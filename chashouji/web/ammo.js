@@ -313,14 +313,15 @@ const Ammo = (function () {
      外轮廓变化只说明形状变了。花束 46%、奶茶 25%、手柄 14%、抱枕 4%。
      见 `tools/3d/measure_volume.py`。
 
-     `scale` 每次重渲都会变，必须照 `pack_atlas.py` 打印的那行填。它跟着并集走，
-     而并集跟着描边粗细走 —— 描边现在按 `screen_r` 倒推（屏幕上统一 2.6px），
-     所以八件的 scale 都比上一版大了几个点，物品在屏幕上也相应大 2~3%。 */
+     `scale` 每次重渲都会变，必须照 `pack_atlas.py` 打印的那行填 —— 它跟着并集走，
+     而并集跟着描边粗细走。描边现在按 `screen_r` 从"这件东西在屏幕上多大"倒推，
+     八件统一 2.8px（见 tools/3d/common.py 的 _ink_thickness，那里有一个把描边
+     按平方放大的坑）。 */
   const SPRITE = {
-    bouquet: { src: 'assets/items/bouquet_atlas.webp', n: 36, cols: 6, cell: 272, scale: 1.39 },
-    milktea: { src: 'assets/items/milktea_atlas.webp', n: 36, cols: 6, cell: 264, scale: 1.34 },
-    ringbox: { src: 'assets/items/ringbox_atlas.webp', n: 36, cols: 6, cell: 336, scale: 1.65 },
-    photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.46 },
+    bouquet: { src: 'assets/items/bouquet_atlas.webp', n: 36, cols: 6, cell: 272, scale: 1.35 },
+    milktea: { src: 'assets/items/milktea_atlas.webp', n: 36, cols: 6, cell: 264, scale: 1.30 },
+    ringbox: { src: 'assets/items/ringbox_atlas.webp', n: 36, cols: 6, cell: 336, scale: 1.61 },
+    photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.38 },
     hairpin: { src: 'assets/items/hairpin_atlas.webp', n: 36, cols: 6, cell: 96,  scale: 1.08 },
     seed:    { src: 'assets/items/seed_atlas.webp',    n: 36, cols: 6, cell: 96,  scale: 1.10 },
     pillow:  { src: 'assets/items/pillow_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.18 },

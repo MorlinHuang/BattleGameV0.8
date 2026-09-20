@@ -34,8 +34,7 @@ from mathutils import Vector, Matrix
 ORTHO      = 3.3       # 相机正交宽度。主体 NOMINAL 单位 → 占画幅 60.6%
 NOMINAL    = 2.0       # 主体的标称直径（Blender 单位）。pack_atlas 靠它反算 scale
 INK        = '3a2c26'  # 描边色，取角色线稿那个暖黑
-OUTLINE_W  = 2.6       # 外轮廓线宽，**观众屏幕上的像素**（不是渲染图里的）。见 render_turntable
-INNER_W    = 0.7       # 内部结构线宽（自遮挡轮廓），同样是屏幕像素。见 _freestyle
+OUTLINE_W  = 2.8       # 描边宽度，**观众屏幕上的像素**（不是渲染图里的）。见 render_turntable
 TILT       = 0.75      # 转轴倾角（rad）。纯绕横轴会转到正底面，那一帧只剩一个梯形
 ROLL       = 0.30      # 转盘整体侧倾
 
@@ -164,57 +163,66 @@ def _render_settings(res, samp, ss):
     r.image_settings.color_mode = 'RGBA'
 
 
+def _ink_thickness(w):
+    """把"想要的线宽（渲染图像素）"换算成 `linestyle.thickness` 该填的值。
+
+    Freestyle 的线宽有两个入口 —— `render.line_thickness`（全局）和
+    `linestyle.thickness`（每个 lineset 自己的）。ABSOLUTE 模式下这两个是
+    **相乘**的，`tools/3d/probe_ink.py` 渲正方块标定出来：
+
+        线宽 ≈ 0.85 × render.line_thickness × linestyle.thickness − 0.65
+
+    （实测点：2.6×2.6→4.98px、2.6×5.2→10.94、5.2×2.6→10.94、5.2×5.2→22.23，
+    交换两个入口结果完全一样，对称性说明就是乘法。）
+
+    这个乘法坑过两次，两次都是**把同一个倍率乘进了两处**，于是线宽按平方涨：
+    第一次是超采样 ss（ss=1/2/3 渲出 4/14/30px，发卡整根被描边吞成一条墨胶囊）；
+    第二次是按屏幕倒推的倍率 k —— 戒指盒 k=1.97 两处一乘，描边到屏幕上是
+    **11px**，整件糊成黑块，而调 INNER_W 完全没反应（因为那一档本来就是空的，
+    见 _freestyle），害得人往"内部线太粗"的方向找了一轮。
+
+    根治办法是让宽度只有一个入口：`render.line_thickness` 固定成中性的 1.0，
+    所有倍率都只乘进 linestyle 这一边。"""
+    return (w + 0.65) / 0.85
+
+
 def _freestyle(ss, k=1.0):
-    """描边分两档：**最外那一圈**和**物体内部的自遮挡轮廓**，两者要分开定宽。
+    """描边只有一档。
 
-    这两件事在画面上的职责完全不同：最外一圈是物体与背景的分界，在明亮客厅
-    底图上实体全靠它被看见，必须够粗；内部那些线是结构提示（盒盖压着盒身、
-    花瓣压着花瓣），一粗就把小面吃掉，整件读成一团黑。
+    原先是两档（`select_silhouette` 一档、`select_border` 一档），想让外轮廓粗、
+    内部结构线细。**但 border 指的是网格的开放边，而这些物品都是封闭网格，
+    那一档一条线都不产生** —— 所谓"两档"一直只有一档在画。
 
-    ⚠️ 这里踩过一个不看渲染结果就发现不了的坑：原先两档写的是
-    `select_silhouette`（含自遮挡）+ `select_border`。**border 指的是网格的
-    开放边，而这些物品都是封闭网格，那一档几乎一条线都不产生** —— 也就是说
-    内部结构线一直是被 silhouette 那一档按外轮廓的宽度画出来的。于是把外轮廓
-    调粗（按 screen_r 倒推之后粗了近一倍），内部也跟着粗一倍，戒指盒和相框
-    直接糊成黑块；而去调 INNER_W 完全没有反应（1.1→0.45 三档渲出来一模一样，
-    黑像素占比都是 77%），因为那一档本来就是空的。
-
-    改成 `select_external_contour`（只要最外层）+ `select_silhouette`（含自遮挡）
-    才真正分开：同样外轮廓 2.6，内部线从 2.6 收到 0.7 之后戒指盒的黑像素占比
-    77%→54%，戒指环重新看得见。
+    试过换成 `select_external_contour` 来单独拿最外一圈，正交相机下它同样
+    不出线（probe_ink.py 渲正方块，一个描边像素都没有）。所以这套用法里
+    外轮廓和自遮挡轮廓**分不开**，索性就只留一档，把宽度定准。
 
     `k` 是渲染图相对屏幕的放大倍率（render_turntable 按 screen_r 算出来的），
-    两档都乘它 —— 两个宽度值现在都是**屏幕像素**口径。"""
+    只乘在 linestyle 这一个入口上 —— 理由见 _ink_thickness。"""
     sc = bpy.context.scene
     r = sc.render
     r.use_freestyle = True
     r.line_thickness_mode = 'ABSOLUTE'
-    r.line_thickness = OUTLINE_W * k * ss
+    r.line_thickness = 1.0        # 中性基准，宽度全部走 linestyle，不要动它
     vl = sc.view_layers[0]
     vl.use_freestyle = True
     fs = vl.freestyle_settings
     while fs.linesets:
         fs.linesets.remove(fs.linesets[0])
 
-    def mk(name, thick, **sel):
-        ls = fs.linesets.new(name)
-        # linesets.new() 建出来的 lineset 不自带 linestyle，直接设 .color 会
-        # AttributeError: 'NoneType'。必须显式建一个。
-        if ls.linestyle is None:
-            ls.linestyle = bpy.data.linestyles.new(name + 'Ink')
-        # 全部关掉再按需打开 —— 漏关一个就会有第二档线悄悄叠上来，
-        # 而多出来的线跟正主同色，看图根本分不出是哪一档画的
-        for a in ('select_silhouette', 'select_border', 'select_crease',
-                  'select_edge_mark', 'select_contour', 'select_external_contour'):
-            setattr(ls, a, False)
-        for a, v in sel.items():
-            setattr(ls, a, v)
-        ls.linestyle.color = srgb(INK)[:3]
-        ls.linestyle.thickness = thick * ss
-        return ls
-
-    mk('Outline', OUTLINE_W * k, select_external_contour=True)
-    mk('Inner', INNER_W * k, select_silhouette=True, select_border=True)
+    ls = fs.linesets.new('Ink')
+    # linesets.new() 建出来的 lineset 不自带 linestyle，直接设 .color 会
+    # AttributeError: 'NoneType'。必须显式建一个。
+    if ls.linestyle is None:
+        ls.linestyle = bpy.data.linestyles.new('Ink')
+    # 全部关掉再按需打开：漏关一个就会有第二档线悄悄叠上来，而它跟正主同色，
+    # 看图根本分不出多出来的线是哪一档画的
+    for a in ('select_silhouette', 'select_border', 'select_crease',
+              'select_edge_mark', 'select_contour', 'select_external_contour'):
+        setattr(ls, a, False)
+    ls.select_silhouette = True
+    ls.linestyle.color = srgb(INK)[:3]
+    ls.linestyle.thickness = _ink_thickness(OUTLINE_W * k * ss)
     fs.crease_angle = math.radians(105)
 
 
