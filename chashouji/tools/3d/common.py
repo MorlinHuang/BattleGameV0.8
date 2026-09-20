@@ -35,7 +35,7 @@ ORTHO      = 3.3       # 相机正交宽度。主体 NOMINAL 单位 → 占画�
 NOMINAL    = 2.0       # 主体的标称直径（Blender 单位）。pack_atlas 靠它反算 scale
 INK        = '3a2c26'  # 描边色，取角色线稿那个暖黑
 OUTLINE_W  = 2.6       # 外轮廓线宽，**观众屏幕上的像素**（不是渲染图里的）。见 render_turntable
-INNER_W    = 1.1       # 内部结构线宽。粗了内部叠成一团黑，细了撑不住，分两档是试点结论
+INNER_W    = 0.7       # 内部结构线宽（自遮挡轮廓），同样是屏幕像素。见 _freestyle
 TILT       = 0.75      # 转轴倾角（rad）。纯绕横轴会转到正底面，那一帧只剩一个梯形
 ROLL       = 0.30      # 转盘整体侧倾
 
@@ -165,10 +165,26 @@ def _render_settings(res, samp, ss):
 
 
 def _freestyle(ss, k=1.0):
-    """描边分两档。只用一档：粗了内部结构叠成一团黑，细了外轮廓撑不住。
+    """描边分两档：**最外那一圈**和**物体内部的自遮挡轮廓**，两者要分开定宽。
 
-    `k` 是渲染图相对屏幕的放大倍率（render_turntable 按 screen_r 算出来的）。
-    两档都乘同一个 k —— 只放大外轮廓的话，内部结构会相对变细，越小的件越糊。"""
+    这两件事在画面上的职责完全不同：最外一圈是物体与背景的分界，在明亮客厅
+    底图上实体全靠它被看见，必须够粗；内部那些线是结构提示（盒盖压着盒身、
+    花瓣压着花瓣），一粗就把小面吃掉，整件读成一团黑。
+
+    ⚠️ 这里踩过一个不看渲染结果就发现不了的坑：原先两档写的是
+    `select_silhouette`（含自遮挡）+ `select_border`。**border 指的是网格的
+    开放边，而这些物品都是封闭网格，那一档几乎一条线都不产生** —— 也就是说
+    内部结构线一直是被 silhouette 那一档按外轮廓的宽度画出来的。于是把外轮廓
+    调粗（按 screen_r 倒推之后粗了近一倍），内部也跟着粗一倍，戒指盒和相框
+    直接糊成黑块；而去调 INNER_W 完全没有反应（1.1→0.45 三档渲出来一模一样，
+    黑像素占比都是 77%），因为那一档本来就是空的。
+
+    改成 `select_external_contour`（只要最外层）+ `select_silhouette`（含自遮挡）
+    才真正分开：同样外轮廓 2.6，内部线从 2.6 收到 0.7 之后戒指盒的黑像素占比
+    77%→54%，戒指环重新看得见。
+
+    `k` 是渲染图相对屏幕的放大倍率（render_turntable 按 screen_r 算出来的），
+    两档都乘它 —— 两个宽度值现在都是**屏幕像素**口径。"""
     sc = bpy.context.scene
     r = sc.render
     r.use_freestyle = True
@@ -180,22 +196,25 @@ def _freestyle(ss, k=1.0):
     while fs.linesets:
         fs.linesets.remove(fs.linesets[0])
 
-    def mk(name, thick, silhouette, border):
+    def mk(name, thick, **sel):
         ls = fs.linesets.new(name)
         # linesets.new() 建出来的 lineset 不自带 linestyle，直接设 .color 会
         # AttributeError: 'NoneType'。必须显式建一个。
         if ls.linestyle is None:
             ls.linestyle = bpy.data.linestyles.new(name + 'Ink')
-        ls.select_silhouette = silhouette
-        ls.select_border = border
-        ls.select_crease = False
-        ls.select_edge_mark = False
+        # 全部关掉再按需打开 —— 漏关一个就会有第二档线悄悄叠上来，
+        # 而多出来的线跟正主同色，看图根本分不出是哪一档画的
+        for a in ('select_silhouette', 'select_border', 'select_crease',
+                  'select_edge_mark', 'select_contour', 'select_external_contour'):
+            setattr(ls, a, False)
+        for a, v in sel.items():
+            setattr(ls, a, v)
         ls.linestyle.color = srgb(INK)[:3]
         ls.linestyle.thickness = thick * ss
         return ls
 
-    mk('Outline', OUTLINE_W * k, True, False)
-    mk('Inner', INNER_W * k, False, True)
+    mk('Outline', OUTLINE_W * k, select_external_contour=True)
+    mk('Inner', INNER_W * k, select_silhouette=True, select_border=True)
     fs.crease_angle = math.radians(105)
 
 
