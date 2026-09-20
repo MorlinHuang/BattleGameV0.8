@@ -307,7 +307,7 @@ const Ammo = (function () {
      `cell` 是单格边长，`n` 是转盘帧数，`scale` 补偿裁剪留白：图集是按**所有
      角度的并集**裁的，单帧物体填不满一格。 */
   const SPRITE = {
-    bouquet: { src: 'assets/items/rose_atlas.png', n: 36, cols: 6, cell: 268, scale: 1.34 },
+    bouquet: { src: 'assets/items/bouquet_atlas.webp', n: 36, cols: 6, cell: 272, scale: 1.36 },
   };
 
   function loadSprites(ver, off) {
@@ -478,16 +478,21 @@ const Ammo = (function () {
     p.ax = ACC[g.style] || 0;
     /* 处决压过来的速度只有一半。它买的是"一段没人打断的时间"—— 嗖一下飞过去
        就把这段时间还回去了。慢，才有"全场都看着它过来"。 */
-    if (p.exec) { p.vx *= 0.5; p.ax *= 0.35; p.vrot *= 0.5; }
+    if (p.exec) { p.vx *= 0.5; p.ax *= 0.35; }
     p.rot = Math.random() * 6.283;
     // 转速跟着体量走，小东西翻得快。方向也随机，一批里有顺时针有逆时针
     /* 转速。矢量物品转的是一张平面图，快了只会晃眼；贴图物品转的是真的转盘，
        **必须在飞行途中转够一圈以上**，观众才看得出它是个有厚度的东西。
        重投飞完全程约 0.65 秒，给 14 rad/s 差不多是一圈半。
        符号仍随机：顺着翻和倒着翻都是合理的姿势。 */
-    p.vrot = g.spin
+    /* 处决弹的转速跟着速度一起减半。这一句原先写在上面那行 exec 分支里
+       （`p.vrot *= 0.5`），而 p.vrot 在这里才被赋值 —— 它改的是上一发留在
+       对象池里的旧值，从来没生效过。处决弹速度减半、飞行时间翻倍，转速不
+       跟着降就会在慢镜头里转足三圈，"全场都看着它过来"就变成了陀螺。 */
+    p.vrot = (g.spin
       ? (Math.random() < 0.5 ? -1 : 1) * g.spin * (0.85 + Math.random() * 0.3)
-      : (Math.random() - 0.5) * (g.style === 'volley' ? 26 : g.style === 'single' ? 13 : 4.5);
+      : (Math.random() - 0.5) * (g.style === 'volley' ? 26 : g.style === 'single' ? 13 : 4.5))
+      * (p.exec ? 0.5 : 1);
     /* 轨迹环形缓冲：拖尾画的是这个东西**真正走过**的地方。原先那几条速度线
        是固定画在本体后方的，跟实际路径无关，所以飞得快飞得慢看上去一个样；
        记下真实轨迹之后，拖尾长度自己就跟速度挂上钩了。 */

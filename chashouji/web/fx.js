@@ -71,6 +71,81 @@ const Particles = (function () {
     return c;
   }
 
+  /* ---------- 3D 渲出来的实体粒子贴图 ---------- */
+
+  /* 实体粒子原先是现场画的几何：圆角胶囊当碎片、五角星路径、矩形当照片。
+     它们在画面上就是一个纯色形状在平移 —— 没有厚度，光影也无从谈起。
+     换成 Blender 渲的转盘之后，每一颗都带硬边二分的明暗和自己的描边，
+     翻滚时能看到正面转到侧面再转到背面。"有体积感"就是这个差别。
+
+     **贴图一律渲成白色。** 粒子颜色是配方在 spawn 时逐颗定的（羽毛五颗里有
+     一颗偏粉、碎片按 `dark` 分两种深浅），烧死在贴图里配方就没法再调色了。
+     运行时用 multiply 把目标色乘上去：亮面变成目标色本身，暗面变成它的暗调，
+     二分光影原样保留。描边也因此不能用角色线稿那个暖黑 —— 乘完会黑死，
+     素材那边已经改成浅两档的 5a4a42。
+
+     `scale` 补偿裁剪留白（图集按所有角度的并集裁，单帧填不满一格），
+     跟 ammo.js 的 SPRITE 是同一套账。这些数字由 tools/3d/pack_atlas.py 打印。 */
+  /* scale 这里是**实测调出来的绘制倍率**，跟 ammo.js 那边不一样。
+     物品的模型都按"主体直径 2.0 单位"建，pack_atlas 算出来的 scale 直接能用；
+     粒子里有细长件（羽毛长宽 1:2.2），它在正方形格子里只占一半宽度，
+     照算出来的倍率画就比矢量版细一圈、在画面上碎成一片瓜子壳。
+     所以细长的那几个手工放大过，末尾标了算出来的原值。 */
+  const SHAPE = {
+    petal:   { src: 'assets/fx/petal_atlas.webp',   n: 12, cols: 6, cell: 80, scale: 1.15 },
+    feather: { src: 'assets/fx/feather_atlas.webp', n: 12, cols: 6, cell: 80, scale: 1.40 },  // 算出来 1.03
+    debris:  { src: 'assets/fx/debris_atlas.webp',  n: 12, cols: 6, cell: 80, scale: 1.00 },  // 算出来 0.83
+    star:    { src: 'assets/fx/star_atlas.webp',    n: 12, cols: 6, cell: 80, scale: 1.22 },
+    heart:   { src: 'assets/fx/heart_atlas.webp',   n: 12, cols: 6, cell: 80, scale: 1.24 },
+    card:    { src: 'assets/fx/card_atlas.webp',    n: 12, cols: 6, cell: 80, scale: 1.31 },
+    // 珍珠是个球，绕哪个轴转轮廓都一样，4 帧只是让明暗交界有一点挪动
+    pearl:   { src: 'assets/fx/pearl_atlas.webp',   n: 4,  cols: 6, cell: 80, scale: 1.09 },
+  };
+
+  /* ?nosprite=1 连粒子贴图一起关掉，退回矢量画法。两条路都要留着：
+     加载失败要能退，跟转盘版并排对比也要能退。 */
+  function loadShapes(ver, off) {
+    if (off) return Promise.resolve([]);
+    const q = ver ? '?v=' + encodeURIComponent(ver) : '';
+    return Promise.all(Object.keys(SHAPE).map((k) => new Promise((done) => {
+      const sp = SHAPE[k], im = new Image();
+      sp.key = k;
+      im.onload = () => { sp.img = im; done(true); };
+      im.onerror = () => done(false);     // 缺素材不阻塞，退回矢量画法
+      im.src = sp.src + q;
+    })));
+  }
+
+  const tintCache = new Map();
+  function tinted(sp, rgb) {
+    const key = sp.key + '|' + rgb[0] + ',' + rgb[1] + ',' + rgb[2];
+    let c = tintCache.get(key);
+    if (c) return c;
+    c = document.createElement('canvas');
+    c.width = sp.img.width; c.height = sp.img.height;
+    const g = c.getContext('2d');
+    g.drawImage(sp.img, 0, 0);
+    g.globalCompositeOperation = 'multiply';
+    g.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    g.fillRect(0, 0, c.width, c.height);
+    /* multiply 把整块矩形都涂了，透明区的 alpha 也被抬成 1。
+       再用 destination-in 拿原图的 alpha 把轮廓切回来。 */
+    g.globalCompositeOperation = 'destination-in';
+    g.drawImage(sp.img, 0, 0);
+    /* 配方给的颜色是离散的（`i % 5 ? A : B` 这种写法），缓存条目本来就只有
+       十来条。设个上限是防将来有人写连续随机色，别让离屏 canvas 无限长下去。 */
+    if (tintCache.size > 48) tintCache.clear();
+    tintCache.set(key, c);
+    return c;
+  }
+
+  // 当前朝向对应转盘的哪一格
+  function shapeCell(sp, rot) {
+    let k = Math.floor(rot / 6.2832 * sp.n) % sp.n;
+    if (k < 0) k += sp.n;
+    return k;
+  }
+
   /* ---------- 粒子 ---------- */
 
   /* kind 只有六种，都是形态而非题材：
@@ -108,6 +183,13 @@ const Particles = (function () {
     p.fill = `rgb(${p.rgb[0]},${p.rgb[1]},${p.rgb[2]})`;
     p.line = p.edge ? `rgb(${p.edge[0]},${p.edge[1]},${p.edge[2]})` : null;
     p.tex = p.kind === 'soft' ? soft(p.rgb) : p.kind === 'dot' ? glow(p.rgb) : null;
+    /* shape 指这颗粒子用哪张 3D 转盘。它跟 kind 是两件事：kind 是**画法**
+       （实体还是光、吃不吃描边），shape 是**题材**（羽毛还是花瓣还是碎片）。
+       同一个 chip 被五个配方复用，各自要的东西完全不一样 —— 枕头炸出羽毛、
+       花束炸出花瓣、奶茶炸出珍珠，所以选图得看配方而不是看 kind。
+       没给 shape、或素材没加载上，p.sp 为空，draw 自动退回矢量画法。 */
+    p.sp = (o.shape && SHAPE[o.shape] && SHAPE[o.shape].img) ? SHAPE[o.shape] : null;
+    p.stex = p.sp ? tinted(p.sp, p.rgb) : null;
     act.push(p);
     return p;
   }
@@ -184,6 +266,29 @@ const Particles = (function () {
       if (p.kind === 'soft') {
         const r = p.r + (p.r1 - p.r) * (1 - k);
         ctx.drawImage(p.tex, p.x - r, p.y - r, r * 2, r * 2);
+
+      } else if (p.stex) {
+        /* 3D 转盘版。五种实体形态共用这一段 —— 它们的差别已经全在贴图里了。
+
+           尺寸取**正方形**：贴图格子是按所有角度的并集正方形裁的，物体在格子
+           里保持自己的长宽比（羽毛就是细长的、照片就是竖的）。再按 w×h 去拉伸
+           等于把形状的比例乘两遍，羽毛会被拉成一根面条。
+
+           朝向分两份：转盘格子走 p.rot 全速（那是物体在**翻面**），canvas 只
+           跟着转四分之一（那是它在画面里**打旋**）。不转 canvas 会僵、全速转
+           canvas 又等于把渲好的光影一起转走 —— 那正是换 3D 要解决的问题。 */
+        const r = p.r + (p.r1 - p.r) * (1 - k);
+        const sz = ((p.kind === 'star' || p.kind === 'heart') ? r * 2 : Math.max(p.w, p.h)) * p.sp.scale;
+        const ph = p.seed + (1 - k) * 7.4;
+        const c = shapeCell(p.sp, p.rot), e = p.sp.cell;
+        ctx.save();
+        ctx.translate(p.x + (p.spin ? Math.cos(ph) * p.spin : 0),
+                      p.y + (p.spin ? Math.sin(ph) * p.spin * 0.42 : 0));
+        ctx.rotate(p.seed + p.rot * 0.25);
+        ctx.drawImage(p.stex, (c % p.sp.cols) * e, ((c / p.sp.cols) | 0) * e, e, e,
+                      -sz / 2, -sz / 2, sz, sz);
+        ctx.restore();
+
       } else if (p.kind === 'star' || p.kind === 'heart') {
         const r = p.r + (p.r1 - p.r) * (1 - k);
         const ph = p.seed + (1 - k) * 7.4;
@@ -325,7 +430,7 @@ const Particles = (function () {
   function clear() { while (act.length) pool.push(act.pop()); shake = flash = stop = cool = lvl = 0; }
 
   return {
-    spawn, update, draw, drawFlash, tick,
+    spawn, update, draw, drawFlash, tick, loadShapes,
     hitStop, addShake, addFlash, clear,
     off, count: () => act.length,
   };

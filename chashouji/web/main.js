@@ -361,7 +361,7 @@ const RECIPE = {
       for (let i = 0; i < Math.round(9 * s); i++) {
         const a = (Math.random() - 0.5) * 2.4;
         const sp = (170 + Math.random() * 330) * s;
-        Particles.spawn({ kind: 'chip', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 200,
+        Particles.spawn({ kind: 'chip', shape: 'debris', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 200,
                           g: 780, drag: 0.99, life: 0.7 + Math.random() * 0.6,
                           w: 6 + Math.random() * 8 * s, h: 4 + Math.random() * 6 * s,
                           rot: Math.random() * 6.28, vrot: (Math.random() - 0.5) * 16,
@@ -395,7 +395,7 @@ const RECIPE = {
       for (let i = 0; i < Math.round(30 * s); i++) {
         const a = (Math.random() - 0.5) * 2.8;
         const sp = (200 + Math.random() * 560) * s;
-        Particles.spawn({ kind: 'chip', x: x + (Math.random() - 0.5) * 60, y: y + (Math.random() - 0.5) * 80,
+        Particles.spawn({ kind: 'chip', shape: 'feather', x: x + (Math.random() - 0.5) * 60, y: y + (Math.random() - 0.5) * 80,
                           vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 170,
                           g: 150, drag: 0.988, sway: 40 + Math.random() * 55,
                           life: 1.5 + Math.random() * 1.4,
@@ -420,7 +420,7 @@ const RECIPE = {
       // 公转的大星星：数量少，每颗都要看得清，所以描边给足
       for (let i = 0; i < Math.round(7 * s); i++) {
         const a = Math.random() * 6.283;
-        Particles.spawn({ kind: 'star', x: x - side * 20, y: y - 40 - Math.random() * 60,
+        Particles.spawn({ kind: 'star', shape: 'star', x: x - side * 20, y: y - 40 - Math.random() * 60,
                           vx: -side * (20 + Math.random() * 90), vy: -60 - Math.random() * 90,
                           g: 180, drag: 0.95, spin: 26 + Math.random() * 34,
                           r: (13 + Math.random() * 11) * s, r1: 3,
@@ -432,7 +432,7 @@ const RECIPE = {
       for (let i = 0; i < Math.round(11 * s); i++) {
         const a = (Math.random() - 0.5) * 2.8;
         const sp = (200 + Math.random() * 440) * s;
-        Particles.spawn({ kind: 'star', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 180,
+        Particles.spawn({ kind: 'star', shape: 'star', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 180,
                           g: 640, drag: 0.982, r: (6 + Math.random() * 6) * s, r1: 2,
                           life: 0.5 + Math.random() * 0.45,
                           rot: a, vrot: (Math.random() - 0.5) * 14,
@@ -463,7 +463,7 @@ const RECIPE = {
         const a = (Math.random() - 0.5) * 2.5;
         const sp = (300 + Math.random() * 620) * s;
         const dark = i % 3 === 0;
-        Particles.spawn({ kind: 'chip', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 300,
+        Particles.spawn({ kind: 'chip', shape: 'debris', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 300,
                           g: 1450, drag: 0.995, life: 0.55 + Math.random() * 0.5,
                           w: 5 + Math.random() * 12 * s, h: 4 + Math.random() * 8 * s,
                           rot: Math.random() * 6.28, vrot: (Math.random() - 0.5) * 22,
@@ -503,7 +503,7 @@ const RECIPE = {
         const a = (Math.random() - 0.5) * 2.9;
         const sp = (210 + Math.random() * 580) * s;
         const deep = i % 3 === 0;
-        Particles.spawn({ kind: 'chip', x: x + (Math.random() - 0.5) * 60, y: y + (Math.random() - 0.5) * 80,
+        Particles.spawn({ kind: 'chip', shape: 'petal', x: x + (Math.random() - 0.5) * 60, y: y + (Math.random() - 0.5) * 80,
                           vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 180,
                           g: 140, drag: 0.987, sway: 44 + Math.random() * 60,
                           life: 1.4 + Math.random() * 1.4,
@@ -553,7 +553,7 @@ const RECIPE = {
         const a = (Math.random() - 0.5) * 2.7;
         const sp = (240 + Math.random() * 520) * s;
         const d = 13 + Math.random() * 9 * s;
-        Particles.spawn({ kind: 'chip', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 300,
+        Particles.spawn({ kind: 'chip', shape: 'pearl', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 300,
                           g: 1180, drag: 0.992, sway: 12 + Math.random() * 20,
                           life: 1.1 + Math.random() * 0.8,
                           w: d, h: d,
@@ -599,7 +599,7 @@ const RECIPE = {
            档 4 确实该铺满屏，但**脸是这个玩法仅有的两个可读信息之一**，而
            爱心要在画面上待一秒半到两秒半，不是一闪而过。密度靠数量，不靠
            单颗更大。 */
-        Particles.spawn({ kind: 'heart', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        Particles.spawn({ kind: 'heart', shape: 'heart', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
                           g: -46, drag: 0.90, sway: 26 + Math.random() * 34,
                           r: (9 + Math.random() * 9) * s, r1: 4,
                           life: 1.5 + Math.random() * 1.1,
@@ -610,7 +610,7 @@ const RECIPE = {
       // 金色星光，绕着命中点公转 —— 借 star 配方那套"眩晕"的读法
       for (let i = 0; i < Math.round(10 * s); i++) {
         const a = Math.random() * 6.283;
-        Particles.spawn({ kind: 'star', x, y, vx: Math.cos(a) * (60 + Math.random() * 170),
+        Particles.spawn({ kind: 'star', shape: 'star', x, y, vx: Math.cos(a) * (60 + Math.random() * 170),
                           vy: Math.sin(a) * (60 + Math.random() * 150) - 70,
                           g: 150, drag: 0.94, spin: 30 + Math.random() * 40,
                           r: (11 + Math.random() * 12) * s, r1: 3,
@@ -653,7 +653,7 @@ const RECIPE = {
         const a = Math.random() * 6.283;
         const sp = (130 + Math.random() * 330) * s;
         const old = i % 4 === 0;
-        Particles.spawn({ kind: 'card', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 150,
+        Particles.spawn({ kind: 'card', shape: 'card', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 150,
                           g: 190, drag: 0.976, sway: 62 + Math.random() * 70,
                           life: 2.0 + Math.random() * 0.8,
                           w: 30 + Math.random() * 17 * s, h: 24 + Math.random() * 13 * s,
@@ -664,7 +664,7 @@ const RECIPE = {
       // 少量爱心，把这一下和戒指盒认作同一档
       for (let i = 0; i < Math.round(7 * s); i++) {
         const a = Math.random() * 6.283;
-        Particles.spawn({ kind: 'heart', x, y, vx: Math.cos(a) * (200 + Math.random() * 300) * s,
+        Particles.spawn({ kind: 'heart', shape: 'heart', x, y, vx: Math.cos(a) * (200 + Math.random() * 300) * s,
                           vy: Math.sin(a) * (200 + Math.random() * 260) * s,
                           g: -40, drag: 0.90, sway: 24 + Math.random() * 30,
                           r: (8 + Math.random() * 8) * s, r1: 3,
@@ -730,21 +730,33 @@ const ITEM_OF = {
    push 是这件物品被直接发射时的默认注入量（诊断胶片会用到）；走 SHOP 送礼
    时以 SHOP 的 push 为准 —— 同一个抱枕，魔法镜刷出来和能量电池刷出来
    份量差 5.5 倍，但飞起来是同一个东西。 */
+/* spin 是贴图转盘的转速（rad/s），八件都要给。
+
+   为什么不能沿用矢量时代按 style 分的那套默认值（volley 26 / single 13 / heavy 4.5）：
+   矢量物品转的是一张平面图，转多快都只是晃眼；贴图转的是真转盘，**角速度
+   同时受两头夹**——
+
+     下限：必须在飞行途中转够一圈以上，观众才看得出它有厚度。
+           重投全程约 0.65 秒，一圈需要 9.7 rad/s，原来的 4.5 连半圈都不到。
+     上限：每帧换的格子不能太多。60fps、36 格转盘，每格 10°，
+           26 rad/s 就是每帧跳 2.5 格 —— 那不叫旋转，那叫乱闪。
+           每帧 ≤1.5 格（约 15.7 rad/s）是看着还连贯的线。
+
+   两头一夹，八件就都落在 14~15 这个窄带里，跟体量没什么关系了。 */
 const GIFT = {
   // 查岗党（女方，在左，from=+1）
-  hairpin: { from: +1, style: 'volley', item: 'hairpin', r: 22, n: 8, power: 1, recipe: 'star',    push: 1 },
-  pillow:  { from: +1, style: 'single', item: 'pillow',  r: 56,       power: 2, recipe: 'feather', push: 20 },
-  // spin：贴图转盘专用的转速（rad/s）。矢量物品不需要，见 ammo.js 里 fire() 的注释
-  bouquet: { from: +1, style: 'heavy',  item: 'bouquet', r: 76, spin: 14, power: 3, recipe: 'petal',   push: 230 },
+  hairpin: { from: +1, style: 'volley', item: 'hairpin', r: 22, n: 8, spin: 15, power: 1, recipe: 'star',    push: 1 },
+  pillow:  { from: +1, style: 'single', item: 'pillow',  r: 56,       spin: 15, power: 2, recipe: 'feather', push: 20 },
+  bouquet: { from: +1, style: 'heavy',  item: 'bouquet', r: 76,       spin: 14, power: 3, recipe: 'petal',   push: 230 },
   /* 档 4 的 r 看着不大，是因为 exec 会再乘 1.8（ammo.js）：64→115、68→122，
      占屏宽的 24% 与 25%。飞行体积负责预告"这一下很重"，兑现在命中那一刻的
      绽放里 —— 所以本体不必再大，大的是绽开的东西。 */
-  ringbox: { from: +1, style: 'heavy',  item: 'ringbox', r: 64,       power: 4, recipe: 'bloom',   push: 600 },
+  ringbox: { from: +1, style: 'heavy',  item: 'ringbox', r: 64,       spin: 14, power: 4, recipe: 'bloom',   push: 600 },
   // 灭迹党（男方，在右，from=-1）
-  seed:    { from: -1, style: 'volley', item: 'seed',    r: 21, n: 8, power: 1, recipe: 'star',    push: 1 },
-  gamepad: { from: -1, style: 'single', item: 'gamepad', r: 52,       power: 2, recipe: 'debris',  push: 20 },
-  milktea: { from: -1, style: 'heavy',  item: 'milktea', r: 72,       power: 3, recipe: 'splash',  push: 230 },
-  photo:   { from: -1, style: 'heavy',  item: 'photo',   r: 68,       power: 4, recipe: 'memory',  push: 600 },
+  seed:    { from: -1, style: 'volley', item: 'seed',    r: 21, n: 8, spin: 15, power: 1, recipe: 'star',    push: 1 },
+  gamepad: { from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 15, power: 2, recipe: 'debris',  push: 20 },
+  milktea: { from: -1, style: 'heavy',  item: 'milktea', r: 72,       spin: 14, power: 3, recipe: 'splash',  push: 230 },
+  photo:   { from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 14, power: 4, recipe: 'memory',  push: 600 },
 };
 
 function sampleRow(arr, y) {
@@ -1065,11 +1077,17 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Array.from({ length: 101 }, (_, p) =>
       load(`assets/frames/f${String(p).padStart(3, '0')}.png`).catch(() => null)));
   const seq = new FrameSeq(frames);
-  // 物品的 3D 转盘贴图。失败不阻塞：加载不到就退回 ITEM 里的矢量画法
-  const sprOK = await Ammo.loadSprites(Q0.get('v'), Q0.get('nosprite') === '1');
+  /* 3D 转盘贴图，两套：飞行物品的（ammo.js）和命中粒子的（fx.js）。
+     失败不阻塞 —— 加载不到就退回各自的矢量画法，?nosprite=1 同时关掉两套。 */
+  const noSpr = Q0.get('nosprite') === '1';
+  const [sprOK, shpOK] = await Promise.all([
+    Ammo.loadSprites(Q0.get('v'), noSpr),
+    Particles.loadShapes(Q0.get('v'), noSpr),
+  ]);
   document.getElementById('msg').textContent =
     `${frames.filter(Boolean).length}/101 档 · 每 1%` +
-    (sprOK.some(Boolean) ? ` · 物品转盘 ${sprOK.filter(Boolean).length}` : '');
+    (sprOK.some(Boolean) ? ` · 物品转盘 ${sprOK.filter(Boolean).length}` : '') +
+    (shpOK.some(Boolean) ? ` · 粒子 ${shpOK.filter(Boolean).length}` : '');
 
   const Q = new URLSearchParams(location.search);
 
