@@ -1,108 +1,130 @@
-"""发卡（档 1，查岗党）—— 一根粉色小棒 + 一端一颗浅粉珠子。
+"""发卡（档 1，查岗党）—— **带齿的鸭嘴夹**，不是最早那版"一根粉棒 + 一颗珠"。
 
-照搬 ammo.js ITEM.hairpin 的几何：总长 2r、棒粗 ≈0.6r（roundRect 半高 0.3r）、
-一端一颗珠子。
+## 为什么换形体
 
-四条形状结论：
+一根光棒加一颗珠子剥掉外轮廓之后里面是空的（内部结构密度 0%、屏幕结构量 0），不管怎么转、
+转多快，中间那块看上去都一样。走花束那条路：**靠零件数量堆遮挡关系**。
 
-- **转轴用斜轴 lean=50，不是绕观察轴（lean=0）。** 上一版四件全是 lean=0，那是
-  纯屏幕内旋转、物体自身根本没转 —— 36 帧只是同一个姿态的 36 个副本，看上去就是
-  一张 2D 贴纸在打旋，3D 白渲了。lean 是转轴从视线轴往屏幕横轴偏的度数，0（贴纸）
-  和 90（绕横轴翻跟头）之间连续可选，正面朝向转过 180° 时偏 2*lean。
-  发卡是绕自身长轴的旋转体、没有"正面"，能给多大只取决于长轴会不会转到正对镜头：
-  长轴放 Z（屏幕竖向）、转轴在 xy 平面里，两者永远垂直，投影最短剩 cos(lean) ——
-  这正是斜轴跟 axis='X' 的根本区别，后者会让长轴正对镜头塌成一颗珠子。
-  12 帧快测过 35/50/65（/tmp/q_hs_big.png 第 1~3 行）：35 只缩到 82%，伸缩感偏弱；
-  65 有 3 帧缩到 42%，只剩一颗珠子加个小疙瘩，读不出；50 缩到 64%，仍是"珠子 + 斜棒"，
-  12/12 可读、长度伸缩最明显，定 50。
-  lean 模式下 tilt/roll 是**物体的固定姿态偏置**（先摆好姿势，再整个绕斜轴转），
-  不像 axis 模式那样跟着转轴滚。两个都只能给小值：它们把长轴从屏幕竖向拽开，
-  拽得越多最短投影越短（光是 tilt=0.25 就把 64% 拉到 51%）。
-- **棒做成圆柱不是扁片。** 横截面最粗处直径 0.53、珠头直径 0.84，缩到观众端的
-  44px 每一帧都是一坨带描边的粉色；扁片在 3/4 角上会直接消失。
-- **棒身一端必须收成尖，不能是两头一样粗的胶囊。** 等粗棒 + 一端一颗圆珠，
-  在画面内自转、又放大到图集尺寸去看的时候，形状会读得很难听 —— 这是要挂在
-  直播间里当礼物的东西，不能冒这个险。收成尖之后读的是"发簪"：一头尖、
-  一头带珠头，既没歧义，也比胶囊更像真发卡。珠头再沿棒轴压扁 14%，
-  跟棒身拉开 1.6 倍宽度差，看着是"装饰头"而不是"圆帽"。
-- **棒不能收太尖、珠子不能太大。** 第一轮 0.15→0.30 的锥度配 0.48 的珠子，
-  渲出来是一支麦克风；现在棒几乎等粗、可见棒长:珠径 = 1.66:1，才读得出"发卡"。
-- **棒是一块整网格，不是锥台加小球拼的。** 拼的时候小球半径正好等于锥台底半径，
-  两个面在底沿相切，Freestyle 把这一圈判成忽有忽无的可见轮廓，棒身上就挂着
-  几根来回闪的小黑杠。
+两个方案横着比过（同尺寸、同转轴）：
 
-公共灯光会把每个通道往白里抬一大截（实测矢量版的珠色 #ffd9e8 渲出来是
-(223,215,218) 的中性灰，一点粉味都不剩），所以珠子素材色比矢量版深两档 ——
-跟 bouquet 把包装纸 #f7e3cf 加深成 #e8c79e 是同一件事：对齐的是**渲染结果**，
-不是素材数值。
+| 方案 | 结构密度 | 贴纸残 | 粉色像素 中位 / 最少 | 判断 |
+|---|---|---|---|---|
+| 鸭嘴夹（两片夹片 + 一排齿 + 铰点珠） | 41% | 0.51 | 1223 / 943 | **选它** |
+| 蝴蝶结（两环 + 束带 + 两条带尾） | 70% | 0.71 | 一半不到 | 否掉 |
 
-跑：blender -b --python hairpin.py -- 36 146 128 <out> 1
-    pack_atlas.py <帧目录> hairpin_atlas.webp --cell 96
+蝴蝶结的结构密度数字更高，但那是**被描边喂出来的**：密度量的是"剥掉外轮廓后里面还剩多少墨"，
+糊成一团黑的东西天然得高分。看粉色像素就露馅 —— 同尺寸下只剩鸭嘴夹一半的可见粉色。
+根因是**零件数除不开**：蝴蝶结要在 2.0 的框里塞两个环 + 一个结 + 两条尾，每个零件只剩
+0.3~0.4 宽，而描边按屏幕绝对像素画，瘦零件会被自己那两条边吃光。
 
-    渲染边长 146 = 单格 96 / 并集占比 0.658。common.py 说描边宽度是
-    "最终像素的绝对值"，要真做到，得让 pack_atlas 不缩放 —— 也就是
-    **并集边长正好等于单格**，反推出渲染边长 = 单格 / 并集占比。
-    并集占比是先渲一轮 36 帧量出来的（它跟分辨率无关，只跟形状、转轴和描边有关，
-    **换了 lean 就得重量一遍**；8 帧量会偏小，细长件尤其）。
-    ss 一律留 1。common.py 的 `_freestyle(ss)` 把 ss 同时乘进了
-    `render.line_thickness` 和 `linestyle.thickness`，而这两个值在 ABSOLUTE 模式下
-    是**相乘**的，所以描边宽度按 ss² 长：实测同一场景 ss=1/2/3 描边 4 / 14 / 30 像素。
-    ss=3 时那 30px 是绝对像素、不随渲染边长缩，发卡的棒才 0.55 单位宽，
-    整根被描边吞成一条纯墨色的胶囊。common.py 不许改，所以超采样这条路直接不走：
-    Cycles 每像素 128 个采样本身就带足了抗锯齿，锯齿并不是实际问题。
+## 尺寸是被描边宽度定死的
+
+描边 OUTLINE_W=2.8 是**观众屏幕上的像素**，而这件东西在屏幕上只有 63px、主体标称直径 44px。
+夹片归一化后宽 0.66 单位 = 屏幕 14.5px，两条描边吃掉 5.6px，剩 9px 填色。实测四档：
+
+| 夹片宽 BARW | 齿 | 结构密度 | 屏幕结构量 | 墨占实心 | 粉色像素中位 |
+|---|---|---|---|---|---|
+| 0.64（窄） | 3 | 41% | 16 | 67% | 1223 |
+| **0.95（本版）** | **3** | **39%** | **16** | **63%** | **1485** |
+| 0.95 | 3 齿距 0.64 长夹片 | 43% | 16 | 66% | — |
+| 0.85 | 2 | 35% | 14 | 62% | 1556 |
+
+夹片加宽 + 张口收窄，结构量一点没掉，墨占降了 4 个点、可见粉色多了两成 —— 同一件东西
+**把零件做粗是纯赚的**，只要长轴还竖着（见下）。齿从 3 颗减到 2 颗则是纯亏：墨少 1 个点，
+结构量掉 2，而"带齿"是这东西的第一识别点。
+
+**齿距 0.42 是上一轮在 k² 粗描边下被否掉的方案，描边修好之后重试了一次**（0.42 × 4 颗齿）：
+结构密度 47% vs 41%、墨占 70% vs 67%、粉色像素 1053 vs 1223 —— 密度确实涨了，但涨的是墨，
+齿之间的缝在 63px 上并不成立，读成一条毛边。**不成立，维持 0.62 的齿距 × 3 颗。**
+
+## 形状结论（改形先看这几条）
+
+- **零件一律做粗**，可见宽度必须大于两条描边宽才留得住填色。夹片 0.95 宽、厚 0.72，齿高 0.36。
+- **张口角决定宽高比，必须跟夹片长度一起调。** 张口 0.24rad 配短夹片时下沿甩出去 ±1.15，
+  归一化之后变成**横着的**，"长轴竖着"那条就破了。本版夹片加宽以后同样要补偿：
+  张口收到 0.13、夹片长到 z=-1.75，量出来 x2.77 × z2.88，长轴仍在竖向。
+  **改 BARW 必须看脚本打印的 BBOX 那行，z 要是最大的那个。**
+- **铰点压一颗浅粉珠**，既把两片咬在一起，也接上了最早那版"一端一颗珠"的配色记忆。
+- **长轴保持竖着（Z）。** 细长件长轴竖着绕斜轴不会塌：转轴在 xy 平面里、长轴是 Z，
+  两者永远垂直，最短投影还剩 cos(lean)=64%；横着放会转到正对镜头塌成一坨。
+
+## 转轴与渲染边长
+
+`lean=50, tilt=0.25, roll=0.15` 沿用量出来的档，换形体后复量过（贴纸残差 0.54，八件里最低），
+没理由动。
+
+跑：blender -b --python hairpin.py -- 36 160 128 <out> 1
+    pack_atlas.py <帧目录> hairpin_atlas.webp --cell <并集>
+
+渲染边长按 `res = 单格 / 并集占比` 反推：并集占比 0.87，要 139 的单格就渲 160。
+**描边宽度与渲染边长无关**（cell 在 `屏幕描边 = 渲染描边 × px/side` 里正好约掉），
+挑边长只影响图集清晰度。ss 一律留 1。
 """
+
 import sys, os, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import *
+from mathutils import Vector, Matrix
 import bpy
 
 init()
-mat('bar',  '#ff7aab')   # 粉棒
-mat('bead', '#ffb8d4')   # 浅粉珠
+mat('bar',  '#ff7aab')   # 夹片
+mat('bead', '#ffb8d4')   # 铰点珠
 
-BAR_R  = 0.265           # 棒身最粗处 ≈ 矢量版 roundRect 半高 0.3r
-TIP_R  = 0.10            # 另一端收成尖：见开头第五条
-BEAD_R = 0.42
-BEAD_FLAT = 0.86         # 珠子沿棒轴压扁一点，读成"珠头"而不是"圆帽"
-SEG    = 18
+TH = 0.72        # 夹片厚度（Y，朝镜头的深度）——做成块不是片，片在 3/4 角会消失
+BARW = 0.95      # 夹片本体宽度（X）
+TOOTH = 0.36     # 齿高（X）
+PITCH = 0.62     # 齿距（Z）。小于两条描边宽就并成一团（0.42 试过，读成毛边）
+NT = 3           # 每片几颗齿
+OPEN = 0.13      # 张口角（rad），绕上端铰点往两边张。加宽夹片必须同时收小它
+ZBOT = -1.75     # 夹片下沿。跟 OPEN 一起把长轴保持在竖向
 
 
-def lathe(prof, seg, matname, name):
-    # (r, z) 剖面绕 Z 旋成一块封闭网格，两端 r=0 的点收成极点
-    verts, faces, ring = [], [], []
-    for r, z in prof:
-        if r <= 1e-9:
-            ring.append(('p', len(verts)))
-            verts.append((0.0, 0.0, z))
-        else:
-            ring.append(('r', len(verts)))
-            for i in range(seg):
-                a = i * 2 * math.pi / seg
-                verts.append((r * math.cos(a), r * math.sin(a), z))
-    for k in range(len(prof) - 1):
-        (t0, b0), (t1, b1) = ring[k], ring[k + 1]
-        for i in range(seg):
-            j = (i + 1) % seg
-            if t0 == 'p':
-                faces.append((b0, b1 + j, b1 + i))
-            elif t1 == 'p':
-                faces.append((b0 + i, b0 + j, b1))
-            else:
-                faces.append((b0 + i, b0 + j, b1 + j, b1 + i))
+def slab(name, pts, th, matname):
+    """XZ 平面的多边形（逆时针给点）沿 Y 挤出成块。"""
+    n = len(pts)
+    verts = [(x, -th / 2, z) for x, z in pts] + [(x, th / 2, z) for x, z in pts]
+    faces = [tuple(range(n - 1, -1, -1)), tuple(range(n, 2 * n))]
+    for i in range(n):
+        j = (i + 1) % n
+        faces.append((i, j, j + n, i + n))
     return add_mesh(name, verts, faces, matname)
 
 
-# 下端收成尖 → 一路变粗的棒身 → 顶端平收（被珠子盖住，看不见）
-PROF = [(TIP_R * math.sin(k * math.pi / 12), -0.92 - TIP_R * math.cos(k * math.pi / 12))
-        for k in range(7)]
-PROF += [(TIP_R + (BAR_R - TIP_R) * (k / 4.0) ** 0.85, -0.92 + 1.62 * k / 4.0)
-         for k in range(1, 5)]
-PROF += [(0.0, 0.70)]
-bar = lathe(PROF, SEG, 'bar', 'bar')
+def jaw(name, sign):
+    """一片夹片：上端铰点、下端张口，内缘自下而上 NT 颗齿。sign=+1 右片 / -1 左片。"""
+    x0, ztop, zbot = 0.12, 0.74, ZBOT
+    x1 = x0 + BARW
+    pts = [(x0, ztop), (x1, ztop), (x1, zbot), (x0 + TOOTH * 0.3, zbot)]
+    for k in range(NT):
+        z0 = zbot + 0.20 + k * PITCH
+        pts += [(x0 + TOOTH, z0 + 0.04), (x0, z0 + 0.24)]
+    pts.append((x0, ztop - 0.36))
+    pts = [(sign * x, z) for x, z in pts]
+    return slab(name, pts if sign > 0 else pts[::-1], TH, 'bar')
 
-# 珠头：压在棒顶上，两者相交处由 Freestyle 的可见轮廓自然分开
-bead = prim('uv_sphere', 'bead', segments=24, ring_count=14, radius=BEAD_R,
-            location=(0, 0, 0.62))
-bead.scale = (1.0, 1.0, BEAD_FLAT)
 
-render_turntable('hairpin', active=bar, lean=50, tilt=0.25, roll=0.15)
+for s, nm in ((1, 'jaw_r'), (-1, 'jaw_l')):
+    ob = jaw(nm, s)
+    ob.matrix_world = (Matrix.Translation((0, 0, 0.74)) @ Matrix.Rotation(-s * OPEN, 4, 'Y')
+                       @ Matrix.Translation((0, 0, -0.74))) @ ob.matrix_world
+
+prim('uv_sphere', 'bead', segments=16, ring_count=10, radius=0.38, location=(0, 0, 0.80))
+
+# 整件归一到 NOMINAL：量所有顶点的世界坐标包围盒，按最长边缩
+obs = list(bpy.data.objects)
+lo, hi = [1e9] * 3, [-1e9] * 3
+for ob in obs:
+    for v in ob.data.vertices:
+        w = ob.matrix_world @ v.co
+        for i in range(3):
+            lo[i], hi[i] = min(lo[i], w[i]), max(hi[i], w[i])
+dim = [hi[i] - lo[i] for i in range(3)]
+# 改 BARW / OPEN / ZBOT 以后盯这一行：z 必须是最大的那个，否则长轴躺倒了
+print('BBOX x%.2f y%.2f z%.2f' % tuple(dim), flush=True)
+s = NOMINAL / max(dim)
+for ob in obs:
+    ob.matrix_world = Matrix.Diagonal((s, s, s, 1.0)) @ ob.matrix_world
+
+render_turntable('hairpin', active=bpy.data.objects['jaw_r'],
+                 lean=50, tilt=0.25, roll=0.15, screen_r=22)

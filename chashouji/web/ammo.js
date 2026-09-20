@@ -39,24 +39,74 @@ const Ammo = (function () {
   const INK = 'rgb(52,40,36)';
   function ink(ctx, lw) { ctx.lineWidth = lw; ctx.strokeStyle = INK; ctx.stroke(); }
 
+  /* 鸭嘴夹的外轮廓：上窄下宽的 ∧ 形整块，纵向 ±1.02r、下沿 ±0.96r。
+     3D 那版是**两片**各自成形、中间留 0.16r 的缝，照搬过来会翻车：这里 r=22，
+     缝只有 3.5 屏幕px，而矢量描边 2px 一画（内外各一半）缝就被填死，六十多
+     像素上读出来是一整个粉方块。跟 3D 建模那边同一条约束 —— 间隙小于两倍
+     线宽，两条描边就并成一条黑带。
+     所以矢量兜底版换了个表达：外轮廓画成合拢的一整片，两片的咬合面改用一条
+     **锯齿 INK 线**画出来。齿是这件东西的第一识别点，缝不是；缝被填死就认不
+     出是夹子，而一条锯齿线在 62px 上仍然读得出"带齿的咬合面"。
+     两条路不会同屏出现（有贴图就走贴图），所以这里按可读性定形，不逐点复刻。 */
+  function clipBody(ctx, r) {
+    ctx.moveTo(-0.60 * r, -0.71 * r);
+    ctx.lineTo(0.60 * r, -0.71 * r);
+    ctx.lineTo(0.96 * r, 1.02 * r);
+    ctx.lineTo(-0.96 * r, 1.02 * r);
+    ctx.closePath();
+  }
+
+  /* 一颗瓜子壳：尖头朝 +x、钝头朝 -x，长 1.6r 宽 0.78r。
+     两头都画成尖的话读起来像叶子或者杏仁，钝的那头才是瓜子。 */
+  function kernel(ctx, r) {
+    ctx.moveTo(r * 0.80, 0);
+    ctx.quadraticCurveTo(r * 0.25, r * 0.39, -r * 0.45, r * 0.34);
+    ctx.quadraticCurveTo(-r * 0.86, r * 0.21, -r * 0.86, 0);
+    ctx.quadraticCurveTo(-r * 0.86, -r * 0.21, -r * 0.45, -r * 0.34);
+    ctx.quadraticCurveTo(r * 0.25, -r * 0.39, r * 0.80, 0);
+  }
+
+  /* 一撮瓜子怎么摆：一颗横躺打底，另外四颗按黄金角散着斜插在它上面，彼此
+     压住但不平行。平行摆过 —— 两条轮廓并成一根黑杠，读成一片叶子。
+     [dx, dy, 角度]，单位 r / 弧度。 */
+  const SEEDLAY = [[0, 0, 0], [0.17, 0.11, 0.86], [-0.13, -0.15, 1.98],
+                   [0.09, -0.19, 3.44], [-0.15, 0.17, 5.12]];
+
   const ITEM = {
-    // 发卡：一根粉色小棒加一颗珠子，连珠用
+    /* 发卡：带齿的鸭嘴夹，竖着飞。原先是"一根粉色小棒加一颗珠子" —— 那个形体
+       在 3D 转盘里剥掉外轮廓之后内部一条描边都不剩（结构密度 0%），转起来就是
+       一张打转的贴纸。换成鸭嘴夹是为了给它**内部结构**：两片之间有缝、内缘有齿、
+       顶上压一颗铰点珠。这里是矢量兜底（?nosprite 或素材没加载出来时走这条），
+       尺寸照 3D 那版归一，两条路上飞的得是同一件东西。 */
     hairpin(ctx, r) {
-      ctx.beginPath(); ctx.roundRect(-r, -r * 0.3, r * 2, r * 0.6, r * 0.3);
-      ctx.fillStyle = '#ff8fb8'; ctx.fill(); ink(ctx, r * 0.26);
-      ctx.beginPath(); ctx.arc(-r * 0.62, 0, r * 0.46, 0, 6.2832);
-      ctx.fillStyle = '#ffd9e8'; ctx.fill(); ink(ctx, r * 0.22);
+      ctx.beginPath(); clipBody(ctx, r);
+      ctx.fillStyle = '#ff7aab'; ctx.fill(); ink(ctx, r * 0.085);
+      // 咬合面：一条来回三趟的锯齿线，对应 3D 版每片内缘那三颗齿
+      ctx.beginPath();
+      ctx.moveTo(0, -0.71 * r);
+      for (let i = 0; i < 6; i++) {
+        ctx.lineTo((i % 2 ? -0.19 : 0.19) * r, (-0.71 + 1.73 * (i + 0.5) / 6) * r);
+      }
+      ctx.lineTo(0, 1.02 * r);
+      ctx.lineWidth = r * 0.085; ctx.strokeStyle = INK;
+      ctx.lineJoin = 'miter'; ctx.stroke(); ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.arc(0, -r * 0.76, r * 0.26, 0, 6.2832);
+      ctx.fillStyle = '#ffb8d4'; ctx.fill(); ink(ctx, r * 0.085);
     },
 
-    // 瓜子壳：一颗水滴，深棕。男方的连珠，嗑瓜子看戏顺手就弹过去了
+    /* 瓜子：一撮五颗，不是一颗。同样是为了内部结构 —— 单颗水滴的结构密度是 0，
+       五颗交叉叠着才有彼此遮挡的接缝可读。男方的连珠，嗑瓜子看戏顺手弹过去。 */
     seed(ctx, r) {
-      ctx.beginPath();
-      ctx.moveTo(r, 0);
-      ctx.quadraticCurveTo(0, r * 0.66, -r, 0);
-      ctx.quadraticCurveTo(0, -r * 0.66, r, 0);
-      ctx.fillStyle = '#6b5136'; ctx.fill(); ink(ctx, r * 0.24);
-      ctx.beginPath(); ctx.moveTo(r * 0.5, 0); ctx.lineTo(-r * 0.62, 0);
-      ctx.lineWidth = r * 0.16; ctx.strokeStyle = 'rgba(255,240,220,.5)'; ctx.stroke();
+      for (const [dx, dy, a] of SEEDLAY) {
+        ctx.save();
+        ctx.translate(dx * r, dy * r); ctx.rotate(a);
+        ctx.beginPath(); kernel(ctx, r * 0.62);
+        ctx.fillStyle = '#6b5136'; ctx.fill(); ink(ctx, r * 0.09);
+        ctx.beginPath();
+        ctx.moveTo(r * 0.30, 0); ctx.lineTo(-r * 0.40, 0);
+        ctx.lineWidth = r * 0.07; ctx.strokeStyle = '#ae9570'; ctx.stroke();
+        ctx.restore();
+      }
     },
 
     // 抱枕：圆角方 + 缝线 + 两点兔耳暗示，跟沙发上那只兔抱枕呼应
@@ -233,17 +283,23 @@ const Ammo = (function () {
      就是四遍完整物品）又脏（细节在高速移动里糊成噪点）。它只需要形状。
      调用方负责 fill，这里只铺路径。 */
   const SILH = {
+    // 发卡：∧ 形块加顶上的珠。残影是实心填充，锯齿接缝在这里画不出来，不画
     hairpin(ctx, r) {
       ctx.beginPath();
-      ctx.roundRect(-r, -r * 0.3, r * 2, r * 0.6, r * 0.3);
-      ctx.moveTo(-r * 0.16, 0);
-      ctx.arc(-r * 0.62, 0, r * 0.46, 0, 6.2832);
+      clipBody(ctx, r);
+      ctx.moveTo(r * 0.26, -r * 0.76);
+      ctx.arc(0, -r * 0.76, r * 0.26, 0, 6.2832);
     },
+    // 瓜子：五颗交叉的水滴，轮廓本身就是"一撮"的识别点
     seed(ctx, r) {
       ctx.beginPath();
-      ctx.moveTo(r, 0);
-      ctx.quadraticCurveTo(0, r * 0.66, -r, 0);
-      ctx.quadraticCurveTo(0, -r * 0.66, r, 0);
+      for (const [dx, dy, a] of SEEDLAY) {
+        /* save/restore 夹着建路径是安全的：路径点在 addPath 那一刻就按当时的
+           变换换算成用户空间坐标了，路径本身不属于 drawing state。 */
+        ctx.save(); ctx.translate(dx * r, dy * r); ctx.rotate(a);
+        kernel(ctx, r * 0.62);
+        ctx.restore();
+      }
     },
     pillow(ctx, r) { ctx.beginPath(); ctx.roundRect(-r, -r * 0.84, r * 2, r * 1.68, r * 0.4); },
     gamepad(ctx, r) { ctx.beginPath(); ctx.roundRect(-r, -r * 0.48, r * 2, r * 0.96, r * 0.44); },
@@ -322,8 +378,8 @@ const Ammo = (function () {
     milktea: { src: 'assets/items/milktea_atlas.webp', n: 36, cols: 6, cell: 264, scale: 1.30 },
     ringbox: { src: 'assets/items/ringbox_atlas.webp', n: 36, cols: 6, cell: 336, scale: 1.61 },
     photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.38 },
-    hairpin: { src: 'assets/items/hairpin_atlas.webp', n: 36, cols: 6, cell: 96,  scale: 1.08 },
-    seed:    { src: 'assets/items/seed_atlas.webp',    n: 36, cols: 6, cell: 96,  scale: 1.10 },
+    hairpin: { src: 'assets/items/hairpin_atlas.webp', n: 36, cols: 6, cell: 138, scale: 1.42 },
+    seed:    { src: 'assets/items/seed_atlas.webp',    n: 36, cols: 6, cell: 130, scale: 1.34 },
     pillow:  { src: 'assets/items/pillow_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.18 },
     gamepad: { src: 'assets/items/gamepad_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.07 },
   };
