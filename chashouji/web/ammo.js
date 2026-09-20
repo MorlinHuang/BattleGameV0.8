@@ -305,9 +305,18 @@ const Ammo = (function () {
      有贴图就用贴图，没有就退回矢量 —— `?sim` 那条分支不加载任何素材，必须能退。
 
      `cell` 是单格边长，`n` 是转盘帧数，`scale` 补偿裁剪留白：图集是按**所有
-     角度的并集**裁的，单帧物体填不满一格。 */
+     角度的并集**裁的，单帧物体填不满一格。
+
+     转轴（建模侧定的，这里只是记着为什么同一套图集看起来转法不一样）：
+     各向同性的绕横轴翻面（bouquet）；有正立方向、内容绕竖轴均匀的绕自身竖轴
+     （milktea）；内容只朝一个方向的绕观察轴（ringbox / photo，正面锁定朝观众，
+     厚度靠固定倾角给）。选错的代价是一半的帧读不出题材 —— 详见
+     `docs/3D方案评估.md` 7.9。 */
   const SPRITE = {
     bouquet: { src: 'assets/items/bouquet_atlas.webp', n: 36, cols: 6, cell: 272, scale: 1.36 },
+    milktea: { src: 'assets/items/milktea_atlas.webp', n: 36, cols: 6, cell: 251, scale: 1.23 },
+    ringbox: { src: 'assets/items/ringbox_atlas.webp', n: 36, cols: 6, cell: 336, scale: 1.58 },
+    photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.36 },
   };
 
   function loadSprites(ver, off) {
