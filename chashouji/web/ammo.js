@@ -409,6 +409,32 @@ const Ammo = (function () {
         g.fillStyle = `rgb(${TAIL[k] || '52,40,36'})`;
         g.fillRect(0, 0, c.width, c.height);
         sp.silh = c;
+
+        /* 边缘光用的剪影：同一张贴图，染成它自己的 AURA 色，**三分之一分辨率**。
+           物品不是圆的，所以想要一圈贴着轮廓的薄光，光的形状只能取自物品自己 ——
+           圆形渐变贴图怎么调都是个光斑。
+           分辨率只取三分之一，两个理由：一是内存，全分辨率八件要多吃 66MB（原图
+           加剪影已经占了两份），三分之一是 7MB；二是放大回去时双线性插值自带
+           两三个像素的过渡，边就从"一道实色描边"变成了"一圈光"，不用再做模糊。
+           逐格烘、格间留 2px 空边：整张缩小的话相邻格会互相采样进来 —— 打包时
+           并集就是格边长，长轴正对镜头那几帧物品正好顶到格子边上，糊过去就是
+           邻格的边渗进来一道杂色。 */
+        const RS = 1 / 3, PAD = 2;
+        const ce = Math.max(8, Math.round(sp.cell * RS)), step = ce + PAD * 2;
+        const rows = Math.ceil(sp.n / sp.cols);
+        const rc = document.createElement('canvas');
+        rc.width = sp.cols * step; rc.height = rows * step;
+        const rg = rc.getContext('2d');
+        for (let i = 0; i < sp.n; i++) {
+          const cx = i % sp.cols, cy = (i / sp.cols) | 0;
+          rg.drawImage(im, cx * sp.cell, cy * sp.cell, sp.cell, sp.cell,
+                       cx * step + PAD, cy * step + PAD, ce, ce);
+        }
+        rg.globalCompositeOperation = 'source-in';
+        rg.fillStyle = `rgb(${(AURA[k] || [255, 140, 60]).join(',')})`;
+        rg.fillRect(0, 0, rc.width, rc.height);
+        sp.rim = rc; sp.rimCell = ce; sp.rimStep = step; sp.rimPad = PAD;
+
         done(true);
       };
       im.onerror = () => done(false);       // 缺素材不阻塞，退回矢量画法
@@ -432,20 +458,17 @@ const Ammo = (function () {
     c = document.createElement('canvas');
     c.width = c.height = S;
     const g = c.getContext('2d');
-    /* 渐变是**环形**的：浓度峰值落在物体轮廓所在的那一圈，不在正中心。
-       原先是中心 0.92 一路衰减到边缘 0 的普通放射光，而色晕是画在本体**下面**
-       的 —— 最浓的中心整块被本体盖住，真正露出来的只有边缘那一圈，那里的
-       alpha 算下来只剩 0.22（横向）和 0.09（竖向），再乘 gk 就是 0.03~0.16。
-       这就是"弹幕特效有些淡"的全部来由：光的能量九成画在了看不见的地方。
-       把峰值挪到 0.63（本体横向轮廓落在归一化半径 0.645，竖向 0.847），同一
-       张贴图、同样的开销，露出来的那一圈从 0.22 变成 0.95。
-       内侧不清零而是留 0.42：色晕沿轨迹摆三团，后两团没有本体遮挡，中心一空
-       就读成三个烟圈。留着这点底，它们仍是一团光。 */
+    /* 普通的中心浓、向外衰减的放射光。曾经把峰值挪到 0.63 做成环形，想让被
+       本体盖住的那部分能量露出来 —— 方向错了：这张贴图是**圆**的，而物品不是。
+       圆环贴不住轮廓，加浓之后露出来的不是"物体边上的一圈光"，是一个比物品
+       大半圈的椭圆光斑，读起来就是物品底下压了一团影子。
+       边缘光现在由 ⑤ 层负责，那一层的形状直接取自物品自己的剪影，贴得住。
+       这张贴图退回它本来该干的活：**只摆在身后**当弹道余辉，不再画在本体下面，
+       所以中心浓是对的，环形反而会让没有遮挡的余辉团读成烟圈。 */
     const rg = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-    rg.addColorStop(0.00, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.42)`);
-    rg.addColorStop(0.40, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.52)`);
-    rg.addColorStop(0.63, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.95)`);
-    rg.addColorStop(0.82, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.55)`);
+    rg.addColorStop(0.00, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.80)`);
+    rg.addColorStop(0.42, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.46)`);
+    rg.addColorStop(0.74, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.14)`);
     rg.addColorStop(1.00, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
     g.fillStyle = rg; g.fillRect(0, 0, S, S);
     auraCache.set(key, c);
@@ -695,20 +718,24 @@ const Ammo = (function () {
       const reach = reachOf(p);
       const tail = p.hx[backAt(p, reach)];
 
-      /* ① 弹道色晕：沿真实轨迹摆三团，越靠后越小越淡。
-         光要铺满整条路径 —— 只挂在本体上的话弹道本身是暗的，读出来是"一个
-         发光的东西在移动"，而不是"它带着一道光在走"。
-         只比本体大半圈：色晕一大就把物品洗白了，浅粉的被子会整块糊成发光板，
-         格纹和翻角全没了。它该是物体边缘的一圈光，不是一团雾。
+      /* ① 弹道余辉：沿真实轨迹在**身后**摆两团，越靠后越小越淡。
+         光要铺满整条路径 —— 弹道本身是暗的话，读出来是"一个发光的东西在
+         移动"，而不是"它带着一道光在走"。
+         身后两团，不含本体那一团。曾经有第三团压在本体正下方，半宽 1.55r，
+         而本体轮廓横向就在 1.0r —— 于是每颗弹幕底下都垫着一圈比它大半圈的
+         椭圆光斑。那东西贴不住轮廓（本体不是圆的），读起来是影子不是光。
+         本体的边缘光归 ⑤ 层，那一层的形状取自物品剪影。这两团只管余辉，
+         所以也收小降浓了（原来 1.55r×1.18r / gk 0.34~0.74）：余辉要的是
+         "刚才有个亮东西从这儿过去了"，不是一路铺开的雾。
          越接近对抗线越浓：命中前的最后一段自己会烧起来。 */
       if (!bare) {
         ctx.save();
-        const gk = 0.34 + p.near * 0.40;
-        for (let k = 2; k >= 0; k--) {
-          const idx = k ? backAt(p, reach * k * 0.33) : p.hi;
+        const gk = 0.11 + p.near * 0.17;
+        for (let k = 2; k >= 1; k--) {
+          const idx = backAt(p, reach * k * 0.33);
           const f = 1 - k * 0.19;
           ctx.globalAlpha = gk * f * f;
-          const gw = p.r * 1.55 * f, gh = p.r * 1.18 * f;
+          const gw = p.r * 1.02 * f, gh = p.r * 0.78 * f;
           ctx.drawImage(tex, p.hx[idx] - gw, p.y - gh, gw * 2, gh * 2);
         }
         ctx.restore();
@@ -792,6 +819,47 @@ const Ammo = (function () {
 
       ctx.save();
       ctx.translate(p.x, p.y);
+
+      /* ⑤ 边缘光：物品自己的剪影，染成 AURA 色，向外撑出几个像素，垫在本体
+         正下方 —— 露出来的就是紧贴轮廓的一圈薄光。
+         这一层是"自发光"的全部来源。之前那版靠圆形色晕贴图去做，怎么调都不对：
+         圆的东西贴不住方的、扁的、带把手的轮廓，调淡了看不见，调浓了就是物品
+         底下压了一团光斑。形状对了之后，浓度反而可以放心给足。
+         撑出的量按**屏幕像素**算，不按半径比例：光边的宽度是个绝对观感，小件
+         按比例算会细到看不见。整格放大 rim*2.8，物品轮廓在格内归一化半径 0.645
+         （横向）、0.847（竖向），所以实际外扩是 0.9~1.2 个 rim —— 两个方向略有
+         厚薄差，比圆形贴图那种 1.55 倍的错位小一个量级。
+         贴图本体自带 2.8px 深色描边，这圈亮光落在描边**外侧**，深边夹在中间，
+         正好是轮廓光该有的读法：物体是实的，边上挂着光。 */
+      if (!bare) {
+        ctx.globalAlpha = 0.30 + p.near * 0.24;
+        /* 厚度：小件 2px、最大的花束 3px 出头，再算上贴图放大的柔边，观众看到
+           的是 3~5px 的一道光。给得再宽一点就不是轮廓光了 —— 光一旦厚到能盖住
+           物品自己的描边，读出来就是物品底下垫了个发光的影子。
+           嫌淡/嫌浓就动这两个数：rim 是宽度（像素），上面那行的 alpha 是浓度。
+           两个都别超过原来那版圆形色晕的量级 —— 那一版就是浓度堆上去之后，
+           因为形状不对而读成了光斑。 */
+        const rim = 1.5 + p.r * 0.020;
+        if (useSp) {
+          const c = cellOf(sp, p.rot), q = sp.rimStep, e = sp.rimCell;
+          const dd = p.r * sp.scale * 2 + rim * 2.8;
+          ctx.drawImage(sp.rim, (c % sp.cols) * q + sp.rimPad, ((c / sp.cols) | 0) * q + sp.rimPad,
+                        e, e, -dd / 2, -dd / 2, dd, dd);
+        } else {
+          /* 矢量兜底：SILH 的轮廓半径就是 r，直接放大 1+rim/r。这条路没有贴图
+             那种插值柔边，边会硬一点 —— 它本来就是素材没加载出来时的备胎。 */
+          ctx.save();
+          ctx.rotate(p.rot);
+          const kr = 1 + rim / p.r;
+          ctx.scale(kr, kr);
+          ctx.fillStyle = auStr;
+          SILH[p.item](ctx, p.r);
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+      }
+
       if (useSp) {
         /* 贴图本体：**不转 canvas**。转盘序列里每一格自己就是那个角度渲好的，
            再叠一次 2D 旋转就成了"又翻又转"，而且光影会跟着 canvas 一起转，
