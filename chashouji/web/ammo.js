@@ -314,13 +314,13 @@ const Ammo = (function () {
      `docs/3D方案评估.md` 7.9。 */
   const SPRITE = {
     bouquet: { src: 'assets/items/bouquet_atlas.webp', n: 36, cols: 6, cell: 272, scale: 1.36 },
-    milktea: { src: 'assets/items/milktea_atlas.webp', n: 36, cols: 6, cell: 251, scale: 1.23 },
-    ringbox: { src: 'assets/items/ringbox_atlas.webp', n: 36, cols: 6, cell: 336, scale: 1.58 },
-    photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.36 },
+    milktea: { src: 'assets/items/milktea_atlas.webp', n: 36, cols: 6, cell: 264, scale: 1.30 },
+    ringbox: { src: 'assets/items/ringbox_atlas.webp', n: 36, cols: 6, cell: 336, scale: 1.61 },
+    photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.38 },
     hairpin: { src: 'assets/items/hairpin_atlas.webp', n: 36, cols: 6, cell: 96,  scale: 1.08 },
-    seed:    { src: 'assets/items/seed_atlas.webp',    n: 36, cols: 6, cell: 96,  scale: 1.08 },
-    pillow:  { src: 'assets/items/pillow_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.19 },
-    gamepad: { src: 'assets/items/gamepad_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.08 },
+    seed:    { src: 'assets/items/seed_atlas.webp',    n: 36, cols: 6, cell: 96,  scale: 1.10 },
+    pillow:  { src: 'assets/items/pillow_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.18 },
+    gamepad: { src: 'assets/items/gamepad_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.07 },
   };
 
   function loadSprites(ver, off) {
