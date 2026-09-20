@@ -42,8 +42,10 @@ const GREEN = [126, 217, 87], RED = [255, 72, 72];
 
 ## 三张表：改数值只改这里
 
-**`P` —— 参数表**（几何 + 手感）：`curve` 进度→位移的非线性 / `half` 对抗线最大偏移 /
-`drag` 角色整体跟随比例 / `phoneY=560` 手机高度锚 / `rug` 地毯四角 /
+**`P` —— 参数表**（几何 + 手感）：`curve` 进度→位移的曲线（**线性 1.0**，别再设成
+中段慢的 >1 —— 中段姿态差别本来就小、全指望平移补，压扁它等于让比赛最长的那一段
+画面静止）/ `half=150` 对抗线最大偏移 / `sway=5` 空闲拉锯幅度（百分点）/
+`drag=0.55` 角色整体跟随比例 / `phoneY=560` 手机高度锚 / `rug` 地毯四角 /
 `waveSpread` `waveDecay` 冲量传播 / `hitK` `hitDamp` 角色被推开的弹力与阻尼 /
 `punchDecay` `tintDecay` 脉冲与染色衰减。
 
@@ -81,12 +83,26 @@ photo:   { from:-1, style:'heavy',  item:'photo',   r:68,      power:4, recipe:'
 
 ```js
 const S = { p: 50, t: 0, auto: true, line: 3 };   // p 是唯一的真实状态
-const FX = { phoneX, phoneY, rowOff[], rowHeat[], rowImp[], struggle, actorX, jit,
-             hitX, hitV, punch, tint, tintA };     // 全部由 derive(dt) 算出
+const FX = { pDraw, phoneX, phoneY, rowOff[], rowHeat[], rowImp[], struggle, actorX,
+             jit, hitX, hitV, punch, tint, tintA };   // 全部由 derive(dt) 算出
 ```
 
-`derive(dt)` 每帧从 `S.p` 算出这一帧所有位置与强度，绘制函数只读 `FX`。
+`derive(dt)` 每帧算出这一帧所有位置与强度，绘制函数只读 `FX`。
 **不要在绘制里改状态**——那是"帧和线对不上"这类 bug 的来源。
+
+**进度有两个数，别混**：
+- `S.p` 是战况真源。**胜负只读它**（p≥100/≤0 判胜、时间到按 p>53 / p<47 比），
+  HUD 的血条与百分比也读它。
+- `FX.pDraw = S.p + 空闲拉锯` 是画面读的那个。对抗线、地面分色、角色取哪一帧、
+  手机位移**全部读它**，所以"对抗线对不上画面"在构造上仍然不可能发生。
+
+拉锯是为了解决"双方都不送礼物时 S.p 一动不动、画面僵在同一档关键帧上很久"。
+三个频率叠加（1.65/2.73/4.65 rad/s），**不要用两个**——两频会周期性互相抵消，
+实测 0.83/1.41 那组有 3.6 秒的平台期，正好把"长时间同一个动作"复现了一遍。
+收敛用 `calm = 1-|bias|³`，一次方衰减太快（p=78 就只剩四成），而"长时间不动"
+在任何进度上都会发生。
+**扰动绝不能进 `S.p`**：±5 的抖动会把接近中点的比赛结果变成掷骰子；也不能进血条，
+观众刚刷完礼物就看见数字往回跌，读出来是"我刷的没用"。
 
 对抗线在任意高度的横坐标：
 ```js
@@ -124,7 +140,8 @@ renderFx      对抗线/指针 → 刻度尺 → 气泡 → 弹幕 → 粒子 �
 | `?auto=0` | 停掉自动推进 |
 | `?zoom=1` | 画布按原始宽度显示（截图用） |
 | `?line=0..3` | 对抗线样式：0 全无 / 1 原发光柱 / 2 地面战线+指针 / 3 只要指针 |
-| `?strip=N` | N 档角色帧并排成胶片（2~21） |
+| `?strip=N` | N 档角色帧并排成胶片（2~21）。自动关掉空闲拉锯，要的是各档之间的**纯**差异 |
+| `?swaystrip=N&swayms=M&swayp=P` | 空闲拉锯胶片：**同一个 S.p** 只让时间往前走，每格标 pDraw 与手机 x。拉锯是纯时间函数，单张截图跟静止画面一模一样，两张不同时刻的截图又分不清是它在动还是页面没加载完 |
 | `?fxstrip=N&fxms=M&fxpower=1..3&fxrecipe=thud\|feather\|star\|debris` | 粒子配方胶片 |
 | `?ammostrip=N&ammoms=M&ammogift=<礼物名>&ammoy=<高度>` | 弹道胶片 |
 | `?bubblestrip=N&bubblems=M` | 气泡胶片，四种消息轮流强制推 |
