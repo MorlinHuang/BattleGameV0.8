@@ -1,8 +1,13 @@
 /* 《查手机》网页版 —— 单一真源驱动。
  *
- * 全场唯一状态是 S.p（查岗党进度 0~100）。它派生出 FX.phoneX，对抗线、
- * 地面分色、HUD、角色取哪一帧，全部读它。画面上没有第二个战况
- * 来源，所以"对抗线对不上画面"在构造上不可能发生。
+ * 全场唯一状态是 S.p（查岗党进度 0~100）。胜负判定只读它。
+ *
+ * 场景这一侧读的是 FX.pDraw = S.p + 空闲拉锯（derive 里算）。对抗线、地面
+ * 分色、角色取哪一帧、手机位移，**全部读同一个 pDraw**，所以"对抗线对不上
+ * 画面"在构造上仍然不可能发生。只有 HUD 的血条与百分比读 S.p 真值。
+ * 分成两个数是为了把"战况"和"这一刻谁拽赢了"分开：拔河里双方一直在较劲，
+ * 绳子来回动并不代表谁占了上风 —— 让那点来回去改 S.p，会把接近中点的比赛
+ * 结果变成掷骰子；让它去改血条，观众刚刷完礼物就会看见数字往回跌。
  */
 const W = 960, H = 1334;
 const TOP = 128, BOT = 1232, MID = 480;
@@ -11,12 +16,23 @@ const ROWS = 15;
 const GREEN = [126, 217, 87], RED = [255, 72, 72];
 
 const P = {
-  curve: 1.55,     // 进度→位移的非线性，中段慢、末段快
+  /* 进度→位移的曲线，**线性**：每涨一个百分点，手机走同样远。
+     曾经是 1.55（中段慢、末段快），那跟下面那段注释写的设计意图正好是反的 ——
+     中段姿态差别本来就小、全指望平移补，而 1.55 把中段压得最扁：p 从 50 走到
+     60 手机一共只动 9px，在 960 宽的画面上等于没动，观众看到的是比赛最长的
+     那一段画面静止。两头反倒是姿态已经够夸张、最不缺平移的地方。
+     改成 1.0 之后同样 50→60 走 30px，而两头的行程一点没少。 */
+  curve: 1.0,
   /* 关键帧本身已经把"谁被拖过去"画进姿态里了，half/drag 管的是在此之上
      整组人物平移多少：中段那几档姿态差别很小，全靠这段平移把"手机正在被
-     拽走"读出来；两头则相反 —— 姿态已经够夸张，再平移就该出画了。 */
-  half: 108,       // 对抗线最大偏移
-  drag: 0.58,      // 角色整体跟随对抗线的比例
+     拽走"读出来；两头则相反 —— 姿态已经够夸张，再平移就该出画了。
+     half 从 108 提到 150 是量过的：p=0/100 两格里人物组离画框还剩 100px 以上。
+     drag 同步从 0.58 收到 0.55，角色的最大平移 63→82px，吃掉其中 19px，
+     余量仍有 80px；多出来的行程留给手机自己走。 */
+  half: 150,       // 对抗线最大偏移
+  drag: 0.55,      // 角色整体跟随对抗线的比例
+  /* 空闲拉锯的幅度，单位是**进度的百分点**。见 derive 里的 FX.pDraw。 */
+  sway: 5,
   tilt: 1.55, bulge: 46, linkW: 0.80, shapeRate: 2.6,
   phoneY: 560,     // 对抗线上"手机所在高度"，气泡与辉光的锚
   rug: { top: 738, bot: 1128, tl: 88, tr: 872, bl: 28, br: 912 },  // 底版里地毯四角
@@ -74,6 +90,7 @@ const S = {
 };
 const FX = {
   phoneX: MID, phoneY: P.phoneY,
+  pDraw: 50,                         // 画面读的进度（= S.p 叠上空闲拉锯），见 derive
   rowOff: new Array(ROWS).fill(0), rowHeat: new Array(ROWS).fill(0),
   rowImp: new Array(ROWS).fill(0),   // 冲击波，独立于常规形变
   struggle: 1, actorX: 0, jit: 0,
@@ -224,7 +241,26 @@ function startMatch() {
 
 /* ---------- 表现层：由 S.p 派生画面 ---------- */
 function derive(dt) {
-  const bias = (S.p - 50) / 50;
+  /* 空闲拉锯。双方都不送礼物时 S.p 一动不动，画面就僵在同一档关键帧上很久 ——
+     可拔河里"没人占上风"不等于"没人使劲"，绳子该一直在小幅来回。
+     扰动只进**表现层**：S.p 仍然是唯一的战况真源，胜负判定读的是它；画面上的
+     手机、角色姿态、对抗线、地面分色、血条一律改读 FX.pDraw。
+     不能直接摇 S.p —— 时间到是按 p>53 / p<47 判胜负的，±5 的抖动会把接近中点
+     的比赛结果变成掷骰子。
+     三个频率叠加，不是单频也不是两频。单频读出来是钟摆，一眼看穿；两频会
+     周期性地互相抵消 —— 实测 0.83/1.41 那一组有长达 3.6 秒的平台期，胶片上
+     连着四格 pDraw 都卡在 51.2，正好把"长时间同一个动作"原样复现了一遍。
+     这一组每 0.6 秒的极差中位 1.9 个百分点，最长的呆滞只有 0.6 秒。
+     越接近端点越收敛（calm）。用三次方而不是一次方：一次方衰减太快，p=78
+     就只剩四成幅度，可"长时间不动"在任何进度上都会发生，不是中点专有的毛病；
+     三次方让它在 p=90 之前基本满幅，只在最后几个点收住。收住是必须的 ——
+     pDraw 到了 100 而 S.p 还停在 96 的话，画面推到底了却不判胜负。 */
+  const calm = 1 - Math.pow(Math.abs(S.p - 50) / 50, 3);
+  FX.pDraw = clamp(S.p + (Math.sin(S.t * 1.65) * 0.55
+                        + Math.sin(S.t * 2.73 + 2.1) * 0.30
+                        + Math.sin(S.t * 4.65 + 4.3) * 0.15) * P.sway * calm, 0, 100);
+
+  const bias = (FX.pDraw - 50) / 50;
   // p 大 = 查岗党(女方,在左)占优 = 手机被拽向左
   const target = MID - Math.sign(bias) * Math.pow(Math.abs(bias), P.curve) * P.half;
   FX.phoneX += (target - FX.phoneX) * approach(dt, 4.2);
@@ -1133,7 +1169,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      的照片，角色每帧重画一张 900 高的 PNG，特效层则随着场上有多少东西线性
      涨。"哪一层在拖后腿"只有分开计时才答得出，而合在一个函数里就只能猜。 */
   function renderBg() {
-    const bias = (S.p - 50) / 50;
+    const bias = (FX.pDraw - 50) / 50;
     const ox = Particles.off.x, oy = Particles.off.y;
     bctx.clearRect(0, 0, W, H);
     bctx.drawImage(bg, 0, 0, W, H);
@@ -1148,12 +1184,12 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const ox = Particles.off.x, oy = Particles.off.y;
     cctx.clearRect(0, 0, W, H);
     cctx.save(); cctx.translate(ox, oy);
-    seq.draw(cctx, S.p, FX.actorX, FX.punch, FX.tint, FX.tintA);
+    seq.draw(cctx, FX.pDraw, FX.actorX, FX.punch, FX.tint, FX.tintA);
     cctx.restore();
   }
 
   function renderFx() {
-    const bias = (S.p - 50) / 50;
+    const bias = (FX.pDraw - 50) / 50;
     const ox = Particles.off.x, oy = Particles.off.y;
     fctx.clearRect(0, 0, W, H);
     fctx.save(); fctx.translate(ox, oy);
@@ -1168,6 +1204,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Ammo.draw(fctx);
     Particles.draw(fctx);
     fctx.restore();
+    /* 血条与百分比读 **S.p 真值**，不读 pDraw。手机位置是"这一刻谁拽赢了"，
+       会来回晃；血条是"累计战况"，不该跟着晃 —— 观众刚刷完礼物却看见数字
+       往回跌，读出来是"我刷的没用"。两者本来就是两件事，拔河时绳子来回而
+       没有人真的前进，正是这个意思。 */
     drawHUD(fctx, S.p);
     Particles.drawFlash(fctx, W, H);
   }
@@ -1177,6 +1217,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* ?strip=N 出一条连帧胶片：一次看清 N 个档位之间过不过得去。
      动画在静止截图里看不出问题，只有把相邻档位并排摆着才看得出哪一格在跳。 */
   if (Q.has('strip')) {
+    // 胶片要的是各档之间的**纯**差异，拉锯会给每格叠上同一个偏移，关掉
+    P.sway = 0;
     const n = clamp(+Q.get('strip') | 0, 2, 21), sc = 0.5;
     const out = document.createElement('canvas');
     out.width = n * W * sc; out.height = H * sc;
@@ -1192,6 +1234,41 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 86, 26);
       o.fillStyle = '#fff'; o.font = '600 15px system-ui';
       o.fillText(`p=${S.p.toFixed(0)}`, dx + 8, 18);
+    }
+    const stage = document.getElementById('stage');
+    stage.style.width = out.width + 'px';
+    stage.style.aspectRatio = `${out.width}/${out.height}`;
+    stage.innerHTML = '';
+    out.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+    stage.appendChild(out);
+    return;
+  }
+
+  /* ?swaystrip=N 看空闲拉锯：**同一个 S.p**，只让时间往前走，N 格并排。
+     这是唯一能看清它的办法 —— 拉锯是纯时间函数，单张截图里跟静止画面长得
+     一模一样，而两张不同时刻的截图又分不清"是拉锯在动"还是"页面还没加载完"。
+     每格标出 pDraw 与手机 x，位移直接读数。
+     ?swayp= 定在哪个进度看（默认 50）；越靠近端点 calm 越小，拉锯该越弱，
+     这条也靠它验证。?swayms= 每格之间推进多少毫秒（默认 700）。 */
+  if (Q.has('swaystrip')) {
+    const n = clamp(+Q.get('swaystrip') | 0, 2, 12), sc = 0.5;
+    const MS = clamp(+(Q.get('swayms') || 700), 60, 4000) / 1000;
+    S.p = clamp(+(Q.get('swayp') || 50), 0, 100); S.auto = false;
+    const out = document.createElement('canvas');
+    out.width = n * W * sc; out.height = H * sc;
+    const o = out.getContext('2d');
+    o.fillStyle = '#0c0e12'; o.fillRect(0, 0, out.width, out.height);
+    // 先空跑两秒：phoneX 是趋近过去的，不预热的话第一格还停在画面正中
+    S.t = 0;
+    for (let k = 0; k < 120; k++) { S.t += 1 / 60; derive(1 / 60); }
+    for (let i = 0; i < n; i++) {
+      if (i) for (let k = 0, m = Math.round(MS * 60); k < m; k++) { S.t += 1 / 60; derive(1 / 60); }
+      render();
+      const dx = i * W * sc;
+      for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
+      o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 196, 26);
+      o.fillStyle = '#fff'; o.font = '600 15px system-ui';
+      o.fillText(`t=${S.t.toFixed(1)}s  pDraw=${FX.pDraw.toFixed(1)}  x=${FX.phoneX.toFixed(0)}`, dx + 8, 18);
     }
     const stage = document.getElementById('stage');
     stage.style.width = out.width + 'px';
