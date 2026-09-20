@@ -323,6 +323,12 @@ const Ammo = (function () {
     gamepad: { src: 'assets/items/gamepad_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.07 },
   };
 
+  /* 诊断开关。`bare` 只画物品本体，把色晕、拖尾、残影全关掉 —— 用来回答
+     "看不出体积感，是转法不对还是被特效糊住了"这类问题。两个因素纠缠在
+     一起时，单看成品图是分不出来的。 */
+  let bare = false;
+  function setBare(v) { bare = !!v; }
+
   function loadSprites(ver, off) {
     // ?nosprite=1 强制退回矢量画法 —— 用来和转盘版并排对比，两条路都要留着
     if (off) return Promise.resolve([]);
@@ -492,12 +498,20 @@ const Ammo = (function () {
     /* 处决压过来的速度只有一半。它买的是"一段没人打断的时间"—— 嗖一下飞过去
        就把这段时间还回去了。慢，才有"全场都看着它过来"。 */
     if (p.exec) { p.vx *= 0.5; p.ax *= 0.35; }
-    p.rot = Math.random() * 6.283;
-    // 转速跟着体量走，小东西翻得快。方向也随机，一批里有顺时针有逆时针
+    /* 起始朝向：从转盘第 0 格起步，只抖 ±10°。
+       原来是 `Math.random() * 6.283` 满圈随机。飞行只有半秒、总共又只转半圈，
+       起点落在哪儿就完全靠运气 —— 落在"手柄两个握把正好重叠成两团圆"那种
+       相位上，观众这一整发就没看见过手柄长什么样。
+       第 0 格是建模时的正面（八件都是），从正面起步、朝任一方向翻半圈，
+       观众先认出这是什么，再看着它翻过去。抖那 ±10° 是为了齐射的八颗不至于
+       整齐划一，读成复制粘贴。 */
+    p.rot = (Math.random() - 0.5) * 0.35;
     /* 转速。矢量物品转的是一张平面图，快了只会晃眼；贴图物品转的是真的转盘，
-       **必须在飞行途中转够一圈以上**，观众才看得出它是个有厚度的东西。
-       重投飞完全程约 0.65 秒，给 14 rad/s 差不多是一圈半。
-       符号仍随机：顺着翻和倒着翻都是合理的姿势。 */
+       规矩是**飞行途中转半圈**（GIFT 表那里有完整推导）。
+       原先写的是"必须转够一圈以上才看得出厚度"，那条是错的：按它给出来的
+       14~15 每帧要转 14°，而转盘每格才 10° —— 每帧跳 1.4 格就进了走马灯区，
+       读出来是闪不是转。半圈已经把可见面完整换过一遍，体积感全在里头。
+       符号仍随机：顺着翻和倒着翻各用掉转盘的一半，36 格还是都用得上。 */
     /* 处决弹的转速跟着速度一起减半。这一句原先写在上面那行 exec 分支里
        （`p.vrot *= 0.5`），而 p.vrot 在这里才被赋值 —— 它改的是上一发留在
        对象池里的旧值，从来没生效过。处决弹速度减半、飞行时间翻倍，转速不
@@ -616,43 +630,45 @@ const Ammo = (function () {
          只比本体大半圈：色晕一大就把物品洗白了，浅粉的被子会整块糊成发光板，
          格纹和翻角全没了。它该是物体边缘的一圈光，不是一团雾。
          越接近对抗线越浓：命中前的最后一段自己会烧起来。 */
-      ctx.save();
-      const gk = 0.34 + p.near * 0.40;
-      for (let k = 2; k >= 0; k--) {
-        const idx = k ? backAt(p, reach * k * 0.33) : p.hi;
-        const f = 1 - k * 0.19;
-        ctx.globalAlpha = gk * f * f;
-        const gw = p.r * 1.55 * f, gh = p.r * 1.18 * f;
-        ctx.drawImage(tex, p.hx[idx] - gw, p.y - gh, gw * 2, gh * 2);
+      if (!bare) {
+        ctx.save();
+        const gk = 0.34 + p.near * 0.40;
+        for (let k = 2; k >= 0; k--) {
+          const idx = k ? backAt(p, reach * k * 0.33) : p.hi;
+          const f = 1 - k * 0.19;
+          ctx.globalAlpha = gk * f * f;
+          const gw = p.r * 1.55 * f, gh = p.r * 1.18 * f;
+          ctx.drawImage(tex, p.hx[idx] - gw, p.y - gh, gw * 2, gh * 2);
+        }
+        ctx.restore();
+
+        /* ② 拖尾带：从轨迹上 reach 那么远的一点收拢到本体。用暗调而不是亮色
+           —— 明亮客厅底图上浅色线几乎看不见，跟粒子配色是同一条规矩：靠轮廓
+           不靠亮度。长度是这一发**实际飞过**的距离，所以速度抖动一上来就看得
+           出谁快谁慢。 */
+        ctx.save();
+        ctx.globalAlpha = 0.30;
+        ctx.fillStyle = `rgb(${TAIL[p.item] || '52,40,36'})`;
+        ctx.beginPath();
+        ctx.moveTo(tail, p.y - p.r * 0.06);
+        ctx.lineTo(p.x, p.y - p.r * 0.5);
+        ctx.lineTo(p.x, p.y + p.r * 0.5);
+        ctx.lineTo(tail, p.y + p.r * 0.06);
+        ctx.closePath();
+        ctx.fill();
+
+        /* ③ 弹道亮芯：压在暗拖尾中间的一条细楔子。两条都要 —— 只有暗的读成
+           一道划痕，只有亮的在浅底图上又浮不起来；暗的给实体感，亮的给能量感。 */
+        ctx.globalAlpha = 0.48;
+        ctx.fillStyle = auStr;
+        ctx.beginPath();
+        ctx.moveTo(tail, p.y);
+        ctx.lineTo(p.x, p.y - p.r * 0.26);
+        ctx.lineTo(p.x, p.y + p.r * 0.26);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
       }
-      ctx.restore();
-
-      /* ② 拖尾带：从轨迹上 reach 那么远的一点收拢到本体。用暗调而不是亮色
-         —— 明亮客厅底图上浅色线几乎看不见，跟粒子配色是同一条规矩：靠轮廓
-         不靠亮度。长度是这一发**实际飞过**的距离，所以速度抖动一上来就看得
-         出谁快谁慢。 */
-      ctx.save();
-      ctx.globalAlpha = 0.30;
-      ctx.fillStyle = `rgb(${TAIL[p.item] || '52,40,36'})`;
-      ctx.beginPath();
-      ctx.moveTo(tail, p.y - p.r * 0.06);
-      ctx.lineTo(p.x, p.y - p.r * 0.5);
-      ctx.lineTo(p.x, p.y + p.r * 0.5);
-      ctx.lineTo(tail, p.y + p.r * 0.06);
-      ctx.closePath();
-      ctx.fill();
-
-      /* ③ 弹道亮芯：压在暗拖尾中间的一条细楔子。两条都要 —— 只有暗的读成
-         一道划痕，只有亮的在浅底图上又浮不起来；暗的给实体感，亮的给能量感。 */
-      ctx.globalAlpha = 0.48;
-      ctx.fillStyle = auStr;
-      ctx.beginPath();
-      ctx.moveTo(tail, p.y);
-      ctx.lineTo(p.x, p.y - p.r * 0.26);
-      ctx.lineTo(p.x, p.y + p.r * 0.26);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
 
       /* ④ 残影：在它身后 reach 的四分之一、二分之一…处，把**外轮廓**再画
          一遍，越远越淡越小。只画轮廓不画内部细节 —— 缝线、按键、格纹在高速
@@ -668,38 +684,40 @@ const Ammo = (function () {
       const sp = SPRITE[p.item];
       const useSp = sp && sp.img;
 
-      ctx.save();
-      ctx.fillStyle = `rgb(${TAIL[p.item] || '52,40,36'})`;
-      const silh = SILH[p.item];
-      /* 残影数量和浓度分两套。矢量物品的 SILH 是**刻意简化过的**轮廓（花束就是
-         七个圆），四个叠起来仍读作"影子"；贴图剪影带着全部细节（每片花瓣、
-         叶子、包装纸），同样画四个、同样的浓度，糊出来是一大团暗红，比本体
-         还抢眼，读成"另一个物体"而不是它的轨迹。
-         贴图本身转盘就带足了运动信息，两个淡影够了。 */
-      const k0 = useSp ? 2 : 4, ka = useSp ? 0.5 : 1;
-      for (let k = k0; k >= 1; k--) {
-        const idx = backAt(p, reach * k / k0);
-        ctx.globalAlpha = (0.40 - k * 0.068) * ka;
+      if (!bare) {
         ctx.save();
-        ctx.translate(p.hx[idx], p.y);
-        const sc = 1 - k * 0.05;
-        if (useSp) {
-          /* 残影取**那一刻的朝向**对应的格子，不是当前朝向 —— 用当前朝向的话
-             四个残影会是同一个姿势，读成"复制粘贴"而不是"它飞过来的轨迹"。
-             这跟 hr[] 记录历史旋转角是同一个用意。 */
-          const c = cellOf(sp, p.hr[idx]), e = sp.cell;
-          const d = p.r * sp.scale * 2 * sc;
-          ctx.drawImage(sp.silh, (c % sp.cols) * e, ((c / sp.cols) | 0) * e, e, e,
-                        -d / 2, -d / 2, d, d);
-        } else {
-          ctx.rotate(p.hr[idx]);
-          ctx.scale(sc, sc);
-          silh(ctx, p.r);
-          ctx.fill();
+        ctx.fillStyle = `rgb(${TAIL[p.item] || '52,40,36'})`;
+        const silh = SILH[p.item];
+        /* 残影数量和浓度分两套。矢量物品的 SILH 是**刻意简化过的**轮廓（花束就是
+           七个圆），四个叠起来仍读作"影子"；贴图剪影带着全部细节（每片花瓣、
+           叶子、包装纸），同样画四个、同样的浓度，糊出来是一大团暗红，比本体
+           还抢眼，读成"另一个物体"而不是它的轨迹。
+           贴图本身转盘就带足了运动信息，两个淡影够了。 */
+        const k0 = useSp ? 2 : 4, ka = useSp ? 0.5 : 1;
+        for (let k = k0; k >= 1; k--) {
+          const idx = backAt(p, reach * k / k0);
+          ctx.globalAlpha = (0.40 - k * 0.068) * ka;
+          ctx.save();
+          ctx.translate(p.hx[idx], p.y);
+          const sc = 1 - k * 0.05;
+          if (useSp) {
+            /* 残影取**那一刻的朝向**对应的格子，不是当前朝向 —— 用当前朝向的话
+               四个残影会是同一个姿势，读成"复制粘贴"而不是"它飞过来的轨迹"。
+               这跟 hr[] 记录历史旋转角是同一个用意。 */
+            const c = cellOf(sp, p.hr[idx]), e = sp.cell;
+            const d = p.r * sp.scale * 2 * sc;
+            ctx.drawImage(sp.silh, (c % sp.cols) * e, ((c / sp.cols) | 0) * e, e, e,
+                          -d / 2, -d / 2, d, d);
+          } else {
+            ctx.rotate(p.hr[idx]);
+            ctx.scale(sc, sc);
+            silh(ctx, p.r);
+            ctx.fill();
+          }
+          ctx.restore();
         }
         ctx.restore();
       }
-      ctx.restore();
 
       ctx.save();
       ctx.translate(p.x, p.y);
@@ -725,5 +743,5 @@ const Ammo = (function () {
     queue.length = 0; warns.length = 0; pending.length = 0; lock = 0;
   }
 
-  return { init, launch, update, draw, clear, loadSprites, ITEM, count: () => act.length + queue.length };
+  return { init, launch, update, draw, clear, loadSprites, setBare, ITEM, count: () => act.length + queue.length };
 })();

@@ -732,31 +732,32 @@ const ITEM_OF = {
    份量差 5.5 倍，但飞起来是同一个东西。 */
 /* spin 是贴图转盘的转速（rad/s），八件都要给。
 
-   为什么不能沿用矢量时代按 style 分的那套默认值（volley 26 / single 13 / heavy 4.5）：
-   矢量物品转的是一张平面图，转多快都只是晃眼；贴图转的是真转盘，**角速度
-   同时受两头夹**——
+   定它的规矩是**飞行途中转半圈**，不是"转够一圈"。
+   原来那条"必须转够一圈以上，观众才看得出它是个有厚度的东西"是错的，
+   而且错得很贵 —— 按它给出来的 14~15，每帧要转 14°，转盘每格才 10°，
+   等于**每帧跳 1.4 格**。那已经进了走马灯区：眼睛读不出"一个刚体在转"，
+   只读到一连串跳变的形状，也就是"闪"。用户的原话是"不够三d，没有体积感"。
 
-     下限：必须在飞行途中转够一圈以上，观众才看得出它有厚度。
-           重投全程约 0.65 秒，一圈需要 9.7 rad/s，原来的 4.5 连半圈都不到。
-     上限：每帧换的格子不能太多。60fps、36 格转盘，每格 10°，
-           26 rad/s 就是每帧跳 2.5 格 —— 那不叫旋转，那叫乱闪。
-           每帧 ≤1.5 格（约 15.7 rad/s）是看着还连贯的线。
+   半圈就够了 —— 从正面转到背面，可见面已经完整换过一遍，体积感全在里头。
+   而每帧只转 5~8°（半格到 0.8 格），姿态是连着的，眼睛跟得上。
+   飞行时长按各自的速度算：volley 0.36s、single 0.56s、heavy 0.47s
+   （heavy 带 900 的加速度），spin = π / 飞行时长。
 
-   两头一夹，八件就都落在 14~15 这个窄带里，跟体量没什么关系了。 */
+   处决弹速度减半、时长翻倍，`fire()` 里把转速一起减半，仍是半圈。 */
 const GIFT = {
   // 查岗党（女方，在左，from=+1）
-  hairpin: { from: +1, style: 'volley', item: 'hairpin', r: 22, n: 8, spin: 15, power: 1, recipe: 'star',    push: 1 },
-  pillow:  { from: +1, style: 'single', item: 'pillow',  r: 56,       spin: 15, power: 2, recipe: 'feather', push: 20 },
-  bouquet: { from: +1, style: 'heavy',  item: 'bouquet', r: 76,       spin: 14, power: 3, recipe: 'petal',   push: 230 },
+  hairpin: { from: +1, style: 'volley', item: 'hairpin', r: 22, n: 8, spin: 8.8, power: 1, recipe: 'star',    push: 1 },
+  pillow:  { from: +1, style: 'single', item: 'pillow',  r: 56,       spin: 5.7, power: 2, recipe: 'feather', push: 20 },
+  bouquet: { from: +1, style: 'heavy',  item: 'bouquet', r: 76,       spin: 6.7, power: 3, recipe: 'petal',   push: 230 },
   /* 档 4 的 r 看着不大，是因为 exec 会再乘 1.8（ammo.js）：64→115、68→122，
      占屏宽的 24% 与 25%。飞行体积负责预告"这一下很重"，兑现在命中那一刻的
      绽放里 —— 所以本体不必再大，大的是绽开的东西。 */
-  ringbox: { from: +1, style: 'heavy',  item: 'ringbox', r: 64,       spin: 14, power: 4, recipe: 'bloom',   push: 600 },
+  ringbox: { from: +1, style: 'heavy',  item: 'ringbox', r: 64,       spin: 6.7, power: 4, recipe: 'bloom',   push: 600 },
   // 灭迹党（男方，在右，from=-1）
-  seed:    { from: -1, style: 'volley', item: 'seed',    r: 21, n: 8, spin: 15, power: 1, recipe: 'star',    push: 1 },
-  gamepad: { from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 15, power: 2, recipe: 'debris',  push: 20 },
-  milktea: { from: -1, style: 'heavy',  item: 'milktea', r: 72,       spin: 14, power: 3, recipe: 'splash',  push: 230 },
-  photo:   { from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 14, power: 4, recipe: 'memory',  push: 600 },
+  seed:    { from: -1, style: 'volley', item: 'seed',    r: 21, n: 8, spin: 8.8, power: 1, recipe: 'star',    push: 1 },
+  gamepad: { from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 5.7, power: 2, recipe: 'debris',  push: 20 },
+  milktea: { from: -1, style: 'heavy',  item: 'milktea', r: 72,       spin: 6.7, power: 3, recipe: 'splash',  push: 230 },
+  photo:   { from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
 };
 
 function sampleRow(arr, y) {
@@ -1210,7 +1211,13 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const n = clamp(+Q.get('ammostrip') | 0, 2, 12);
     const MS = clamp(+(Q.get('ammoms') || 110), 16, 400) / 1000;
     const sc = 0.5, gname = Q.get('ammogift') || 'pillow';
-    const g = GIFT[gname] || GIFT.pillow;
+    /* ?ammospin=<rad/s> 临时换转速、?ammobare=1 只画本体（关掉色晕/拖尾/残影）。
+       "看不出体积感"可能是转太快、也可能是被特效糊住，这两个因素在成品图里
+       纠缠在一起，分不开就只能靠猜。给两个开关才能一次分清。 */
+    const g = Q.has('ammospin')
+      ? { ...(GIFT[gname] || GIFT.pillow), spin: clamp(+Q.get('ammospin'), 0, 40) }
+      : (GIFT[gname] || GIFT.pillow);
+    Ammo.setBare(Q.get('ammobare') === '1');
     S.auto = false; S.t = 3.0;
     for (let k = 0; k < 150; k++) derive(1 / 60);
 
