@@ -376,10 +376,20 @@ const Ammo = (function () {
     c = document.createElement('canvas');
     c.width = c.height = S;
     const g = c.getContext('2d');
+    /* 渐变是**环形**的：浓度峰值落在物体轮廓所在的那一圈，不在正中心。
+       原先是中心 0.92 一路衰减到边缘 0 的普通放射光，而色晕是画在本体**下面**
+       的 —— 最浓的中心整块被本体盖住，真正露出来的只有边缘那一圈，那里的
+       alpha 算下来只剩 0.22（横向）和 0.09（竖向），再乘 gk 就是 0.03~0.16。
+       这就是"弹幕特效有些淡"的全部来由：光的能量九成画在了看不见的地方。
+       把峰值挪到 0.63（本体横向轮廓落在归一化半径 0.645，竖向 0.847），同一
+       张贴图、同样的开销，露出来的那一圈从 0.22 变成 0.95。
+       内侧不清零而是留 0.42：色晕沿轨迹摆三团，后两团没有本体遮挡，中心一空
+       就读成三个烟圈。留着这点底，它们仍是一团光。 */
     const rg = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-    rg.addColorStop(0.00, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.92)`);
-    rg.addColorStop(0.34, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.56)`);
-    rg.addColorStop(0.68, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.18)`);
+    rg.addColorStop(0.00, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.42)`);
+    rg.addColorStop(0.40, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.52)`);
+    rg.addColorStop(0.63, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.95)`);
+    rg.addColorStop(0.82, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.55)`);
     rg.addColorStop(1.00, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
     g.fillStyle = rg; g.fillRect(0, 0, S, S);
     auraCache.set(key, c);
