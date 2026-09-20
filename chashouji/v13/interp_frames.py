@@ -23,7 +23,7 @@ from PIL import Image
 from skimage.registration import optical_flow_tvl1
 from skimage.transform import warp
 
-DST = '../unity/BattleGame/Assets/Resources/frames'
+DST = '../web/assets/frames'
 MAX_DIFF = 42.0        # 超过这个差异（%）就不插，交给生图（临界点实测见文件头）
 DS = 2                 # 流场降采样倍数
 

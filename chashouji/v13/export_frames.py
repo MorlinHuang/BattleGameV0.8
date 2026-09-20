@@ -1,4 +1,7 @@
-"""导出 Unity 用的角色层帧序列。
+"""导出角色层帧序列 —— 尺度与重心的唯一真源。
+
+⚠️ 跑这个脚本会**清空并重建** ../web/assets/frames，光流补出来的中间帧一并清掉
+（关键档一变它们就过期）。补帧由 interp_frames.py 在这之后重跑。
 
 尺度基准用女方睡衣（浅粉是她独有的颜色）的面积开方，不用整组人物的 alpha
 面积：生图时模型每一张的"镜头远近"都不一样 —— p=85~95 那几张人物被画小一
@@ -48,7 +51,7 @@ MARGIN = 4             # 最宽那档到画布左右边的总余量
 VISIBLE_BAND = 0.25    # 人物下多少比例的高度必须完整落在画布内（脚与小腿）
 SCALE_CAP = 1.20       # 单档尺度修正上限，见下方注释
 RATE = 15              # 每 5% 档距允许的重心横向偏移上限（px），按实际档距缩放
-DST = '../unity/BattleGame/Assets/Resources/frames'
+DST = '../web/assets/frames'
 # 档位集合由 parts/ 里实际有哪些帧决定：补帧阶段它是不等间距的，
 # 光流补满之后才回到每 1% 一张。
 PS = sorted(int(n[1:4]) for n in os.listdir('parts') if re.fullmatch(r'f\d{3}\.png', n))

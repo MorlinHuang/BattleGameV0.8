@@ -15,7 +15,7 @@ from PIL import Image
 sys.path.insert(0, '.')
 from cutout import cutout
 
-DST = '../unity/BattleGame/Assets/StreamingAssets/art/frames'
+DST = '../web/assets/frames'
 W, H, FOOT_Y = 960, 1334, 1200
 
 

@@ -1,6 +1,6 @@
 """把导出好的角色层帧贴到固定背景上，出本地预览。
 
-几何（尺度、重心、地面线）一律由 export_unity.py 决定，这里只负责合成：它
+几何（尺度、重心、地面线）一律由 export_frames.py 决定，这里只负责合成：它
 导出的帧已经是与画布同尺寸、人物摆好位置的透明图，在这儿再算一遍缩放和锚点
 就会多出一套会各自漂移的真源 —— 之前就是这样，预览里的人物比引擎里大一圈。
 """
@@ -9,13 +9,13 @@ import re
 
 from PIL import Image, ImageDraw, ImageFont
 
-SRC = '../unity/BattleGame/Assets/Resources/frames'
+SRC = '../web/assets/frames'
 BG = '../web/assets/bg.jpg'
 PS = sorted(int(n[1:4]) for n in os.listdir(SRC) if re.fullmatch(r'f\d{3}\.png', n))
 FONT = '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc'
 
 
-W, H, FRAME_TOP = 960, 1334, 308      # 帧纹理只覆盖人物那条横带，与 export_unity 同值
+W, H, FRAME_TOP = 960, 1334, 308      # 帧纹理只覆盖人物那条横带，与 export_frames 同值
 
 
 def frame(p):
