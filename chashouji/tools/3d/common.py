@@ -209,26 +209,60 @@ def join_all(active=None):
     return ob
 
 
-def render_turntable(name, active=None, tilt=TILT, roll=ROLL, axis='X'):
-    """建完模调这一句：合并 → 布光布景 → 绕横轴翻滚渲 N 帧。
+def render_turntable(name, active=None, tilt=TILT, roll=ROLL, axis='X', lean=None):
+    """建完模调这一句：合并 → 布光布景 → 绕一根轴转满一圈渲 N 帧。
 
-    转轴默认绕 X（水平横轴）。**不要改成垂直轴** —— 近似轴对称的物件绕垂直轴
-    转几乎看不出变化，体积感全在"依次看到正面、顶部、背面、底部"这件事上。
-    轴对称特别强的物件（奶茶杯、抱枕）可以传 axis='Y' 换个翻法试试。"""
+    **优先用 `lean`，它才是这套东西的主参数。** `axis` 是早期只能绕三根世界轴时
+    留下的，两条极端各自都有毛病：
+
+      `axis='X'`（绕屏幕横轴翻跟头）—— 体积感最足，依次看到正面顶部背面底部。
+        但有天然正面的物件（手柄、相框、戒指盒）翻过去就是背面，一半的帧认不出。
+      `axis='Y'`（绕视线轴）—— 正面永远朝着观众，每一帧都认得出。
+        但那是**纯屏幕内旋转，物体自身根本没转**，看上去就是一张 2D 贴纸在打旋，
+        3D 白渲了。这条路踩过：八件里七件这么渲，用户一眼看出"不够 3D"。
+
+    这两者不是二选一，中间是连续的 —— `lean` 就是那根转轴从视线轴往屏幕横轴
+    偏多少度：
+
+        lean=0      绕视线轴，等于 axis='Y'，平
+        lean=35     斜着翻滚（默认推荐），可见面连续变化、明暗在变，
+                    而正面最多偏转 2*lean = 70°，始终认得出
+        lean=90     绕横轴翻跟头，等于 axis='X'
+
+    正面朝向在转过 180° 时偏转 2*lean —— 这是选档的依据：要体积就加大，
+    认不出了就收小。各向同性的物件（花束）没有"正面"，lean 随便，用 90 最好看。
+
+    `tilt` / `roll` 在 lean 模式下是**物体的固定姿态偏置**（先摆好姿势，再整个
+    绕斜轴转），不像 axis 模式那样会跟着转轴滚来滚去。"""
     A = argv()
     ob = join_all(active)
     _world_and_light()
     _camera()
     _render_settings(A['res'], A['samp'], A['ss'])
     _freestyle(A['ss'])
-    idx = {'X': 0, 'Y': 1, 'Z': 2}[axis]
+
+    if lean is None:
+        idx = {'X': 0, 'Y': 1, 'Z': 2}[axis]
+        spin_axis = None
+    else:
+        # 相机在 -Y 沿 +Y 看：世界 Y 是视线轴，世界 X 是屏幕横轴。
+        # 转轴在这两者张成的平面里，从视线轴往横轴偏 lean 度。
+        a = math.radians(lean)
+        spin_axis = Vector((math.sin(a), math.cos(a), 0.0)).normalized()
+        base = Matrix.Rotation(roll, 4, 'Y') @ Matrix.Rotation(tilt, 4, 'X')
+
     for i in range(A['frames']):
-        e = [0.0, 0.0, 0.0]
-        e[idx] = i * 2 * math.pi / A['frames']
-        # 固定倾角叠在转轴之外，保证每一帧都能同时看到侧面和一点顶/底
-        e[(idx + 1) % 3] += tilt
-        e[(idx + 2) % 3] += roll
-        ob.rotation_euler = tuple(e)
+        theta = i * 2 * math.pi / A['frames']
+        if spin_axis is None:
+            e = [0.0, 0.0, 0.0]
+            e[idx] = theta
+            # 固定倾角叠在转轴之外。注意它加在哪根轴上是跟着 axis 滚的，
+            # 换 axis 之后 tilt/roll 各自管什么会变，数字不能照抄。
+            e[(idx + 1) % 3] += tilt
+            e[(idx + 2) % 3] += roll
+            ob.rotation_euler = tuple(e)
+        else:
+            ob.rotation_euler = (Matrix.Rotation(theta, 4, spin_axis) @ base).to_euler()
         bpy.context.scene.render.filepath = '%s%03d' % (A['out'], i)
         bpy.ops.render.render(write_still=True)
         print('[%s] %d/%d' % (name, i + 1, A['frames']), flush=True)
