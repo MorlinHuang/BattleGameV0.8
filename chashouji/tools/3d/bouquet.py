@@ -80,4 +80,4 @@ for i, (phi, rad, z, R, m, lean) in enumerate(HEADS):
     for ob in obs:
         ob.matrix_world = M @ ob.matrix_world
 
-render_turntable('bouquet', active=wrap)
+render_turntable('bouquet', active=wrap, screen_r=76)

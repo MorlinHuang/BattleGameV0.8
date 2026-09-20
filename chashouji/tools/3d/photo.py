@@ -150,4 +150,4 @@ wedge('stand', SW / 2, SY0, SY1, SZ0, SZ1, 'card')
 # 三分之一只剩一根木条），40° 只废 1 帧，而细长比波动比 35° 多一半（105% vs 70%），所以取 40。
 #
 # lean 模式下 tilt/roll 是固定姿态偏置（先摆好姿势再整个绕斜轴转），不跟着转轴滚。
-render_turntable('photo', active=fr, tilt=0.26, roll=0.20, lean=40)
+render_turntable('photo', active=fr, tilt=0.26, roll=0.20, lean=40, screen_r=68)

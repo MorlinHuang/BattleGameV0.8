@@ -307,16 +307,20 @@ const Ammo = (function () {
      `cell` 是单格边长，`n` 是转盘帧数，`scale` 补偿裁剪留白：图集是按**所有
      角度的并集**裁的，单帧物体填不满一格。
 
-     转轴（建模侧定的，这里只是记着为什么同一套图集看起来转法不一样）：
-     各向同性的绕横轴翻面（bouquet）；有正立方向、内容绕竖轴均匀的绕自身竖轴
-     （milktea）；内容只朝一个方向的绕观察轴（ringbox / photo，正面锁定朝观众，
-     厚度靠固定倾角给）。选错的代价是一半的帧读不出题材 —— 详见
-     `docs/3D方案评估.md` 7.9。 */
+     转轴由建模侧的 `lean` 定（转轴从视线轴往屏幕横轴偏多少度），这里不管。
+     一度以为"转法不对"是没有体积感的原因，量完才知道不是：真正决定体积感的是
+     **剥掉外轮廓之后剪影里还剩多少结构**——转动时眼睛读到的是内部遮挡关系在变，
+     外轮廓变化只说明形状变了。花束 46%、奶茶 25%、手柄 14%、抱枕 4%。
+     见 `tools/3d/measure_volume.py`。
+
+     `scale` 每次重渲都会变，必须照 `pack_atlas.py` 打印的那行填。它跟着并集走，
+     而并集跟着描边粗细走 —— 描边现在按 `screen_r` 倒推（屏幕上统一 2.6px），
+     所以八件的 scale 都比上一版大了几个点，物品在屏幕上也相应大 2~3%。 */
   const SPRITE = {
-    bouquet: { src: 'assets/items/bouquet_atlas.webp', n: 36, cols: 6, cell: 272, scale: 1.36 },
-    milktea: { src: 'assets/items/milktea_atlas.webp', n: 36, cols: 6, cell: 264, scale: 1.30 },
-    ringbox: { src: 'assets/items/ringbox_atlas.webp', n: 36, cols: 6, cell: 336, scale: 1.61 },
-    photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.38 },
+    bouquet: { src: 'assets/items/bouquet_atlas.webp', n: 36, cols: 6, cell: 272, scale: 1.39 },
+    milktea: { src: 'assets/items/milktea_atlas.webp', n: 36, cols: 6, cell: 264, scale: 1.34 },
+    ringbox: { src: 'assets/items/ringbox_atlas.webp', n: 36, cols: 6, cell: 336, scale: 1.65 },
+    photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.46 },
     hairpin: { src: 'assets/items/hairpin_atlas.webp', n: 36, cols: 6, cell: 96,  scale: 1.08 },
     seed:    { src: 'assets/items/seed_atlas.webp',    n: 36, cols: 6, cell: 96,  scale: 1.10 },
     pillow:  { src: 'assets/items/pillow_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.18 },

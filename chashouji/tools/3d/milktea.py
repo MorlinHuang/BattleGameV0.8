@@ -84,4 +84,4 @@ straw.rotation_euler = (0, TILT_S * -1, 0)   # 绕 Y 负向 = 顶端往 -X 倒
 # 但细长比波动 30%→44%→57% 还在涨，所以取 68 这个拐点（75 会让前后两帧的吸管细到只剩一小截）。
 #
 # lean 模式下 tilt/roll 是**固定姿态偏置**（先摆好姿势再整个绕斜轴转），不跟着转轴滚。
-render_turntable('milktea', active=cup, tilt=0.26, roll=0.20, lean=68)
+render_turntable('milktea', active=cup, tilt=0.26, roll=0.20, lean=68, screen_r=72)

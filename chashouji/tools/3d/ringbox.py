@@ -121,4 +121,4 @@ lining.matrix_world = HINGE @ lining.matrix_world
 # 盒子厚、开着盖，斜轴转起来依次看到盒内绒布槽、盒口、盒盖外侧、盒底，立体感是这三件里最足的。
 #
 # lean 模式下 tilt/roll 是固定姿态偏置（先摆好姿势再整个绕斜轴转），不跟着转轴滚。
-render_turntable('ringbox', active=body, tilt=0.26, roll=0.20, lean=40)
+render_turntable('ringbox', active=body, tilt=0.26, roll=0.20, lean=40, screen_r=64)
