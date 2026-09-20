@@ -31,9 +31,10 @@ import bpy, math, sys, os
 from mathutils import Vector, Matrix
 
 # ---------- 全局常量：八件共用，改一处等于改全套风格 ----------
-ORTHO      = 3.3       # 相机正交宽度。主体 2.0 单位 → 占画幅 60.6%
+ORTHO      = 3.3       # 相机正交宽度。主体 NOMINAL 单位 → 占画幅 60.6%
+NOMINAL    = 2.0       # 主体的标称直径（Blender 单位）。pack_atlas 靠它反算 scale
 INK        = '3a2c26'  # 描边色，取角色线稿那个暖黑
-OUTLINE_W  = 2.6       # 外轮廓线宽（最终像素）。它决定这东西在明亮底图上认不认得出
+OUTLINE_W  = 2.6       # 外轮廓线宽，**观众屏幕上的像素**（不是渲染图里的）。见 render_turntable
 INNER_W    = 1.1       # 内部结构线宽。粗了内部叠成一团黑，细了撑不住，分两档是试点结论
 TILT       = 0.75      # 转轴倾角（rad）。纯绕横轴会转到正底面，那一帧只剩一个梯形
 ROLL       = 0.30      # 转盘整体侧倾
@@ -163,13 +164,16 @@ def _render_settings(res, samp, ss):
     r.image_settings.color_mode = 'RGBA'
 
 
-def _freestyle(ss):
-    """描边分两档。只用一档：粗了内部结构叠成一团黑，细了外轮廓撑不住。"""
+def _freestyle(ss, k=1.0):
+    """描边分两档。只用一档：粗了内部结构叠成一团黑，细了外轮廓撑不住。
+
+    `k` 是渲染图相对屏幕的放大倍率（render_turntable 按 screen_r 算出来的）。
+    两档都乘同一个 k —— 只放大外轮廓的话，内部结构会相对变细，越小的件越糊。"""
     sc = bpy.context.scene
     r = sc.render
     r.use_freestyle = True
     r.line_thickness_mode = 'ABSOLUTE'
-    r.line_thickness = OUTLINE_W * ss
+    r.line_thickness = OUTLINE_W * k * ss
     vl = sc.view_layers[0]
     vl.use_freestyle = True
     fs = vl.freestyle_settings
@@ -190,8 +194,8 @@ def _freestyle(ss):
         ls.linestyle.thickness = thick * ss
         return ls
 
-    mk('Outline', OUTLINE_W, True, False)
-    mk('Inner', INNER_W, False, True)
+    mk('Outline', OUTLINE_W * k, True, False)
+    mk('Inner', INNER_W * k, False, True)
     fs.crease_angle = math.radians(105)
 
 
@@ -209,7 +213,7 @@ def join_all(active=None):
     return ob
 
 
-def render_turntable(name, active=None, tilt=TILT, roll=ROLL, axis='X', lean=None):
+def render_turntable(name, active=None, tilt=TILT, roll=ROLL, axis='X', lean=None, screen_r=None):
     """建完模调这一句：合并 → 布光布景 → 绕一根轴转满一圈渲 N 帧。
 
     **优先用 `lean`，它才是这套东西的主参数。** `axis` 是早期只能绕三根世界轴时
@@ -233,13 +237,42 @@ def render_turntable(name, active=None, tilt=TILT, roll=ROLL, axis='X', lean=Non
     认不出了就收小。各向同性的物件（花束）没有"正面"，lean 随便，用 90 最好看。
 
     `tilt` / `roll` 在 lean 模式下是**物体的固定姿态偏置**（先摆好姿势，再整个
-    绕斜轴转），不像 axis 模式那样会跟着转轴滚来滚去。"""
+    绕斜轴转），不像 axis 模式那样会跟着转轴滚来滚去。
+
+    ## screen_r —— 描边宽度必须一路算到观众屏幕上
+
+    `screen_r` 是这件东西在引擎里的半径（main.js 的 `GIFT[x].r`）。给了它，
+    描边就按"屏幕上 OUTLINE_W 像素"倒推渲染时该画多粗；不给则按老口径（渲染
+    图里 OUTLINE_W 像素）。
+
+    为什么必须倒推：素材从渲染图到观众眼睛要缩**两道**，
+      渲染边长 R ──(并集裁切，边长 side)──▶ 图集单格 cell ──(引擎绘制)──▶ 屏幕 px
+    把两道并起来，`屏幕描边 = 渲染描边 × cell/side × px/cell = 渲染描边 × px/side`
+    —— cell 约掉了，所以调单格边长根本改变不了描边，之前那条"最终像素"的约定
+    只管到图集为止，屏幕上早就走样了：实测八件落在 1.3~2.2px，小件细掉一半。
+    而这套画风里实体全靠轮廓被看见（明亮客厅底图上亮度加不上去），描边一细
+    东西就糊进背景。
+
+    再把 side 换成已知量：`scale = side / (R × NOMINAL/ORTHO)`、`px = 2 × screen_r × scale`，
+    代进去 scale 正好约掉：
+
+        渲染描边 = OUTLINE_W × R × (NOMINAL/ORTHO) / (2 × screen_r)
+
+    于是只跟渲染边长和引擎半径有关，跟并集、跟 cell 都无关 —— 换句话说这个数
+    在开渲之前就能算准，不必先渲一轮量并集。
+
+    ⚠️ 描边变粗会把并集撑大，**改完这个参数必须重量一次并集再定 cell**
+    （`pack_atlas.py` 会打印出来）。"""
     A = argv()
     ob = join_all(active)
     _world_and_light()
     _camera()
     _render_settings(A['res'], A['samp'], A['ss'])
-    _freestyle(A['ss'])
+    k = A['res'] * (NOMINAL / ORTHO) / (2 * screen_r) if screen_r else 1.0
+    if screen_r:
+        print('[%s] 描边 ×%.2f（屏幕 %.1fpx → 渲染 %.1fpx）'
+              % (name, k, OUTLINE_W, OUTLINE_W * k), flush=True)
+    _freestyle(A['ss'], k)
 
     if lean is None:
         idx = {'X': 0, 'Y': 1, 'Z': 2}[axis]

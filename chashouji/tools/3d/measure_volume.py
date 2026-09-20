@@ -13,10 +13,22 @@
 3. **细长比波动**：剪影二阶矩特征值之比开根 sqrt(λ1/λ2) 的 (max-min)/median。
    平面内打转不改变它，只有三维转动的透视压缩才会改。
 
+**0. 内部结构密度** —— 后来才发现这把才是主尺，先看它。
+   把外轮廓那一圈剥掉，只看剪影里面还剩多少描边：花瓣与花瓣的分界、盒盖与
+   盒身的接缝都算在内。转动时眼睛真正读到的立体信号是**内部结构的遮挡关系在变**，
+   外轮廓变化只说明"形状变了"，撑不起体积。实测花束 47%、奶茶 25%、手柄 13%、
+   抱枕 4%、发卡 0% —— 再乘上屏幕面积，花束的可见结构量是手柄的 12 倍、
+   抱枕的 28 倍。**转轴和转速都调不动这个数**（手柄换成花束那套转轴反而更糟）。
+
 再加一把不是体积感、但决定看不看得见的尺子：
 
 4. **每帧跳变** XOR/并集，按**引擎实际转速**换算到相邻两个渲染帧之间。
    跳太大眼睛就把它读成"闪"而不是"转"，体积感再足也传不到观众那里。
+
+## 两种用法
+
+    python3 measure_volume.py <图集目录>              # 量已打包的 webp，八件横着比
+    python3 measure_volume.py --frames <帧目录> <件名> # 量刚渲出来的 PNG 序列，改完立刻能看
 """
 import sys, os, math
 import numpy as np
@@ -37,14 +49,48 @@ N, COLS, FPS = 36, 6, 60
 SZ = 96          # 统一缩到这个边长再比，快且不影响结论
 
 
+def cells(path, cell):
+    """按帧切出 RGBA 小图。path 是图集 webp，或一个装着 PNG 序列的目录。"""
+    if os.path.isdir(path):
+        import glob
+        fs = sorted(glob.glob(os.path.join(path, '*.png')))
+        return [np.array(Image.open(f).convert('RGBA')) for f in fs]
+    a = np.array(Image.open(path).convert('RGBA'))
+    return [a[(k // COLS) * cell:(k // COLS + 1) * cell,
+              (k % COLS) * cell:(k % COLS + 1) * cell] for k in range(N)]
+
+
 def frames(path, cell):
-    im = Image.open(path).convert('RGBA')
-    a = np.array(im)[..., 3] > 8
+    """逐帧的剪影掩码，统一缩到 SZ 见方。"""
     out = []
-    for k in range(N):
-        g = a[(k // COLS) * cell:(k // COLS + 1) * cell, (k % COLS) * cell:(k % COLS + 1) * cell]
-        out.append(np.array(Image.fromarray(g.astype(np.uint8) * 255).resize((SZ, SZ), Image.BILINEAR)) > 127)
+    for g in cells(path, cell):
+        m = g[..., 3] > 8
+        out.append(np.array(Image.fromarray(m.astype(np.uint8) * 255).resize((SZ, SZ), Image.BILINEAR)) > 127)
     return out
+
+
+INK = np.array([0x3a, 0x2c, 0x26])
+
+
+def struct_density(path, cell, px):
+    """内部结构密度：剥掉相当于 4 个屏幕像素的外轮廓，看里面还剩多少描边。
+
+    剥的厚度按该件在屏幕上的缩放换算 —— 直接剥固定像素的话，大件剥得太浅会把
+    外轮廓算进来，小件剥得太深会把内部结构一起剥没，八件就不可比了。"""
+    from scipy.ndimage import binary_erosion
+    ds = []
+    for g in cells(path, cell):
+        rgb, al = g[..., :3].astype(float), g[..., 3]
+        solid = al > 200
+        if solid.sum() < 80:
+            continue
+        t = max(2, int(round(4 * g.shape[0] / px)))
+        inner = binary_erosion(solid, iterations=t)
+        if inner.sum() < 40:
+            continue
+        isink = np.sqrt(((rgb - INK) ** 2).sum(-1)) < 46
+        ds.append((isink & inner).sum() / inner.sum())
+    return float(np.median(ds)) if ds else 0.0
 
 
 def norm(m):
@@ -88,16 +134,18 @@ def elong(m):
     return math.sqrt(max(w[1], 1e-9) / max(w[0], 1e-9))
 
 
-def run(d, names):
-    print('%-8s %6s %7s %7s %7s %7s %7s' %
-          ('件', '贴纸残', '面积变', '细长变', '屏幕px', '每帧跳', '跳几格'))
-    print('-' * 58)
+def run(d, names, frames_dir=None):
+    print('%-8s %7s %8s %6s %7s %7s %7s %7s' %
+          ('件', '结构密度', '屏幕结构量', '贴纸残', '面积变', '细长变', '屏幕px', '每帧跳'))
+    print('-' * 68)
     rows = []
     for nm in names:
-        p = os.path.join(d, nm + '_atlas.webp')
+        cell, scale, r, spin, _ = ENGINE[nm]
+        p = frames_dir or os.path.join(d, nm + '_atlas.webp')
         if not os.path.exists(p):
             continue
-        cell, scale, r, spin, _ = ENGINE[nm]
+        px = r * scale * 2
+        dens = struct_density(p, cell, px)
         fs = frames(p, cell)
         nf = [norm(f) for f in fs]
         base = nf[0]
@@ -107,22 +155,27 @@ def run(d, names):
         ar = np.array([f.sum() for f in fs], float)
         elo = np.array([elong(f) for f in fs])
 
-        # 引擎实际每帧转过几格，跳变按那个步长量
-        step = max(1, round(spin / FPS / (2 * math.pi / N)))
+        # 引擎实际每帧转过几格，跳变按那个步长量。帧数按实际读到的算 ——
+        # 快测常常只渲 8~12 帧，那时一格不是 10° 而是 30~45°
+        nf_len = len(fs)
+        step = max(1, round(spin / FPS / (2 * math.pi / nf_len)))
         xo = []
-        for k in range(N):
-            a, b = fs[k], fs[(k + step) % N]
+        for k in range(nf_len):
+            a, b = fs[k], fs[(k + step) % nf_len]
             u = (a | b).sum()
             if u:
                 xo.append((a ^ b).sum() / u)
-        rows.append((nm, iou, (ar.max() - ar.min()) / np.median(ar),
-                     (elo.max() - elo.min()) / np.median(elo),
-                     r * scale * 2, np.median(xo), spin / FPS / (2 * math.pi / N)))
-    for nm, iou, da, de, px, xo, gp in sorted(rows, key=lambda t: -t[1]):
-        print('%-8s %6.2f %6.0f%% %6.0f%% %7.0f %6.0f%% %7.2f' % (nm, iou, da * 100, de * 100, px, xo * 100, gp))
+        rows.append((nm, dens, iou, (ar.max() - ar.min()) / np.median(ar),
+                     (elo.max() - elo.min()) / np.median(elo), px, np.median(xo)))
+    # 按"屏幕上的结构量"排 —— 密度再高，画得太小也到不了观众眼里
+    for nm, dn, iou, da, de, px, xo in sorted(rows, key=lambda t: -t[1] * t[5] * t[5]):
+        print('%-8s %6.0f%% %8.0f %6.2f %6.0f%% %6.0f%% %7.0f %6.0f%%'
+              % (nm, dn * 100, dn * px * px / 100, iou, da * 100, de * 100, px, xo * 100))
 
 
 if __name__ == '__main__':
-    d = sys.argv[1] if len(sys.argv) > 1 else '.'
-    ns = sys.argv[2:] or list(ENGINE)
-    run(d, ns)
+    a = sys.argv[1:]
+    if a[:1] == ['--frames']:
+        run('', [a[2]], frames_dir=a[1])
+    else:
+        run(a[0] if a else '.', a[1:] or list(ENGINE))
