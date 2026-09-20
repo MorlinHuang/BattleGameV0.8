@@ -746,18 +746,18 @@ const ITEM_OF = {
    处决弹速度减半、时长翻倍，`fire()` 里把转速一起减半，仍是半圈。 */
 const GIFT = {
   // 查岗党（女方，在左，from=+1）
-  hairpin: { from: +1, style: 'volley', item: 'hairpin', r: 22, n: 8, spin: 8.8, power: 1, recipe: 'star',    push: 1 },
-  pillow:  { from: +1, style: 'single', item: 'pillow',  r: 56,       spin: 5.7, power: 2, recipe: 'feather', push: 20 },
-  bouquet: { from: +1, style: 'heavy',  item: 'bouquet', r: 76,       spin: 6.7, power: 3, recipe: 'petal',   push: 230 },
+  hairpin: { name: '发卡',   from: +1, style: 'volley', item: 'hairpin', r: 22, n: 8, spin: 8.8, power: 1, recipe: 'star',    push: 1 },
+  pillow:  { name: '抱枕',   from: +1, style: 'single', item: 'pillow',  r: 56,       spin: 5.7, power: 2, recipe: 'feather', push: 20 },
+  bouquet: { name: '花束',   from: +1, style: 'heavy',  item: 'bouquet', r: 76,       spin: 6.7, power: 3, recipe: 'petal',   push: 230 },
   /* 档 4 的 r 看着不大，是因为 exec 会再乘 1.8（ammo.js）：64→115、68→122，
      占屏宽的 24% 与 25%。飞行体积负责预告"这一下很重"，兑现在命中那一刻的
      绽放里 —— 所以本体不必再大，大的是绽开的东西。 */
-  ringbox: { from: +1, style: 'heavy',  item: 'ringbox', r: 64,       spin: 6.7, power: 4, recipe: 'bloom',   push: 600 },
+  ringbox: { name: '戒指盒', from: +1, style: 'heavy',  item: 'ringbox', r: 64,       spin: 6.7, power: 4, recipe: 'bloom',   push: 600 },
   // 灭迹党（男方，在右，from=-1）
-  seed:    { from: -1, style: 'volley', item: 'seed',    r: 21, n: 8, spin: 8.8, power: 1, recipe: 'star',    push: 1 },
-  gamepad: { from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 5.7, power: 2, recipe: 'debris',  push: 20 },
-  milktea: { from: -1, style: 'heavy',  item: 'milktea', r: 72,       spin: 6.7, power: 3, recipe: 'splash',  push: 230 },
-  photo:   { from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
+  seed:    { name: '瓜子',   from: -1, style: 'volley', item: 'seed',    r: 21, n: 8, spin: 8.8, power: 1, recipe: 'star',    push: 1 },
+  gamepad: { name: '手柄',   from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 5.7, power: 2, recipe: 'debris',  push: 20 },
+  milktea: { name: '奶茶',   from: -1, style: 'heavy',  item: 'milktea', r: 72,       spin: 6.7, power: 3, recipe: 'splash',  push: 230 },
+  photo:   { name: '相框',   from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
 };
 
 function sampleRow(arr, y) {
@@ -1247,7 +1247,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       if (i === 0) {
         o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 26, 168, 24);
         o.fillStyle = '#ffd36b';
-        o.fillText(`${gname} · ${g.style} · p=${S.p.toFixed(0)}`, dx + 8, 42);
+        o.fillText(`${g.name || gname} · ${g.style} · spin ${g.spin} · p=${S.p.toFixed(0)}`, dx + 8, 42);
       }
     }
     const stage = document.getElementById('stage');
@@ -1549,7 +1549,16 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      演出走的是同一个事件，观众看到的因果关系才对得上。 */
   /* 礼物按钮注入火力，而不是直接发弹幕。发不发、发几颗由火力的消耗量决定
      （见 emitFire）—— 于是"刷得越多扔得越密"是从数值里长出来的，不是写死的。 */
+  /* 按钮上写的是**飞出来的那件东西**，不是平台礼物名。九件平台礼物两边共用，
+     左右两排按钮于是长得一模一样（仙女棒、魔法镜……），可点下去左边飞发卡、
+     右边飞瓜子 —— 看着同一个名字，对不上号。标签由 ITEM_OF + GIFT.name 现算，
+     以后改映射表按钮自动跟着变，不会出现按钮写着一件、飞出来另一件。
+     平台礼物名和注入量退到 title，要查数值时悬停即可。 */
   for (const b of document.querySelectorAll('[data-shop]')) {
+    const it = SHOP[b.dataset.shop];
+    const key = ITEM_OF[+b.dataset.side > 0 ? 'L' : 'R'][it.tier];
+    b.textContent = (key ? GIFT[key].name : it.name) + ' ' + '⓪①②③④'[it.tier];
+    b.title = `平台礼物 ${it.name}　档 ${it.tier}　注入 ${it.push}`;
     b.onclick = () => {
       if (S.phase === 'idle') startMatch();
       giveGift(+b.dataset.side, b.dataset.shop);
