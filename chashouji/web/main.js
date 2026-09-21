@@ -1,13 +1,16 @@
 /* 《查手机》网页版 —— 单一真源驱动。
  *
- * 全场唯一状态是 S.p（查岗党进度 0~100）。胜负判定只读它。
+ * 三层，别混：
+ *   拉力 S.fA / S.fB  礼物注入的存量，双方互相对冲，慢慢自然流失
+ *   血量 S.hpA / S.hpB  **胜负只看它**：拉力差每秒按 X/M/Z 扣对方的血，归零者负
+ *   对抗线 S.p（0~100）  拉力差的**当前读数**，决定手机被拽到哪 —— 它不是
+ *                        积分量，对面追上来手机自己会走回去，这才是拔河
  *
  * 场景这一侧读的是 FX.pDraw = S.p + 空闲拉锯（derive 里算）。对抗线、地面
  * 分色、角色取哪一帧、手机位移，**全部读同一个 pDraw**，所以"对抗线对不上
- * 画面"在构造上仍然不可能发生。只有 HUD 的血条与百分比读 S.p 真值。
- * 分成两个数是为了把"战况"和"这一刻谁拽赢了"分开：拔河里双方一直在较劲，
- * 绳子来回动并不代表谁占了上风 —— 让那点来回去改 S.p，会把接近中点的比赛
- * 结果变成掷骰子；让它去改血条，观众刚刷完礼物就会看见数字往回跌。
+ * 画面"在构造上仍然不可能发生。HUD 的血条读的是 S.hpA / S.hpB 真值。
+ * 拉锯只进表现层：它是"双方都在使劲、谁也没占上风"的样子，不该改战况 ——
+ * 让那点来回去改 S.p，观众刚刷完礼物就会看见手机往回跌。
  */
 const W = 960, H = 1334;
 const TOP = 128, BOT = 1232, MID = 480;
@@ -48,52 +51,62 @@ const P = {
 };
 
 /* 数值参数表 —— 整局的手感全在这十来个数上，集中一处方便手改。
-   模型是**两层**的：礼物注入的是"火力"，双方火力互相对冲，**只有净差值**
-   才把手机往一边拽。两边火力相等时刷得再凶手机也不动 —— 那正是拔河该有的
-   样子，也是这个玩法最长的一段时间。
-   （错误的做法是让礼物直接加进度：那样没有对冲、先刷的人白刷、一次爆发就能
+   模型是**两层**的：礼物注入的是"拉力"，双方拉力互相对冲，**只有差值**
+   才扣血、才拽得动手机。两边拉力相等时刷得再凶也谁都不掉血、手机停在中间
+   —— 那正是拔河该有的样子，也是这个玩法最长的一段时间。
+   （错误的做法是让礼物直接扣血：那样没有对冲、先刷的人白刷、一次爆发就能
    结束比赛。） */
 const NUM = {
-  /* 这三个数是**同一根时间轴**上的刻度，改一个必须三个一起按同样倍数改，
-     否则动的就不只是快慢，还有谁赢谁输。
-     曾经是 0.05 / 0.012 / 0.08，火力的时间常数 83 秒 —— 观众刷一件「爱的爆炸③」
-     出去，血条 20 秒纹丝不动，60 秒才跳 1 个百分点（这条是截图量出来的）。
-     礼物的效果全在，只是摊得太薄，在直播间里等同于没发生。
-     三个数一起 ×3.3 之后时间常数缩到 25 秒，而稳态净差 ÷3.3、DPS ×3.3 正好
-     抵消 —— 稳态推进速度、胜负节奏、弹幕总量、对冲与流失的比例，全部一个
-     不变；变的只有"单次注入多久消化完"。顺带弹幕也更贴脸了：礼物落地后那
-     一波集中打出来，而不是拖八十秒慢慢漏。 */
+  /* BURN / LOSS / HP_Z 是**同一根时间轴**上的刻度，改一个必须三个一起按同样
+     倍数改，否则动的就不只是快慢，还有谁赢谁输：稳态拉力差 = Δ注入 / LOSS，
+     三个同乘 k 之后差值 ÷k 而每点差的伤害 ×k，正好抵消。
+     曾经是 0.05 / 0.012，火力的时间常数 83 秒 —— 观众刷一件「爱的爆炸③」
+     出去，血条 20 秒纹丝不动，60 秒才跳 1 滴（这条是截图量出来的）。礼物的
+     效果全在，只是摊得太薄，在直播间里等同于没发生。现在时间常数 25 秒。 */
   BURN: 0.165,     // 对冲系数：双方等量消耗，由火力少的一方定速
   LOSS: 0.040,     // 自然流失：势头会过去。时间常数 25 秒
-  DPS: 0.27,       // 每 1000 点火力差，每秒把手机推动几个百分点
-  /* 稳态时  净差 = 注入速度差 / LOSS  —— 对冲项在两边完全相同，推导时直接
-     消掉了。所以手机移动的快慢只取决于"两边刷礼物的速度差"，与刷了多少总量
-     无关：都在猛刷就差值小、画面激烈而手机不动；一方停手就立刻被拽走。 */
+  /* 稳态时  拉力差 = 注入速度差 / LOSS  —— 对冲项在两边完全相同，推导时直接
+     消掉了。所以掉血的快慢只取决于"两边刷礼物的速度差"，与刷了多少总量
+     无关：都在猛刷就差值小、画面激烈而谁也不掉血；一方停手就立刻开始挨打。 */
+
+  /* ── 拉力差 → 掉血（X / M / Z）──
+     公式：拉力差 > X 时，每 M 点拉力差，每秒扣对方 Z% 的血。
+     X 和 M 取自《螂人杀》文档（3000 兵 ÷100、兵数 ÷100 的刻度），Z 取自
+     需求里给过的例子，文档本身没写掉血速率。推导写在 battle 里。 */
+  PULL_X: 30,      // 死区：拉力差没到这个数，谁也不掉血（≈1.5 个魔法镜②）
+  PULL_M: 1000,    // 每这么多拉力差……
+  HP_Z: 5,         // ……每秒扣对方这么多滴血（满血 100）
+  /* 掉血速度的上限。拉力差是没有上限的 —— 大哥一秒注入 600 而对面只有 80 时，
+     差值能到四万，折合每秒 200 滴血，半个回合都撑不过。那不叫碾压，那叫没有
+     过程：观众还没看清发生了什么，比赛已经结束。10 表示再怎么碾压也要 10 秒。 */
+  HP_MAX: 10,
+  /* 对抗线的满幅刻度：拉力差到这么多，手机就被拽到底（p=0 或 100）。
+     取 1000 是让它和上面的 M 共用一把尺 —— 手机顶到端点的那一刻，正好就是
+     "每秒扣对方 Z 滴血"的那一刻，画面读数和伤害读数对得上。 */
+  LINE_FULL: 1000,
+  LINE_RATE: 2.2,  // 对抗线趋近拉力差的速率（时间常数 0.45 秒）
+
   SHOT: 9,         // 每消耗这么多火力打出一发弹幕 —— 弹幕就是火力的消耗形式
   MATCH: 720,      // 单局 12 分钟
-  EDGE_HOLD: 3,    // 推到端点还要按住这么久才算赢
-  SUDDEN_LEAD: 35, // 领先这么多个百分点，持续 SUDDEN_WAIT 秒就进绝杀
+  SUDDEN_LEAD: 35, // 血量被拉开这么多滴，持续 SUDDEN_WAIT 秒就进绝杀
   SUDDEN_WAIT: 60,
   SUDDEN: 30,      // 绝杀倒计时
-  STAND_AT: 8,     // 进入最后这么多个百分点触发反击时刻
+  STAND_AT: 8,     // 有人掉到最后这么多滴血时触发反击时刻
   STAND: 120,      // 反击时刻时长：劣势方注入翻倍，全局只触发一次
-  SHIELD_AT: 10,   // 濒死护盾：最后这么多个百分点内，伤害先扣劣势方的火力
-  SHIELD_MAX: 0.75,// 濒死减伤的上限：再能扛也不能扛到推不动
-  /* 手机的最大速度。净差是没有上限的 —— 大哥一秒注入 600 而对面只有 80 时，
-     净差能到四万，折合 3.5 个百分点每秒，十四秒就从中点推到底。那不叫碾压，
-     那叫没有过程：观众还没看清发生了什么，比赛已经结束。
-     拔河的物理直觉也是这样 —— 再大的力气，手机也不可能瞬间飞过去。
-     0.85 表示最快也要一分钟才能从中点推到端点。 */
-  MAXDPS: 0.85,
+  SHIELD_AT: 10,   // 濒死护盾：血量低于这么多滴时，火力按比例替他挡伤害
+  SHIELD_MAX: 0.75,// 濒死减伤的上限：再能扛也不能扛到打不动
 };
 
 const S = {
-  p: 50, t: 0, auto: true, line: 3,   // line: 0 全无 / 1 原发光柱 / 2 地面战线+指针 / 3 只要指针
-  fA: 0, fB: 0,                       // 火力：A=查岗党(左) B=灭迹党(右)
+  /* auto 默认**关**：展示时自动演示会自己来回拽手机，观众分不清哪一下是
+     刷礼物推的、哪一下是演示程序推的。要看关键帧过渡时用 ?auto=1 打开。 */
+  p: 50, t: 0, auto: false, line: 3,  // line: 0 全无 / 1 原发光柱 / 2 地面战线+指针 / 3 只要指针
+  fA: 0, fB: 0,                       // 拉力（火力）：A=查岗党(左) B=灭迹党(右)
+  hpA: 100, hpB: 100,                 // 血量：胜负只看它，归零的一方输
   budA: 0, budB: 0,                   // 发射预算：火力消耗到一发弹幕的量就打一发
   debA: 0, debB: 0, debKA: 0, debKB: 0,  // 受到的注入减益：剩余秒数与折扣
   clock: 0, phase: 'idle',            // idle 不跑数值（诊断与老演示模式）/ play / sudden / over
-  edge: 0, big: 0, sudden: 0,
+  big: 0, sudden: 0,
   stand: 0, standUsed: false,
   winner: 0,
 };
@@ -147,53 +160,84 @@ function battle(dt) {
   emitFire(+1, denA > 0 ? burn / denA : 0);
   emitFire(-1, denB > 0 ? burn / denB : 0);
 
-  // 只有净差值才动手机
+  /* ── 胜负层：血量 ──
+     拉力差（= 双方火力之差）一件事管两头：**当下**它决定对抗线停在哪，
+     **持续**它每秒扣对方的血。血量归零的一方输。
+
+     和上一版的区别在于"手机位置"换了身份：它从**积分量**（被推过去就再也
+     不回来）变成了**当前读数**（此刻谁的拉力大、大多少）。于是
+       · 送礼物立刻看得见 —— 注入是瞬间的，对抗线半秒内就被拽过去；
+       · 对面追上来，手机自己会走回去 —— 这才是拔河，绳子本来就能拉回来；
+       · 输赢不再由"手机到没到底"决定，而是由这段时间里**一直被压着**的
+         累积伤害决定。擦一下端点不算什么，压住对方三十秒才是赢。
+
+     三个数的出处（X / M / Z，见 NUM 表）：
+       M = 1000 拉力：本项目的 push = 螂人杀兵数 ÷ 100，所以 1000 拉力就是
+           螂人杀的 10 万兵；上一版 DPS 的分母本来就是它，刻度没变。
+       X = 30 拉力：螂人杀"最后 100 滴血，兵力大于 3000 才优先掉兵"里的
+           3000 兵 ÷ 100。那是文档里唯一一个"低于它就不作数"的兵力门槛，
+           拿来当死区正合适 —— 双方拉力咬在一起的时候不该有人掉血。
+       Z = 5%/秒：⚠️ 螂人杀公开文档里**没有**掉血速率，它只写了兵数表、绝杀
+           线（差 500w）和血量保护（最后 1000 / 100 滴血）。这个 5% 取自
+           需求里给过的那个例子——"一方 1000 另一方 0，每秒扣对方 5%"，
+           也就是 docs/数值设计.md 零节记着的那条。按它算，一件「爱的爆炸③」
+           打掉对方 28.75%（四件见底），一方猛刷而对面不还手约 70 秒分胜负。
+           要回到 12 分钟的局长，Z 得取 0.27（正好是上一版 DPS 的值，同一个
+           单位）。两个都能跑，改一个数的事，见 ?z= 。 */
   const diff = S.fA - S.fB;
-  let dmg = (diff / 1000) * NUM.DPS * dt;
 
-  /* 濒死护盾：快被推到头时，火力越足越扛得住。照搬螂人杀"最后 100 滴血，
-     兵力够就优先掉兵"的意图 —— 刷礼物能直接保命，而且看得见：火力条长就是
-     在替你挡。
+  /* 对抗线：拉力差的当前读数，**不积分**。
+     趋近而不是直接取值 —— 礼物注入是瞬间跳变的，直接赋值会让手机"咯噔"
+     闪一下；0.45 秒的时间常数既跟得上，又让那一下读成"被拽过去"。 */
+  const want = 50 + 50 * clamp(diff / NUM.LINE_FULL, -1, 1);
+  S.p += (want - S.p) * approach(dt, NUM.LINE_RATE);
 
-     ⚠️ 它**不能去扣火力存量**。试过那种写法，结果是一条正反馈：护盾吃掉劣势
-     方的火力 → min 变小 → 对冲跟着变弱 → 优势方的火力不再被烧掉 → 差值反而
-     越拉越大。实测净差冲到理论值（Δ注入/LOSS）的 2.4 倍，越接近终点崩得越快。
-     根因是火力同时担着两个职责：它既是护盾的燃料，又是对冲的输入，扣一处动
-     两处。所以护盾只能按**比例**减伤，不碰存量。 */
-  if (dmg !== 0) {
-    const losing = dmg > 0 ? -1 : +1;                    // 正在挨打的一方
-    const room = losing > 0 ? S.p : 100 - S.p;           // 他离输还有多远
-    if (room < NUM.SHIELD_AT) {
+  /* 掉血。差距过不了 X 就一个血都不掉 —— 这是僵持区：双方咬得紧的时候
+     画面照样激烈（弹幕全在中线对撞），但谁也伤不到谁。
+     扣血按**差的全量**算，不是"超出 X 的那部分"：X 是开关不是起征点。
+     跨过门槛那一下伤害是 30/1000×Z，一秒零点几个血，看不出跳变。 */
+  const gap = Math.abs(diff);
+  if (gap > NUM.PULL_X) {
+    let z = Math.min(NUM.HP_MAX, gap / NUM.PULL_M * NUM.HP_Z);
+    const losing = diff > 0 ? -1 : +1;                   // 正在挨打的一方
+
+    /* 濒死护盾：血量见底时，火力越足越扛得住。这是螂人杀"最后 100 滴血，
+       兵力大于 3000 就优先掉兵"的原意 —— 刷礼物能直接保命，而且看得见：
+       火力条长就是在替你挡。
+
+       ⚠️ 它**不能去扣火力存量**。试过那种写法，结果是一条正反馈：护盾吃掉
+       劣势方的火力 → min 变小 → 对冲跟着变弱 → 优势方的火力不再被烧掉 →
+       差值反而越拉越大。实测净差冲到理论值（Δ注入/LOSS）的 2.4 倍，越接近
+       终点崩得越快。根因是火力同时担着两个职责：它既是护盾的燃料，又是对冲
+       的输入，扣一处动两处。所以护盾只能按**比例**减伤，不碰存量。 */
+    const hp = losing > 0 ? S.hpA : S.hpB;
+    if (hp < NUM.SHIELD_AT) {
       const mine = losing > 0 ? S.fA : S.fB, his = losing > 0 ? S.fB : S.fA;
-      const ratio = mine / (his + 1);
-      dmg *= 1 - Math.min(NUM.SHIELD_MAX, ratio * 1.5);
+      z *= 1 - Math.min(NUM.SHIELD_MAX, mine / (his + 1) * 1.5);
     }
+    if (losing > 0) S.hpA = Math.max(0, S.hpA - z * dt);
+    else S.hpB = Math.max(0, S.hpB - z * dt);
   }
-  const cap = NUM.MAXDPS * dt;
-  if (dmg > cap) dmg = cap; else if (dmg < -cap) dmg = -cap;
-  S.p = clamp(S.p + dmg, 0, 100);
 
-  /* 反击时刻：第一次被推到最后 8 个百分点时，劣势方注入翻倍两分钟，全局只
+  if (S.hpA <= 0 || S.hpB <= 0) { finish(S.hpA <= 0 ? -1 : +1); return; }
+
+  /* 反击时刻：第一次有人掉到最后 8 滴血时，劣势方注入翻倍两分钟，全局只
      触发一次。放大的是注入不是伤害 —— 在两层模型里，"更有力"只能是更多火力。 */
-  if (!S.standUsed && (S.p < NUM.STAND_AT || S.p > 100 - NUM.STAND_AT)) {
+  if (!S.standUsed && Math.min(S.hpA, S.hpB) < NUM.STAND_AT) {
     S.standUsed = true; S.stand = NUM.STAND;
   }
 
-  // 绝杀：一直被压着就别耗了，给 30 秒最后的机会
-  const lead = Math.abs(S.p - 50) * 2;
+  /* 绝杀：血量被拉开这么多还一直追不回来，就别耗了，给 30 秒最后的机会。
+     判据从"手机压在一边多久"换成了"血差多大"—— 手机位置现在是瞬时读数，
+     一件大礼物就能把它顶到端点，再拿它当"一直被压着"的证据已经不成立。 */
+  const lead = Math.abs(S.hpA - S.hpB);
   if (S.phase === 'play') {
-    S.big = lead >= NUM.SUDDEN_LEAD * 2 ? S.big + dt : 0;
+    S.big = lead >= NUM.SUDDEN_LEAD ? S.big + dt : 0;
     if (S.big >= NUM.SUDDEN_WAIT) { S.phase = 'sudden'; S.sudden = NUM.SUDDEN; }
-  } else if ((S.sudden -= dt) <= 0) { finish(S.p > 50 ? +1 : -1); return; }
+  } else if ((S.sudden -= dt) <= 0) { finish(S.hpA > S.hpB ? +1 : -1); return; }
 
-  /* 推到端点还得按住三秒。没有这一条，一次爆发擦过端点就结束比赛，前十分钟
-     全部作废 —— 观众读到的是"输得莫名其妙"，不是"输得精彩"。 */
-  if (S.p >= 100 || S.p <= 0) {
-    S.edge += dt;
-    if (S.edge >= NUM.EDGE_HOLD) { finish(S.p >= 100 ? +1 : -1); return; }
-  } else S.edge = 0;
-
-  if ((S.clock -= dt) <= 0) finish(S.p > 53 ? +1 : S.p < 47 ? -1 : 0);
+  // 时间到：血多的一方胜，差在 3 滴血以内判平
+  if ((S.clock -= dt) <= 0) finish(S.hpA > S.hpB + 3 ? +1 : S.hpB > S.hpA + 3 ? -1 : 0);
 }
 
 function finish(who) { S.phase = 'over'; S.winner = who; }
@@ -214,7 +258,7 @@ function emitFire(side, clashRatio) {
 function giveGift(side, key) {
   const it = SHOP[key]; if (!it) return;
   const deb = side > 0 ? S.debKA : S.debKB;
-  const loser = S.p < 50 ? +1 : -1;                 // 谁正落后
+  const loser = S.hpA < S.hpB ? +1 : -1;            // 谁正落后（看血，不看手机位置）
   const boost = (S.stand > 0 && side === loser) ? 2 : 1;
   const amt = it.push * (1 - deb) * boost;
   if (side > 0) S.fA += amt; else S.fB += amt;
@@ -243,21 +287,23 @@ function hexDebuff(side, k, sec) {
 
 function startMatch() {
   S.p = 50; S.fA = S.fB = 0; S.budA = S.budB = 0;
+  S.hpA = S.hpB = 100;
   S.debA = S.debB = S.debKA = S.debKB = 0;
   S.clock = NUM.MATCH; S.phase = 'play';
-  S.edge = S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
+  S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
 
 /* ---------- 表现层：由 S.p 派生画面 ---------- */
 function derive(dt) {
-  /* 空闲拉锯。双方都不送礼物时 S.p 一动不动，画面就僵在同一档关键帧上很久 ——
-     可拔河里"没人占上风"不等于"没人使劲"，绳子该一直在小幅来回。
-     扰动只进**表现层**：S.p 仍然是唯一的战况真源，胜负判定读的是它；画面上的
-     手机、角色姿态、对抗线、地面分色、血条一律改读 FX.pDraw。
-     不能直接摇 S.p —— 时间到是按 p>53 / p<47 判胜负的，±5 的抖动会把接近中点
-     的比赛结果变成掷骰子。
+  /* 空闲拉锯。双方都不送礼物时拉力差是 0，S.p 停在正中一动不动，画面就僵在
+     同一档关键帧上很久 —— 可拔河里"没人占上风"不等于"没人使劲"，绳子该一直
+     在小幅来回。
+     扰动只进**表现层**：S.p 是拉力差的读数，画面上的手机、角色姿态、对抗线、
+     地面分色一律改读 FX.pDraw，血条读的是 S.hpA / S.hpB。
+     不能直接摇 S.p —— 它下一帧就会被 battle 按拉力差重算，摇进去的量当场就
+     没了；真要摇也不该摇，那会让观众以为拉力差在变。
      三个频率叠加，不是单频也不是两频。单频读出来是钟摆，一眼看穿；两频会
      周期性地互相抵消 —— 实测 0.83/1.41 那一组有长达 3.6 秒的平台期，胶片上
      连着四格 pDraw 都卡在 51.2，正好把"长时间同一个动作"原样复现了一遍。
@@ -265,27 +311,27 @@ function derive(dt) {
      越接近端点越收敛（calm）。用三次方而不是一次方：一次方衰减太快，p=78
      就只剩四成幅度，可"长时间不动"在任何进度上都会发生，不是中点专有的毛病；
      三次方让它在 p=90 之前基本满幅，只在最后几个点收住。收住是必须的 ——
-     pDraw 到了 100 而 S.p 还停在 96 的话，画面推到底了却不判胜负。 */
+     手机已经被拽到画面边上了，再叠一层来回摆就会读成"推到底了还在晃"。 */
   const calm = 1 - Math.pow(Math.abs(S.p - 50) / 50, 3);
 
   /* 拉锯只在**双方都没送礼物**的时候才满幅 —— 这是需求的原话，而上一版把它做成了
      无条件常开，那个实现错误会直接吃掉玩法：
-     一次拉锯摆动是 10 个百分点（±5 来回），而单件礼物推得动多少？静场实测
-     「爱的爆炸③」1.53、最贵的「神秘空投④」3.99 —— 一次摆动等于 2.5 个空投。
-     观众刷完最贵的那件，那 12px 的推进整个埋在 30px 的来回晃里，读出来就是
-     "我刷了，什么都没发生"。信号比噪声小，加多少浓度都没用。
-     所以拉锯必须给战况让位：场上还有火力在烧，就说明有人刷过、进度正在被推，
-     画面本来就在动，不需要填充；火力烧干了才是真的僵住。
-     指标用**净差**，不是火力总量，也不是"最近几秒有没有人点礼物"：
-     · 只有净差推得动手机（battle 里 dmg = 净差/1000 × DPS），所以净差才是
-       "画面在不在动"的正确度量；
-     · 火力总量是错的 —— 双方对着刷小礼物时它会被撑得很高（各 0.3 件/秒的
-       魔法镜②就能让总量稳在 1000），而那时净差是 0、进度一动不动，按总量
+     一次拉锯摆动是 10 个百分点（±5 来回）。礼物推得动多少是同一把尺子上的数：
+     拉力差 100 才换来手机偏 5 个百分点 —— 一件「魔法镜②」（注入 20）自己
+     只值 1 个百分点，整个埋在 10 个点的来回晃里，读出来就是"我刷了，什么都
+     没发生"。信号比噪声小，加多少浓度都没用。
+     所以拉锯必须给战况让位：场上还有拉力差，手机本来就被拽着在动，不需要
+     填充；拉力烧干了、两边归零了，才是真的僵住。
+     指标用**拉力差**，不是拉力总量，也不是"最近几秒有没有人点礼物"：
+     · 手机位置就是拉力差的读数（battle 里 p = 50 + 50×差/LINE_FULL），所以
+       差值才是"画面在不在动"的正确度量；
+     · 拉力总量是错的 —— 双方对着刷小礼物时它会被撑得很高（各 0.3 件/秒的
+       魔法镜②就能让总量稳在 1000），而那时差值是 0、手机停在正中，按总量
        判就会把拉锯关死，僵局原样回来。而这恰恰是最需要拉锯的场面之一；
-     · 火力是慢衰减的，所以不用另外维护计时器去猜"这一波推完了没有"，净差
-       自己会一路烧到推进真的停下来。
-     阈值 100 ≈ 一个能量电池②。档 0~1 那些一局上百次的小礼物本来就推不动进度
-     （仙女棒实测 0.007 个百分点），它们不该、也不需要把拉锯关掉。
+     · 拉力是慢衰减的，所以不用另外维护计时器去猜"这一波推完了没有"，差值
+       自己会一路烧到手机真的停下来。
+     阈值 100 ≈ 一个能量电池②，也正好是掉血死区 PULL_X(30) 的三倍多：小到
+     推不动画面的那些礼物，不该、也不需要把拉锯关掉。
      趋近而不是直接取值：礼物注入是瞬间跳变的，直接乘会让画面"咯噔"一下。 */
   const busy = Math.min(1, Math.abs(S.fA - S.fB) / 100);
   FX.busy += (busy - FX.busy) * approach(dt, 1.6);
@@ -760,7 +806,7 @@ const RECIPE = {
    SHOP —— **数值**。九件抖音平台礼物，相对价值直接继承《螂人杀》已验证的
    兵数比例（push = 兵数 ÷ 100）：点赞 1、仙女棒 100、魔法镜 2000、
    爱的爆炸 23000、神秘空投 60000……这一套在两个上线玩法里都跑过，不必重定。
-   push 注入的是**火力**，不是进度 —— 进度由双方火力的净差积分出来。
+   push 注入的是**拉力**，不是血 —— 血由双方拉力的差值每秒扣出来。
 
    GIFT —— **表现**。一件物品飞出去长什么样：样式、体积、命中配方。
 
@@ -1031,8 +1077,14 @@ function drawGround(ctx, bias) {
   ctx.restore();
 }
 
-function drawHUD(ctx, p) {
-  const bars = [{ x: 92, w: 276, c: GREEN, v: p, dir: 1 }, { x: 572, w: 296, c: RED, v: 100 - p, dir: -1 }];
+/* 顶上两条是**血条**，各自独立：左边是查岗党剩多少血，右边是灭迹党剩多少。
+   上一版它画的是同一根进度条劈成两半（p 和 100-p），加起来永远是 100 ——
+   那是"手机在哪"，不是"谁快死了"。现在手机位置是瞬时读数（拉力差），两件事
+   必须分开显示，否则观众读不出"我方血更多但这一刻被拽住了"这种局面。
+   血条可以同时掉：僵持时谁也不掉，一方碾压时只有挨打的那条在退。 */
+function drawHUD(ctx) {
+  const hA = clamp(S.hpA, 0, 100), hB = clamp(S.hpB, 0, 100);
+  const bars = [{ x: 92, w: 276, c: GREEN, v: hA, dir: 1 }, { x: 572, w: 296, c: RED, v: hB, dir: -1 }];
   ctx.save();
   for (const b of bars) {
     ctx.fillStyle = 'rgba(8,10,13,.92)'; ctx.fillRect(b.x, 74, b.w, 31);
@@ -1044,8 +1096,8 @@ function drawHUD(ctx, p) {
   }
   ctx.font = 'bold 23px ui-monospace,Menlo,monospace'; ctx.textBaseline = 'middle';
   ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.75)';
-  ctx.textAlign = 'left'; ctx.strokeText(p.toFixed(0) + '%', 100, 90); ctx.fillStyle = '#fff'; ctx.fillText(p.toFixed(0) + '%', 100, 90);
-  ctx.textAlign = 'right'; ctx.strokeText((100 - p).toFixed(0) + '%', 860, 90); ctx.fillStyle = '#fff'; ctx.fillText((100 - p).toFixed(0) + '%', 860, 90);
+  ctx.textAlign = 'left'; ctx.strokeText(hA.toFixed(0) + '%', 100, 90); ctx.fillStyle = '#fff'; ctx.fillText(hA.toFixed(0) + '%', 100, 90);
+  ctx.textAlign = 'right'; ctx.strokeText(hB.toFixed(0) + '%', 860, 90); ctx.fillStyle = '#fff'; ctx.fillText(hB.toFixed(0) + '%', 860, 90);
   ctx.font = 'bold 26px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
   ctx.textAlign = 'left'; ctx.lineWidth = 5;
   ctx.strokeText('查岗党', 92, 42); ctx.fillText('查岗党', 92, 42);
@@ -1053,9 +1105,10 @@ function drawHUD(ctx, p) {
   ctx.strokeText('灭迹党', 868, 42); ctx.fillText('灭迹党', 868, 42);
 
   if (S.phase !== 'idle') {
-    /* 火力条 —— 第二个属性必须看得见。观众刷了礼物、手机没动，屏幕上要是
+    /* 拉力条 —— 第二个属性必须看得见。观众刷了礼物、血量没动，屏幕上要是
        没有任何交代，他会认为这游戏是假的。这两条细带就是那个交代：它们一起
-       涨说明双方在对拼（手机自然不动），一条比另一条长出来的那截才是战况。
+       涨说明双方在对拼（手机自然停在中间、谁也不掉血），一条比另一条长出来
+       的那截才是战况 —— 那一截就是每秒在扣对方血的东西。
        开方是为了让小额也看得出动静 —— 线性的话几百点火力在几千的量程里
        几乎不动一根头发。 */
     const bar = (x, w, dir, f, c) => {
@@ -1104,15 +1157,17 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     while (S.phase !== 'over' && el < cap) {
       S.fA += injA * H; S.fB += injB * H;
       battle(H); el += H;
-      const lead = Math.abs(S.p - 50);
-      if (mark50 < 0 && lead >= 25) mark50 = el;
-      if (mark80 < 0 && lead >= 40) mark80 = el;
+      // 挨打那一方掉到半血 / 只剩两成的时刻 —— 局长看的是血，不是手机位置
+      const low = Math.min(S.hpA, S.hpB);
+      if (mark50 < 0 && low <= 50) mark50 = el;
+      if (mark80 < 0 && low <= 20) mark80 = el;
     }
     const fmt = (v) => v < 0 ? '—' : `${v / 60 | 0}:${String(v % 60 | 0).padStart(2, '0')}`;
     document.getElementById('msg').textContent =
-      `注入 ${injA}:${injB}／秒 → 结束于 ${fmt(el)}  p=${S.p.toFixed(1)}  `
-      + `火力 ${S.fA.toFixed(0)}:${S.fB.toFixed(0)}  净差 ${(S.fA - S.fB).toFixed(0)}  `
-      + `过75%档 ${fmt(mark50)}  过90%档 ${fmt(mark80)}  `
+      `注入 ${injA}:${injB}／秒 → 结束于 ${fmt(el)}  血 ${S.hpA.toFixed(1)}:${S.hpB.toFixed(1)}  `
+      + `拉力 ${S.fA.toFixed(0)}:${S.fB.toFixed(0)}  差 ${(S.fA - S.fB).toFixed(0)}  `
+      + `对抗线 p=${S.p.toFixed(1)}  `
+      + `半血 ${fmt(mark50)}  两成血 ${fmt(mark80)}  `
       + `${S.winner > 0 ? '查岗党胜' : S.winner < 0 ? '灭迹党胜' : '平/未分'}`;
     document.title = 'SIMDONE ' + document.getElementById('msg').textContent;
     return;
@@ -1124,9 +1179,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      一个位置上，那条线永远只在同一处抖。 */
   Ammo.init({
     W, frontAt,
-    /* 命中只负责演出，**不改进度**。进度是双方火力净差积分出来的（见 battle）——
-       让命中再推一次，等于同一份伤害算两遍，而且会把"两边都在刷时手机不动"
-       这条最要紧的手感破坏掉。弹幕是火力的表现形式，不是伤害的来源。 */
+    /* 命中只负责演出，**不扣血也不推手机**。血是双方拉力差每秒扣出来的、手机
+       位置是拉力差的读数（都见 battle）—— 让命中再推一次，等于同一份伤害算
+       两遍，而且会把"两边都在刷时谁也不掉血"这条最要紧的手感破坏掉。
+       弹幕是拉力的表现形式，不是伤害的来源。 */
     onHit(p) {
       impact(-p.from, p.y, p.exec ? 4 : p.g.power, RECIPE[p.g.recipe]);
     },
@@ -1188,7 +1244,17 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     if (Q.get('liveStop') === '1') { stopAll = true; live = false; }
   }
   if (Q.has('p')) { S.p = clamp(+Q.get('p'), 0, 100); S.auto = false; }
+  /* 自动演示默认就是关的（见 S.auto），?auto=1 才打开 —— 展示时它会自己来回
+     拽手机，观众分不清哪一下是刷礼物推的。?auto=0 保留着，写脚本时不用管
+     默认值是什么。 */
   if (Q.get('auto') === '0') S.auto = false;
+  if (Q.get('auto') === '1') S.auto = true;
+  /* X / M / Z 三个数就地试：?x=30&m=1000&z=5。Z 决定局长 —— 5 是需求例子里
+     那个"差 1000 每秒扣 5%"（约 70 秒一局），0.27 是 12 分钟局长的值。 */
+  if (Q.has('x')) NUM.PULL_X = Math.max(0, +Q.get('x'));
+  if (Q.has('m')) NUM.PULL_M = Math.max(1, +Q.get('m'));
+  if (Q.has('z')) NUM.HP_Z = Math.max(0, +Q.get('z'));
+  if (Q.has('linefull')) NUM.LINE_FULL = Math.max(1, +Q.get('linefull'));
   if (Q.has('line')) S.line = clamp(+Q.get('line') | 0, 0, 3);
   // ?zoom=1 用画布原生尺寸铺开，截图时才看得清脸和手的实际画法
   if (Q.get('zoom') === '1') document.getElementById('stage').style.width = W + 'px';
@@ -1239,11 +1305,11 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Ammo.draw(fctx);
     Particles.draw(fctx);
     fctx.restore();
-    /* 血条与百分比读 **S.p 真值**，不读 pDraw。手机位置是"这一刻谁拽赢了"，
-       会来回晃；血条是"累计战况"，不该跟着晃 —— 观众刚刷完礼物却看见数字
-       往回跌，读出来是"我刷的没用"。两者本来就是两件事，拔河时绳子来回而
-       没有人真的前进，正是这个意思。 */
-    drawHUD(fctx, S.p);
+    /* 血条读 S.hpA / S.hpB，不读手机位置。手机位置是"这一刻谁拽赢了"，会
+       来回晃、也会被对面追回去；血量是"这段时间里被压了多久"的累计，只减
+       不增。两者本来就是两件事 —— 拔河时绳子来回而没有人真的前进，正是这个
+       意思，而血条要回答的是"这么耗下去谁先倒"。 */
+    drawHUD(fctx);
     Particles.drawFlash(fctx, W, H);
   }
 
@@ -1623,7 +1689,11 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        自动演示给；play 下滑块失效，进度只能由火力差推出来。混在一起的话
        "礼物到底推了多少"永远说不清。 */
     if (live) { S.fA += liveA * raw; S.fB += liveB * raw; }
-    const keep = S.p; battle(dt); if (freeze) S.p = keep;
+    /* liveFreeze 冻的是**战况**：对抗线和血量都定在预热那一刻，而拉力、弹幕、
+       粒子照跑 —— 截图要的是"打到这个比分时画面是活的什么样"，不是死图。 */
+    const kp = S.p, ka = S.hpA, kb = S.hpB;
+    battle(dt);
+    if (freeze) { S.p = kp; S.hpA = ka; S.hpB = kb; }
     if (S.auto && S.phase === 'idle') {
       S.p += dir * dt * 9 * (0.35 + Math.abs(Math.sin(S.t * .27)) * 1.5);
       if (S.p > 97) { S.p = 97; dir = -1; } if (S.p < 3) { S.p = 3; dir = 1; }
@@ -1636,7 +1706,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     document.getElementById('stat').textContent =
       (S.phase === 'idle'
         ? `p=${S.p.toFixed(1)}  对抗线x=${phonePos()[0].toFixed(0)}  f${String(seq.shown).padStart(3, '0')}  `
-        : `p=${S.p.toFixed(1)}  火力 ${S.fA.toFixed(0)}:${S.fB.toFixed(0)}  净差${(S.fA - S.fB).toFixed(0)}  `
+        : `血 ${S.hpA.toFixed(1)}:${S.hpB.toFixed(1)}  拉力 ${S.fA.toFixed(0)}:${S.fB.toFixed(0)}  `
+          + `差${(S.fA - S.fB).toFixed(0)}  p=${S.p.toFixed(1)}  `
           + `${(mm / 60 | 0)}:${String(mm % 60 | 0).padStart(2, '0')}`
           + (S.phase === 'sudden' ? `  绝杀${S.sudden.toFixed(0)}` : '')
           + (S.stand > 0 ? `  反击${S.stand.toFixed(0)}` : '')
