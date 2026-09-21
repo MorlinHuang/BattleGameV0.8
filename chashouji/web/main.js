@@ -1110,7 +1110,8 @@ const UI = {
      算出来刚好够的位置，画出来就啃到血条底边了。 */
   avR: 30, avCX: 44, avCY: 35,       // 头像圆：左侧圆心，右侧 = W - 它
   barX: 18, barW: 442, barY: 66, barH: 44,    // 血条
-  pwY: 138,                          // 拉力那一行的文字基线（不是条，见 drawPowerText）
+  pwCY: 33,                          // 拉力牌子的中心（中线正上方，见 drawPowerText）
+  clkCY: 130,                        // 时钟那一行的中心（降到血条下面，让位给拉力）
   sk: 12,                            // 斜切量：顶边相对底边右移多少（右侧取反）
 };
 
@@ -1234,35 +1235,38 @@ function drawHpBar(ctx, A) {
   ctx.restore();
 }
 
-/* 拉力直接写成"拉力 575"，不画条。
-   条要成立得有个量程，而拉力是没有上限的存量（大哥一秒注入 600，对面只有 80
-   的时候差值能到四万），画条就只能开方压缩——压完之后小额礼物推不动它，大额
-   又早早顶到头，两头都读不出来。写成数字反而两头都准：刷一件就跳一截，跳多少
-   和礼物的 push 值一一对应。
-   而且这一层本来就不是"还剩多少"，是"我砸进去了多少"。观众要对的是自己刷的
-   那个数，不是一根长度。 */
-function drawPowerText(ctx, A) {
-  const f = A ? S.fA : S.fB, c = A ? GREEN : RED, lf = A ? HUD.lfA : HUD.lfB;
-  const num = f.toFixed(0), y = UI.pwY;
+/* 拉力直接写成"拉力 575"，不画条，而且**两边的数并排摆在正中**。
+   不画条：条要成立得有个量程，而拉力是没有上限的存量（大哥一秒注入 600、对面
+   只有 80 时差值能到四万），画条只能开方压缩 —— 压完小额礼物推不动它、大额又
+   早早顶到头，两头都读不出来。写成数字两头都准：刷一件跳一截，跳多少和礼物的
+   push 值一一对应。
+   放正中：分列左右两侧时没人会去比，而这两个数**必须放在一起比** —— 扣血算的
+   就是它们的差，差过了 X 才有人掉血。并排摆着，"我比他多多少"不用算。
+   它比倒计时显眼一档也是故意的：观众刷礼物改变的是这个数，不是那个钟。 */
+function drawPowerText(ctx) {
+  const cy = UI.pwCY;
   ctx.save();
-  ctx.textBaseline = 'alphabetic';
-  /* 标签小、数值大。竖向只有血条底到指针之间那 35px，而中文的下伸笔画和大号
-     数字的上沿是往两头顶的 —— 把"拉力"压到 18px，省出来的全给数字。 */
-  const fl = 'bold 20px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-  const fn = 'bold 32px ui-monospace,Menlo,monospace';
-  ctx.font = fn; const nw = ctx.measureText(num).width;
-  ctx.font = fl; const lw2 = ctx.measureText('拉力').width;
-  /* 两侧都读成"拉力 <数>"，只是整体贴各自那边的边 —— 严格镜像会把右边写成
-     "575 拉力"，念出来就不是一句话了。 */
-  const x0 = A ? UI.barX + 14 : W - UI.barX - 14 - (lw2 + 10 + nw);
-  ctx.textAlign = 'left';
-  txt(ctx, '拉力', x0, y, 'rgba(232,238,246,.82)', 4);
-  ctx.font = fn;
-  // 礼物砸进来那一下数字整个亮一次 —— 条上那个菱形滑块的活，现在归发光
-  if (lf > 0) { ctx.shadowColor = rgba(c, .95); ctx.shadowBlur = 20 * lf; }
-  txt(ctx, num, x0 + lw2 + 10, y,
-      `rgb(${c.map(v => Math.min(255, (v * (1.15 + .55 * lf)) | 0)).join(',')})`, 5);
-  ctx.shadowBlur = 0;
+  ctx.textBaseline = 'middle';
+  /* 底板宽度写死，不随位数变 —— 跟着数字宽窄伸缩的话，刷一件礼物牌子自己
+     会抖一下，观众会以为是画面卡了。288 够放到五位数。 */
+  ctx.beginPath(); ctx.roundRect(336, 6, 288, 54, 16);
+  ctx.fillStyle = 'rgba(8,10,14,.74)'; ctx.fill();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.20)'; ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 22px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+  txt(ctx, '拉力', MID, cy, 'rgba(232,238,246,.80)', 4);
+
+  ctx.font = 'bold 34px ui-monospace,Menlo,monospace';
+  for (const A of [true, false]) {
+    const f = A ? S.fA : S.fB, c = A ? GREEN : RED, lf = A ? HUD.lfA : HUD.lfB;
+    ctx.textAlign = A ? 'right' : 'left';
+    // 礼物砸进来那一下数字整个亮一次 —— 原先条上那个菱形滑块的活
+    if (lf > 0) { ctx.shadowColor = rgba(c, .95); ctx.shadowBlur = 22 * lf; }
+    txt(ctx, f.toFixed(0), A ? MID - 38 : MID + 38, cy,
+        `rgb(${c.map(v => Math.min(255, (v * (1.18 + .5 * lf)) | 0)).join(',')})`, 5.5);
+    ctx.shadowBlur = 0;
+  }
   ctx.restore();
 }
 
@@ -1273,7 +1277,6 @@ function drawHUD(ctx) {
     ctx.textBaseline = 'middle';
     drawAvatar(ctx, A);
     drawHpBar(ctx, A);
-    if (S.phase !== 'idle') drawPowerText(ctx, A);
     /* 队名和百分比并排在血条**上方**的外侧，条里一个字都不放。
        放进条里试过两版，压外端会在残血时和末端亮口叠在一起，压内端满血时
        又被侵蚀带盖住 —— 填充的末端迟早要扫过整条，数字待在条里就没有安全
@@ -1294,26 +1297,35 @@ function drawHUD(ctx) {
     if (S.phase === 'sudden') { tip = `绝杀 ${S.sudden.toFixed(0)}`; col = '#ff6a5a'; bg = 'rgba(52,8,10,.86)'; }
     else if (S.phase === 'over') { tip = S.winner > 0 ? '查岗党胜' : S.winner < 0 ? '灭迹党胜' : '平局'; col = '#ffd45a'; bg = 'rgba(46,34,6,.88)'; }
     else if (S.stand > 0) { tip = `反击 ${S.stand.toFixed(0)}`; col = '#ffd45a'; bg = 'rgba(46,34,6,.86)'; }
-    /* 时钟和战况读数合成一块牌子，摞在两条血条中间的上方。分成上下两个小胶囊
-       试过，两个都小得读不出，而且下面那个正好落在指针横扫的那一行。 */
-    const one = S.phase === 'over';          // 结算只剩胜负一行，牌子跟着收窄
-    ctx.save();
-    ctx.beginPath(); ctx.roundRect(398, 4, 164, one ? 44 : 62, 16); ctx.fillStyle = bg; ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.20)'; ctx.stroke();
-    ctx.restore();
-    ctx.textAlign = 'center';
-    ctx.font = `bold ${one ? 27 : 31}px ui-monospace,Menlo,monospace`;
-    txt(ctx, tip, MID, one ? 28 : 22, col, 4);
-
-    /* 时钟底下这一行是全屏唯一把因果写成字的地方："此刻每秒扣谁多少血"。
-       玩法的核心是拉力差在扣血，而拉力差本身只画成了两条长度 —— 差多少、
-       够不够过死区、折合每秒几滴，全靠观众心算。这一行替他们算完。 */
+    /* 拉力牌子占了中线正上方，时钟和战况读数一起降到血条下面，并排成一行。
+       倒计时降级是有意的：观众刷礼物改变的是拉力，不是那个钟；钟只在最后
+       半分钟才重要，而那时它会变成"绝杀 18"自己跳出来。 */
+    drawPowerText(ctx);
     const d = S.dpsA > 0.01 ? S.dpsA : S.dpsB, hurtA = S.dpsA > 0.01;
-    if (S.phase === 'over') { ctx.restore(); return; }   // 打完了就没有"此刻扣多少"这回事
-    ctx.font = 'bold 23px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-    if (d > 0.01) {
-      txt(ctx, hurtA ? `◀ 每秒 ${d.toFixed(1)}` : `每秒 ${d.toFixed(1)} ▶`, MID, 48, '#ffd86e', 4);
-    } else txt(ctx, '僵 持', MID, 48, 'rgba(232,236,242,.70)', 4);
+    const over = S.phase === 'over';
+    const note = over ? '' : d > 0.01
+      ? (hurtA ? `◀ 每秒 ${d.toFixed(1)}` : `每秒 ${d.toFixed(1)} ▶`) : '僵 持';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold ${over ? 27 : 23}px ui-monospace,Menlo,monospace`;
+    const tw = ctx.measureText(tip).width;
+    ctx.font = 'bold 21px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+    const nw = note ? ctx.measureText(note).width + 18 : 0;
+    /* 这块底板得跟着内容伸缩 —— 它下面 18px 就是指针三角横扫的那一行，
+       写死一个够宽的值会在"僵持"时空出一大片压在画面上。 */
+    const bw = tw + nw + 36, bx = MID - bw / 2;
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(bx, UI.clkCY - 17, bw, 34, 15);
+    ctx.fillStyle = bg; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.stroke();
+    ctx.restore();
+    ctx.textAlign = 'left';
+    ctx.font = `bold ${over ? 27 : 23}px ui-monospace,Menlo,monospace`;
+    txt(ctx, tip, bx + 18, UI.clkCY, col, 4);
+    if (note) {
+      ctx.font = 'bold 21px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+      txt(ctx, note, bx + 18 + tw + 18, UI.clkCY,
+          d > 0.01 ? '#ffd86e' : 'rgba(232,236,242,.70)', 4);
+    }
   }
   ctx.restore();
 }
@@ -1881,11 +1893,15 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        自动演示给；play 下滑块失效，进度只能由火力差推出来。混在一起的话
        "礼物到底推了多少"永远说不清。 */
     if (live) { S.fA += liveA * raw; S.fB += liveB * raw; }
-    /* liveFreeze 冻的是**战况**：对抗线和血量都定在预热那一刻，而拉力、弹幕、
-       粒子照跑 —— 截图要的是"打到这个比分时画面是活的什么样"，不是死图。 */
-    const kp = S.p, ka = S.hpA, kb = S.hpB;
+    /* liveFreeze 冻的是**战况**：对抗线、血量、比赛阶段与三个计时器都定在预热
+       那一刻，而拉力、弹幕、粒子照跑 —— 截图要的是"打到这个比分时画面是活的
+       什么样"，不是死图。
+       阶段和计时器必须一起冻：只冻血量的话，绝杀的累计照走（lead 被冻在一个
+       大值上，等于每一帧都在给它加码），截一张残血图能等出个"查岗党胜"来。 */
+    const k = { p: S.p, hpA: S.hpA, hpB: S.hpB, clock: S.clock, phase: S.phase,
+                big: S.big, sudden: S.sudden, stand: S.stand, winner: S.winner };
     battle(dt);
-    if (freeze) { S.p = kp; S.hpA = ka; S.hpB = kb; }
+    if (freeze) Object.assign(S, k);
     if (S.auto && S.phase === 'idle') {
       S.p += dir * dt * 9 * (0.35 + Math.abs(Math.sin(S.t * .27)) * 1.5);
       if (S.p > 97) { S.p = 97; dir = -1; } if (S.p < 3) { S.p = 3; dir = 1; }
