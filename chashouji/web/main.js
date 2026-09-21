@@ -1043,7 +1043,7 @@ function drawFrontMark(ctx, bias) {
   const col = Math.abs(bias) < 0.06 ? [255, 255, 255] : (bias > 0 ? GREEN : RED);
   /* 指针整体压到 HUD 下沿之外。它的 x 随对抗线跑、三角有 42px 宽，留在原来
      的 TOP-2 会横着划过血条和拉力条 —— HUD 一放大就没地方躲了。 */
-  const y = TOP + 26, x = frontAt(y) + FX.jit;
+  const y = TOP + 36, x = frontAt(y) + FX.jit;
   ctx.save();
   ctx.strokeStyle = 'rgba(12,14,20,.6)'; ctx.lineWidth = 11;
   ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 52); ctx.stroke();
@@ -1104,11 +1104,13 @@ const UI = {
   /* 直播间里这块画面会被缩到手机屏的三分之一宽，条细一点、字小一号就彻底
      看不清了。所以横向**顶满**：头像缩成贴在队名左边的小圆，血条从边缘 18px
      一直铺到离中线 20px，两条之间只留 40px 缝。
-     竖向吃到 133 为止 —— 对抗线的指针三角从 y=138 开始横扫全宽，越过去就会
-     被它划一道（指针的 x 随对抗线跑，不是待在中间）。 */
-  avR: 33, avCX: 46, avCY: 37,       // 头像圆：左侧圆心，右侧 = W - 它
-  barX: 18, barW: 442, barY: 70, barH: 42,    // 血条
-  pwY: 118, pwH: 15,                 // 拉力条（和血条留 6px：贴太近两条描边会并成一条粗黑带）
+     竖向吃到 145 为止 —— 对抗线的指针三角从 y=148 开始横扫全宽，越过去就会
+     被它划一道（指针的 x 随对抗线跑，不是待在中间）。
+     排这一块要连**描边**一起算：文字的 lineWidth 5 会往外扩 2.5px，按字号
+     算出来刚好够的位置，画出来就啃到血条底边了。 */
+  avR: 30, avCX: 44, avCY: 35,       // 头像圆：左侧圆心，右侧 = W - 它
+  barX: 18, barW: 442, barY: 66, barH: 44,    // 血条
+  pwY: 138,                          // 拉力那一行的文字基线（不是条，见 drawPowerText）
   sk: 12,                            // 斜切量：顶边相对底边右移多少（右侧取反）
 };
 
@@ -1232,45 +1234,46 @@ function drawHpBar(ctx, A) {
   ctx.restore();
 }
 
-function drawPowerBar(ctx, A) {
+/* 拉力直接写成"拉力 575"，不画条。
+   条要成立得有个量程，而拉力是没有上限的存量（大哥一秒注入 600，对面只有 80
+   的时候差值能到四万），画条就只能开方压缩——压完之后小额礼物推不动它，大额
+   又早早顶到头，两头都读不出来。写成数字反而两头都准：刷一件就跳一截，跳多少
+   和礼物的 push 值一一对应。
+   而且这一层本来就不是"还剩多少"，是"我砸进去了多少"。观众要对的是自己刷的
+   那个数，不是一根长度。 */
+function drawPowerText(ctx, A) {
   const f = A ? S.fA : S.fB, c = A ? GREEN : RED, lf = A ? HUD.lfA : HUD.lfB;
-  const x = A ? UI.barX : W - UI.barX - UI.barW, w = UI.barW, y = UI.pwY, h = UI.pwH;
-  const sk = A ? UI.sk : -UI.sk;
-  // 开方标度：线性的话几百点火力在几千的量程里连一根头发都推不动
-  const k = Math.min(1, Math.sqrt(f / 3000)), fw = w * k;
+  const num = f.toFixed(0), y = UI.pwY;
   ctx.save();
-  skew(ctx, x - 2, y - 2, w + 4, h + 4, sk); ctx.fillStyle = 'rgba(6,8,11,.80)'; ctx.fill();
-  skew(ctx, x, y, w, h, sk); ctx.save(); ctx.clip();
-  ctx.fillStyle = 'rgba(16,19,25,.60)'; ctx.fillRect(x - 20, y, w + 40, h);
-  if (fw > 0.5) {
-    const fx0 = A ? x : x + w - fw;
-    ctx.fillStyle = rgba(c, .80 + .20 * lf); ctx.fillRect(fx0, y, fw, h);
-    ctx.fillStyle = `rgba(255,255,255,${.18 + .55 * lf})`; ctx.fillRect(fx0, y, fw, h * 0.42);
-  }
-  // 六格刻度：有格子才有"涨了一格"，一条光溜溜的色带涨了也没人看得出来
-  ctx.fillStyle = 'rgba(0,0,0,.28)';
-  for (let i = 1; i < 8; i++) { skew(ctx, x + w * i / 8 - 1, y, 2.5, h, sk); ctx.fill(); }
-  ctx.restore();
-  // 末端菱形滑块：礼物砸进来的时候它往外弹一下，这是"我刷的那一下"的落点
-  const ex = A ? x + fw : x + w - fw, cy = y + h / 2, R = 10 + 4 * lf;
-  ctx.beginPath();
-  ctx.moveTo(ex + sk * 0.5, cy - R); ctx.lineTo(ex + R * .66, cy);
-  ctx.lineTo(ex - sk * 0.5, cy + R); ctx.lineTo(ex - R * .66, cy); ctx.closePath();
-  if (lf > 0) { ctx.shadowColor = rgba(c, .9); ctx.shadowBlur = 14 * lf; }
-  ctx.fillStyle = rgba(c.map(v => Math.min(255, v * 1.3 | 0)), .96); ctx.fill();
+  ctx.textBaseline = 'alphabetic';
+  /* 标签小、数值大。竖向只有血条底到指针之间那 35px，而中文的下伸笔画和大号
+     数字的上沿是往两头顶的 —— 把"拉力"压到 18px，省出来的全给数字。 */
+  const fl = 'bold 20px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+  const fn = 'bold 32px ui-monospace,Menlo,monospace';
+  ctx.font = fn; const nw = ctx.measureText(num).width;
+  ctx.font = fl; const lw2 = ctx.measureText('拉力').width;
+  /* 两侧都读成"拉力 <数>"，只是整体贴各自那边的边 —— 严格镜像会把右边写成
+     "575 拉力"，念出来就不是一句话了。 */
+  const x0 = A ? UI.barX + 14 : W - UI.barX - 14 - (lw2 + 10 + nw);
+  ctx.textAlign = 'left';
+  txt(ctx, '拉力', x0, y, 'rgba(232,238,246,.82)', 4);
+  ctx.font = fn;
+  // 礼物砸进来那一下数字整个亮一次 —— 条上那个菱形滑块的活，现在归发光
+  if (lf > 0) { ctx.shadowColor = rgba(c, .95); ctx.shadowBlur = 20 * lf; }
+  txt(ctx, num, x0 + lw2 + 10, y,
+      `rgb(${c.map(v => Math.min(255, (v * (1.15 + .55 * lf)) | 0)).join(',')})`, 5);
   ctx.shadowBlur = 0;
-  ctx.lineWidth = 1.5; ctx.strokeStyle = `rgba(255,255,255,${.45 + .5 * lf})`; ctx.stroke();
   ctx.restore();
 }
 
 function drawHUD(ctx) {
   const hA = clamp(S.hpA, 0, 100), hB = clamp(S.hpB, 0, 100);
   ctx.save();
-  ctx.textBaseline = 'middle';
   for (const A of [true, false]) {
+    ctx.textBaseline = 'middle';
     drawAvatar(ctx, A);
     drawHpBar(ctx, A);
-    if (S.phase !== 'idle') drawPowerBar(ctx, A);
+    if (S.phase !== 'idle') drawPowerText(ctx, A);
     /* 队名和百分比并排在血条**上方**的外侧，条里一个字都不放。
        放进条里试过两版，压外端会在残血时和末端亮口叠在一起，压内端满血时
        又被侵蚀带盖住 —— 填充的末端迟早要扫过整条，数字待在条里就没有安全
