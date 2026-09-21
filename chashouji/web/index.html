@@ -84,7 +84,7 @@
 (function () {
   var v = new URLSearchParams(location.search).get('v');
   var q = v ? '?v=' + encodeURIComponent(v) : '';
-  var fs = ['fx.js', 'ammo.js', 'bubble.js', 'main.js'];
+  var fs = ['fx.js', 'ammo.js', 'bubble.js', 'result.js', 'main.js'];
   for (var i = 0; i < fs.length; i++) document.write('<scr' + 'ipt src="' + fs[i] + q + '"></scr' + 'ipt>');
   /* 读数行本身要留着（截图与压测都往里写），只是默认藏起来。这里必须写死 'flex'
      而不是清空 —— 清空只是去掉行内样式，#devrow{display:none} 那条还在，行还是不出来。 */

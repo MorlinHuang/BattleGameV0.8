@@ -110,6 +110,12 @@ const S = {
   big: 0, sudden: 0,
   stand: 0, standUsed: false,
   winner: 0,
+  overT: 0,                           // 结算已经播了几秒，入场动画与两帧循环都读它
+  giftA: 0, giftB: 0,                 // 本局各送出多少件，结算那格数据用
+  /* 送礼榜。网页版没有观众身份，接直播时由外部填成
+     [{name, side, amt}, ...]（已按 amt 倒序），结算取前三。
+     这里**不造假数据** —— 空着的时候结算画面自己会说"接入直播后显示"。 */
+  board: [],
 };
 const FX = {
   phoneX: MID, phoneY: P.phoneY,
@@ -245,7 +251,7 @@ function battle(dt) {
   if ((S.clock -= dt) <= 0) finish(S.hpA > S.hpB + 3 ? +1 : S.hpB > S.hpA + 3 ? -1 : 0);
 }
 
-function finish(who) { S.phase = 'over'; S.winner = who; S.dpsA = S.dpsB = 0; }
+function finish(who) { S.phase = 'over'; S.winner = who; S.dpsA = S.dpsB = 0; S.overT = 0; }
 
 /* 火力转成弹幕。clash 的那些飞到中线就互相撞掉，只有剩下的才砸到人身上 ——
    这是"对冲"唯一的可视化，没有它观众看不懂自己刷的东西去哪了。 */
@@ -266,7 +272,7 @@ function giveGift(side, key) {
   const loser = S.hpA < S.hpB ? +1 : -1;            // 谁正落后（看血，不看手机位置）
   const boost = (S.stand > 0 && side === loser) ? 2 : 1;
   const amt = it.push * (1 - deb) * boost;
-  if (side > 0) S.fA += amt; else S.fB += amt;
+  if (side > 0) { S.fA += amt; S.giftA++; } else { S.fB += amt; S.giftB++; }
 
   /* 高档礼物的第二维度：压制。光靠 push 拉开差距会逼出很难看的数值，而
      "让对方刷的每一件都打折"才是贵真正买到的东西。 */
@@ -296,6 +302,7 @@ function startMatch() {
   S.debA = S.debB = S.debKA = S.debKB = 0;
   S.clock = NUM.MATCH; S.phase = 'play';
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
+  S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
@@ -345,6 +352,13 @@ function derive(dt) {
                         + Math.sin(S.t * 2.73 + 2.1) * 0.30
                         + Math.sin(S.t * 4.65 + 4.3) * 0.15)
                        * P.sway * calm * (1 - FX.busy), 0, 100);
+
+  if (S.phase === 'over') {
+    S.overT += dt;
+    /* ?overt=<秒> 把结算钉在指定时刻。判词砸下来只有半秒、气泡和面板各自也
+       就零点几秒，不钉住根本截不到入场的样子 —— 和 ?hudflash 同一个道理。 */
+    if (Result.pin >= 0) S.overT = Result.pin;
+  }
 
   const bias = (FX.pDraw - 50) / 50;
   // p 大 = 查岗党(女方,在左)占优 = 手机被拽向左
@@ -1409,6 +1423,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     ['av_a', 'av_b'].map(n => load(`assets/ui/${n}.webp`).catch(() => null)));
   /* 3D 转盘贴图，两套：飞行物品的（ammo.js）和命中粒子的（fx.js）。
      失败不阻塞 —— 加载不到就退回各自的矢量画法，?nosprite=1 同时关掉两套。 */
+  // 结算演出图。失败不阻塞：缺素材时结算退到纯色板，照样把结果交代清楚
+  const resN = await Result.load(Q0.get('v'));
   const noSpr = Q0.get('nosprite') === '1';
   const [sprOK, shpOK] = await Promise.all([
     Ammo.loadSprites(Q0.get('v'), noSpr),
@@ -1417,7 +1433,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   document.getElementById('msg').textContent =
     `${frames.filter(Boolean).length}/101 档 · 每 1%` +
     (sprOK.some(Boolean) ? ` · 物品转盘 ${sprOK.filter(Boolean).length}` : '') +
-    (shpOK.some(Boolean) ? ` · 粒子 ${shpOK.filter(Boolean).length}` : '');
+    (shpOK.some(Boolean) ? ` · 粒子 ${shpOK.filter(Boolean).length}` : '') +
+    (resN ? ` · 结算 ${resN}` : '');
 
   const Q = new URLSearchParams(location.search);
 
@@ -1433,9 +1450,24 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     // liveGift 在预热的最后一刻送一件礼物出去 —— 顿帧、独占、处决这些只在
     // 落地后的零点几秒里存在，不指定时刻的话截不到
     const gk = Q.get('liveGift'), gAt = clamp(+(Q.get('liveAt') || warm), 0, 600);
+    /* ?liveEvery=<秒>&liveGA=<礼物>&liveGB=<礼物> 按**真实送礼节奏**预热。
+       liveA/liveB 是直接往 S.fA 上加数，绕开了 giveGift —— 于是礼物计数、
+       tier3/4 的减益、反击时刻的加成这些统统不发生。要看"一局真的这么打下来
+       是什么样"（含结算那格礼物数），只能走这条路。 */
+    const every = Math.max(0, +(Q.get('liveEvery') || 0));
+    const gA = Q.get('liveGA'), gB = Q.get('liveGB');
     for (let k = 0; k < warm * 30; k++) {
-      S.fA += liveA / 30; S.fB += liveB / 30;
-      if (gk && k === Math.floor(gAt * 30)) giveGift(+(Q.get('liveSide') || 1), gk);
+      /* 分出胜负之后不再注入。这一局已经打完了，照注的话结算面板上"最终拉力"
+         和"礼物"会一路涨下去，跟旁边那格"本局时长"对不上 —— 截出来的图自相
+         矛盾（实测：26 秒结束的一局显示送了 12 件礼物）。 */
+      if (S.phase !== 'over') {
+        S.fA += liveA / 30; S.fB += liveB / 30;
+        if (every > 0 && k % Math.round(every * 30) === 0) {
+          if (gA) giveGift(+1, gA);
+          if (gB) giveGift(-1, gB);
+        }
+        if (gk && k === Math.floor(gAt * 30)) giveGift(+(Q.get('liveSide') || 1), gk);
+      }
       battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30; derive(1 / 30);
     }
     // 预热完冻住**进度**：战况定在这一刻，而火力、弹幕、粒子照跑 —— 截图要的
@@ -1459,6 +1491,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   if (Q.has('linefull')) NUM.LINE_FULL = Math.max(1, +Q.get('linefull'));
   // ?hudflash=0..1 钉住拉力条的注入闪光，专门用来截"礼物砸进来那一下"的形态
   if (Q.has('hudflash')) HUD.pin = clamp(+Q.get('hudflash'), 0, 1);
+  if (Q.has('overt')) Result.setPin(Math.max(0, +Q.get('overt')));   // 结算定帧
   if (Q.has('line')) S.line = clamp(+Q.get('line') | 0, 0, 3);
   // ?zoom=1 用画布原生尺寸铺开，截图时才看得清脸和手的实际画法
   if (Q.get('zoom') === '1') document.getElementById('stage').style.width = W + 'px';
@@ -1513,7 +1546,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        来回晃、也会被对面追回去；血量是"这段时间里被压了多久"的累计，只减
        不增。两者本来就是两件事 —— 拔河时绳子来回而没有人真的前进，正是这个
        意思，而血条要回答的是"这么耗下去谁先倒"。 */
-    drawHUD(fctx);
+    /* 结算全屏接管：演出图铺满整幅，血条不再画。顶上那两条属于对局中，
+       结果已经写在画面里（谁在抡枕头、谁跪着哭），再摆一遍是重复。 */
+    if (S.phase === 'over') Result.draw(fctx);
+    else drawHUD(fctx);
     Particles.drawFlash(fctx, W, H);
   }
 
@@ -1892,7 +1928,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* 对局跑数值，调试台跑演示。两者互斥：idle 下 battle 不动，进度由滑块或
        自动演示给；play 下滑块失效，进度只能由火力差推出来。混在一起的话
        "礼物到底推了多少"永远说不清。 */
-    if (live) { S.fA += liveA * raw; S.fB += liveB * raw; }
+    // 同理：结算画面上的数是这一局的战果，不该在结算期间还往上跳
+    if (live && S.phase !== 'over') { S.fA += liveA * raw; S.fB += liveB * raw; }
     /* liveFreeze 冻的是**战况**：对抗线、血量、比赛阶段与三个计时器都定在预热
        那一刻，而拉力、弹幕、粒子照跑 —— 截图要的是"打到这个比分时画面是活的
        什么样"，不是死图。
@@ -1909,6 +1946,12 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     if (S.phase !== 'idle') document.getElementById('pv').value = S.p;
     else if (S.auto) document.getElementById('pv').value = S.p;
     derive(dt); hudTick(dt);
+    /* 结算停够了就自动开下一局 —— 直播是连着开的，没人会在结算画面上手点。
+       这一句必须待在主循环里，不能塞进 derive：?live 的预热是靠反复调
+       derive 快进的，开新局这种流程副作用混进去，预热跑到结算就会自己把
+       这一局重置掉（截图全白忙一场）。derive 只负责由 S 派生画面量。
+       钉住时刻时不自动开局，否则截图会被下一局冲掉。 */
+    if (S.phase === 'over' && Result.pin < 0 && S.overT >= Result.NEXT) startMatch();
     render();
     const mm = Math.max(0, S.clock);
     document.getElementById('stat').textContent =
