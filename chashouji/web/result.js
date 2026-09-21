@@ -192,10 +192,12 @@ const Result = (function () {
       ctx.shadowColor = 'rgba(0,0,0,.40)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 10;
       /* 尾巴指向说话的人。A 案女生在左下，尾巴就朝左下 —— 但不能拉太长，
          拉长了会变成一大块白三角压在抱枕上（试过，很丑）。漫画里尾巴本来
-         也不必够到嘴，方向对了观众就连得起来。 */
+         也不必够到嘴，方向对了观众就连得起来。
+         B 案的更短：男生站在右边举着手机，照 A 案镜像出来的长尾巴尖端正好
+         戳在屏幕上，读成是手机在说话。缩到刚探出气泡，从手机顶边上方过去。 */
       const tl = A
         ? [[bx - bw * 0.36, by + bh * 0.38], [bx - bw * 0.46, by + bh + 52], [bx - bw * 0.14, by + bh * 0.46]]
-        : [[bx + bw * 0.36, by + bh * 0.38], [bx + bw * 0.46, by + bh + 52], [bx + bw * 0.14, by + bh * 0.46]];
+        : [[bx + bw * 0.36, by + bh * 0.38], [bx + bw * 0.52, by + bh * 0.82], [bx + bw * 0.18, by + bh * 0.46]];
       ctx.beginPath(); ctx.moveTo(tl[0][0], tl[0][1]);
       ctx.lineTo(tl[1][0], tl[1][1]); ctx.lineTo(tl[2][0], tl[2][1]); ctx.closePath();
       ctx.fillStyle = '#fff'; ctx.fill();
