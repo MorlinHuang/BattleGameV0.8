@@ -110,6 +110,13 @@ const S = {
   big: 0, sudden: 0,
   stand: 0, standUsed: false,
   winner: 0,
+  overT: 0,                           // 结算画面已经播了几秒（入场动画读它）
+  giftA: 0, giftB: 0,                 // 本局各送出多少件，结算那行数据用
+  /* 送礼榜。网页版没有观众身份，接直播时由外部填成
+     [{name, side, amt}, ...]（已按 amt 倒序），结算画面取前三。
+     这里**不造假数据** —— 空着的时候结算画面自己会说"接入直播后显示"，
+     总比摆三个编出来的名字强：那种图一旦发出去，所有人都会以为功能已经有了。 */
+  board: [],
 };
 const FX = {
   phoneX: MID, phoneY: P.phoneY,
@@ -117,6 +124,8 @@ const FX = {
   rowOff: new Array(ROWS).fill(0), rowHeat: new Array(ROWS).fill(0),
   rowImp: new Array(ROWS).fill(0),   // 冲击波，独立于常规形变
   struggle: 1, actorX: 0, jit: 0,
+  endP: 50,                          // 结算时把画面拽向端点用的独立进度，见 derive
+  overPin: -1,                       // ?overt= 把结算动画钉在第几秒（-1 = 正常播）
   busy: 0,                           // 场上还有多少火力在烧（0~1），拉锯按它让位
 
   hitX: 0, hitV: 0,                  // 角色被推开的位移与速度
@@ -245,7 +254,7 @@ function battle(dt) {
   if ((S.clock -= dt) <= 0) finish(S.hpA > S.hpB + 3 ? +1 : S.hpB > S.hpA + 3 ? -1 : 0);
 }
 
-function finish(who) { S.phase = 'over'; S.winner = who; S.dpsA = S.dpsB = 0; }
+function finish(who) { S.phase = 'over'; S.winner = who; S.dpsA = S.dpsB = 0; S.overT = 0; }
 
 /* 火力转成弹幕。clash 的那些飞到中线就互相撞掉，只有剩下的才砸到人身上 ——
    这是"对冲"唯一的可视化，没有它观众看不懂自己刷的东西去哪了。 */
@@ -266,7 +275,7 @@ function giveGift(side, key) {
   const loser = S.hpA < S.hpB ? +1 : -1;            // 谁正落后（看血，不看手机位置）
   const boost = (S.stand > 0 && side === loser) ? 2 : 1;
   const amt = it.push * (1 - deb) * boost;
-  if (side > 0) S.fA += amt; else S.fB += amt;
+  if (side > 0) { S.fA += amt; S.giftA++; } else { S.fB += amt; S.giftB++; }
 
   /* 高档礼物的第二维度：压制。光靠 push 拉开差距会逼出很难看的数值，而
      "让对方刷的每一件都打折"才是贵真正买到的东西。 */
@@ -293,6 +302,7 @@ function hexDebuff(side, k, sec) {
 function startMatch() {
   S.p = 50; S.fA = S.fB = 0; S.budA = S.budB = 0;
   S.hpA = S.hpB = 100; S.dpsA = S.dpsB = 0;
+  S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   S.debA = S.debB = S.debKA = S.debKB = 0;
   S.clock = NUM.MATCH; S.phase = 'play';
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
@@ -345,6 +355,29 @@ function derive(dt) {
                         + Math.sin(S.t * 2.73 + 2.1) * 0.30
                         + Math.sin(S.t * 4.65 + 4.3) * 0.15)
                        * P.sway * calm * (1 - FX.busy), 0, 100);
+
+  /* 分出胜负之后，画面再走完最后一下：把角色推到端点那一帧。
+     两端的关键帧本来就是**完整的胜负演出** —— f100 是女方把手机抢到手、男方
+     跪在地上够不着，f000 反过来。所以结算根本不需要新素材，让 pDraw 走到底
+     就是这一局的结局。趋近而不是直接赋值：最后这一拽要让观众看见。
+     血量归零时手机常常还在中间（p 是瞬时读数，不是积分量），不补这一下的话
+     结算画面会定在两个人僵持着的姿势上，跟"谁赢了"对不上。 */
+  if (S.phase === 'over') {
+    if (S.winner !== 0) {
+      /* 必须用一个**独立的**量来推，不能直接改 FX.pDraw —— 上面那行每帧都会
+         把它按 S.p 重算一遍，趋近再怎么写也只走得出一帧的量，画面会永远停在
+         僵持的姿势上（这条是截结算图时才发现的：两个人还在中间拔河，底下写着
+         "手机到手了"）。 */
+      if (S.overT === 0) FX.endP = FX.pDraw;        // 从分出胜负的那个位置起步
+      FX.endP += ((S.winner > 0 ? 100 : 0) - FX.endP) * approach(dt, 1.7);
+      FX.pDraw = FX.endP;
+    }
+    S.overT += dt;
+    /* ?overt=<秒> 把结算动画钉在指定时刻。判词砸下来只有半秒，副题和面板各自
+       也就零点几秒，不钉住根本截不到入场的样子 —— 和 ?hudflash 同一个道理。
+       角色的端点趋近不受它影响（那是迭代量），所以钉早期时刻时人已经到位了。 */
+    if (FX.overPin >= 0) S.overT = FX.overPin;
+  }
 
   const bias = (FX.pDraw - 50) / 50;
   // p 大 = 查岗党(女方,在左)占优 = 手机被拽向左
@@ -1270,6 +1303,141 @@ function drawPowerText(ctx) {
   ctx.restore();
 }
 
+/* ── 结算 ──
+   不做"胜利弹窗"，而是把这一局的剧情演完。
+
+   这个玩法的结局本来就写在关键帧里：f100 是女方把手机抢到手、男方跪在地上
+   够不着，f000 反过来。所以结算画面的主体不是 UI，是**定格在端点的那一帧**
+   —— derive 里让 pDraw 走到底，观众看见的是"最后被拽走了"，不是弹出一块板子
+   告诉他谁赢。判词落在墙面空白区（y=150~470，量过的），底下压着的是活的场景。
+
+   判词也不写"红方胜利"这种话。查手机赢下来的是一个**后果**：手机到手了，
+   或者什么都没查到。写后果才有代入感，写"胜利"只是记分。 */
+function drawResult(ctx) {
+  const t = S.overT, win = S.winner;
+  const c = win > 0 ? GREEN : win < 0 ? RED : [235, 238, 244];
+  const ease = (v) => 1 - Math.pow(1 - clamp(v, 0, 1), 3);
+  const veil = ease(t / 0.55);
+  // 赢家站的那一半：聚光打在这边，暗幕压另一边
+  const wx = win > 0 ? 300 : win < 0 ? 660 : MID;
+
+  ctx.save();
+  /* 输家那半边压暗。渐变到中线为止 —— 整屏均匀压暗只会让画面变脏，
+     而"一边亮一边暗"本身就在说谁赢了。 */
+  if (win !== 0) {
+    const g = ctx.createLinearGradient(win > 0 ? W : 0, 0, win > 0 ? MID + 130 : MID - 130, 0);
+    g.addColorStop(0, `rgba(2,3,6,${0.66 * veil})`); g.addColorStop(0.55, `rgba(2,3,6,${0.30 * veil})`);
+    g.addColorStop(1, 'rgba(2,3,6,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  // 四角压暗 + 赢家身上一层队色的光：把视线收到人身上
+  const vg = ctx.createRadialGradient(wx, 700, 210, wx, 700, 880);
+  vg.addColorStop(0, 'rgba(2,3,6,0)'); vg.addColorStop(1, `rgba(2,3,6,${0.64 * veil})`);
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  /* 聚光要罩住赢家**整个人**（脚底 1208、头顶 400 上下），半径小了只照亮腰部
+     一圈，看着像打了个补丁。 */
+  const sg = ctx.createRadialGradient(wx, 720, 60, wx, 720, 580);
+  sg.addColorStop(0, rgba(c, 0.20 * veil)); sg.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = sg; ctx.fillRect(0, 0, W, H);
+  // 判词那条横带单独压一层，否则白字压在浅绿墙上糊成一片
+  const bg = ctx.createLinearGradient(0, 150, 0, 500);
+  bg.addColorStop(0, 'rgba(4,6,10,0)'); bg.addColorStop(0.45, `rgba(4,6,10,${0.58 * veil})`);
+  bg.addColorStop(1, 'rgba(4,6,10,0)');
+  ctx.fillStyle = bg; ctx.fillRect(0, 150, W, 350);
+
+  /* 判词。1.35 倍砸下来 —— 结算的第一眼必须有重量，淡入太软。 */
+  const k = ease((t - 0.22) / 0.5), sc = 1 + 0.35 * (1 - k);
+  if (k > 0) {
+    const title = win > 0 ? '查岗党 胜' : win < 0 ? '灭迹党 胜' : '平 局';
+    ctx.save();
+    ctx.globalAlpha = k;
+    ctx.translate(MID, 310); ctx.scale(sc, sc);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 86px "Noto Serif CJK SC","Songti SC",serif';
+    ctx.lineWidth = 11; ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(6,8,14,.92)'; ctx.strokeText(title, 0, 0);
+    ctx.shadowColor = rgba(c, .85); ctx.shadowBlur = 34;
+    const tg = ctx.createLinearGradient(0, -46, 0, 46);
+    tg.addColorStop(0, '#fff6d8'); tg.addColorStop(0.5, '#ffd964'); tg.addColorStop(1, '#e8a521');
+    ctx.fillStyle = tg; ctx.fillText(title, 0, 0);
+    ctx.shadowBlur = 0;
+    // 上下两条队色细线：给判词一个"框"，不然它只是飘在墙上的字
+    for (const dy of [-78, 78]) {
+      const lg = ctx.createLinearGradient(-300, 0, 300, 0);
+      lg.addColorStop(0, rgba(c, 0)); lg.addColorStop(0.5, rgba(c, .9)); lg.addColorStop(1, rgba(c, 0));
+      ctx.fillStyle = lg; ctx.fillRect(-300, dy, 600, 3);
+    }
+    ctx.restore();
+  }
+
+  /* 副题写**后果**，不写"胜利"。查手机赢下来的是一个结果：手机到手了，或者
+     什么都没查到 —— 这句话才是观众看完这一局记住的东西。 */
+  const k2 = ease((t - 0.8) / 0.45);
+  if (k2 > 0) {
+    ctx.save(); ctx.globalAlpha = k2;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '38px "Noto Serif CJK SC","Songti SC",serif';
+    const sub = win > 0 ? '「 手机到手了 」' : win < 0 ? '「 什么都没查到 」' : '「 谁也没撒手 」';
+    txt(ctx, sub, MID, 416, 'rgba(240,244,250,.92)', 7);
+    ctx.restore();
+  }
+
+  /* 底部：这一局发生了什么。三格并排 —— 时长 / 双方各送了几件 / 最终拉力。
+     礼物数是观众唯一能拿来吹的数（"我一个人刷了二十件"），所以它在正中。 */
+  const k3 = ease((t - 1.15) / 0.5);
+  if (k3 > 0) {
+    ctx.save(); ctx.globalAlpha = k3; ctx.translate(0, 26 * (1 - k3));
+    const el = Math.max(0, NUM.MATCH - S.clock);
+    const cells = [
+      ['本局时长', `${el / 60 | 0}:${String(el % 60 | 0).padStart(2, '0')}`],
+      ['礼物', `${S.giftA} : ${S.giftB}`],
+      ['最终拉力', `${S.fA.toFixed(0)} : ${S.fB.toFixed(0)}`],
+    ];
+    /* 数据和榜合在一块面板里。分成两块时榜那半截没有底，字正好落在赢家的
+       拖鞋上，读不出来也不好看 —— 结算区要和场景**明确分开**。 */
+    ctx.beginPath(); ctx.roundRect(72, 1050, 816, 236, 22);
+    ctx.fillStyle = 'rgba(6,8,13,.80)'; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(c, .34); ctx.stroke();
+    // 面板上沿一道队色光：把这块板子和赢家那边连起来
+    const tg2 = ctx.createLinearGradient(72, 0, 888, 0);
+    tg2.addColorStop(0, rgba(c, 0)); tg2.addColorStop(0.5, rgba(c, .75)); tg2.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = tg2; ctx.fillRect(96, 1050, 768, 2.5);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    cells.forEach(([lab, val], i) => {
+      const cx = 96 + 768 * (i + 0.5) / 3;
+      ctx.font = '19px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+      txt(ctx, lab, cx, 1090, 'rgba(226,232,240,.62)', 3.5);
+      ctx.font = 'bold 28px ui-monospace,Menlo,monospace';
+      txt(ctx, val, cx, 1124, '#fff', 4.5);
+      if (i) { ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.fillRect(96 + 768 * i / 3, 1080, 1.5, 54); }
+    });
+
+    /* 送礼榜。**空的时候就说它是空的** —— 摆三个编出来的名字，看图的人会以为
+       这个功能已经做好了。数据得由直播侧填进 S.board。 */
+    ctx.fillStyle = 'rgba(255,255,255,.10)'; ctx.fillRect(112, 1152, 736, 1.5);
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 22px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+    txt(ctx, '本局送礼榜', MID, 1178, rgba(c.map(v => Math.min(255, v * 1.2 | 0)), .95), 4);
+    if (S.board.length) {
+      S.board.slice(0, 3).forEach((b, i) => {
+        const y = 1218 + i * 34, bc = b.side > 0 ? GREEN : RED;
+        ctx.textAlign = 'left'; ctx.font = 'bold 22px ui-monospace,Menlo,monospace';
+        txt(ctx, `${i + 1}`, 300, y, 'rgba(255,214,110,.95)', 4);
+        ctx.font = '22px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+        txt(ctx, b.name, 334, y, '#fff', 4);
+        ctx.textAlign = 'right'; ctx.font = 'bold 22px ui-monospace,Menlo,monospace';
+        txt(ctx, b.amt.toFixed(0), 660, y, rgba(bc.map(v => Math.min(255, v * 1.2 | 0)), .95), 4);
+      });
+    } else {
+      ctx.textAlign = 'center';
+      ctx.font = '20px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+      txt(ctx, '— 接入直播后显示前三名 —', MID, 1226, 'rgba(226,232,240,.44)', 3.5);
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function drawHUD(ctx) {
   const hA = clamp(S.hpA, 0, 100), hB = clamp(S.hpB, 0, 100);
   ctx.save();
@@ -1303,10 +1471,11 @@ function drawHUD(ctx) {
     drawPowerText(ctx);
     const d = S.dpsA > 0.01 ? S.dpsA : S.dpsB, hurtA = S.dpsA > 0.01;
     const over = S.phase === 'over';
-    const note = over ? '' : d > 0.01
+    if (over) { ctx.restore(); return; }   // 胜负交给结算层的大判词，这儿不重复写
+    const note = d > 0.01
       ? (hurtA ? `◀ 每秒 ${d.toFixed(1)}` : `每秒 ${d.toFixed(1)} ▶`) : '僵 持';
     ctx.textBaseline = 'middle';
-    ctx.font = `bold ${over ? 27 : 23}px ui-monospace,Menlo,monospace`;
+    ctx.font = 'bold 23px ui-monospace,Menlo,monospace';
     const tw = ctx.measureText(tip).width;
     ctx.font = 'bold 21px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
     const nw = note ? ctx.measureText(note).width + 18 : 0;
@@ -1319,7 +1488,7 @@ function drawHUD(ctx) {
     ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.stroke();
     ctx.restore();
     ctx.textAlign = 'left';
-    ctx.font = `bold ${over ? 27 : 23}px ui-monospace,Menlo,monospace`;
+    ctx.font = 'bold 23px ui-monospace,Menlo,monospace';
     txt(ctx, tip, bx + 18, UI.clkCY, col, 4);
     if (note) {
       ctx.font = 'bold 21px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
@@ -1433,8 +1602,18 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     // liveGift 在预热的最后一刻送一件礼物出去 —— 顿帧、独占、处决这些只在
     // 落地后的零点几秒里存在，不指定时刻的话截不到
     const gk = Q.get('liveGift'), gAt = clamp(+(Q.get('liveAt') || warm), 0, 600);
+    /* ?liveEvery=<秒>&liveGA=<礼物>&liveGB=<礼物> 按**真实送礼节奏**预热。
+       liveA/liveB 是直接往 S.fA 上加数，绕开了 giveGift —— 于是礼物计数、
+       tier3/4 的减益、反击时刻的加成这些统统不发生。要看"一局真的这么打下来
+       是什么样"（含结算画面那行礼物数），只能走这条路。 */
+    const every = Math.max(0, +(Q.get('liveEvery') || 0));
+    const gA = Q.get('liveGA'), gB = Q.get('liveGB');
     for (let k = 0; k < warm * 30; k++) {
       S.fA += liveA / 30; S.fB += liveB / 30;
+      if (every > 0 && k % Math.round(every * 30) === 0) {
+        if (gA) giveGift(+1, gA);
+        if (gB) giveGift(-1, gB);
+      }
       if (gk && k === Math.floor(gAt * 30)) giveGift(+(Q.get('liveSide') || 1), gk);
       battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30; derive(1 / 30);
     }
@@ -1459,6 +1638,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   if (Q.has('linefull')) NUM.LINE_FULL = Math.max(1, +Q.get('linefull'));
   // ?hudflash=0..1 钉住拉力条的注入闪光，专门用来截"礼物砸进来那一下"的形态
   if (Q.has('hudflash')) HUD.pin = clamp(+Q.get('hudflash'), 0, 1);
+  if (Q.has('overt')) FX.overPin = Math.max(0, +Q.get('overt'));   // 结算动画定帧
   if (Q.has('line')) S.line = clamp(+Q.get('line') | 0, 0, 3);
   // ?zoom=1 用画布原生尺寸铺开，截图时才看得清脸和手的实际画法
   if (Q.get('zoom') === '1') document.getElementById('stage').style.width = W + 'px';
@@ -1500,10 +1680,18 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     fctx.save(); fctx.translate(ox, oy);
     /* line=1 要在角色之上再叠一遍，否则光柱全程被两具身体挡死；line=2 的
        带子在地上，挡住了也没关系 —— 顶端那个指针替它做读数。 */
-    if (S.line === 1) drawLine(fctx, 0.42);
-    else if (S.line >= 2) drawFrontMark(fctx, bias);
-    // 气泡在弹幕之下：它贴在后面那堵墙上，弹幕是前景，飞过时该压过去
-    Bubble.draw(fctx);
+    /* 结算后这两样半秒内淡出：对抗线已经不代表任何东西了，而气泡是对局中的
+       闲话，留着正好压在判词下面。弹幕和粒子不管 —— 已经飞出去的让它飞完，
+       那是这一局最后的余波。 */
+    const liveA2 = S.phase === 'over' ? 1 - clamp(S.overT / 0.5, 0, 1) : 1;
+    if (liveA2 > 0.004) {
+      fctx.save(); fctx.globalAlpha = liveA2;
+      if (S.line === 1) drawLine(fctx, 0.42);
+      else if (S.line >= 2) drawFrontMark(fctx, bias);
+      // 气泡在弹幕之下：它贴在后面那堵墙上，弹幕是前景，飞过时该压过去
+      Bubble.draw(fctx);
+      fctx.restore();
+    }
     /* 弹幕在角色之上、粒子之下：它飞向两个人中间，画在角色底下的话命中前
        最后那段就被身体挡掉了；而粒子是命中的爆炸，该盖在弹幕上面。 */
     Ammo.draw(fctx);
@@ -1513,6 +1701,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        来回晃、也会被对面追回去；血量是"这段时间里被压了多久"的累计，只减
        不增。两者本来就是两件事 —— 拔河时绳子来回而没有人真的前进，正是这个
        意思，而血条要回答的是"这么耗下去谁先倒"。 */
+    if (S.phase === 'over') drawResult(fctx);
     drawHUD(fctx);
     Particles.drawFlash(fctx, W, H);
   }
@@ -1892,7 +2081,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* 对局跑数值，调试台跑演示。两者互斥：idle 下 battle 不动，进度由滑块或
        自动演示给；play 下滑块失效，进度只能由火力差推出来。混在一起的话
        "礼物到底推了多少"永远说不清。 */
-    if (live) { S.fA += liveA * raw; S.fB += liveB * raw; }
+    // 分出胜负之后不再注入：真实对局里没人会往一个已经打完的局里刷礼物，
+    // 照注的话结算那行"最终拉力"会一直往上跳
+    if (live && S.phase !== 'over') { S.fA += liveA * raw; S.fB += liveB * raw; }
     /* liveFreeze 冻的是**战况**：对抗线、血量、比赛阶段与三个计时器都定在预热
        那一刻，而拉力、弹幕、粒子照跑 —— 截图要的是"打到这个比分时画面是活的
        什么样"，不是死图。
