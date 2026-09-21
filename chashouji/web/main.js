@@ -103,6 +103,7 @@ const S = {
   p: 50, t: 0, auto: false, line: 3,  // line: 0 全无 / 1 原发光柱 / 2 地面战线+指针 / 3 只要指针
   fA: 0, fB: 0,                       // 拉力（火力）：A=查岗党(左) B=灭迹党(右)
   hpA: 100, hpB: 100,                 // 血量：胜负只看它，归零的一方输
+  dpsA: 0, dpsB: 0,                   // 此刻每秒正在掉多少血（battle 算出来的读数，HUD 画它）
   budA: 0, budB: 0,                   // 发射预算：火力消耗到一发弹幕的量就打一发
   debA: 0, debB: 0, debKA: 0, debKB: 0,  // 受到的注入减益：剩余秒数与折扣
   clock: 0, phase: 'idle',            // idle 不跑数值（诊断与老演示模式）/ play / sudden / over
@@ -197,6 +198,10 @@ function battle(dt) {
      扣血按**差的全量**算，不是"超出 X 的那部分"：X 是开关不是起征点。
      跨过门槛那一下伤害是 30/1000×Z，一秒零点几个血，看不出跳变。 */
   const gap = Math.abs(diff);
+  /* 每秒正在掉多少血，写成读数给 HUD 用。它本来就是上面算出来的中间量，
+     摆出来是因为观众真正想知道的就是这个数 —— "我刷的这件把他的血扣快了
+     多少"。血条自己回答不了，它只显示存量。 */
+  S.dpsA = S.dpsB = 0;
   if (gap > NUM.PULL_X) {
     let z = Math.min(NUM.HP_MAX, gap / NUM.PULL_M * NUM.HP_Z);
     const losing = diff > 0 ? -1 : +1;                   // 正在挨打的一方
@@ -215,8 +220,8 @@ function battle(dt) {
       const mine = losing > 0 ? S.fA : S.fB, his = losing > 0 ? S.fB : S.fA;
       z *= 1 - Math.min(NUM.SHIELD_MAX, mine / (his + 1) * 1.5);
     }
-    if (losing > 0) S.hpA = Math.max(0, S.hpA - z * dt);
-    else S.hpB = Math.max(0, S.hpB - z * dt);
+    if (losing > 0) { S.hpA = Math.max(0, S.hpA - z * dt); S.dpsA = z; }
+    else { S.hpB = Math.max(0, S.hpB - z * dt); S.dpsB = z; }
   }
 
   if (S.hpA <= 0 || S.hpB <= 0) { finish(S.hpA <= 0 ? -1 : +1); return; }
@@ -240,7 +245,7 @@ function battle(dt) {
   if ((S.clock -= dt) <= 0) finish(S.hpA > S.hpB + 3 ? +1 : S.hpB > S.hpA + 3 ? -1 : 0);
 }
 
-function finish(who) { S.phase = 'over'; S.winner = who; }
+function finish(who) { S.phase = 'over'; S.winner = who; S.dpsA = S.dpsB = 0; }
 
 /* 火力转成弹幕。clash 的那些飞到中线就互相撞掉，只有剩下的才砸到人身上 ——
    这是"对冲"唯一的可视化，没有它观众看不懂自己刷的东西去哪了。 */
@@ -287,7 +292,7 @@ function hexDebuff(side, k, sec) {
 
 function startMatch() {
   S.p = 50; S.fA = S.fB = 0; S.budA = S.budB = 0;
-  S.hpA = S.hpB = 100;
+  S.hpA = S.hpB = 100; S.dpsA = S.dpsB = 0;
   S.debA = S.debB = S.debKA = S.debKB = 0;
   S.clock = NUM.MATCH; S.phase = 'play';
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
@@ -1077,57 +1082,230 @@ function drawGround(ctx, bias) {
   ctx.restore();
 }
 
-/* 顶上两条是**血条**，各自独立：左边是查岗党剩多少血，右边是灭迹党剩多少。
-   上一版它画的是同一根进度条劈成两半（p 和 100-p），加起来永远是 100 ——
-   那是"手机在哪"，不是"谁快死了"。现在手机位置是瞬时读数（拉力差），两件事
-   必须分开显示，否则观众读不出"我方血更多但这一刻被拽住了"这种局面。
-   血条可以同时掉：僵持时谁也不掉，一方碾压时只有挨打的那条在退。 */
+/* ── HUD ──
+   顶上一侧是一个整体：头像 · 队名 · 血条 · 拉力条，左右严格镜像。做成一个
+   单元是因为观众要在半秒内读出"绿色这边是谁、他还剩多少、他现在猛不猛"——
+   零散摆着的色块做不到这件事，那是调试面板不是直播画面。
+
+   三个数各有各的位置，谁也不冒充谁：
+     血条   存量。只减不增，归零就输，所以它最大、最上面。
+     侵蚀带 血条末端那截脉动的暖色 —— 宽度 = 再这样扣两秒会没掉的量。
+            血量制下掉血是连续的小数，一秒扣一滴时血条几乎不动，光看长度
+            读不出"正在挨打"。这截暖色就是把 S.dpsA/B 画出来。
+     拉力条 存量之下的细条。双方一起涨 = 在对拼（谁也不掉血）；长出来的
+            那一截才是战况。开方标度是为了让小额礼物也推得动它。
+   中间是时钟，时钟下面一行小字直接报"此刻每秒扣谁多少血"——这是全屏唯一
+   一处把因果写成字的地方，僵持时它就写"僵持"。 */
+
+// 两侧严格镜像：右侧的 x 一律由 W - x - w 推出来，改一处两边一起动
+const UI = {
+  avR: 38, avCX: 60, avCY: 58,       // 头像圆：左侧圆心 x，右侧 = W - 它
+  barX: 116, barW: 298, barY: 36, barH: 30,   // 血条
+  pwY: 74, pwH: 11,                  // 拉力条（和血条留 8px：贴太近两条描边会并成一条粗黑带）
+  sk: 9,                             // 斜切量：顶边相对底边右移多少（右侧取反）
+};
+
+/* HUD 自己的表现层状态。单独放一坨，是为了让人一眼看出改这里不会改谁输谁赢 ——
+   战况全在 S 里，这里只有"闪一下""跳一下"这种活儿。 */
+const HUD = {
+  avA: null, avB: null,   // 两张头像（assets/ui/av_*.webp，加载不到就画纯色盘）
+  lfA: 0, lfB: 0,         // 注入闪光余量：礼物砸进来那一下，拉力条整条亮一次
+  pfA: 0, pfB: 0,         // 上一帧的拉力，用来把"礼物注入"和"自然增长"分开
+  t: 0,                   // 脉动用的自走时钟
+  pin: -1,                // ?hudflash= 把闪光钉住，见下（-1 = 不钉，正常衰减）
+};
+
+/* 斜切平行四边形：顶边相对底边横移 sk。直播 HUD 不用正方角是有道理的 ——
+   正矩形在任何底图上都读成"控件"，切一刀就变成"装备"。 */
+const skew = (ctx, x, y, w, h, sk) => {
+  ctx.beginPath();
+  ctx.moveTo(x + sk, y); ctx.lineTo(x + w + sk, y);
+  ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+};
+const txt = (ctx, str, x, y, fill, lw) => {
+  ctx.lineWidth = lw; ctx.strokeStyle = 'rgba(0,0,0,.80)'; ctx.strokeText(str, x, y);
+  ctx.fillStyle = fill; ctx.fillText(str, x, y);
+};
+
+/* 认出"这是一次注入"：礼物是瞬间跳变（最小的仙女棒也有 1 点），而自然增长
+   在 60 帧下每帧只有零点几。2.5 这道坎把两者分得很干净。 */
+function hudTick(dt) {
+  HUD.t += dt;
+  /* 注入闪光只亮半秒，截图永远抓不到它 —— 判断动态效果必须有专门的胶片参数，
+     不然调强弱只能靠脑补。?hudflash=0..1 把两侧都钉在指定强度。 */
+  if (HUD.pin >= 0) { HUD.lfA = HUD.lfB = HUD.pin; HUD.pfA = S.fA; HUD.pfB = S.fB; return; }
+  if (S.fA - HUD.pfA > 2.5) HUD.lfA = 1;
+  if (S.fB - HUD.pfB > 2.5) HUD.lfB = 1;
+  HUD.pfA = S.fA; HUD.pfB = S.fB;
+  HUD.lfA = Math.max(0, HUD.lfA - dt * 1.7);
+  HUD.lfB = Math.max(0, HUD.lfB - dt * 1.7);
+}
+
+function drawAvatar(ctx, A) {
+  const img = A ? HUD.avA : HUD.avB, c = A ? GREEN : RED;
+  const dps = A ? S.dpsA : S.dpsB, hp = A ? S.hpA : S.hpB;
+  const cx = A ? UI.avCX : W - UI.avCX, cy = UI.avCY, r = UI.avR;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, 7); ctx.fillStyle = 'rgba(8,10,14,.92)'; ctx.fill();
+  if (img) {
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.clip();
+    ctx.drawImage(img, cx - r, cy - r, r * 2, r * 2);
+    /* 底部压一层队色，让头像和血条是同一个人 —— 不然两个圆脸浮在那儿，
+       跟下面的绿条红条没有任何关系。 */
+    const g = ctx.createLinearGradient(0, cy + r * 0.1, 0, cy + r);
+    g.addColorStop(0, rgba(c, 0)); g.addColorStop(1, rgba(c, .52));
+    ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.restore();
+  } else { ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = rgba(c, .55); ctx.fill(); }
+  // 挨打时外圈红色脉动：谁在掉血，扫一眼头像就知道，不用去比两条的长度
+  if (dps > 0.01) {
+    const k = 0.5 + 0.5 * Math.sin(HUD.t * 7.5);
+    ctx.beginPath(); ctx.arc(cx, cy, r + 7, 0, 7);
+    ctx.lineWidth = 3.5; ctx.strokeStyle = `rgba(255,190,72,${0.34 + 0.56 * k})`; ctx.stroke();
+  }
+  /* 圈色就是身份：赢了镀金、倒下转灰、其余时候是队色。结算画面上观众第一眼
+     找的是脸，让脸自己把结果说了，比在中间多写一行字快。 */
+  const win = S.phase === 'over' && (A ? S.winner > 0 : S.winner < 0);
+  const out = hp <= 0 || (S.phase === 'over' && S.winner !== 0 && !win);
+  ctx.beginPath(); ctx.arc(cx, cy, r + 1.5, 0, 7);
+  ctx.lineWidth = win ? 4.5 : 3.5;
+  if (win) { ctx.shadowColor = 'rgba(255,208,80,.95)'; ctx.shadowBlur = 18; }
+  ctx.strokeStyle = rgba(win ? [255, 212, 90] : out ? [110, 110, 118] : c, .96);
+  ctx.stroke(); ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function drawHpBar(ctx, A) {
+  const hp = clamp(A ? S.hpA : S.hpB, 0, 100), dps = A ? S.dpsA : S.dpsB;
+  const c = A ? GREEN : RED;
+  const x = A ? UI.barX : W - UI.barX - UI.barW, w = UI.barW, y = UI.barY, h = UI.barH;
+  const sk = A ? UI.sk : -UI.sk, fw = w * hp / 100;
+  ctx.save();
+  // 见血了才报警：低于两成整条外缘透红呼吸，观众远远地就知道有人要没了
+  if (hp < 20) {
+    const k = 0.5 + 0.5 * Math.sin(HUD.t * 5.5);
+    ctx.save(); ctx.shadowColor = `rgba(255,60,50,${0.5 + 0.45 * k})`; ctx.shadowBlur = 16;
+    skew(ctx, x - 2, y - 2, w + 4, h + 4, sk); ctx.fillStyle = 'rgba(255,60,50,.22)'; ctx.fill();
+    ctx.restore();
+  }
+  skew(ctx, x - 3, y - 3, w + 6, h + 6, sk); ctx.fillStyle = 'rgba(6,8,11,.88)'; ctx.fill();
+
+  skew(ctx, x, y, w, h, sk); ctx.save(); ctx.clip();
+  ctx.fillStyle = 'rgba(16,19,25,.82)'; ctx.fillRect(x - 20, y, w + 40, h);
+  // 空槽里的斜纹：让"还剩多少"有个可数的底，纯黑一块读不出刻度
+  ctx.fillStyle = 'rgba(255,255,255,.045)';
+  for (let i = -2; i * 16 < w + 40; i++) { skew(ctx, x + i * 16, y, 7, h, sk); ctx.fill(); }
+
+  if (fw > 0.5) {
+    const fx0 = A ? x : x + w - fw;
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, rgba(c.map(v => Math.min(255, v * 1.22 | 0)), 1));
+    g.addColorStop(0.52, rgba(c, 1));
+    g.addColorStop(1, rgba(c.map(v => v * 0.55 | 0), 1));
+    ctx.fillStyle = g; ctx.fillRect(fx0, y, fw, h);
+    ctx.fillStyle = 'rgba(255,255,255,.26)'; ctx.fillRect(fx0, y, fw, h * 0.36);
+    /* 侵蚀带 —— 末端正在被啃掉的那截。宽度按"再扣两秒会没多少"算，所以
+       对面刷得越猛这截越宽，一眼能看出是被小刀割还是被大哥碾。 */
+    if (dps > 0.01) {
+      const er = Math.min(clamp(w * dps / 100 * 4.5, 15, w * 0.34), fw);
+      const ex = A ? x + fw - er : x + w - fw;
+      const pk = 0.42 + 0.38 * Math.sin(HUD.t * 7.5);
+      const eg = ctx.createLinearGradient(A ? ex : ex + er, 0, A ? ex + er : ex, 0);
+      eg.addColorStop(0, 'rgba(255,190,60,0)');
+      eg.addColorStop(1, `rgba(255,222,110,${0.26 + 0.5 * pk})`);
+      ctx.fillStyle = eg; ctx.fillRect(ex, y, er, h);
+    }
+    // 末端亮口：血条的"当前位置"，退的时候这一条在动，比看整块色块灵敏
+    ctx.fillStyle = 'rgba(255,255,255,.88)';
+    ctx.fillRect(A ? x + fw - 3 : x + w - fw, y, 3, h);
+  }
+  ctx.restore();
+  skew(ctx, x, y, w, h, sk);
+  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.stroke();
+  ctx.restore();
+}
+
+function drawPowerBar(ctx, A) {
+  const f = A ? S.fA : S.fB, c = A ? GREEN : RED, lf = A ? HUD.lfA : HUD.lfB;
+  const x = A ? UI.barX : W - UI.barX - UI.barW, w = UI.barW, y = UI.pwY, h = UI.pwH;
+  const sk = A ? UI.sk : -UI.sk;
+  // 开方标度：线性的话几百点火力在几千的量程里连一根头发都推不动
+  const k = Math.min(1, Math.sqrt(f / 3000)), fw = w * k;
+  ctx.save();
+  skew(ctx, x - 2, y - 2, w + 4, h + 4, sk); ctx.fillStyle = 'rgba(6,8,11,.80)'; ctx.fill();
+  skew(ctx, x, y, w, h, sk); ctx.save(); ctx.clip();
+  ctx.fillStyle = 'rgba(16,19,25,.60)'; ctx.fillRect(x - 20, y, w + 40, h);
+  if (fw > 0.5) {
+    const fx0 = A ? x : x + w - fw;
+    ctx.fillStyle = rgba(c, .80 + .20 * lf); ctx.fillRect(fx0, y, fw, h);
+    ctx.fillStyle = `rgba(255,255,255,${.18 + .55 * lf})`; ctx.fillRect(fx0, y, fw, h * 0.42);
+  }
+  // 六格刻度：有格子才有"涨了一格"，一条光溜溜的色带涨了也没人看得出来
+  ctx.fillStyle = 'rgba(0,0,0,.28)';
+  for (let i = 1; i < 6; i++) { skew(ctx, x + w * i / 6 - 1, y, 2, h, sk); ctx.fill(); }
+  ctx.restore();
+  // 末端菱形滑块：礼物砸进来的时候它往外弹一下，这是"我刷的那一下"的落点
+  const ex = A ? x + fw : x + w - fw, cy = y + h / 2, R = 7 + 3 * lf;
+  ctx.beginPath();
+  ctx.moveTo(ex + sk * 0.5, cy - R); ctx.lineTo(ex + R * .66, cy);
+  ctx.lineTo(ex - sk * 0.5, cy + R); ctx.lineTo(ex - R * .66, cy); ctx.closePath();
+  if (lf > 0) { ctx.shadowColor = rgba(c, .9); ctx.shadowBlur = 14 * lf; }
+  ctx.fillStyle = rgba(c.map(v => Math.min(255, v * 1.3 | 0)), .96); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 1.5; ctx.strokeStyle = `rgba(255,255,255,${.45 + .5 * lf})`; ctx.stroke();
+  ctx.restore();
+}
+
 function drawHUD(ctx) {
   const hA = clamp(S.hpA, 0, 100), hB = clamp(S.hpB, 0, 100);
-  const bars = [{ x: 92, w: 276, c: GREEN, v: hA, dir: 1 }, { x: 572, w: 296, c: RED, v: hB, dir: -1 }];
   ctx.save();
-  for (const b of bars) {
-    ctx.fillStyle = 'rgba(8,10,13,.92)'; ctx.fillRect(b.x, 74, b.w, 31);
-    const fw = b.w * b.v / 100, gx = b.dir > 0 ? b.x : b.x + b.w - fw;
-    const g = ctx.createLinearGradient(0, 74, 0, 105);
-    g.addColorStop(0, rgba(b.c, 1)); g.addColorStop(1, rgba(b.c.map(v => v * .62 | 0), 1));
-    ctx.fillStyle = g; ctx.fillRect(gx, 74, fw, 31);
-    ctx.fillStyle = 'rgba(255,255,255,.30)'; ctx.fillRect(gx, 74, fw, 9);
+  ctx.textBaseline = 'middle';
+  for (const A of [true, false]) {
+    drawAvatar(ctx, A);
+    drawHpBar(ctx, A);
+    if (S.phase !== 'idle') drawPowerBar(ctx, A);
+    /* 队名和百分比并排在血条**上方**的外侧，条里一个字都不放。
+       放进条里试过两版，压外端会在残血时和末端亮口叠在一起，压内端满血时
+       又被侵蚀带盖住 —— 填充的末端迟早要扫过整条，数字待在条里就没有安全
+       位置。挪出来之后两边各是一行"谁 · 剩多少"，条本身只管长度。
+       放外侧是为了避开中线：那儿归时钟和战况读数。 */
+    const hv = A ? hA : hB, ox = A ? 1 : -1;
+    ctx.textAlign = A ? 'left' : 'right';
+    ctx.font = 'bold 21px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+    txt(ctx, A ? '查岗党' : '灭迹党', A ? UI.barX : W - UI.barX, 20, '#fff', 5);
+    ctx.font = 'bold 23px ui-monospace,Menlo,monospace';
+    txt(ctx, hv.toFixed(0) + '%', (A ? UI.barX : W - UI.barX) + ox * 78, 20,
+        hv < 20 ? '#ff8a7a' : '#fff', 5);
   }
-  ctx.font = 'bold 23px ui-monospace,Menlo,monospace'; ctx.textBaseline = 'middle';
-  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.75)';
-  ctx.textAlign = 'left'; ctx.strokeText(hA.toFixed(0) + '%', 100, 90); ctx.fillStyle = '#fff'; ctx.fillText(hA.toFixed(0) + '%', 100, 90);
-  ctx.textAlign = 'right'; ctx.strokeText(hB.toFixed(0) + '%', 860, 90); ctx.fillStyle = '#fff'; ctx.fillText(hB.toFixed(0) + '%', 860, 90);
-  ctx.font = 'bold 26px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-  ctx.textAlign = 'left'; ctx.lineWidth = 5;
-  ctx.strokeText('查岗党', 92, 42); ctx.fillText('查岗党', 92, 42);
-  ctx.textAlign = 'right';
-  ctx.strokeText('灭迹党', 868, 42); ctx.fillText('灭迹党', 868, 42);
 
   if (S.phase !== 'idle') {
-    /* 拉力条 —— 第二个属性必须看得见。观众刷了礼物、血量没动，屏幕上要是
-       没有任何交代，他会认为这游戏是假的。这两条细带就是那个交代：它们一起
-       涨说明双方在对拼（手机自然停在中间、谁也不掉血），一条比另一条长出来
-       的那截才是战况 —— 那一截就是每秒在扣对方血的东西。
-       开方是为了让小额也看得出动静 —— 线性的话几百点火力在几千的量程里
-       几乎不动一根头发。 */
-    const bar = (x, w, dir, f, c) => {
-      const k = Math.min(1, Math.sqrt(f / 3000));
-      ctx.fillStyle = 'rgba(8,10,13,.55)'; ctx.fillRect(x, 109, w, 10);
-      const fw = w * k, gx = dir > 0 ? x : x + w - fw;
-      ctx.fillStyle = rgba(c, .86); ctx.fillRect(gx, 109, fw, 10);
-    };
-    bar(92, 276, 1, S.fA, GREEN);
-    bar(572, 296, -1, S.fB, RED);
-
     const mm = Math.max(0, S.clock);
-    ctx.textAlign = 'center'; ctx.font = 'bold 27px ui-monospace,Menlo,monospace';
-    ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.75)';
-    let tip = `${mm / 60 | 0}:${String(mm % 60 | 0).padStart(2, '0')}`, col = '#fff';
-    if (S.phase === 'sudden') { tip = `绝杀 ${S.sudden.toFixed(0)}`; col = '#ff5a5a'; }
-    else if (S.phase === 'over') { tip = S.winner > 0 ? '查岗党胜' : S.winner < 0 ? '灭迹党胜' : '平局'; col = '#ffd45a'; }
-    else if (S.stand > 0) { tip = `反击 ${S.stand.toFixed(0)}`; col = '#ffd45a'; }
-    ctx.strokeText(tip, 480, 42); ctx.fillStyle = col; ctx.fillText(tip, 480, 42);
+    let tip = `${mm / 60 | 0}:${String(mm % 60 | 0).padStart(2, '0')}`, col = '#fff', bg = 'rgba(8,10,14,.74)';
+    if (S.phase === 'sudden') { tip = `绝杀 ${S.sudden.toFixed(0)}`; col = '#ff6a5a'; bg = 'rgba(52,8,10,.86)'; }
+    else if (S.phase === 'over') { tip = S.winner > 0 ? '查岗党胜' : S.winner < 0 ? '灭迹党胜' : '平局'; col = '#ffd45a'; bg = 'rgba(46,34,6,.88)'; }
+    else if (S.stand > 0) { tip = `反击 ${S.stand.toFixed(0)}`; col = '#ffd45a'; bg = 'rgba(46,34,6,.86)'; }
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(424, 22, 112, 33, 16); ctx.fillStyle = bg; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.20)'; ctx.stroke();
+    ctx.restore();
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${S.phase === 'over' ? 22 : 25}px ui-monospace,Menlo,monospace`;
+    txt(ctx, tip, MID, 39, col, 4);
+
+    /* 时钟底下这一行是全屏唯一把因果写成字的地方："此刻每秒扣谁多少血"。
+       玩法的核心是拉力差在扣血，而拉力差本身只画成了两条长度 —— 差多少、
+       够不够过死区、折合每秒几滴，全靠观众心算。这一行替他们算完。 */
+    const d = S.dpsA > 0.01 ? S.dpsA : S.dpsB, hurtA = S.dpsA > 0.01;
+    if (S.phase === 'over') { ctx.restore(); return; }   // 打完了就没有"此刻扣多少"这回事
+    /* 底板不是装饰：对抗线的指针尖就顶在这一行下面，没有底板的话"僵持"两个字
+       正好被那个三角啃掉一半。HUD 在 renderFx 的最后画，盖得住。 */
+    ctx.beginPath(); ctx.roundRect(416, 61, 128, 27, 13);
+    ctx.fillStyle = d > 0.01 ? 'rgba(40,20,6,.72)' : 'rgba(8,10,14,.60)'; ctx.fill();
+    ctx.font = 'bold 18px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    if (d > 0.01) {
+      txt(ctx, hurtA ? `◀ 每秒 ${d.toFixed(1)}` : `每秒 ${d.toFixed(1)} ▶`, MID, 75, '#ffd86e', 4);
+    } else txt(ctx, '僵 持', MID, 75, 'rgba(232,236,242,.70)', 4);
   }
   ctx.restore();
 }
@@ -1205,6 +1383,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Array.from({ length: 101 }, (_, p) =>
       load(`assets/frames/f${String(p).padStart(3, '0')}.png`).catch(() => null)));
   const seq = new FrameSeq(frames);
+  /* HUD 头像。离线从 girl.png / boy.png 裁好的 160 方图，两张共 21KB ——
+     立绘原图是 760×1145，只为取两个脸去加载它们不值当。 */
+  [HUD.avA, HUD.avB] = await Promise.all(
+    ['av_a', 'av_b'].map(n => load(`assets/ui/${n}.webp`).catch(() => null)));
   /* 3D 转盘贴图，两套：飞行物品的（ammo.js）和命中粒子的（fx.js）。
      失败不阻塞 —— 加载不到就退回各自的矢量画法，?nosprite=1 同时关掉两套。 */
   const noSpr = Q0.get('nosprite') === '1';
@@ -1255,6 +1437,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   if (Q.has('m')) NUM.PULL_M = Math.max(1, +Q.get('m'));
   if (Q.has('z')) NUM.HP_Z = Math.max(0, +Q.get('z'));
   if (Q.has('linefull')) NUM.LINE_FULL = Math.max(1, +Q.get('linefull'));
+  // ?hudflash=0..1 钉住拉力条的注入闪光，专门用来截"礼物砸进来那一下"的形态
+  if (Q.has('hudflash')) HUD.pin = clamp(+Q.get('hudflash'), 0, 1);
   if (Q.has('line')) S.line = clamp(+Q.get('line') | 0, 0, 3);
   // ?zoom=1 用画布原生尺寸铺开，截图时才看得清脸和手的实际画法
   if (Q.get('zoom') === '1') document.getElementById('stage').style.width = W + 'px';
@@ -1418,7 +1602,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         Particles.update(1 / 60);
         Ammo.update(d);
         Bubble.update(d, FX.struggle);
-        derive(d);
+        derive(d); hudTick(d);
       }
       el += step;
       render();
@@ -1536,7 +1720,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       for (let k = 0; k < Math.max(1, Math.round(step * 60)); k++) {
         const d = Particles.tick(1 / 60);   // 与主循环同构：粒子走真实时间，逻辑走 d
         Particles.update(1 / 60);
-        derive(d);
+        derive(d); hudTick(d);
       }
       el += step;
       render();
@@ -1607,7 +1791,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       Ammo.update(d);
       Bubble.update(d, FX.struggle);
       S.t += d;
-      derive(d);
+      derive(d); hudTick(d);
       const t1 = performance.now(); renderBg();
       const t2 = performance.now(); renderActors();
       const t3 = performance.now(); renderFx();
@@ -1700,7 +1884,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     }
     if (S.phase !== 'idle') document.getElementById('pv').value = S.p;
     else if (S.auto) document.getElementById('pv').value = S.p;
-    derive(dt);
+    derive(dt); hudTick(dt);
     render();
     const mm = Math.max(0, S.clock);
     document.getElementById('stat').textContent =
