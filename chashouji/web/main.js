@@ -1041,7 +1041,9 @@ function drawFrontGround(ctx, bias) {
    出战线此刻**具体**压在哪一条竖线上，而手机位移就是这个玩法的进度条。 */
 function drawFrontMark(ctx, bias) {
   const col = Math.abs(bias) < 0.06 ? [255, 255, 255] : (bias > 0 ? GREEN : RED);
-  const x = frontAt(TOP) + FX.jit, y = TOP - 2;
+  /* 指针整体压到 HUD 下沿之外。它的 x 随对抗线跑、三角有 42px 宽，留在原来
+     的 TOP-2 会横着划过血条和拉力条 —— HUD 一放大就没地方躲了。 */
+  const y = TOP + 26, x = frontAt(y) + FX.jit;
   ctx.save();
   ctx.strokeStyle = 'rgba(12,14,20,.6)'; ctx.lineWidth = 11;
   ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 52); ctx.stroke();
@@ -1099,10 +1101,15 @@ function drawGround(ctx, bias) {
 
 // 两侧严格镜像：右侧的 x 一律由 W - x - w 推出来，改一处两边一起动
 const UI = {
-  avR: 38, avCX: 60, avCY: 58,       // 头像圆：左侧圆心 x，右侧 = W - 它
-  barX: 116, barW: 298, barY: 36, barH: 30,   // 血条
-  pwY: 74, pwH: 11,                  // 拉力条（和血条留 8px：贴太近两条描边会并成一条粗黑带）
-  sk: 9,                             // 斜切量：顶边相对底边右移多少（右侧取反）
+  /* 直播间里这块画面会被缩到手机屏的三分之一宽，条细一点、字小一号就彻底
+     看不清了。所以横向**顶满**：头像缩成贴在队名左边的小圆，血条从边缘 18px
+     一直铺到离中线 20px，两条之间只留 40px 缝。
+     竖向吃到 133 为止 —— 对抗线的指针三角从 y=138 开始横扫全宽，越过去就会
+     被它划一道（指针的 x 随对抗线跑，不是待在中间）。 */
+  avR: 33, avCX: 46, avCY: 37,       // 头像圆：左侧圆心，右侧 = W - 它
+  barX: 18, barW: 442, barY: 70, barH: 42,    // 血条
+  pwY: 118, pwH: 15,                 // 拉力条（和血条留 6px：贴太近两条描边会并成一条粗黑带）
+  sk: 12,                            // 斜切量：顶边相对底边右移多少（右侧取反）
 };
 
 /* HUD 自己的表现层状态。单独放一坨，是为了让人一眼看出改这里不会改谁输谁赢 ——
@@ -1146,22 +1153,22 @@ function drawAvatar(ctx, A) {
   const dps = A ? S.dpsA : S.dpsB, hp = A ? S.hpA : S.hpB;
   const cx = A ? UI.avCX : W - UI.avCX, cy = UI.avCY, r = UI.avR;
   ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, 7); ctx.fillStyle = 'rgba(8,10,14,.92)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, 7); ctx.fillStyle = 'rgba(8,10,14,.92)'; ctx.fill();
   if (img) {
     ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.clip();
     ctx.drawImage(img, cx - r, cy - r, r * 2, r * 2);
     /* 底部压一层队色，让头像和血条是同一个人 —— 不然两个圆脸浮在那儿，
        跟下面的绿条红条没有任何关系。 */
     const g = ctx.createLinearGradient(0, cy + r * 0.1, 0, cy + r);
-    g.addColorStop(0, rgba(c, 0)); g.addColorStop(1, rgba(c, .52));
+    g.addColorStop(0, rgba(c, 0)); g.addColorStop(1, rgba(c, .42));
     ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
     ctx.restore();
   } else { ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = rgba(c, .55); ctx.fill(); }
   // 挨打时外圈红色脉动：谁在掉血，扫一眼头像就知道，不用去比两条的长度
   if (dps > 0.01) {
     const k = 0.5 + 0.5 * Math.sin(HUD.t * 7.5);
-    ctx.beginPath(); ctx.arc(cx, cy, r + 7, 0, 7);
-    ctx.lineWidth = 3.5; ctx.strokeStyle = `rgba(255,190,72,${0.34 + 0.56 * k})`; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, 7);
+    ctx.lineWidth = 3; ctx.strokeStyle = `rgba(255,190,72,${0.34 + 0.56 * k})`; ctx.stroke();
   }
   /* 圈色就是身份：赢了镀金、倒下转灰、其余时候是队色。结算画面上观众第一眼
      找的是脸，让脸自己把结果说了，比在中间多写一行字快。 */
@@ -1191,10 +1198,10 @@ function drawHpBar(ctx, A) {
   skew(ctx, x - 3, y - 3, w + 6, h + 6, sk); ctx.fillStyle = 'rgba(6,8,11,.88)'; ctx.fill();
 
   skew(ctx, x, y, w, h, sk); ctx.save(); ctx.clip();
-  ctx.fillStyle = 'rgba(16,19,25,.82)'; ctx.fillRect(x - 20, y, w + 40, h);
+  ctx.fillStyle = 'rgba(16,19,25,.70)'; ctx.fillRect(x - 20, y, w + 40, h);
   // 空槽里的斜纹：让"还剩多少"有个可数的底，纯黑一块读不出刻度
   ctx.fillStyle = 'rgba(255,255,255,.045)';
-  for (let i = -2; i * 16 < w + 40; i++) { skew(ctx, x + i * 16, y, 7, h, sk); ctx.fill(); }
+  for (let i = -2; i * 20 < w + 40; i++) { skew(ctx, x + i * 20, y, 9, h, sk); ctx.fill(); }
 
   if (fw > 0.5) {
     const fx0 = A ? x : x + w - fw;
@@ -1203,11 +1210,11 @@ function drawHpBar(ctx, A) {
     g.addColorStop(0.52, rgba(c, 1));
     g.addColorStop(1, rgba(c.map(v => v * 0.55 | 0), 1));
     ctx.fillStyle = g; ctx.fillRect(fx0, y, fw, h);
-    ctx.fillStyle = 'rgba(255,255,255,.26)'; ctx.fillRect(fx0, y, fw, h * 0.36);
+    ctx.fillStyle = 'rgba(255,255,255,.20)'; ctx.fillRect(fx0, y, fw, h * 0.28);
     /* 侵蚀带 —— 末端正在被啃掉的那截。宽度按"再扣两秒会没多少"算，所以
        对面刷得越猛这截越宽，一眼能看出是被小刀割还是被大哥碾。 */
     if (dps > 0.01) {
-      const er = Math.min(clamp(w * dps / 100 * 4.5, 15, w * 0.34), fw);
+      const er = Math.min(clamp(w * dps / 100 * 4.5, 22, w * 0.34), fw);
       const ex = A ? x + fw - er : x + w - fw;
       const pk = 0.42 + 0.38 * Math.sin(HUD.t * 7.5);
       const eg = ctx.createLinearGradient(A ? ex : ex + er, 0, A ? ex + er : ex, 0);
@@ -1217,7 +1224,7 @@ function drawHpBar(ctx, A) {
     }
     // 末端亮口：血条的"当前位置"，退的时候这一条在动，比看整块色块灵敏
     ctx.fillStyle = 'rgba(255,255,255,.88)';
-    ctx.fillRect(A ? x + fw - 3 : x + w - fw, y, 3, h);
+    ctx.fillRect(A ? x + fw - 4 : x + w - fw, y, 4, h);
   }
   ctx.restore();
   skew(ctx, x, y, w, h, sk);
@@ -1242,10 +1249,10 @@ function drawPowerBar(ctx, A) {
   }
   // 六格刻度：有格子才有"涨了一格"，一条光溜溜的色带涨了也没人看得出来
   ctx.fillStyle = 'rgba(0,0,0,.28)';
-  for (let i = 1; i < 6; i++) { skew(ctx, x + w * i / 6 - 1, y, 2, h, sk); ctx.fill(); }
+  for (let i = 1; i < 8; i++) { skew(ctx, x + w * i / 8 - 1, y, 2.5, h, sk); ctx.fill(); }
   ctx.restore();
   // 末端菱形滑块：礼物砸进来的时候它往外弹一下，这是"我刷的那一下"的落点
-  const ex = A ? x + fw : x + w - fw, cy = y + h / 2, R = 7 + 3 * lf;
+  const ex = A ? x + fw : x + w - fw, cy = y + h / 2, R = 10 + 4 * lf;
   ctx.beginPath();
   ctx.moveTo(ex + sk * 0.5, cy - R); ctx.lineTo(ex + R * .66, cy);
   ctx.lineTo(ex - sk * 0.5, cy + R); ctx.lineTo(ex - R * .66, cy); ctx.closePath();
@@ -1270,12 +1277,12 @@ function drawHUD(ctx) {
        位置。挪出来之后两边各是一行"谁 · 剩多少"，条本身只管长度。
        放外侧是为了避开中线：那儿归时钟和战况读数。 */
     const hv = A ? hA : hB, ox = A ? 1 : -1;
+    const nx = (A ? UI.avCX : W - UI.avCX) + ox * (UI.avR + 12);   // 队名从头像右缘起
     ctx.textAlign = A ? 'left' : 'right';
-    ctx.font = 'bold 21px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-    txt(ctx, A ? '查岗党' : '灭迹党', A ? UI.barX : W - UI.barX, 20, '#fff', 5);
-    ctx.font = 'bold 23px ui-monospace,Menlo,monospace';
-    txt(ctx, hv.toFixed(0) + '%', (A ? UI.barX : W - UI.barX) + ox * 78, 20,
-        hv < 20 ? '#ff8a7a' : '#fff', 5);
+    ctx.font = 'bold 30px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+    txt(ctx, A ? '查岗党' : '灭迹党', nx, UI.avCY, '#fff', 6);
+    ctx.font = 'bold 37px ui-monospace,Menlo,monospace';
+    txt(ctx, hv.toFixed(0) + '%', nx + ox * 114, UI.avCY, hv < 20 ? '#ff8a7a' : '#fff', 6.5);
   }
 
   if (S.phase !== 'idle') {
@@ -1284,28 +1291,26 @@ function drawHUD(ctx) {
     if (S.phase === 'sudden') { tip = `绝杀 ${S.sudden.toFixed(0)}`; col = '#ff6a5a'; bg = 'rgba(52,8,10,.86)'; }
     else if (S.phase === 'over') { tip = S.winner > 0 ? '查岗党胜' : S.winner < 0 ? '灭迹党胜' : '平局'; col = '#ffd45a'; bg = 'rgba(46,34,6,.88)'; }
     else if (S.stand > 0) { tip = `反击 ${S.stand.toFixed(0)}`; col = '#ffd45a'; bg = 'rgba(46,34,6,.86)'; }
+    /* 时钟和战况读数合成一块牌子，摞在两条血条中间的上方。分成上下两个小胶囊
+       试过，两个都小得读不出，而且下面那个正好落在指针横扫的那一行。 */
+    const one = S.phase === 'over';          // 结算只剩胜负一行，牌子跟着收窄
     ctx.save();
-    ctx.beginPath(); ctx.roundRect(424, 22, 112, 33, 16); ctx.fillStyle = bg; ctx.fill();
+    ctx.beginPath(); ctx.roundRect(398, 4, 164, one ? 44 : 62, 16); ctx.fillStyle = bg; ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.20)'; ctx.stroke();
     ctx.restore();
     ctx.textAlign = 'center';
-    ctx.font = `bold ${S.phase === 'over' ? 22 : 25}px ui-monospace,Menlo,monospace`;
-    txt(ctx, tip, MID, 39, col, 4);
+    ctx.font = `bold ${one ? 27 : 31}px ui-monospace,Menlo,monospace`;
+    txt(ctx, tip, MID, one ? 28 : 22, col, 4);
 
     /* 时钟底下这一行是全屏唯一把因果写成字的地方："此刻每秒扣谁多少血"。
        玩法的核心是拉力差在扣血，而拉力差本身只画成了两条长度 —— 差多少、
        够不够过死区、折合每秒几滴，全靠观众心算。这一行替他们算完。 */
     const d = S.dpsA > 0.01 ? S.dpsA : S.dpsB, hurtA = S.dpsA > 0.01;
     if (S.phase === 'over') { ctx.restore(); return; }   // 打完了就没有"此刻扣多少"这回事
-    /* 底板不是装饰：对抗线的指针尖就顶在这一行下面，没有底板的话"僵持"两个字
-       正好被那个三角啃掉一半。HUD 在 renderFx 的最后画，盖得住。 */
-    ctx.beginPath(); ctx.roundRect(416, 61, 128, 27, 13);
-    ctx.fillStyle = d > 0.01 ? 'rgba(40,20,6,.72)' : 'rgba(8,10,14,.60)'; ctx.fill();
-    ctx.font = 'bold 18px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-    ctx.textAlign = 'center';
+    ctx.font = 'bold 23px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
     if (d > 0.01) {
-      txt(ctx, hurtA ? `◀ 每秒 ${d.toFixed(1)}` : `每秒 ${d.toFixed(1)} ▶`, MID, 75, '#ffd86e', 4);
-    } else txt(ctx, '僵 持', MID, 75, 'rgba(232,236,242,.70)', 4);
+      txt(ctx, hurtA ? `◀ 每秒 ${d.toFixed(1)}` : `每秒 ${d.toFixed(1)} ▶`, MID, 48, '#ffd86e', 4);
+    } else txt(ctx, '僵 持', MID, 48, 'rgba(232,236,242,.70)', 4);
   }
   ctx.restore();
 }
