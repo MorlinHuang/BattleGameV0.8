@@ -23,9 +23,10 @@ main.js      常量 / P / S / FX / derive / impact / RECIPE / GIFT / 各层绘�
 fx.js        Particles —— 粒子、屏幕震动、全屏闪、顿帧
 ammo.js      Ammo —— 飞行物与弹道（色晕/拖尾/残影/本体）
 bubble.js    Bubble —— 手机上方的聊天气泡
+result.js    Result —— 结算画面（演出图 + 判词 + 台词 + 数据带），全屏接管
 ```
 
-引入顺序 `fx → ammo → bubble → main`，改 index.html 时别打乱。
+引入顺序 `fx → ammo → bubble → result → main`，改 index.html 时别打乱。
 
 ## 几何常量（`main.js` 顶部，改动牵一发动全身）
 
@@ -184,12 +185,67 @@ const approach = (dt, k) => 1 - Math.exp(-k * dt);
 ```
 renderBg      底版照片 960×1334
 renderActors  角色帧（按 p 取最近一张硬切）+ 染色
-renderFx      对抗线/指针 → 刻度尺 → 气泡 → 弹幕 → 粒子 → HUD → 全屏闪
+renderFx      对抗线/指针 → 刻度尺 → 气泡 → 弹幕 → 粒子 → HUD（结算时换成 Result.draw）→ 全屏闪
 ```
 
 **拆成三段是为了能分层计时**（`?bench` 靠它分账），合在一个函数里只能猜哪层慢。
 
 气泡在弹幕**之下**：它贴在后面那堵墙上，弹幕是前景。
+
+## 结算画面（`result.js`，全屏接管不是弹窗）
+
+`S.phase === 'over'` 时 `renderFx` 里 **`Result.draw` 顶掉 `drawHUD`** —— 结算把整屏
+接管，血条队名全撤。它存在的理由是**情绪展示**：赢家的戏、输家的脸、一句台词。
+不是"显示比分"，数据只配当底下那条带子。
+
+版式四段（960×1334）：判词 `0~210` / 台词气泡 `214~390` / 演出区 `390~1040` /
+数据带 `1058~1300`。演出图是**底图**，铺满全屏，UI 压在它上面。
+
+```
+assets/ui/win_a1.webp  查岗党胜·蓄力（女生举枕头）      960×1334
+assets/ui/win_a2.webp  查岗党胜·命中（砸下去）
+assets/ui/win_b1.webp  灭迹党胜·蓄力（手机举胸前）
+assets/ui/win_b2.webp  灭迹党胜·命中（怼到她面前）
+```
+
+- **两帧硬切，间隔不能等长**。蓄力 `HOLD=0.45` / 命中 `HIT=0.18`。等频（试过 0.22/0.22）
+  读成机械闪烁，不像人在打——抡东西本来就是举起来慢、砸下去快。这个节奏还顺带压住了
+  生成帧之间的人物位移：两张图里连跪着不动的人也会挪几十 px，等频快切会把它放大成
+  "人在左右跳"，慢蓄力+快命中则读成"扑上去"。
+- **命中那 0.18 秒整幅下震 6px，只震演出图不震 UI**。字跟着抖就读不下去了。
+  震屏下移会让顶边露出底下没被盖住的东西 → `drawImage(im, -8, sh-8, W+16, H+16)`，
+  四边各留 8px 余量。
+- **生图必须先按界面画幅构图，不能生完再裁**。第一批生的方图/9:16 裁进 0.72:1 时
+  人物被推到下半屏，数据卡直接盖在两张脸上——情绪展示的主体被 UI 埋了。提示词里
+  写死"上五分之一留墙、下四分之一留地板、人物在正中偏下占一半高"才落得对。
+  挑图也要**裁到 960×1334 之后再挑**。
+- **背景对齐 ≠ 人物对齐**。量第二帧与第一帧的背景 MAE（上墙/地板都 <5）说明镜头没动，
+  但人物仍会漂。要按质心单独量人物（粉色睡衣 / 暗色头发 / 手机亮屏各算一个）。
+- **台词气泡的尾巴要按每套素材单调，不能镜像套用**。A 案女生在左下，尾巴朝左下；
+  B 案照镜像出来的长尾巴尖端正好戳在男生举着的手机屏上，读成手机在说话——缩到刚
+  探出气泡、从手机顶边上方过去。尾巴本来也不必够到嘴，拉长只会变成一大块白三角。
+- **`▸`（U+25B8）在 Noto Sans CJK 里是空码位**，渲染成豆腐块。倒计时那个箭头是
+  `beginPath` 画的三角。
+- **贴纸描边的 lineWidth 是居中的**（一半描在字外），PIL 的 `stroke_width` 是全外。
+  离线试版定的 27/17/9 搬到 canvas 要写 **54/34/18**。
+- **战斗画面是写实的、结算是 Q 版**，中间靠 `0~0.18s` 的白闪 + 硬切转场掩盖。
+  白闪那 0.18 秒底下仍是战斗画面，别在这段提前画结算。
+
+两条流程上的规矩（都踩过）：
+
+- **`derive` 不做流程控制**。把"到点开下一局"写进 `derive` 一定出事：`?live` 的预热
+  是靠反复调 `derive(1/30)` 快进的，预热跑到结算就会在循环内部把这一局重置掉。
+  开新局属于对局流程，放在主循环 `frame()` 里：
+  `if (S.phase === 'over' && Result.pin < 0 && S.overT >= Result.NEXT) startMatch()`。
+  `derive` 里只推进 `S.overT`。
+- **`over` 之后必须停掉注入和送礼**，预热循环和主循环两条路径都要加 `if (S.phase !== 'over')`。
+  漏了就会截出"本局时长 0:26 / 礼物 12:12 / 拉力 5747"这种自相矛盾的面板——
+  局在 26 秒打完，后面 44 秒的注入还在往一个已经结束的局里加。
+
+`S.board` 是送礼榜，形如 `[{name, side, amt}]` 按 amt 倒序，**网页版恒为空**，
+接直播时由外部填。空的时候面板自己写"接入直播后显示前三名"——**不造假数据**。
+榜只能横排三格（竖排三行在 1334 高里装不下，第三行顶到底边），代价是昵称按格宽截断。
+
 
 ## URL 诊断参数（全表）
 
@@ -286,13 +342,15 @@ if (Math.abs(diff) > NUM.PULL_X) {
 | `&liveGift=drop&liveAt=&liveSide=` | 指定时刻送一件礼物 |
 | `&liveFreeze=1` | 冻住**整个战况**（对抗线/血量/阶段/三个计时器），拉力与弹幕照跑 |
 | `&liveStop=1` | 冻住整个世界（截处决这种只存在零点几秒的东西） |
+| `&liveEvery=<秒>&liveGA=&liveGB=` | 每隔几秒给两边各送一件，用来把礼物数堆到能看的量 |
+| `?overt=<秒>` | **结算定帧**：把 `S.overT` 钉死在指定秒。入场动画和两帧循环都读它，不钉住截不到 |
 | `&v=<任意值>` | 绕过 js 的磁盘缓存，见 chashouji-verify |
 
 ## 部署
 
 ```bash
-node --check main.js && node --check ammo.js && node --check fx.js && node --check bubble.js
-timeout 100 scp -q main.js fx.js ammo.js bubble.js index.html kf-deployment:/home/op/chashouji/web/
+for f in main ammo fx bubble result; do node --check $f.js; done
+timeout 100 scp -q main.js fx.js ammo.js bubble.js result.js index.html kf-deployment:/home/op/chashouji/web/
 ```
 桌面容器上 `python3 -m http.server 40235` 常驻在 `/home/op/chashouji/web`。
 
