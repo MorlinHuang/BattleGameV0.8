@@ -1057,9 +1057,9 @@ function drawFrontMark(ctx, bias) {
   const col = Math.abs(bias) < 0.06 ? [255, 255, 255] : (bias > 0 ? GREEN : RED);
   /* 指针整体压到 HUD 下沿之外。它的 x 随对抗线跑、三角有 42px 宽，留在原来
      的 TOP-2 会横着划过血条和拉力条 —— HUD 一放大就没地方躲了。
-     TOP+102 = 230：三角占 214~246，正好接在 HUD 下沿（210）之下；竖线到 282，
-     离人物帧顶 308 还有 26px。HUD 再长高就要把这个数一起推。 */
-  const y = TOP + 102, x = frontAt(y) + FX.jit;
+     TOP+88 = 216：三角占 200~232，正好接在 HUD 下沿（196）之下；竖线到 268，
+     离人物帧顶 308 还有 40px。HUD 再长高就要把这个数一起推。 */
+  const y = TOP + 88, x = frontAt(y) + FX.jit;
   ctx.save();
   ctx.strokeStyle = 'rgba(12,14,20,.6)'; ctx.lineWidth = 11;
   ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 52); ctx.stroke();
@@ -1120,18 +1120,18 @@ const UI = {
   /* 直播间里这块画面会被缩到手机屏的三分之一宽，条细一点、字小一号就彻底
      看不清了。所以横向**顶满**：头像缩成贴在队名左边的小圆，血条从边缘 18px
      一直铺到离中线 20px，两条之间只留 40px 缝。
-     竖向吃到 210 为止 —— 对抗线的指针三角跟着降到 214 才开始横扫全宽，越过去
+     竖向吃到 196 为止 —— 对抗线的指针三角跟着降到 200 才开始横扫全宽，越过去
      就会被它划一道（指针的 x 随对抗线跑，不是待在中间）。这条线不是定数：
      HUD 要长高就得把 drawFrontMark 里的 y 一起往下推，两处必须一起改。
      排这一块要连**描边**一起算：文字的 lineWidth 5 会往外扩 2.5px，按字号
      算出来刚好够的位置，画出来就啃到血条底边了。 */
   avR: 30, avCX: 44, avCY: 35,       // 头像圆：左侧圆心，右侧 = W - 它
-  barX: 18, barW: 442, barY: 68, barH: 58,    // 血条（68~126）
+  barX: 18, barW: 442, barY: 68, barH: 44,    // 血条（68~112）
   /* 时钟在血条**上方**、拉力在血条**下方**。两块都在中间那段，左右是头像和队名。
-     拉力那条带子 134~210：85px 的数字墨区约 61px，上下各留 7px。和血条之间
+     拉力那条带子 120~196：85px 的数字墨区约 61px，上下各留 7px。和血条之间
      留 8px 缝 —— 两条深色描边贴在一起会并成一道粗黑带，读成"血条破了"。 */
   clkCY: 33,                         // 时钟那一行的中心（血条上面）
-  pwCY: 172,                         // 拉力那一行的中心（血条下面，见 drawPowerText）
+  pwCY: 158,                         // 拉力那一行的中心（血条下面，见 drawPowerText）
   sk: 12,                            // 斜切量：顶边相对底边右移多少（右侧取反）
 };
 
@@ -1154,6 +1154,31 @@ const skew = (ctx, x, y, w, h, sk) => {
   ctx.beginPath();
   ctx.moveTo(x + sk, y); ctx.lineTo(x + w + sk, y);
   ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+};
+/* 中线上那两块牌子（时钟、拉力）用的形。血条是平行四边形（顶边整体右移 sk），
+   但它们跨在正中间，跟哪一侧对齐都会显得偏 —— 做成两端对称内切的梯形，
+   既和血条是同一套切角语言，又不偏向任何一边。 */
+const plate = (ctx, x, y, w, h, sk) => {
+  ctx.beginPath();
+  ctx.moveTo(x + sk, y); ctx.lineTo(x + w - sk, y);
+  ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+};
+/* 牌面的底：竖向渐变 + 顶边一道内亮线。纯色平涂在照片底图上会像贴了块塑料，
+   上深下浅加一条高光，才读得出"一块有厚度的板"。 */
+const plateFill = (ctx, x, y, w, h, sk, a) => {
+  plate(ctx, x, y, w, h, sk);
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, `rgba(26,31,43,${a})`);
+  g.addColorStop(1, `rgba(9,12,19,${Math.min(1, a + .05)})`);
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.40)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5;
+  ctx.fillStyle = g; ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,.10)'; ctx.fillRect(x, y, w, 2);
+  ctx.restore();
+  plate(ctx, x, y, w, h, sk);
+  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.stroke();
 };
 const txt = (ctx, str, x, y, fill, lw) => {
   ctx.lineWidth = lw; ctx.strokeStyle = 'rgba(0,0,0,.80)'; ctx.strokeText(str, x, y);
@@ -1247,7 +1272,12 @@ function drawHpBar(ctx, A) {
     ctx.fillStyle = `rgba(255,255,255,${0.30 * hf})`; ctx.fill();
     ctx.restore();
   }
+  /* 外框带投影：底图是照片，HUD 不浮起来就像直接印在墙上。偏移只给 4px，
+     再多就从"贴在画面前面"变成"飘在半空"了。 */
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.42)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
   skew(ctx, x - 3, y - 3, w + 6, h + 6, sk); ctx.fillStyle = 'rgba(6,8,11,.88)'; ctx.fill();
+  ctx.restore();
 
   skew(ctx, x, y, w, h, sk); ctx.save(); ctx.clip();
   ctx.fillStyle = 'rgba(16,19,25,.70)'; ctx.fillRect(x - 20, y, w + 40, h);
@@ -1257,12 +1287,19 @@ function drawHpBar(ctx, A) {
 
   if (fw > 0.5) {
     const fx0 = A ? x : x + w - fw;
+    /* 四段渐变而不是三段：多出来的 0.18 那一档把亮面收窄成一条，条子就从
+       "涂了个渐变的色块"变成"一根有圆度的管"。底边那道暗是它的厚度。 */
     const g = ctx.createLinearGradient(0, y, 0, y + h);
-    g.addColorStop(0, rgba(c.map(v => Math.min(255, v * 1.22 | 0)), 1));
-    g.addColorStop(0.52, rgba(c, 1));
-    g.addColorStop(1, rgba(c.map(v => v * 0.55 | 0), 1));
+    g.addColorStop(0, rgba(c.map(v => Math.min(255, v * 1.30 | 0)), 1));
+    g.addColorStop(0.18, rgba(c.map(v => Math.min(255, v * 1.12 | 0)), 1));
+    g.addColorStop(0.58, rgba(c, 1));
+    g.addColorStop(1, rgba(c.map(v => v * 0.52 | 0), 1));
     ctx.fillStyle = g; ctx.fillRect(fx0, y, fw, h);
-    ctx.fillStyle = 'rgba(255,255,255,.20)'; ctx.fillRect(fx0, y, fw, h * 0.28);
+    // 顶上的高光也做成渐变收尾，平涂一块白会在条上留一道生硬的分界
+    const hg = ctx.createLinearGradient(0, y, 0, y + h * 0.30);
+    hg.addColorStop(0, 'rgba(255,255,255,.26)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hg; ctx.fillRect(fx0, y, fw, h * 0.30);
+    ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.fillRect(fx0, y + h - 3, fw, 3);
     /* 侵蚀带 —— 末端正在被啃掉的那截。宽度按"再扣两秒会没多少"算，所以
        对面刷得越猛这截越宽，一眼能看出是被小刀割还是被大哥碾。 */
     if (dps > 0.01) {
@@ -1287,7 +1324,11 @@ function drawHpBar(ctx, A) {
   }
   ctx.restore();
   skew(ctx, x, y, w, h, sk);
-  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.stroke();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.26)'; ctx.stroke();
+  // 顶边再压一道更亮的短线：光从上面来，框的上沿该比下沿亮
+  ctx.save(); skew(ctx, x, y, w, h, sk); ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(x - 20, y, w + 40, 1.5);
+  ctx.restore();
   ctx.restore();
 }
 
@@ -1307,9 +1348,24 @@ function drawPowerText(ctx) {
   /* 底板宽度写死，不随位数变 —— 跟着数字宽窄伸缩的话，刷一件礼物牌子自己
      会抖一下，观众会以为是画面卡了。660 够两边各放到五位数：85px 的等宽
      数字每位约 51px，五位 255，加上中间"拉力"两个字和左右各 24 的缝。 */
-  ctx.beginPath(); ctx.roundRect(MID - 330, 134, 660, 76, 22);
-  ctx.fillStyle = 'rgba(8,10,14,.74)'; ctx.fill();
-  ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.20)'; ctx.stroke();
+  const px = MID - 330, py = cy - 38, pw = 660, ph = 76;
+  plateFill(ctx, px, py, pw, ph, 14, .80);
+  /* 归属靠**两端各一道队色亮边**，不是大片染色。整片渗色试过（120px、.26）：
+     板是深的，队色叠上去只会变成一块墨绿和一块暗红，脏，而且待机时两个 0
+     撑不住那么大两片颜色。细边亮度足、面积小，反而一眼分得清左右是谁的。 */
+  ctx.save(); plate(ctx, px, py, pw, ph, 14); ctx.clip();
+  for (const A of [true, false]) {
+    const col = A ? GREEN : RED;
+    ctx.save();
+    ctx.shadowColor = rgba(col, .85); ctx.shadowBlur = 14;
+    ctx.fillStyle = rgba(col, .92);
+    /* 这道边要**跟着斜边倾斜**（skew 而不是 fillRect）：板是梯形，
+       竖着画的矩形会被斜边切掉大半，只剩底下一个小三角。 */
+    skew(ctx, A ? px : px + pw - 7, py, 7, ph, A ? 14 : -14);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
 
   ctx.textAlign = 'center';
   ctx.font = 'bold 55px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
@@ -1349,6 +1405,10 @@ function drawHUD(ctx) {
     txt(ctx, hv.toFixed(0) + '%', nx + ox * 114, UI.avCY, hv < 20 ? '#ff8a7a' : '#fff', 6.5);
   }
 
+  /* 两条血条中间那道 40px 缝**故意空着**。试过在里面放一个左右各半边队色的
+     小菱形：满血时两条填充顶到缝边，菱形被夹成一条细缝，只剩"碎"。
+     两边顶在一起的感觉，血条端部的斜切已经说清楚了。 */
+
   /* 时钟和拉力**不等开局**：页面一打开就摆在那儿（时钟满时长、拉力 0:0）。
      等 phase 变成 play 才画的话，观众进直播间看到的是半块 HUD，第一件礼物
      砸下来才突然冒出两行字 —— 会读成"卡了一下"，而不是"开打了"。 */
@@ -1375,18 +1435,23 @@ function drawHUD(ctx) {
     const nw = note ? ctx.measureText(note).width + 18 : 0;
     /* 这块底板得跟着内容伸缩 —— 它下面 18px 就是指针三角横扫的那一行，
        写死一个够宽的值会在"僵持"时空出一大片压在画面上。 */
-    const bw = tw + nw + 36, bx = MID - bw / 2;
+    const bw = tw + nw + 46, bx = MID - bw / 2;
     ctx.save();
-    ctx.beginPath(); ctx.roundRect(bx, UI.clkCY - 17, bw, 34, 15);
-    ctx.fillStyle = bg; ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.stroke();
+    /* 常态用和拉力板同一套梯形；绝杀/反击/结算这三种要变色，就还用它们
+       自己的底色平涂 —— 那几下是"出事了"，形一样但颜色必须跳出来。 */
+    if (bg === 'rgba(8,10,14,.74)') plateFill(ctx, bx, UI.clkCY - 18, bw, 36, 9, .80);
+    else {
+      plate(ctx, bx, UI.clkCY - 18, bw, 36, 9);
+      ctx.fillStyle = bg; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.26)'; ctx.stroke();
+    }
     ctx.restore();
     ctx.textAlign = 'left';
     ctx.font = `bold ${over ? 27 : 23}px ui-monospace,Menlo,monospace`;
-    txt(ctx, tip, bx + 18, UI.clkCY, col, 4);
+    txt(ctx, tip, bx + 23, UI.clkCY, col, 4);
     if (note) {
       ctx.font = 'bold 21px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-      txt(ctx, note, bx + 18 + tw + 18, UI.clkCY,
+      txt(ctx, note, bx + 23 + tw + 18, UI.clkCY,
           d > 0.01 ? '#ffd86e' : 'rgba(232,236,242,.70)', 4);
     }
   }
