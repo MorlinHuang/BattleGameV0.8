@@ -106,7 +106,7 @@ const S = {
   dpsA: 0, dpsB: 0,                   // 此刻每秒正在掉多少血（battle 算出来的读数，HUD 画它）
   budA: 0, budB: 0,                   // 发射预算：火力消耗到一发弹幕的量就打一发
   debA: 0, debB: 0, debKA: 0, debKB: 0,  // 受到的注入减益：剩余秒数与折扣
-  clock: 0, phase: 'idle',            // idle 不跑数值（诊断与老演示模式）/ play / sudden / over
+  clock: NUM.MATCH, phase: 'idle',    // idle 不跑数值（诊断与老演示模式）/ play / sudden / over
   big: 0, sudden: 0,
   stand: 0, standUsed: false,
   winner: 0,
@@ -1124,8 +1124,13 @@ const UI = {
      算出来刚好够的位置，画出来就啃到血条底边了。 */
   avR: 30, avCX: 44, avCY: 35,       // 头像圆：左侧圆心，右侧 = W - 它
   barX: 18, barW: 442, barY: 66, barH: 44,    // 血条
-  pwCY: 33,                          // 拉力牌子的中心（中线正上方，见 drawPowerText）
-  clkCY: 130,                        // 时钟那一行的中心（降到血条下面，让位给拉力）
+  /* 时钟在血条**上方**、拉力在血条**下方**。两块都在中间那段，左右是头像和队名。
+     下面这条带子只有 38px 净空：血条底边 110，再往下 148 就是指针三角横扫的
+     那一行。所以拉力的底板压到 30 高（116~146），34px 的数字墨区约 24px，
+     上下各剩 3px。和血条之间留 6px 缝 —— 两条深色描边贴在一起会并成一道粗黑带，
+     读成"血条破了"。 */
+  clkCY: 33,                         // 时钟那一行的中心（血条上面）
+  pwCY: 131,                         // 拉力那一行的中心（血条下面，见 drawPowerText）
   sk: 12,                            // 斜切量：顶边相对底边右移多少（右侧取反）
 };
 
@@ -1256,14 +1261,15 @@ function drawHpBar(ctx, A) {
    push 值一一对应。
    放正中：分列左右两侧时没人会去比，而这两个数**必须放在一起比** —— 扣血算的
    就是它们的差，差过了 X 才有人掉血。并排摆着，"我比他多多少"不用算。
-   它比倒计时显眼一档也是故意的：观众刷礼物改变的是这个数，不是那个钟。 */
+   它比倒计时显眼一档也是故意的：观众刷礼物改变的是这个数，不是那个钟。
+   排在血条**下方**：上方那行归时钟。 */
 function drawPowerText(ctx) {
   const cy = UI.pwCY;
   ctx.save();
   ctx.textBaseline = 'middle';
   /* 底板宽度写死，不随位数变 —— 跟着数字宽窄伸缩的话，刷一件礼物牌子自己
      会抖一下，观众会以为是画面卡了。288 够放到五位数。 */
-  ctx.beginPath(); ctx.roundRect(336, 6, 288, 54, 16);
+  ctx.beginPath(); ctx.roundRect(336, 116, 288, 30, 13);
   ctx.fillStyle = 'rgba(8,10,14,.74)'; ctx.fill();
   ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.20)'; ctx.stroke();
 
@@ -1305,19 +1311,24 @@ function drawHUD(ctx) {
     txt(ctx, hv.toFixed(0) + '%', nx + ox * 114, UI.avCY, hv < 20 ? '#ff8a7a' : '#fff', 6.5);
   }
 
-  if (S.phase !== 'idle') {
+  /* 时钟和拉力**不等开局**：页面一打开就摆在那儿（时钟满时长、拉力 0:0）。
+     等 phase 变成 play 才画的话，观众进直播间看到的是半块 HUD，第一件礼物
+     砸下来才突然冒出两行字 —— 会读成"卡了一下"，而不是"开打了"。 */
+  {
+    const idle = S.phase === 'idle';
     const mm = Math.max(0, S.clock);
     let tip = `${mm / 60 | 0}:${String(mm % 60 | 0).padStart(2, '0')}`, col = '#fff', bg = 'rgba(8,10,14,.74)';
     if (S.phase === 'sudden') { tip = `绝杀 ${S.sudden.toFixed(0)}`; col = '#ff6a5a'; bg = 'rgba(52,8,10,.86)'; }
     else if (S.phase === 'over') { tip = S.winner > 0 ? '查岗党胜' : S.winner < 0 ? '灭迹党胜' : '平局'; col = '#ffd45a'; bg = 'rgba(46,34,6,.88)'; }
     else if (S.stand > 0) { tip = `反击 ${S.stand.toFixed(0)}`; col = '#ffd45a'; bg = 'rgba(46,34,6,.86)'; }
-    /* 拉力牌子占了中线正上方，时钟和战况读数一起降到血条下面，并排成一行。
-       倒计时降级是有意的：观众刷礼物改变的是拉力，不是那个钟；钟只在最后
-       半分钟才重要，而那时它会变成"绝杀 18"自己跳出来。 */
+    /* 时钟和战况读数并排成一行，放在血条上方；拉力在血条下方。
+       倒计时排在拉力对面、字也小一号是有意的：观众刷礼物改变的是拉力，
+       不是那个钟；钟只在最后半分钟才重要，而那时它会变成"绝杀 18"自己跳出来。 */
     drawPowerText(ctx);
     const d = S.dpsA > 0.01 ? S.dpsA : S.dpsB, hurtA = S.dpsA > 0.01;
     const over = S.phase === 'over';
-    const note = over ? '' : d > 0.01
+    // 还没开局时不写"僵持"——那是对局里"谁都没掉血"的读数，待机时写它是假的
+    const note = over || idle ? '' : d > 0.01
       ? (hurtA ? `◀ 每秒 ${d.toFixed(1)}` : `每秒 ${d.toFixed(1)} ▶`) : '僵 持';
     ctx.textBaseline = 'middle';
     ctx.font = `bold ${over ? 27 : 23}px ui-monospace,Menlo,monospace`;
@@ -2005,7 +2016,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   }
   document.getElementById('start').onclick = () => {
     if (S.phase === 'idle') { startMatch(); document.getElementById('start').textContent = '回到调试台'; }
-    else { S.phase = 'idle'; S.fA = S.fB = 0; Ammo.clear(); document.getElementById('start').textContent = '开始对局'; }
+    else { S.phase = 'idle'; S.fA = S.fB = 0; S.clock = NUM.MATCH; Ammo.clear(); document.getElementById('start').textContent = '开始对局'; }
   };
   const lv = document.getElementById('lv');
   lv.value = S.line;
