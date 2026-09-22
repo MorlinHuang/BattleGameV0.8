@@ -1056,8 +1056,10 @@ function drawFrontGround(ctx, bias) {
 function drawFrontMark(ctx, bias) {
   const col = Math.abs(bias) < 0.06 ? [255, 255, 255] : (bias > 0 ? GREEN : RED);
   /* 指针整体压到 HUD 下沿之外。它的 x 随对抗线跑、三角有 42px 宽，留在原来
-     的 TOP-2 会横着划过血条和拉力条 —— HUD 一放大就没地方躲了。 */
-  const y = TOP + 36, x = frontAt(y) + FX.jit;
+     的 TOP-2 会横着划过血条和拉力条 —— HUD 一放大就没地方躲了。
+     TOP+102 = 230：三角占 214~246，正好接在 HUD 下沿（210）之下；竖线到 282，
+     离人物帧顶 308 还有 26px。HUD 再长高就要把这个数一起推。 */
+  const y = TOP + 102, x = frontAt(y) + FX.jit;
   ctx.save();
   ctx.strokeStyle = 'rgba(12,14,20,.6)'; ctx.lineWidth = 11;
   ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 52); ctx.stroke();
@@ -1118,19 +1120,18 @@ const UI = {
   /* 直播间里这块画面会被缩到手机屏的三分之一宽，条细一点、字小一号就彻底
      看不清了。所以横向**顶满**：头像缩成贴在队名左边的小圆，血条从边缘 18px
      一直铺到离中线 20px，两条之间只留 40px 缝。
-     竖向吃到 145 为止 —— 对抗线的指针三角从 y=148 开始横扫全宽，越过去就会
-     被它划一道（指针的 x 随对抗线跑，不是待在中间）。
+     竖向吃到 210 为止 —— 对抗线的指针三角跟着降到 214 才开始横扫全宽，越过去
+     就会被它划一道（指针的 x 随对抗线跑，不是待在中间）。这条线不是定数：
+     HUD 要长高就得把 drawFrontMark 里的 y 一起往下推，两处必须一起改。
      排这一块要连**描边**一起算：文字的 lineWidth 5 会往外扩 2.5px，按字号
      算出来刚好够的位置，画出来就啃到血条底边了。 */
   avR: 30, avCX: 44, avCY: 35,       // 头像圆：左侧圆心，右侧 = W - 它
-  barX: 18, barW: 442, barY: 66, barH: 44,    // 血条
+  barX: 18, barW: 442, barY: 68, barH: 58,    // 血条（68~126）
   /* 时钟在血条**上方**、拉力在血条**下方**。两块都在中间那段，左右是头像和队名。
-     下面这条带子只有 38px 净空：血条底边 110，再往下 148 就是指针三角横扫的
-     那一行。所以拉力的底板压到 30 高（116~146），34px 的数字墨区约 24px，
-     上下各剩 3px。和血条之间留 6px 缝 —— 两条深色描边贴在一起会并成一道粗黑带，
-     读成"血条破了"。 */
+     拉力那条带子 134~210：85px 的数字墨区约 61px，上下各留 7px。和血条之间
+     留 8px 缝 —— 两条深色描边贴在一起会并成一道粗黑带，读成"血条破了"。 */
   clkCY: 33,                         // 时钟那一行的中心（血条上面）
-  pwCY: 131,                         // 拉力那一行的中心（血条下面，见 drawPowerText）
+  pwCY: 172,                         // 拉力那一行的中心（血条下面，见 drawPowerText）
   sk: 12,                            // 斜切量：顶边相对底边右移多少（右侧取反）
 };
 
@@ -1140,8 +1141,11 @@ const HUD = {
   avA: null, avB: null,   // 两张头像（assets/ui/av_*.webp，加载不到就画纯色盘）
   lfA: 0, lfB: 0,         // 注入闪光余量：礼物砸进来那一下，拉力条整条亮一次
   pfA: 0, pfB: 0,         // 上一帧的拉力，用来把"礼物注入"和"自然增长"分开
+  hfA: 0, hfB: 0,         // 掉血闪光余量：血条整条白闪一下
+  phA: 100, phB: 100,     // 上一帧的血量，用来认出"又跌过一个整点"
   t: 0,                   // 脉动用的自走时钟
   pin: -1,                // ?hudflash= 把闪光钉住，见下（-1 = 不钉，正常衰减）
+  hpin: -1,               // ?hphit= 把掉血闪光钉住
 };
 
 /* 斜切平行四边形：顶边相对底边横移 sk。直播 HUD 不用正方角是有道理的 ——
@@ -1162,12 +1166,30 @@ function hudTick(dt) {
   HUD.t += dt;
   /* 注入闪光只亮半秒，截图永远抓不到它 —— 判断动态效果必须有专门的胶片参数，
      不然调强弱只能靠脑补。?hudflash=0..1 把两侧都钉在指定强度。 */
-  if (HUD.pin >= 0) { HUD.lfA = HUD.lfB = HUD.pin; HUD.pfA = S.fA; HUD.pfB = S.fB; return; }
-  if (S.fA - HUD.pfA > 2.5) HUD.lfA = 1;
-  if (S.fB - HUD.pfB > 2.5) HUD.lfB = 1;
+  if (HUD.pin >= 0) HUD.lfA = HUD.lfB = HUD.pin;
+  else {
+    if (S.fA - HUD.pfA > 2.5) HUD.lfA = 1;
+    if (S.fB - HUD.pfB > 2.5) HUD.lfB = 1;
+    HUD.lfA = Math.max(0, HUD.lfA - dt * 1.7);
+    HUD.lfB = Math.max(0, HUD.lfB - dt * 1.7);
+  }
   HUD.pfA = S.fA; HUD.pfB = S.fB;
-  HUD.lfA = Math.max(0, HUD.lfA - dt * 1.7);
-  HUD.lfB = Math.max(0, HUD.lfB - dt * 1.7);
+
+  /* 掉血闪光：血量**每跌过一个整点**闪一次，不是"血量在变就亮着"。
+     按连续变化判的话，挨打期间每一帧都满足条件，闪光常亮 —— 读出来是
+     "这条是白的"，不是"正在掉"。按整点跨越，掉得越快闪得越密（dps 3.2
+     大约每 0.3 秒一次，碾压时几乎连成一片），节拍本身就是挨打的强度。
+     衰减 7/秒（约 0.14 秒灭）：dps 3.2 时占空比四成五，看得出一下一下；
+     4.5/秒试过，占空比到七成，读出来是"这条一直是白的"。被碾时（dps 10+）
+     它确实会连成一片 —— 那时"一直在闪"正是要表达的意思。 */
+  if (HUD.hpin >= 0) HUD.hfA = HUD.hfB = HUD.hpin;
+  else {
+    if (Math.floor(S.hpA) < Math.floor(HUD.phA)) HUD.hfA = 1;
+    if (Math.floor(S.hpB) < Math.floor(HUD.phB)) HUD.hfB = 1;
+    HUD.hfA = Math.max(0, HUD.hfA - dt * 7);
+    HUD.hfB = Math.max(0, HUD.hfB - dt * 7);
+  }
+  HUD.phA = S.hpA; HUD.phB = S.hpB;
 }
 
 function drawAvatar(ctx, A) {
@@ -1206,7 +1228,7 @@ function drawAvatar(ctx, A) {
 
 function drawHpBar(ctx, A) {
   const hp = clamp(A ? S.hpA : S.hpB, 0, 100), dps = A ? S.dpsA : S.dpsB;
-  const c = A ? GREEN : RED;
+  const c = A ? GREEN : RED, hf = A ? HUD.hfA : HUD.hfB;
   const x = A ? UI.barX : W - UI.barX - UI.barW, w = UI.barW, y = UI.barY, h = UI.barH;
   const sk = A ? UI.sk : -UI.sk, fw = w * hp / 100;
   ctx.save();
@@ -1215,6 +1237,14 @@ function drawHpBar(ctx, A) {
     const k = 0.5 + 0.5 * Math.sin(HUD.t * 5.5);
     ctx.save(); ctx.shadowColor = `rgba(255,60,50,${0.5 + 0.45 * k})`; ctx.shadowBlur = 16;
     skew(ctx, x - 2, y - 2, w + 4, h + 4, sk); ctx.fillStyle = 'rgba(255,60,50,.22)'; ctx.fill();
+    ctx.restore();
+  }
+  // 掉了一点血：外框先渗出一圈白光，条还没看清缩了多少，余光已经报过信了
+  if (hf > 0.001) {
+    ctx.save();
+    ctx.shadowColor = `rgba(255,255,255,${0.95 * hf})`; ctx.shadowBlur = 26 * hf;
+    skew(ctx, x - 3, y - 3, w + 6, h + 6, sk);
+    ctx.fillStyle = `rgba(255,255,255,${0.30 * hf})`; ctx.fill();
     ctx.restore();
   }
   skew(ctx, x - 3, y - 3, w + 6, h + 6, sk); ctx.fillStyle = 'rgba(6,8,11,.88)'; ctx.fill();
@@ -1244,9 +1274,16 @@ function drawHpBar(ctx, A) {
       eg.addColorStop(1, `rgba(255,222,110,${0.26 + 0.5 * pk})`);
       ctx.fillStyle = eg; ctx.fillRect(ex, y, er, h);
     }
-    // 末端亮口：血条的"当前位置"，退的时候这一条在动，比看整块色块灵敏
+    // 掉血那一下整条压一层白：色块本身在闪，余光扫到也知道是自己在掉
+    if (hf > 0.001) {
+      ctx.fillStyle = `rgba(255,255,255,${0.50 * hf})`;
+      ctx.fillRect(fx0, y, fw, h);
+    }
+    /* 末端亮口：血条的"当前位置"，退的时候这一条在动，比看整块色块灵敏。
+       掉血时从 4px 张开到 22px —— 缩短是从这一端发生的，光就该在这儿最亮。 */
+    const lip = 4 + 18 * hf;
     ctx.fillStyle = 'rgba(255,255,255,.88)';
-    ctx.fillRect(A ? x + fw - 4 : x + w - fw, y, 4, h);
+    ctx.fillRect(A ? x + fw - lip : x + w - fw, y, lip, h);
   }
   ctx.restore();
   skew(ctx, x, y, w, h, sk);
@@ -1268,23 +1305,24 @@ function drawPowerText(ctx) {
   ctx.save();
   ctx.textBaseline = 'middle';
   /* 底板宽度写死，不随位数变 —— 跟着数字宽窄伸缩的话，刷一件礼物牌子自己
-     会抖一下，观众会以为是画面卡了。288 够放到五位数。 */
-  ctx.beginPath(); ctx.roundRect(336, 116, 288, 30, 13);
+     会抖一下，观众会以为是画面卡了。660 够两边各放到五位数：85px 的等宽
+     数字每位约 51px，五位 255，加上中间"拉力"两个字和左右各 24 的缝。 */
+  ctx.beginPath(); ctx.roundRect(MID - 330, 134, 660, 76, 22);
   ctx.fillStyle = 'rgba(8,10,14,.74)'; ctx.fill();
   ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.20)'; ctx.stroke();
 
   ctx.textAlign = 'center';
-  ctx.font = 'bold 22px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-  txt(ctx, '拉力', MID, cy, 'rgba(232,238,246,.80)', 4);
+  ctx.font = 'bold 55px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+  txt(ctx, '拉力', MID, cy, 'rgba(232,238,246,.80)', 6);
 
-  ctx.font = 'bold 34px ui-monospace,Menlo,monospace';
+  ctx.font = 'bold 85px ui-monospace,Menlo,monospace';
   for (const A of [true, false]) {
     const f = A ? S.fA : S.fB, c = A ? GREEN : RED, lf = A ? HUD.lfA : HUD.lfB;
     ctx.textAlign = A ? 'right' : 'left';
     // 礼物砸进来那一下数字整个亮一次 —— 原先条上那个菱形滑块的活
-    if (lf > 0) { ctx.shadowColor = rgba(c, .95); ctx.shadowBlur = 22 * lf; }
-    txt(ctx, f.toFixed(0), A ? MID - 38 : MID + 38, cy,
-        `rgb(${c.map(v => Math.min(255, (v * (1.18 + .5 * lf)) | 0)).join(',')})`, 5.5);
+    if (lf > 0) { ctx.shadowColor = rgba(c, .95); ctx.shadowBlur = 30 * lf; }
+    txt(ctx, f.toFixed(0), A ? MID - 79 : MID + 79, cy,
+        `rgb(${c.map(v => Math.min(255, (v * (1.18 + .5 * lf)) | 0)).join(',')})`, 8);
     ctx.shadowBlur = 0;
   }
   ctx.restore();
@@ -1479,7 +1517,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         }
         if (gk && k === Math.floor(gAt * 30)) giveGift(+(Q.get('liveSide') || 1), gk);
       }
-      battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30; derive(1 / 30);
+      /* hudTick 也要跟着快进：它管两种闪光的余量。不调的话预热结束那一帧的
+         HUD 永远是"刚开局、什么都没闪过"的样子，?livet 微调也扫不到闪光。 */
+      battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30;
+      derive(1 / 30); hudTick(1 / 30);
     }
     // 预热完冻住**进度**：战况定在这一刻，而火力、弹幕、粒子照跑 —— 截图要的
     // 是"打到这个比分时画面是活的什么样"，不是一张静止的死图
@@ -1500,8 +1541,13 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   if (Q.has('m')) NUM.PULL_M = Math.max(1, +Q.get('m'));
   if (Q.has('z')) NUM.HP_Z = Math.max(0, +Q.get('z'));
   if (Q.has('linefull')) NUM.LINE_FULL = Math.max(1, +Q.get('linefull'));
-  // ?hudflash=0..1 钉住拉力条的注入闪光，专门用来截"礼物砸进来那一下"的形态
-  if (Q.has('hudflash')) HUD.pin = clamp(+Q.get('hudflash'), 0, 1);
+  /* 钉住闪光。两个都在这里**当场写一次值**，不能只设 pin 等 hudTick 去写 ——
+     ?liveStop 把主循环停在 `render(); return`，hudTick 一次都不会跑，
+     只设 pin 的话截出来的永远是没闪光的那一帧（踩过）。 */
+  // ?hudflash=0..1 钉住拉力的注入闪光，专门用来截"礼物砸进来那一下"的形态
+  if (Q.has('hudflash')) { HUD.pin = clamp(+Q.get('hudflash'), 0, 1); HUD.lfA = HUD.lfB = HUD.pin; }
+  // ?hphit=0..1 钉住掉血闪光。它 0.22 秒就灭，不钉住截不到
+  if (Q.has('hphit')) { HUD.hpin = clamp(+Q.get('hphit'), 0, 1); HUD.hfA = HUD.hfB = HUD.hpin; }
   if (Q.has('overt')) Result.setPin(Math.max(0, +Q.get('overt')));   // 结算定帧
   if (Q.has('line')) S.line = clamp(+Q.get('line') | 0, 0, 3);
   // ?zoom=1 用画布原生尺寸铺开，截图时才看得清脸和手的实际画法
