@@ -31,8 +31,6 @@ const Result = (function () {
   const INK = '#1e1b24';
   const CN = 'system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
   const NEXT = 8;              // 结算停留多久，到点自动开下一局
-  const TT = 104;              // 判词字号。和 PW 是一对：两个一起决定顶行挤不挤
-  const PW = 420;              // 右上角最终拉力卡的宽度
 
   /* 演出图。两套各两帧：a=查岗党胜 b=灭迹党胜。
      b 那套还没画，加载不到就退到纯色板 —— 缺素材不该让整屏白掉。 */
@@ -141,18 +139,13 @@ const Result = (function () {
     const k1 = ease((t - 0.35) / 0.5);
     if (k1 > 0) {
       const title = A ? '查岗党 胜' : S.winner < 0 ? '灭迹党 胜' : '平 局';
-      /* 判词从居中改成左对齐：右上角让给最终拉力。顶上这一行放不下
-         "判词 + 三倍拉力"（482 + 516 + 边距 = 1030 > 960），两个都要大
-         就只能一左一右，各自贴边。字号 108→104 是为了给中间留一道缝。 */
-      ctx.font = `900 ${TT}px ${CN}`;
-      const cxT = 28 + TT / 2 * 0.5 + ctx.measureText(title).width / 2;
       ctx.save();
       ctx.globalAlpha = k1;
-      ctx.translate(cxT, 118); ctx.rotate(-3.2 * Math.PI / 180);
+      ctx.translate(MID, 118); ctx.rotate(-3.2 * Math.PI / 180);
       ctx.scale(1 + 0.38 * (1 - k1), 1 + 0.38 * (1 - k1));
       ctx.save();
       ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 11;
-      sticker(ctx, title, 0, 0, TT, S.winner === 0 ? 'rgba(235,238,244,1)' : ring);
+      sticker(ctx, title, 0, 0, 108, S.winner === 0 ? 'rgba(235,238,244,1)' : ring);
       ctx.restore();
 
       // "本局胜者"角标：斜压在判词左肩上
@@ -161,7 +154,7 @@ const Result = (function () {
       ctx.restore();
       ctx.save();
       ctx.globalAlpha = k1;
-      ctx.translate(cxT - 138, 40); ctx.rotate(-3.2 * Math.PI / 180);
+      ctx.translate(MID - 158, 40); ctx.rotate(-3.2 * Math.PI / 180);
       card(ctx, -119, -30, 238, 60, 28, rgba(c, .96));
       ctx.font = `700 27px ${CN}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -169,27 +162,21 @@ const Result = (function () {
       ctx.restore();
     }
 
-    /* ── 右上角常驻：最终拉力 ──────────────────────────────
-       拉力和倒计时对调过：拉力是决定胜负的那个数，原来窝在底部第三张小卡里，
-       比"本局时长"还不起眼；倒计时只是个"还有几秒开下一局"的提示，却占着
-       判词旁边最显眼的位置。字号按数据卡的三倍（标签 22→66，数值 40→120）。 */
+    // ── 右上角常驻：下一局倒计时 ────────────────────────────
     if (k1 > 0) {
-      const lab6 = '最终拉力', val6 = `${S.fA.toFixed(0)} : ${S.fB.toFixed(0)}`;
-      const bx6 = W - PW - 24, bh6 = 190;
+      const left = Math.max(0, Math.ceil(NEXT - t));
       ctx.save(); ctx.globalAlpha = k1;
-      card(ctx, bx6, 26, PW, bh6, 32, 'rgba(255,255,255,.98)');
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `700 58px ${CN}`; ctx.fillStyle = '#747a8a';
-      ctx.fillText(lab6, bx6 + PW / 2, 26 + 52);
-      /* 数值按卡内宽自适应：一局打到上万时 "12480 : 3620" 比现在长一半，
-         写死字号会顶出卡外。缩下限 60px，再小就不如不放大了。 */
-      let fs6 = 96;
-      ctx.font = `900 ${fs6}px ${CN}`;
-      const vw6 = ctx.measureText(val6).width, in6 = PW - 40;
-      if (vw6 > in6) { fs6 = Math.max(60, Math.floor(fs6 * in6 / vw6)); ctx.font = `900 ${fs6}px ${CN}`; }
-      ctx.fillStyle = INK; ctx.fillText(val6, bx6 + PW / 2, 26 + 128);
-      ctx.beginPath(); ctx.roundRect(bx6 + 20, 26 + bh6 - 15, PW - 40, 6, 3);
-      ctx.fillStyle = rgba(c, .88); ctx.fill();
+      card(ctx, W - 238, 26, 214, 56, 26, 'rgba(38,36,48,.96)');
+      ctx.font = `700 24px ${CN}`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      const s5 = `下一局  ${left}`;
+      const w5 = ctx.measureText(s5).width;
+      const x5 = W - 131 - (w5 + 26) / 2;
+      ctx.fillStyle = '#fff'; ctx.fillText(s5, x5, 55);
+      // ▸ 在中文字体里是空码位，画成三角才不会出豆腐块
+      const tx = x5 + w5 + 11;
+      ctx.beginPath(); ctx.moveTo(tx, 44); ctx.lineTo(tx + 15, 55); ctx.lineTo(tx, 66);
+      ctx.closePath(); ctx.fillStyle = '#fff'; ctx.fill();
       ctx.restore();
     }
 
@@ -233,7 +220,7 @@ const Result = (function () {
       const cells = [
         ['本局时长', `${el / 60 | 0}:${String(el % 60 | 0).padStart(2, '0')}`],
         ['礼物', `${S.giftA} : ${S.giftB}`],
-        ['下一局', String(Math.max(0, Math.ceil(NEXT - t)))],
+        ['最终拉力', `${S.fA.toFixed(0)} : ${S.fB.toFixed(0)}`],
       ];
       const cw = 290, ch = 112, gap = 15, x0 = (W - (cw * 3 + gap * 2)) / 2;
       cells.forEach(([lab, val], i) => {
