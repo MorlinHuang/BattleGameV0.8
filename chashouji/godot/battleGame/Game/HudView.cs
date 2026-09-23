@@ -57,8 +57,7 @@ public partial class HudView {
 
     /* 文字层。
        字体走系统字体：Godot 内置的 Open Sans 没有汉字，"查岗党/灭迹党"会整行
-       变成方框。SystemFont 按家族名向操作系统要，与 Unity 版
-       Font.CreateDynamicFontFromOSFont 的做法一致。 */
+       变成方框。SystemFont 按家族名向操作系统要。 */
     public partial class TextLayer : Node2D {
         public float p;
         Font f23, f26, f27;

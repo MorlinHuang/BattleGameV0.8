@@ -95,15 +95,14 @@ v10~v12 的网格变形 + 半骨骼已被用户否掉（原话："spine 效果�
    叠在一起是两副骨架互相穿透的重影。（用户原话："不要用模糊，直接硬切"。）
 
 完整管线（归一化、区间传播、补帧策略、画幅切断与 inpainting）见
-`references/keyframes.md`。脚本：`v13/cutout.py` `export_unity.py`
+`references/keyframes.md`。脚本：`v13/cutout.py` `export_frames.py`
 `interp_frames.py` `compose.py` `pick.py`。
 
-## 四、纹理尺寸（Unity 侧差 6 倍）
+## 四、纹理尺寸（差 6 倍）
 
-**DXT 压缩要求边长是 4 的倍数。** 画布高 1334 不是，Unity 只能退回 RGBA32——
-93 张就是 **454MB**。裁成只覆盖人物的 **960×900** 横带、并从 StreamingAssets 改走
-**Assets/Resources**（编辑器导入时就压好）之后是 **77MB**。
-引擎侧按 `FRAME_TOP = 308` 把横带贴回 960×1334 画布。
+**GPU 块压缩（DXT/BC）要求边长是 4 的倍数。** 画布高 1334 不是，引擎只能退回
+未压缩的 RGBA——93 张就是 **454MB**。裁成只覆盖人物的 **960×900** 横带之后是
+**77MB**。引擎侧按 `FRAME_TOP = 308` 把横带贴回 960×1334 画布。
 
 ## 五、物品与粒子素材：Blender 转盘序列帧（已完成）
 

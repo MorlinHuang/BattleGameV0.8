@@ -1,7 +1,7 @@
 # 预渲染关键帧序列·完整管线
 
 管线脚本：`/workspace/art/chashouji/v13/`
-`cutout.py` 抠像 · `export_unity.py` 归一化导出 · `interp_frames.py` 光流插帧 ·
+`cutout.py` 抠像 · `export_frames.py` 归一化导出 · `interp_frames.py` 光流插帧 ·
 `compose.py` 合成预览 · `pick.py` 选帧
 
 原始品红素材入库（`v13/raw/f000~f100.png`），抠像与合成的中间产物不入库（可重跑）。

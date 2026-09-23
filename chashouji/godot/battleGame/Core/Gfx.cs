@@ -2,10 +2,8 @@ using Godot;
 
 namespace Chashouji {
 
-/* 一层能每帧重建的 2D 几何。
-   Unity 版这里是 GameObject + MeshFilter + MeshRenderer + Material + 自定义
-   shader 五件套；Godot 里就是一个 Node2D 加两个属性，因为 CanvasItem 本来
-   就是干这个的。 */
+/* 一层能每帧重建的 2D 几何。就是一个 Node2D 加两个属性 —— CanvasItem
+   本来就是干这个的，不需要自己拼网格和材质。 */
 public partial class MeshLayer : Node2D {
     public readonly Draw2D D = new Draw2D();
 
@@ -16,15 +14,11 @@ public partial class MeshLayer : Node2D {
 }
 
 public static class Gfx {
-    /* 混合模式。
-       Unity 版为了配合贴图采样在 shader 里把颜色预乘了 alpha，于是源因子取
-       One 而不是 SrcAlpha。Godot 这两个模式对**纯顶点色**几何与它逐像素等价：
-         Mix = SrcAlpha/OneMinusSrcAlpha → src.rgb*a + dst*(1-a)
-         预乘 + One/OneMinusSrcAlpha    → (src.rgb*a)*1 + dst*(1-a)   一样
-         Add = SrcAlpha/One             → src.rgb*a + dst
-         预乘 + One/One                 → (src.rgb*a)*1 + dst         一样
-       所以 Vertex2D.shader 整个不需要了 —— 少一个"运行时才按名字取、打包后
-       静默失效"的东西（Unity 版踩过这个坑）。 */
+    /* 混合模式。对**纯顶点色**几何，内置的两个模式就与网页画布逐像素等价：
+         Mix = SrcAlpha/OneMinusSrcAlpha → src.rgb*a + dst*(1-a)   = source-over
+         Add = SrcAlpha/One             → src.rgb*a + dst          = lighter
+       所以不写自定义 shader —— 少一个"运行时才按名字取、打包后静默失效"
+       的东西。 */
     static CanvasItemMaterial mix, add;
 
     public static CanvasItemMaterial MixMat =>
