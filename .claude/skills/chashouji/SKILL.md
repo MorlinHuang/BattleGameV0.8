@@ -19,7 +19,7 @@ description: 《查手机》弹幕直播玩法的项目总览与导航——玩�
 
 | | 路径 |
 |---|---|
-| git 仓库根 | `/workspace/art`（远端 `git@github.com:MorlinHuang/BattleGame.git` main） |
+| git 仓库根 | `/workspace/art`（远端 `v08` = `git@github.com:MorlinHuang/BattleGameV0.8.git` main；旧 `origin` 停在 V0.5，不再推） |
 | 网页版（**单一真源**） | `/workspace/art/chashouji/web/` |
 | 角色帧成品 | `web/assets/frames/` 共 89 张 960×900 PNG（49MB） |
 | v13 素材管线 | `/workspace/art/chashouji/v13/`（raw 入库，中间产物可重跑） |
@@ -40,7 +40,7 @@ timeout 100 scp -q main.js fx.js ammo.js bubble.js index.html \
 
 # 推 GitHub（必须带这个环境变量）
 export GIT_SSH_COMMAND="ssh -i /workspace/.sshkeys/id_github -o IdentitiesOnly=yes -o UserKnownHostsFile=/workspace/.sshkeys/known_hosts"
-timeout 280 git push -q origin main
+timeout 280 git push -q v08 main
 ```
 
 ## 做到哪一步
@@ -59,7 +59,7 @@ timeout 280 git push -q origin main
 | | 状态 |
 |---|---|
 | 网页版 | ✅ 最新 |
-| **Godot 版** | 🔄 玩法层与表现层都跑通了（弹幕/粒子/气泡/命中链路齐全）；**未导出 exe** |
+| **Godot 版** | 🔄 停在 `32486d5`（09-17）：弹幕/粒子/气泡/命中链路齐全，但**没跟上**之后网页版的血量制胜负、新 HUD、Q 版结算；**未导出 exe** |
 
 **Unity / 团结引擎版 2026-09-20 由用户决定弃掉**，容器副本与 `chashouji-unity`
 skill 都已删除（留在 git 历史里，`git log -- chashouji/unity` 能取回）。用户本机
