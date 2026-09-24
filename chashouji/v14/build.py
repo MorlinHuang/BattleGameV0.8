@@ -23,7 +23,7 @@
 
 ────────── 手机位置 ──────────
 弹幕往手机那条竖线上打、聊天气泡从手机里冒出来，所以每张贴图都要知道手机在哪。
-自动找：近黑像素的连通块里，挑"外框填充率高 + 横向长条"的那一块。头发也是黑的，
+自动找：近黑像素的连通块里，挑"沿自身方向量的填充率高 + 长条"的那一块（手机可以斜着）。头发也是黑的，
 但它是散的（填充率低）；裤子是黑的，但它是竖的、面积大。每次重跑都会把找到的
 位置画到 v14/preview/phone_check.jpg 上，**必须看一眼**再部署。
 """
@@ -36,7 +36,7 @@ from scipy import ndimage
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', 'web', 'assets', 'world')
 H = 1334
-SCALE = 0.66          # 1536×1024 的生图 → 引擎像素。站立的人约 520 高
+SCALE = 0.66          # 1536×1024 的生图 → 引擎像素。站立的人约 600 高
 K = np.ones((3, 3), np.float32)
 
 # 门的切点（原图 1659×948 坐标）：卧室留到右边缘；客厅从它左门的右门框起、
@@ -80,16 +80,26 @@ def find_phone(rgb, al):
     h, w = al.shape
     for i, sl in enumerate(ndimage.find_objects(lab), 1):
         ys, xs = sl
-        bh, bw = ys.stop - ys.start, xs.stop - xs.start
-        area = (lab[sl] == i).sum()
-        fill = area / (bh * bw)
-        if not (1.3 < bw / max(bh, 1) < 3.6 and fill > 0.62 and 0.0012 * h * w < area < 0.03 * h * w):
+        py, px = np.nonzero(lab[sl] == i)
+        area = len(px)
+        if not 0.0012 * h * w < area < 0.03 * h * w:
             continue
         if ys.start > h * 0.75:           # 拖鞋在最底下，手机不会在那
             continue
+        # 长宽沿块自己的主方向量，不用水平外框：趴地那两张手机是斜着拿的，
+        # 水平外框只填得满一半，会被当成散开的头发筛掉
+        pts = np.stack([px, py], 1).astype(np.float32)
+        pts -= pts.mean(0)
+        _, vec = np.linalg.eigh(np.cov(pts.T))
+        proj = pts @ vec
+        ext = proj.max(0) - proj.min(0) + 1
+        long_, short = ext.max(), ext.min()
+        fill = area / (long_ * short)
+        if not (1.3 < long_ / max(short, 1) < 3.6 and fill > 0.62):
+            continue
         s = fill * area
         if s > score:
-            score, best = s, ((xs.start + xs.stop) / 2, (ys.start + ys.stop) / 2, bw, bh)
+            score, best = s, (xs.start + px.mean(), ys.start + py.mean(), long_, short)
     return best
 
 
@@ -138,8 +148,12 @@ def main():
     for name, f, feet in [
         ('n0', 'loop/n0.png', True), ('nL1', 'loop/nL1.png', True), ('nL2', 'loop/nL2.png', True),
         ('nR1', 'loop/nR1.png', True), ('nR2', 'loop/nR2.png', True),
-        ('aW', 'pose/01_女小优_拽着走.png', False), ('aD', 'pose/02_女大优_拖地.png', False),
-        ('bW', 'pose/03_男小优_拽着走.png', False), ('bD', 'pose/04_男大优_拖地.png', False),
+        # 被拉倒三档：K 跪着 / F 往前扑倒 / L 趴在地上。a = 查岗党(女)占优、男方倒；b 反之。
+        # 两人朝向永远不变：头朝对方、腿在身后（见 chashouji-art skill 的朝向铁律）
+        ('aK', 'pose/21_女优_男跪.png', False), ('aF', 'pose/22_女优_男扑倒.png', False),
+        ('aL', 'pose/23_女优_男趴.png', False),
+        ('bK', 'pose/24_男优_女跪.png', False), ('bF', 'pose/25_男优_女扑倒.png', False),
+        ('bL', 'pose/26_男优_女趴.png', False),
     ]:
         meta, im = build_pose(name, os.path.join(HERE, f), feet)
         poses[name] = meta
@@ -152,7 +166,7 @@ def main():
 
     # 手机位置自检图：每张贴图上画出锚点（绿）与手机（红圈）
     cw = 560
-    out = Image.new('RGB', (cw * 3, 380 * 3), (40, 40, 40))
+    out = Image.new('RGB', (cw * 3, 380 * ((len(sheet) + 2) // 3)), (40, 40, 40))
     for k, (name, meta, im) in enumerate(sheet):
         c = Image.new('RGBA', im.size, (250, 240, 150, 255)); c.alpha_composite(im)
         d = ImageDraw.Draw(c)

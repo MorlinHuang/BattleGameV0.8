@@ -29,15 +29,19 @@ const P = {
   /* 姿态怎么选：按 S.p 的偏离量 |bias|（0 = 势均力敌，1 = 拉力差顶满）。
      带回差（hys）：刚好压在门槛上时，拉锯的一点点抖动会让动作一秒换好几次，
      读出来是抽搐。进门槛要超过 +hys，退出来要低于 -hys。 */
-  walkAt: 0.22,    // 超过它：领先方开始拽着对方走
-  dragAt: 0.62,    // 超过它：落后方被拽倒、拖在地上
+  /* 落后方被拉倒分三档，一档比一档低：跪着 → 往前扑倒 → 趴在地上被拖。
+     领先方全程站着、面朝对方倒退着拽（任何一档都不转身）。 */
+  kneelAt: 0.22,   // 超过它：落后方被拽得跪下
+  fallAt: 0.45,    // 超过它：落后方往前扑倒（一条腿跪着、一条腿往后滑）
+  lieAt: 0.68,     // 超过它：落后方趴在地上被拖
   hys: 0.05,
   /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
      来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
   loopFps: 8,
-  /* 只有一张图的动作（拽着走 / 拖地，循环帧还没画）靠上下颠一下假装在走。
-     这是占位：等循环帧画出来就删掉。bobHz 是每秒几步，bobPx 是颠多高。 */
-  bobHz: 2.6, bobPx: 7,
+  /* 被拉倒的三档各只有一张图（循环帧还没画），靠上下颠一下假装领先方在走。
+     这是占位：等循环帧画出来就删掉。bobHz 是每秒几步，bobPx 是颠多高
+     （落后方贴着地，只有领先方在迈步，所以颠得比站着走小）。 */
+  bobHz: 2.6, bobPx: 4,
 
   /* 挨一下之后的反应：角色被推开又弹回。人是硬的，推得动、马上站回来。 */
   hitK: 620,         // 角色回中的弹力
@@ -119,7 +123,7 @@ const S = {
 };
 /* 表现层状态：全部由 derive(dt) 从 S 算出来，绘制只读不写。 */
 const FX = {
-  pose: 'n',                         // 当前动作：n 僵持 / aW aD 查岗党拽着走、拖地 / bW bD 灭迹党的
+  pose: 'n',                         // 当前动作：n 僵持 / aK aF aL 查岗党占优、男方跪·扑倒·趴 / bK bF bL 反之
   poseT: 0,                          // 进入这个动作多久了（循环帧与颠步读它）
   frame: 'n0',                       // 这一帧用哪张贴图（world.json 里的名字）
   camX: 0,                           // 镜头中心在世界里的横坐标（像素）
@@ -312,15 +316,17 @@ let WORLD = null;
    这是拔河里"谁也没占上风"的样子：一直在使劲、一直在来回，但哪头也没赢。 */
 const LOOP_N = ['n0', 'nL1', 'nL2', 'nL1', 'n0', 'nR1', 'nR2', 'nR1'];
 
-/* 由 |bias| 选动作，带回差。返回 n / aW / aD / bW / bD。 */
+/* 由 |bias| 选动作，带回差。返回 n，或 a/b + K(跪) F(扑倒) L(趴)。 */
+const STAGES = 'KFL';
 function pickPose(prev, bias) {
   const k = Math.abs(bias), side = bias > 0 ? 'a' : 'b';
-  const lvl = prev === 'n' ? 0 : prev[1] === 'W' ? 1 : 2;
+  const lvl = prev === 'n' ? 0 : STAGES.indexOf(prev[1]) + 1;
   const same = prev === 'n' || prev[0] === side;
-  // 回差只对"留在原档"起作用：已经在拖地的，要掉到 dragAt-hys 以下才站起来
-  const up = (l, at) => (same && lvl >= l) ? at - P.hys : at + P.hys;
-  if (k > up(2, P.dragAt)) return side + 'D';
-  if (k > up(1, P.walkAt)) return side + 'W';
+  const at = [P.kneelAt, P.fallAt, P.lieAt];
+  // 回差只对"留在原档"起作用：已经趴下的，要掉到 lieAt-hys 以下才撑起来
+  for (let l = 3; l >= 1; l--) {
+    if (k > ((same && lvl >= l) ? at[l - 1] - P.hys : at[l - 1] + P.hys)) return side + STAGES[l - 1];
+  }
   return 'n';
 }
 
@@ -337,19 +343,18 @@ function derive(dt) {
   const pose = pickPose(FX.pose, bias);
   if (pose !== FX.pose) { FX.pose = pose; FX.poseT = 0; } else FX.poseT += dt;
 
-  /* 这一帧用哪张图。僵持走循环；拽着走、拖地现在各只有一张图，先靠颠步
-     （bob）假装在走 —— 循环帧画出来之后，这两档也换成跟僵持一样的数组。 */
+  /* 这一帧用哪张图。僵持走循环；被拉倒的三档现在各只有一张图，先靠颠步
+     （bob）假装在走 —— 循环帧画出来之后，这三档也换成跟僵持一样的数组。 */
   if (FX.pose === 'n') {
     FX.frame = LOOP_N[Math.floor(FX.poseT * P.loopFps) % LOOP_N.length];
     FX.bob = 0;
   } else {
     FX.frame = FX.pose;
-    /* 拽着走：一步一颠，取 |sin| 是因为人只会往上颠、不会陷进地板。
-       拖地：被拖的人贴着地，只有赢的那个在走，颠一半。
+    /* 一步一颠，取 |sin| 是因为人只会往上颠、不会陷进地板。
        速度为 0（抓门框顶住了、或调试台里 p 刚过门槛）时不颠 —— 背景没在卷，
        人还在原地踏步就是滑冰。 */
     const moving = Math.min(1, Math.abs(S.vel) / 0.5);
-    const amp = (FX.pose[1] === 'D' ? 0.5 : 1) * P.bobPx * moving;
+    const amp = P.bobPx * moving;
     FX.bob = -Math.abs(Math.sin(FX.poseT * Math.PI * P.bobHz)) * amp;
   }
 
@@ -1483,11 +1488,11 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     stage.appendChild(out);
   }
 
-  /* ?strip=1 五种动作 × 各自该在的房间并排摆：一次看清动作、背景、距离条、
+  /* ?strip=1 七种动作 × 各自该在的房间并排摆：一次看清动作、背景、距离条、
      手机位置四样东西对不对得上。p 定动作、pos 定卷到哪 —— 两者本来由同一个
      拉力差推出来，这里分开给是为了每格都落在一个有代表性的位置上。 */
   if (Q.has('strip')) {
-    const cells = [[50, 0], [70, 6], [95, 22], [30, -6], [5, -22]];
+    const cells = [[50, 0], [66, 4], [80, 12], [95, 24], [34, -4], [20, -12], [5, -24]];
     filmstrip(cells.length, (i) => {
       [S.p, S.pos] = cells[i]; S.vel = (S.p - 50) / 50 * NUM.V_Z; S.t = 3.0;
       FX.pose = 'n'; FX.poseT = 0;

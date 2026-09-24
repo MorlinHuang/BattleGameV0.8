@@ -58,7 +58,7 @@ world.json       rooms 各宽 · center 客厅正中的世界 x（=0 米，3396�
 ## 三张表：改数值只改这里
 
 **`P` —— 参数表**（表现手感）：`pxPerM=82` 米→世界像素（±30 米正好停在两头房间深处、
-镜头不露边）/ `walkAt=0.22` `dragAt=0.62` `hys=0.05` 选动作的门槛与回差（按 |S.p−50|/50）/
+镜头不露边）/ `kneelAt=0.22` `fallAt=0.45` `lieAt=0.68` `hys=0.05` 选动作的门槛与回差（按 |S.p−50|/50）/
 `loopFps=8` 僵持循环格速 / `bobHz` `bobPx` 单张动作的颠步（**占位**，循环帧画出来就删）/
 `hitK` `hitDamp` 角色被推开的弹力与阻尼 / `punchDecay` `tintDecay` 脉冲与染色衰减。
 
@@ -108,9 +108,9 @@ const FX = { pose, poseT, frame, camX, pairX, bob, phoneX, phoneY, struggle,
 - `S.vel` 读数：HUD 的方向箭头、头像被拖脉动、颠步开不开都读它。
   **颠步必须看 vel**：速度为 0（抓门框顶住、调试台刚过门槛）时背景不卷，人还在颠就是滑冰。
 
-动作五档：`n` 僵持（8 格循环 `LOOP_N`，5 张来回用）/ `aW` `aD` 查岗党拽着走、拖地 /
-`bW` `bD` 灭迹党的。**拽着走、拖地目前各只有一张图** —— 画出循环帧后把 `derive`
-里那个分支换成跟僵持一样的数组，并删掉 bob。
+动作七档：`n` 僵持（8 格循环 `LOOP_N`，5 张来回用）/ `aK` `aF` `aL` 查岗党占优、男方
+跪·扑倒·趴 / `bK` `bF` `bL` 反之（`pickPose` 按 `STAGES='KFL'` 逐档比门槛）。
+**被拉倒三档目前各只有一张图** —— 画出循环帧后把 `derive` 里那个分支换成跟僵持一样的数组，并删掉 bob。
 
 **空闲拉锯（`P.sway` / `FX.pDraw` / `FX.busy`）和对抗线形变（`rowOff/rowImp/frontAt(y)`）
 已随 v14 删除**：前者是为了"僵在同一帧"加的，现在僵持本身就是循环；后者画在地毯上，
@@ -225,7 +225,7 @@ assets/ui/win_b2.webp  灭迹党胜·命中（怼到她面前）
 | `?x=` `?m=` `?vz=` `?end=` `?linefull=` | 就地改 X / M / V_Z、终点米数、姿态满幅刻度 |
 | `?hudflash=0..1` | 钉住拉力数字的注入闪光。它只亮半秒，不钉住截图永远抓不到 |
 | `?zoom=1` | 画布按原始宽度显示（截图用） |
-| `?strip=1` | 五种动作 × 各自该在的房间并排：动作/背景/距离条/手机位置一次对 |
+| `?strip=1` | 七种动作 × 各自该在的房间并排：动作/背景/距离条/手机位置一次对 |
 | `?loopstrip=1` | 僵持循环 8 格按播放顺序并排，每格标手机 x |
 | `?fxstrip=N&fxms=M&fxpower=1..3&fxrecipe=thud\|feather\|star\|debris` | 粒子配方胶片 |
 | `?ammostrip=N&ammoms=M&ammogift=<礼物名>&ammoy=<高度>` | 弹道胶片 |
