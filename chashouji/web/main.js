@@ -2,48 +2,44 @@
  *
  * 三层，别混：
  *   拉力 S.fA / S.fB  礼物注入的存量，双方互相对冲，慢慢自然流失
- *   血量 S.hpA / S.hpB  **胜负只看它**：拉力差每秒按 X/M/Z 扣对方的血，归零者负
- *   对抗线 S.p（0~100）  拉力差的**当前读数**，决定手机被拽到哪 —— 它不是
- *                        积分量，对面追上来手机自己会走回去，这才是拔河
+ *   位置 S.pos（米）  **胜负只看它**：拉力差每秒把两个人往拉力大的那边拖，
+ *                    正 = 往左拖进女生卧室（查岗党占优），负 = 往右拖进电竞房。
+ *                    拖到 ±NUM.END 那一头就分出胜负（2026-09-24 起；此前是血量制）
+ *   姿态 S.p（0~100）  拉力差的**当前读数**，决定两个人此刻摆哪套动作 —— 它不是
+ *                    积分量，对面追上来就换回僵持，这才是拔河
  *
- * 场景这一侧读的是 FX.pDraw = S.p + 空闲拉锯（derive 里算）。对抗线、地面
- * 分色、角色取哪一帧、手机位移，**全部读同一个 pDraw**，所以"对抗线对不上
- * 画面"在构造上仍然不可能发生。HUD 的血条读的是 S.hpA / S.hpB 真值。
- * 拉锯只进表现层：它是"双方都在使劲、谁也没占上风"的样子，不该改战况 ——
- * 让那点来回去改 S.p，观众刚刷完礼物就会看见手机往回跌。
+ * 位置管"已经被拖了多远"（背景卷到哪、距离条），姿态管"此刻谁在使劲"
+ * （僵持 / 拽着走 / 拖在地上）。两个都从同一个拉力差来，所以画面和读数
+ * 在构造上对得上：拽着走的时候背景一定在卷，背景停了姿态一定回僵持。
  */
 const W = 960, H = 1334;
-const TOP = 128, BOT = 1232, MID = 480;
-const FRAME_TOP = 308, FRAME_W = 960, FRAME_H = 900;  // 帧纹理只覆盖人物那条横带
-const ROWS = 15;
+const MID = 480;
+/* 地面线：两个人的脚底落在这一行。背景三间房的墙根在 y≈720，地板往下铺到底，
+   1195 让人站在地板中段偏下 —— 再往下脚就贴底边了，往上头会顶进 HUD。 */
+const GROUND = 1195;
 const GREEN = [126, 217, 87], RED = [255, 72, 72];
 
 const P = {
-  /* 进度→位移的曲线，**线性**：每涨一个百分点，手机走同样远。
-     曾经是 1.55（中段慢、末段快），那跟下面那段注释写的设计意图正好是反的 ——
-     中段姿态差别本来就小、全指望平移补，而 1.55 把中段压得最扁：p 从 50 走到
-     60 手机一共只动 9px，在 960 宽的画面上等于没动，观众看到的是比赛最长的
-     那一段画面静止。两头反倒是姿态已经够夸张、最不缺平移的地方。
-     改成 1.0 之后同样 50→60 走 30px，而两头的行程一点没少。 */
-  curve: 1.0,
-  /* 关键帧本身已经把"谁被拖过去"画进姿态里了，half/drag 管的是在此之上
-     整组人物平移多少：中段那几档姿态差别很小，全靠这段平移把"手机正在被
-     拽走"读出来；两头则相反 —— 姿态已经够夸张，再平移就该出画了。
-     half 从 108 提到 150 是量过的：p=0/100 两格里人物组离画框还剩 100px 以上。
-     drag 同步从 0.58 收到 0.55，角色的最大平移 63→82px，吃掉其中 19px，
-     余量仍有 80px；多出来的行程留给手机自己走。 */
-  half: 150,       // 对抗线最大偏移
-  drag: 0.55,      // 角色整体跟随对抗线的比例
-  /* 空闲拉锯的幅度，单位是**进度的百分点**。见 derive 里的 FX.pDraw。 */
-  sway: 5,
-  tilt: 1.55, bulge: 46, linkW: 0.80, shapeRate: 2.6,
-  phoneY: 560,     // 对抗线上"手机所在高度"，气泡与辉光的锚
-  rug: { top: 738, bot: 1128, tl: 88, tr: 872, bl: 28, br: 912 },  // 底版里地毯四角
+  /* 米 → 世界像素。三间房拼起来 6700px 宽，客厅正中是 0 米。取 82 让 ±30 米
+     （NUM.END）正好停在两头房间的深处、镜头还不露边：左端 3396-2460=936，
+     右端 5856，镜头半宽 480，两头都还有余量。卧室门在 +13 米、电竞房门在 −14 米
+     （距离条上的房间分段按 world.json 现算，不用这两个数）。 */
+  pxPerM: 82,
 
-  /* 挨一下之后的反应。冲击沿对抗线传播、角色被推开又弹回，两件事各有一套
-     参数：线是软的（传得快、留得久），人是硬的（推得动、马上站回来）。 */
-  waveSpread: 7.0,   // 冲量向相邻行传播的速率
-  waveDecay: 0.945,  // 冲量每帧的留存；再高线会晃到一秒开外，像被风吹着
+  /* 姿态怎么选：按 S.p 的偏离量 |bias|（0 = 势均力敌，1 = 拉力差顶满）。
+     带回差（hys）：刚好压在门槛上时，拉锯的一点点抖动会让动作一秒换好几次，
+     读出来是抽搐。进门槛要超过 +hys，退出来要低于 -hys。 */
+  walkAt: 0.22,    // 超过它：领先方开始拽着对方走
+  dragAt: 0.62,    // 超过它：落后方被拽倒、拖在地上
+  hys: 0.05,
+  /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
+     来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
+  loopFps: 8,
+  /* 只有一张图的动作（拽着走 / 拖地，循环帧还没画）靠上下颠一下假装在走。
+     这是占位：等循环帧画出来就删掉。bobHz 是每秒几步，bobPx 是颠多高。 */
+  bobHz: 2.6, bobPx: 7,
+
+  /* 挨一下之后的反应：角色被推开又弹回。人是硬的，推得动、马上站回来。 */
   hitK: 620,         // 角色回中的弹力
   hitDamp: 0.90,     // 角色横向速度的阻尼
   punchDecay: 0.88,  // 缩放脉冲的衰减
@@ -57,53 +53,57 @@ const P = {
    （错误的做法是让礼物直接扣血：那样没有对冲、先刷的人白刷、一次爆发就能
    结束比赛。） */
 const NUM = {
-  /* BURN / LOSS / HP_Z 是**同一根时间轴**上的刻度，改一个必须三个一起按同样
+  /* BURN / LOSS / V_Z 是**同一根时间轴**上的刻度，改一个必须三个一起按同样
      倍数改，否则动的就不只是快慢，还有谁赢谁输：稳态拉力差 = Δ注入 / LOSS，
-     三个同乘 k 之后差值 ÷k 而每点差的伤害 ×k，正好抵消。
+     三个同乘 k 之后差值 ÷k 而每点差的拖动速度 ×k，正好抵消。
      曾经是 0.05 / 0.012，火力的时间常数 83 秒 —— 观众刷一件「爱的爆炸③」
      出去，血条 20 秒纹丝不动，60 秒才跳 1 滴（这条是截图量出来的）。礼物的
      效果全在，只是摊得太薄，在直播间里等同于没发生。现在时间常数 25 秒。 */
   BURN: 0.165,     // 对冲系数：双方等量消耗，由火力少的一方定速
   LOSS: 0.040,     // 自然流失：势头会过去。时间常数 25 秒
   /* 稳态时  拉力差 = 注入速度差 / LOSS  —— 对冲项在两边完全相同，推导时直接
-     消掉了。所以掉血的快慢只取决于"两边刷礼物的速度差"，与刷了多少总量
-     无关：都在猛刷就差值小、画面激烈而谁也不掉血；一方停手就立刻开始挨打。 */
+     消掉了。所以被拖的快慢只取决于"两边刷礼物的速度差"，与刷了多少总量
+     无关：都在猛刷就差值小、画面激烈而谁也拖不动谁；一方停手就立刻被拖走。 */
 
-  /* ── 拉力差 → 掉血（X / M / Z）──
-     公式：拉力差 > X 时，每 M 点拉力差，每秒扣对方 Z% 的血。
-     X 和 M 取自《螂人杀》文档（3000 兵 ÷100、兵数 ÷100 的刻度），Z 取自
-     需求里给过的例子，文档本身没写掉血速率。推导写在 battle 里。 */
-  PULL_X: 30,      // 死区：拉力差没到这个数，谁也不掉血（≈1.5 个魔法镜②）
+  /* ── 拉力差 → 拖动速度（X / M / V_Z）──
+     公式：拉力差 > X 时，每 M 点拉力差，每秒把两个人往拉力大的一方拖 V_Z 米。
+     X 和 M 取自《螂人杀》文档（3000 兵 ÷100、兵数 ÷100 的刻度）。
+     V_Z 是从血量制原样换算过来的，局的节奏一点没变：原来差 1000 每秒扣 5%
+     的血，现在差 1000 每秒拖 END 的 5%（30 米 × 5% = 1.5 米）。 */
+  PULL_X: 30,      // 死区：拉力差没到这个数，谁也拖不动谁（≈1.5 个魔法镜②）
   PULL_M: 1000,    // 每这么多拉力差……
-  HP_Z: 5,         // ……每秒扣对方这么多滴血（满血 100）
-  /* 掉血速度的上限。拉力差是没有上限的 —— 大哥一秒注入 600 而对面只有 80 时，
-     差值能到四万，折合每秒 200 滴血，半个回合都撑不过。那不叫碾压，那叫没有
-     过程：观众还没看清发生了什么，比赛已经结束。10 表示再怎么碾压也要 10 秒。 */
-  HP_MAX: 10,
-  /* 对抗线的满幅刻度：拉力差到这么多，手机就被拽到底（p=0 或 100）。
-     取 1000 是让它和上面的 M 共用一把尺 —— 手机顶到端点的那一刻，正好就是
-     "每秒扣对方 Z 滴血"的那一刻，画面读数和伤害读数对得上。 */
+  V_Z: 1.5,        // ……每秒拖这么多米
+  /* 拖动速度的上限。拉力差是没有上限的 —— 大哥一秒注入 600 而对面只有 80 时，
+     差值能到四万，折合每秒拖 60 米，一眨眼就到头了。那不叫碾压，那叫没有
+     过程。3 米/秒 = END 的 10%：再怎么碾压，从中间拖到头也要 10 秒。 */
+  V_MAX: 3,
+  /* 拖到哪算赢：离客厅正中 END 米。30 米正好在两头房间的深处（见 P.pxPerM）。
+     改它不用动背景：镜头按米数算，房间只是铺在那儿的地皮。 */
+  END: 30,
+  /* 姿态的满幅刻度：拉力差到这么多，姿态读数 p 就顶到 0 或 100（拖在地上）。
+     取 1000 是让它和上面的 M 共用一把尺 —— 被拽倒的那一刻，正好就是"每秒
+     拖 V_Z 米"的那一刻，动作和速度对得上。 */
   LINE_FULL: 1000,
-  LINE_RATE: 2.2,  // 对抗线趋近拉力差的速率（时间常数 0.45 秒）
+  LINE_RATE: 2.2,  // 姿态读数趋近拉力差的速率（时间常数 0.45 秒）
 
   SHOT: 9,         // 每消耗这么多火力打出一发弹幕 —— 弹幕就是火力的消耗形式
   MATCH: 720,      // 单局 12 分钟
-  SUDDEN_LEAD: 35, // 血量被拉开这么多滴，持续 SUDDEN_WAIT 秒就进绝杀
+  SUDDEN_LEAD: 0.35, // 被拖出去 END 的这么多（35% = 10.5 米），持续 SUDDEN_WAIT 秒就进绝杀
   SUDDEN_WAIT: 60,
   SUDDEN: 30,      // 绝杀倒计时
-  STAND_AT: 8,     // 有人掉到最后这么多滴血时触发反击时刻
+  STAND_AT: 0.08,  // 离终点只剩 END 的这么多（8% = 2.4 米）时触发反击时刻
   STAND: 120,      // 反击时刻时长：劣势方注入翻倍，全局只触发一次
-  SHIELD_AT: 10,   // 濒死护盾：血量低于这么多滴时，火力按比例替他挡伤害
-  SHIELD_MAX: 0.75,// 濒死减伤的上限：再能扛也不能扛到打不动
+  SHIELD_AT: 0.10, // 抓门框：离终点不到 END 的这么多（3 米）时，火力按比例替他顶住
+  SHIELD_MAX: 0.75,// 抓门框的减速上限：再能扛也不能扛到拖不动
 };
 
 const S = {
-  /* auto 默认**关**：展示时自动演示会自己来回拽手机，观众分不清哪一下是
-     刷礼物推的、哪一下是演示程序推的。要看关键帧过渡时用 ?auto=1 打开。 */
-  p: 50, t: 0, auto: false, line: 3,  // line: 0 全无 / 1 原发光柱 / 2 地面战线+指针 / 3 只要指针
+  /* auto 默认**关**：展示时自动演示会自己来回拽，观众分不清哪一下是
+     刷礼物推的、哪一下是演示程序推的。要看动作切换时用 ?auto=1 打开。 */
+  p: 50, t: 0, auto: false,
   fA: 0, fB: 0,                       // 拉力（火力）：A=查岗党(左) B=灭迹党(右)
-  hpA: 100, hpB: 100,                 // 血量：胜负只看它，归零的一方输
-  dpsA: 0, dpsB: 0,                   // 此刻每秒正在掉多少血（battle 算出来的读数，HUD 画它）
+  pos: 0,                             // 位置（米）：胜负只看它。正 = 被拖向左边（查岗党占优）
+  vel: 0,                             // 此刻每秒被拖多少米（带符号，battle 算出来的读数，HUD 画它）
   budA: 0, budB: 0,                   // 发射预算：火力消耗到一发弹幕的量就打一发
   debA: 0, debB: 0, debKA: 0, debKB: 0,  // 受到的注入减益：剩余秒数与折扣
   clock: NUM.MATCH, phase: 'idle',    // idle 不跑数值（诊断与老演示模式）/ play / sudden / over
@@ -117,13 +117,16 @@ const S = {
      这里**不造假数据** —— 空着的时候结算画面自己会说"接入直播后显示"。 */
   board: [],
 };
+/* 表现层状态：全部由 derive(dt) 从 S 算出来，绘制只读不写。 */
 const FX = {
-  phoneX: MID, phoneY: P.phoneY,
-  pDraw: 50,                         // 画面读的进度（= S.p 叠上空闲拉锯），见 derive
-  rowOff: new Array(ROWS).fill(0), rowHeat: new Array(ROWS).fill(0),
-  rowImp: new Array(ROWS).fill(0),   // 冲击波，独立于常规形变
-  struggle: 1, actorX: 0, jit: 0,
-  busy: 0,                           // 场上还有多少火力在烧（0~1），拉锯按它让位
+  pose: 'n',                         // 当前动作：n 僵持 / aW aD 查岗党拽着走、拖地 / bW bD 灭迹党的
+  poseT: 0,                          // 进入这个动作多久了（循环帧与颠步读它）
+  frame: 'n0',                       // 这一帧用哪张贴图（world.json 里的名字）
+  camX: 0,                           // 镜头中心在世界里的横坐标（像素）
+  pairX: MID,                        // 两个人的锚点在屏幕上的横坐标
+  bob: 0,                            // 颠步的上下位移
+  phoneX: MID, phoneY: 750,          // 手机在屏幕上的位置 —— 弹幕打它、气泡从它冒
+  struggle: 1,                       // 僵持度 0~1，气泡的冒出节奏读它
 
   hitX: 0, hitV: 0,                  // 角色被推开的位移与速度
   punch: 0,                          // 缩放脉冲
@@ -135,9 +138,9 @@ const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 // 帧率无关的指数趋近：min(1,dt*k) 会让节奏随帧率漂移
 const approach = (dt, k) => 1 - Math.exp(-k * dt);
 
-/* ---------- 数值层：算出 S.p ---------- */
+/* ---------- 数值层：算出 S.pos 与 S.p ---------- */
 
-/* battle 算"手机该往哪走"，derive 算"算出来之后画面长什么样"。分成两个函数
+/* battle 算"两个人该往哪走"，derive 算"算出来之后画面长什么样"。分成两个函数
    是因为它们回答的是两个问题，而把它们混在一起正是上一版最大的错误：礼物
    直接改了 S.p，等于把火力这一层整个删掉了。 */
 function battle(dt) {
@@ -167,91 +170,82 @@ function battle(dt) {
   emitFire(+1, denA > 0 ? burn / denA : 0);
   emitFire(-1, denB > 0 ? burn / denB : 0);
 
-  /* ── 胜负层：血量 ──
-     拉力差（= 双方火力之差）一件事管两头：**当下**它决定对抗线停在哪，
-     **持续**它每秒扣对方的血。血量归零的一方输。
+  /* ── 胜负层：位置 ──
+     拉力差（= 双方火力之差）一件事管两头：**当下**它决定两个人摆哪套动作，
+     **持续**它每秒把两个人往拉力大的那边拖。拖到 ±END 米就分出胜负。
 
-     和上一版的区别在于"手机位置"换了身份：它从**积分量**（被推过去就再也
-     不回来）变成了**当前读数**（此刻谁的拉力大、大多少）。于是
-       · 送礼物立刻看得见 —— 注入是瞬间的，对抗线半秒内就被拽过去；
-       · 对面追上来，手机自己会走回去 —— 这才是拔河，绳子本来就能拉回来；
-       · 输赢不再由"手机到没到底"决定，而是由这段时间里**一直被压着**的
-         累积伤害决定。擦一下端点不算什么，压住对方三十秒才是赢。
+     这是拔河本来的样子：位置是**积分量**，谁拽得久谁就走得远；而且可以
+     拽回来 —— 对面追上来，拉力差反号，两个人就往回走，背景倒着卷。
+     跟上一版血量制比，"被压着打"变成了"被拖着走"，观众不用去读两条血条的
+     长短，看背景里是谁的房间就知道谁占上风。
 
-     三个数的出处（X / M / Z，见 NUM 表）：
-       M = 1000 拉力：本项目的 push = 螂人杀兵数 ÷ 100，所以 1000 拉力就是
-           螂人杀的 10 万兵；上一版 DPS 的分母本来就是它，刻度没变。
+     三个数的出处（X / M / V_Z，见 NUM 表）：
+       M = 1000 拉力：本项目的 push = 螂人杀兵数 ÷ 100，1000 拉力就是 10 万兵。
        X = 30 拉力：螂人杀"最后 100 滴血，兵力大于 3000 才优先掉兵"里的
-           3000 兵 ÷ 100。那是文档里唯一一个"低于它就不作数"的兵力门槛，
-           拿来当死区正合适 —— 双方拉力咬在一起的时候不该有人掉血。
-       Z = 5%/秒：⚠️ 螂人杀公开文档里**没有**掉血速率，它只写了兵数表、绝杀
-           线（差 500w）和血量保护（最后 1000 / 100 滴血）。这个 5% 取自
-           需求里给过的那个例子——"一方 1000 另一方 0，每秒扣对方 5%"，
-           也就是 docs/数值设计.md 零节记着的那条。按它算，一件「爱的爆炸③」
-           打掉对方 28.75%（四件见底），一方猛刷而对面不还手约 70 秒分胜负。
-           要回到 12 分钟的局长，Z 得取 0.27（正好是上一版 DPS 的值，同一个
-           单位）。两个都能跑，改一个数的事，见 ?z= 。 */
+           3000 兵 ÷ 100，拿来当死区 —— 双方拉力咬在一起的时候谁也拖不动谁。
+       V_Z = 1.5 米/秒：从血量制的 Z = 5%/秒 原样换算（END 的 5%）。
+           ⚠️ 5% 取自需求里给过的例子，螂人杀公开文档里**没有**这个速率。
+           按它算，一方猛刷而对面不还手约 70 秒分胜负；想拉长就调小 V_Z 和
+           V_MAX（同一个倍数），见 ?vz= 。 */
   const diff = S.fA - S.fB;
 
-  /* 对抗线：拉力差的当前读数，**不积分**。
-     趋近而不是直接取值 —— 礼物注入是瞬间跳变的，直接赋值会让手机"咯噔"
-     闪一下；0.45 秒的时间常数既跟得上，又让那一下读成"被拽过去"。 */
+  /* 姿态读数：拉力差的当前值，**不积分**。趋近而不是直接取值 —— 礼物注入
+     是瞬间跳变的，直接赋值会让动作一帧之内从僵持跳到拖地。 */
   const want = 50 + 50 * clamp(diff / NUM.LINE_FULL, -1, 1);
   S.p += (want - S.p) * approach(dt, NUM.LINE_RATE);
 
-  /* 掉血。差距过不了 X 就一个血都不掉 —— 这是僵持区：双方咬得紧的时候
-     画面照样激烈（弹幕全在中线对撞），但谁也伤不到谁。
-     扣血按**差的全量**算，不是"超出 X 的那部分"：X 是开关不是起征点。
-     跨过门槛那一下伤害是 30/1000×Z，一秒零点几个血，看不出跳变。 */
+  /* 拖动。差距过不了 X 就谁也拖不动 —— 这是僵持区：双方咬得紧的时候画面照样
+     激烈（弹幕全在中间对撞），但背景一动不动。
+     速度按**差的全量**算，不是"超出 X 的那部分"：X 是开关不是起征点。 */
   const gap = Math.abs(diff);
-  /* 每秒正在掉多少血，写成读数给 HUD 用。它本来就是上面算出来的中间量，
-     摆出来是因为观众真正想知道的就是这个数 —— "我刷的这件把他的血扣快了
-     多少"。血条自己回答不了，它只显示存量。 */
-  S.dpsA = S.dpsB = 0;
+  S.vel = 0;
   if (gap > NUM.PULL_X) {
-    let z = Math.min(NUM.HP_MAX, gap / NUM.PULL_M * NUM.HP_Z);
-    const losing = diff > 0 ? -1 : +1;                   // 正在挨打的一方
+    let v = Math.min(NUM.V_MAX, gap / NUM.PULL_M * NUM.V_Z);
+    const dir = diff > 0 ? +1 : -1;                      // 往哪边拖：+1 = 往左（查岗党那头）
 
-    /* 濒死护盾：血量见底时，火力越足越扛得住。这是螂人杀"最后 100 滴血，
-       兵力大于 3000 就优先掉兵"的原意 —— 刷礼物能直接保命，而且看得见：
-       火力条长就是在替你挡。
-
-       ⚠️ 它**不能去扣火力存量**。试过那种写法，结果是一条正反馈：护盾吃掉
-       劣势方的火力 → min 变小 → 对冲跟着变弱 → 优势方的火力不再被烧掉 →
-       差值反而越拉越大。实测净差冲到理论值（Δ注入/LOSS）的 2.4 倍，越接近
-       终点崩得越快。根因是火力同时担着两个职责：它既是护盾的燃料，又是对冲
-       的输入，扣一处动两处。所以护盾只能按**比例**减伤，不碰存量。 */
-    const hp = losing > 0 ? S.hpA : S.hpB;
-    if (hp < NUM.SHIELD_AT) {
-      const mine = losing > 0 ? S.fA : S.fB, his = losing > 0 ? S.fB : S.fA;
-      z *= 1 - Math.min(NUM.SHIELD_MAX, mine / (his + 1) * 1.5);
+    /* 抓门框：快被拖到头时，火力越足越顶得住。这是螂人杀"最后 100 滴血，
+       兵力大于 3000 就优先掉兵"的原意 —— 刷礼物能直接保命，而且看得见。
+       ⚠️ 它**不能去扣火力存量**：火力同时是对冲的输入，扣掉劣势方的火力 →
+       对冲变弱 → 优势方的火力不再被烧 → 差值越拉越大，越接近终点崩得越快
+       （血量制时实测净差冲到理论值的 2.4 倍）。所以只按**比例**减速。 */
+    const left = NUM.END - S.pos * dir;                  // 被拖的那一方离终点还剩几米
+    if (left < NUM.END * NUM.SHIELD_AT) {
+      const mine = dir > 0 ? S.fB : S.fA, his = dir > 0 ? S.fA : S.fB;
+      v *= 1 - Math.min(NUM.SHIELD_MAX, mine / (his + 1) * 1.5);
     }
-    if (losing > 0) { S.hpA = Math.max(0, S.hpA - z * dt); S.dpsA = z; }
-    else { S.hpB = Math.max(0, S.hpB - z * dt); S.dpsB = z; }
+    S.vel = v * dir;
+    S.pos = clamp(S.pos + S.vel * dt, -NUM.END, NUM.END);
   }
 
-  if (S.hpA <= 0 || S.hpB <= 0) { finish(S.hpA <= 0 ? -1 : +1); return; }
+  if (Math.abs(S.pos) >= NUM.END) { finish(S.pos > 0 ? +1 : -1); return; }
 
-  /* 反击时刻：第一次有人掉到最后 8 滴血时，劣势方注入翻倍两分钟，全局只
-     触发一次。放大的是注入不是伤害 —— 在两层模型里，"更有力"只能是更多火力。 */
-  if (!S.standUsed && Math.min(S.hpA, S.hpB) < NUM.STAND_AT) {
+  /* 反击时刻：第一次有人被拖到离终点只剩 8% 时，劣势方注入翻倍两分钟，全局只
+     触发一次。放大的是注入不是速度 —— 在两层模型里，"更有力"只能是更多火力。 */
+  if (!S.standUsed && Math.abs(S.pos) > NUM.END * (1 - NUM.STAND_AT)) {
     S.standUsed = true; S.stand = NUM.STAND;
   }
 
-  /* 绝杀：血量被拉开这么多还一直追不回来，就别耗了，给 30 秒最后的机会。
-     判据从"手机压在一边多久"换成了"血差多大"—— 手机位置现在是瞬时读数，
-     一件大礼物就能把它顶到端点，再拿它当"一直被压着"的证据已经不成立。 */
-  const lead = Math.abs(S.hpA - S.hpB);
+  /* 绝杀：被拖出去这么远还一直拽不回来，就别耗了，给 30 秒最后的机会。
+     判据是位置而不是姿态 —— 姿态是瞬时读数，一件大礼物就能把人拽倒一下。 */
+  const lead = Math.abs(S.pos) / NUM.END;
   if (S.phase === 'play') {
     S.big = lead >= NUM.SUDDEN_LEAD ? S.big + dt : 0;
     if (S.big >= NUM.SUDDEN_WAIT) { S.phase = 'sudden'; S.sudden = NUM.SUDDEN; }
-  } else if ((S.sudden -= dt) <= 0) { finish(S.hpA > S.hpB ? +1 : -1); return; }
+  } else if ((S.sudden -= dt) <= 0) { finish(S.pos > 0 ? +1 : -1); return; }
 
-  // 时间到：血多的一方胜，差在 3 滴血以内判平
-  if ((S.clock -= dt) <= 0) finish(S.hpA > S.hpB + 3 ? +1 : S.hpB > S.hpA + 3 ? -1 : 0);
+  // 时间到：被拖向谁那边谁赢，离正中不到 1 米判平
+  if ((S.clock -= dt) <= 0) finish(S.pos > 1 ? +1 : S.pos < -1 ? -1 : 0);
 }
 
-function finish(who) { S.phase = 'over'; S.winner = who; S.dpsA = S.dpsB = 0; S.overT = 0; }
+/* 调试台（idle）不跑数值：姿态由滑块或自动演示直接给 S.p。位置照同一把尺子
+   从 S.p 积分出来 —— 不然拖滑块只换动作、背景不动，看不出卷轴对不对。 */
+function drift(dt) {
+  const bias = (S.p - 50) / 50;
+  S.vel = Math.abs(bias) * NUM.LINE_FULL > NUM.PULL_X ? bias * NUM.V_Z : 0;
+  S.pos = clamp(S.pos + S.vel * dt, -NUM.END, NUM.END);
+}
+
+function finish(who) { S.phase = 'over'; S.winner = who; S.vel = 0; S.overT = 0; }
 
 /* 火力转成弹幕。clash 的那些飞到中线就互相撞掉，只有剩下的才砸到人身上 ——
    这是"对冲"唯一的可视化，没有它观众看不懂自己刷的东西去哪了。 */
@@ -269,7 +263,7 @@ function emitFire(side, clashRatio) {
 function giveGift(side, key) {
   const it = SHOP[key]; if (!it) return;
   const deb = side > 0 ? S.debKA : S.debKB;
-  const loser = S.hpA < S.hpB ? +1 : -1;            // 谁正落后（看血，不看手机位置）
+  const loser = S.pos > 0 ? -1 : +1;                // 谁正落后（看位置，不看此刻的姿态）
   const boost = (S.stand > 0 && side === loser) ? 2 : 1;
   const amt = it.push * (1 - deb) * boost;
   if (side > 0) { S.fA += amt; S.giftA++; } else { S.fB += amt; S.giftB++; }
@@ -298,7 +292,7 @@ function hexDebuff(side, k, sec) {
 
 function startMatch() {
   S.p = 50; S.fA = S.fB = 0; S.budA = S.budB = 0;
-  S.hpA = S.hpB = 100; S.dpsA = S.dpsB = 0;
+  S.pos = 0; S.vel = 0;
   S.debA = S.debB = S.debKA = S.debKB = 0;
   S.clock = NUM.MATCH; S.phase = 'play';
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
@@ -307,52 +301,30 @@ function startMatch() {
   Ammo.clear(); Particles.clear();
 }
 
-/* ---------- 表现层：由 S.p 派生画面 ---------- */
+/* ---------- 表现层：由 S 派生画面 ---------- */
+
+/* 世界与贴图的元数据，boot 时从 assets/world/world.json 读进来（v14/build.py 生成）：
+   rooms 三间房各多宽、center 客厅正中（= 0 米）在世界里的横坐标、
+   poses 每张贴图的尺寸、锚点（外框中点或脚的质心 × 脚底线）、手机位置。 */
+let WORLD = null;
+
+/* 僵持循环：5 张来回放成 8 格 —— 手机从正中往左拽过去、回来、往右、回来。
+   这是拔河里"谁也没占上风"的样子：一直在使劲、一直在来回，但哪头也没赢。 */
+const LOOP_N = ['n0', 'nL1', 'nL2', 'nL1', 'n0', 'nR1', 'nR2', 'nR1'];
+
+/* 由 |bias| 选动作，带回差。返回 n / aW / aD / bW / bD。 */
+function pickPose(prev, bias) {
+  const k = Math.abs(bias), side = bias > 0 ? 'a' : 'b';
+  const lvl = prev === 'n' ? 0 : prev[1] === 'W' ? 1 : 2;
+  const same = prev === 'n' || prev[0] === side;
+  // 回差只对"留在原档"起作用：已经在拖地的，要掉到 dragAt-hys 以下才站起来
+  const up = (l, at) => (same && lvl >= l) ? at - P.hys : at + P.hys;
+  if (k > up(2, P.dragAt)) return side + 'D';
+  if (k > up(1, P.walkAt)) return side + 'W';
+  return 'n';
+}
+
 function derive(dt) {
-  /* 空闲拉锯。双方都不送礼物时拉力差是 0，S.p 停在正中一动不动，画面就僵在
-     同一档关键帧上很久 —— 可拔河里"没人占上风"不等于"没人使劲"，绳子该一直
-     在小幅来回。
-     扰动只进**表现层**：S.p 是拉力差的读数，画面上的手机、角色姿态、对抗线、
-     地面分色一律改读 FX.pDraw，血条读的是 S.hpA / S.hpB。
-     不能直接摇 S.p —— 它下一帧就会被 battle 按拉力差重算，摇进去的量当场就
-     没了；真要摇也不该摇，那会让观众以为拉力差在变。
-     三个频率叠加，不是单频也不是两频。单频读出来是钟摆，一眼看穿；两频会
-     周期性地互相抵消 —— 实测 0.83/1.41 那一组有长达 3.6 秒的平台期，胶片上
-     连着四格 pDraw 都卡在 51.2，正好把"长时间同一个动作"原样复现了一遍。
-     这一组每 0.6 秒的极差中位 1.9 个百分点，最长的呆滞只有 0.6 秒。
-     越接近端点越收敛（calm）。用三次方而不是一次方：一次方衰减太快，p=78
-     就只剩四成幅度，可"长时间不动"在任何进度上都会发生，不是中点专有的毛病；
-     三次方让它在 p=90 之前基本满幅，只在最后几个点收住。收住是必须的 ——
-     手机已经被拽到画面边上了，再叠一层来回摆就会读成"推到底了还在晃"。 */
-  const calm = 1 - Math.pow(Math.abs(S.p - 50) / 50, 3);
-
-  /* 拉锯只在**双方都没送礼物**的时候才满幅 —— 这是需求的原话，而上一版把它做成了
-     无条件常开，那个实现错误会直接吃掉玩法：
-     一次拉锯摆动是 10 个百分点（±5 来回）。礼物推得动多少是同一把尺子上的数：
-     拉力差 100 才换来手机偏 5 个百分点 —— 一件「魔法镜②」（注入 20）自己
-     只值 1 个百分点，整个埋在 10 个点的来回晃里，读出来就是"我刷了，什么都
-     没发生"。信号比噪声小，加多少浓度都没用。
-     所以拉锯必须给战况让位：场上还有拉力差，手机本来就被拽着在动，不需要
-     填充；拉力烧干了、两边归零了，才是真的僵住。
-     指标用**拉力差**，不是拉力总量，也不是"最近几秒有没有人点礼物"：
-     · 手机位置就是拉力差的读数（battle 里 p = 50 + 50×差/LINE_FULL），所以
-       差值才是"画面在不在动"的正确度量；
-     · 拉力总量是错的 —— 双方对着刷小礼物时它会被撑得很高（各 0.3 件/秒的
-       魔法镜②就能让总量稳在 1000），而那时差值是 0、手机停在正中，按总量
-       判就会把拉锯关死，僵局原样回来。而这恰恰是最需要拉锯的场面之一；
-     · 拉力是慢衰减的，所以不用另外维护计时器去猜"这一波推完了没有"，差值
-       自己会一路烧到手机真的停下来。
-     阈值 100 ≈ 一个能量电池②，也正好是掉血死区 PULL_X(30) 的三倍多：小到
-     推不动画面的那些礼物，不该、也不需要把拉锯关掉。
-     趋近而不是直接取值：礼物注入是瞬间跳变的，直接乘会让画面"咯噔"一下。 */
-  const busy = Math.min(1, Math.abs(S.fA - S.fB) / 100);
-  FX.busy += (busy - FX.busy) * approach(dt, 1.6);
-
-  FX.pDraw = clamp(S.p + (Math.sin(S.t * 1.65) * 0.55
-                        + Math.sin(S.t * 2.73 + 2.1) * 0.30
-                        + Math.sin(S.t * 4.65 + 4.3) * 0.15)
-                       * P.sway * calm * (1 - FX.busy), 0, 100);
-
   if (S.phase === 'over') {
     S.overT += dt;
     /* ?overt=<秒> 把结算钉在指定时刻。判词砸下来只有半秒、气泡和面板各自也
@@ -360,62 +332,60 @@ function derive(dt) {
     if (Result.pin >= 0) S.overT = Result.pin;
   }
 
-  const bias = (FX.pDraw - 50) / 50;
-  // p 大 = 查岗党(女方,在左)占优 = 手机被拽向左
-  const target = MID - Math.sign(bias) * Math.pow(Math.abs(bias), P.curve) * P.half;
-  FX.phoneX += (target - FX.phoneX) * approach(dt, 4.2);
+  // p 大 = 查岗党(女方,在左)占优 = 两个人被往左拽
+  const bias = (S.p - 50) / 50;
+  const pose = pickPose(FX.pose, bias);
+  if (pose !== FX.pose) { FX.pose = pose; FX.poseT = 0; } else FX.poseT += dt;
 
+  /* 这一帧用哪张图。僵持走循环；拽着走、拖地现在各只有一张图，先靠颠步
+     （bob）假装在走 —— 循环帧画出来之后，这两档也换成跟僵持一样的数组。 */
+  if (FX.pose === 'n') {
+    FX.frame = LOOP_N[Math.floor(FX.poseT * P.loopFps) % LOOP_N.length];
+    FX.bob = 0;
+  } else {
+    FX.frame = FX.pose;
+    /* 拽着走：一步一颠，取 |sin| 是因为人只会往上颠、不会陷进地板。
+       拖地：被拖的人贴着地，只有赢的那个在走，颠一半。
+       速度为 0（抓门框顶住了、或调试台里 p 刚过门槛）时不颠 —— 背景没在卷，
+       人还在原地踏步就是滑冰。 */
+    const moving = Math.min(1, Math.abs(S.vel) / 0.5);
+    const amp = (FX.pose[1] === 'D' ? 0.5 : 1) * P.bobPx * moving;
+    FX.bob = -Math.abs(Math.sin(FX.poseT * Math.PI * P.bobHz)) * amp;
+  }
+
+  /* 镜头：两个人在世界里的位置 = 客厅正中 − 米数 × 每米像素（往左拖是正）。
+     镜头跟着他们走，但不出世界的边 —— 走到头时镜头停住、人往画面边上走，
+     这正是"拖到墙根了"的样子。 */
+  if (WORLD) {
+    const wx = WORLD.center - S.pos * P.pxPerM;
+    FX.camX = clamp(wx, MID, WORLD.total - MID);
+    FX.pairX = MID + (wx - FX.camX);
+  }
   FX.struggle = 1 - Math.abs(bias) * 0.78;          // 僵持度：五五开时最高
-  FX.jit = Math.sin(S.t * 47) * 2.4 * FX.struggle;
-  FX.phoneY = P.phoneY + Math.sin(S.t * 9.3) * 6 * FX.struggle - Math.abs(bias) * 14;
 
   /* 角色被推开又站回来：弹簧-阻尼，不是单纯衰减 —— 单纯衰减只有"飘回去"，
      看不出"被推动了"。挨一下给的是速度不是位移。 */
   FX.hitV += -FX.hitX * P.hitK * dt;
   FX.hitV *= Math.pow(P.hitDamp, dt * 60);
   FX.hitX += FX.hitV * dt;
-  FX.actorX = (FX.phoneX - MID) * P.drag + FX.hitX;
+
+  // 手机位置 = 这张贴图里标好的手机点，跟着人一起平移、颠步、被推开
+  const m = WORLD && WORLD.poses[FX.frame];
+  if (m && m.phone) {
+    FX.phoneX = FX.pairX + FX.hitX + (m.phone[0] - m.ax);
+    FX.phoneY = GROUND + FX.bob + (m.phone[1] - m.ay);
+  }
 
   FX.punch *= Math.pow(P.punchDecay, dt * 60);
   if (FX.punch < 0.002) FX.punch = 0;
   FX.tintA *= Math.pow(P.tintDecay, dt * 60);
   if (FX.tintA < 0.004) FX.tintA = 0;
-
-  /* 对抗线上的冲击波：命中那一行注入冲量，随后沿线上下传播并衰减。它与
-     rowOff 分开演化、最后一起读 —— rowOff 管"谁在推"（慢、由 p 决定），
-     冲量管"刚刚挨了一下"（快、由事件决定）。混在一个数组里的话，一次命中
-     会被 shapeRate 的趋近吃掉大半，读不出撞击。 */
-  const im = FX.rowImp, nim = new Array(ROWS);
-  for (let r = 0; r < ROWS; r++) {
-    const nb = ((r > 0 ? im[r - 1] : im[r]) + (r < ROWS - 1 ? im[r + 1] : im[r])) / 2;
-    nim[r] = (im[r] + (nb - im[r]) * approach(dt, P.waveSpread)) * Math.pow(P.waveDecay, dt * 60);
-  }
-  for (let r = 0; r < ROWS; r++) im[r] = Math.abs(nim[r]) < 0.05 ? 0 : nim[r];
-
-  const o = FX.rowOff, next = new Array(ROWS);
-  for (let r = 0; r < ROWS; r++) {
-    const d = r / (ROWS - 1);
-    const tilt = (0.5 - d) * 2 * bias * P.tilt;
-    const wob = Math.sin(S.t * 0.41 + r * 0.78) * 0.62 + Math.sin(S.t * 0.83 + r * 1.7) * 0.31;
-    const desire = (tilt * 0.62 + wob * 0.42) * P.bulge;
-    const nb = ((r > 0 ? o[r - 1] : o[r]) + (r < ROWS - 1 ? o[r + 1] : o[r])) / 2;
-    const goal = (desire + P.linkW * nb) / (1 + P.linkW);
-    next[r] = o[r] + (goal - o[r]) * approach(dt, P.shapeRate);
-  }
-  for (let r = 0; r < ROWS; r++) o[r] = clamp(next[r], -110, 110);
-
-  const hot = 1 - Math.abs(bias) * 0.42;
-  for (let r = 0; r < ROWS; r++) {
-    const d = r / (ROWS - 1);
-    const g = Math.exp(-Math.pow((d - 0.36) / 0.44, 2));
-    FX.rowHeat[r] += (clamp(g * 1.3 * hot, 0, 1) - FX.rowHeat[r]) * approach(dt, 3.4);
-  }
 }
 
 /* ---------- 命中：一次礼物/点赞落地时发生的全部事情 ---------- */
 
-/* 一次命中同时动五样东西：粒子、对抗线冲量、角色位移与染色、屏幕震动、顿帧。
-   写成单一入口而不是散在各处，是因为这五样的强度必须一起缩放 —— 分开调的话
+/* 一次命中同时动四样东西：粒子、角色位移与染色、屏幕震动、顿帧。
+   写成单一入口而不是散在各处，是因为这四样的强度必须一起缩放 —— 分开调的话
    小礼物会震得比大礼物还狠，而观众读到的"这一下有多重"正是它们的合力。
 
    side: +1 打向查岗党(左/女方)，-1 打向灭迹党(右/男方)
@@ -424,13 +394,6 @@ function impact(side, y, power, recipe) {
   const r = recipe || RECIPE.thud;
   const s = power >= 4 ? 2.8 : power === 3 ? 1.7 : power === 2 ? 1.0 : 0.55;
   const x = frontAt(y);
-
-  // 冲量注入命中高度那一行，方向朝被打的一侧
-  const d = clamp((y - TOP) / (BOT - TOP), 0, 1) * (ROWS - 1);
-  const i0 = clamp(Math.floor(d), 0, ROWS - 1);
-  FX.rowImp[i0] += -side * 40 * s;
-  if (i0 > 0) FX.rowImp[i0 - 1] += -side * 22 * s;
-  if (i0 < ROWS - 1) FX.rowImp[i0 + 1] += -side * 22 * s;
 
   FX.hitV += -side * 320 * s;
   FX.punch = Math.max(FX.punch, 0.045 * s);
@@ -896,256 +859,87 @@ const GIFT = {
   photo:   { name: '相框',   from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
 };
 
-function sampleRow(arr, y) {
-  const d = clamp((y - TOP) / (BOT - TOP), 0, 1) * (ROWS - 1);
-  const i = clamp(Math.floor(d), 0, ROWS - 2), f = d - i;
-  const p0 = arr[Math.max(0, i - 1)], p1 = arr[i], p2 = arr[i + 1], p3 = arr[Math.min(ROWS - 1, i + 2)];
-  return p1 + 0.5 * f * (p2 - p0 + f * (2 * p0 - 5 * p1 + 4 * p2 - p3 + f * (3 * (p1 - p2) + p3 - p0)));
-}
-// 对抗线在高度 y 处的横坐标 —— 手机、光柱、顶端指针、地面分色全读这一个函数
-const frontAt = (y) => FX.phoneX + sampleRow(FX.rowOff, y) + sampleRow(FX.rowImp, y);
-const heatAt = (y) => clamp(sampleRow(FX.rowHeat, y), 0, 1);
-const phonePos = () => [frontAt(FX.phoneY) + FX.jit, FX.phoneY];
+/* 弹幕往手机那条竖线上打：任何高度都返回手机的横坐标。
+   以前这里是一条会弯、会被冲击波推着晃的对抗线，那条线画在客厅地毯上；
+   背景一卷，地毯就走了，线也就没了立足的地方。战况读数现在是顶上的距离条。 */
+const frontAt = () => FX.phoneX;
+const phonePos = () => [FX.phoneX, FX.phoneY];
 
-/* ---------- 角色：预渲染关键帧 ---------- */
-/* 0~100 每 1% 一张。其中 29 张是生图画的关键档，其余由 interp_frames.py 用
-   光流从相邻关键档插出来。从网格变形改走帧序列，是因为两个人抢同一部
-   手机时，肩、肘、腕的相对关系每一档都不一样 —— 这种成对的姿态用一套骨骼
-   去凑，永远是在"手够不到机身"和"肘折过头"之间取舍。
+/* ---------- 角色：姿势贴图 ---------- */
+/* 每张贴图按 world.json 里的锚点贴：锚点 (ax, ay) 对到屏幕上的 (pairX, GROUND)。
+   不做相邻帧的交叉淡化：两张画的是不同姿态，叠在一起是两副骨架互相穿透的
+   重影。硬切虽然跳，但每一帧都是清清楚楚的一张画。 */
+class PoseView {
+  constructor(imgs) { this.imgs = imgs; }
 
-   不做相邻帧的交叉淡化：两张画的是不同姿态而不是同一姿态的不同时刻，叠在
-   一起就是两副骨架互相穿透的重影，越是姿态差得远的档位越糊。硬切虽然跳，
-   但每一帧都是清清楚楚的一张画。 */
-class FrameSeq {
-  /* imgs 是 0~100 共 101 项，缺的那几档是 null —— 姿态跨度太大的区间光流插
-     不出干净的中间帧（会长出两个红发夹），只能等生图补上。缺档先映射到最近
-     的邻居，画面照常，只是那里的跳变还是原来的大小。 */
-  constructor(imgs) {
-    this.imgs = imgs;
-    this.map = imgs.map((im, i) => {
-      if (im) return i;
-      let best = -1, bd = 1e9;
-      imgs.forEach((o, j) => { const d = Math.abs(j - i); if (o && d < bd) { bd = d; best = j; } });
-      return best;
-    });
-  }
-
-  /* punch 是缩放脉冲，tint 是命中染色 —— 角色是预渲染帧，做不了受击变形，
+  /* punch 是缩放脉冲，tint 是命中染色 —— 角色是预渲染图，做不了受击变形，
      打击反馈只能来自贴图之外。缩放以脚底为锚，人挨了一下会"胀"一下但脚不
      离地；染色走 source-atop，只盖在已画出的角色像素上，不会糊到背景。 */
-  draw(ctx, p, offsetX, punch, tint, tintA) {
-    const i = this.map[clamp(Math.round(clamp(p, 0, 100)), 0, 100)];
+  draw(ctx, name, x, y, punch, tint, tintA) {
+    const img = this.imgs[name], m = WORLD.poses[name];
+    if (!img) return;
     const k = 1 + (punch || 0);
-    const w = FRAME_W * k, h = FRAME_H * k;
-    const foot = FRAME_TOP + FRAME_H;
-    const dx = offsetX + (FRAME_W - w) / 2;
-    ctx.drawImage(this.imgs[i], dx, foot - h, w, h);
+    const w = m.w * k, h = m.h * k;
+    const dx = x - m.ax * k, dy = y - m.ay * k;
+    ctx.drawImage(img, dx, dy, w, h);
     if (tintA > 0.004) {
       ctx.save();
       ctx.globalCompositeOperation = 'source-atop';
       ctx.fillStyle = rgba(tint, tintA);
-      // source-atop 只会落在已经画出来的像素上，所以填满整张画布是白费的 ——
-      // 角色帧就占中间那条横带，按它的实际矩形填，结果一模一样
-      ctx.fillRect(dx, foot - h, w, h);
+      ctx.fillRect(dx, dy, w, h);
       ctx.restore();
     }
-    this.shown = i;
+    this.shown = name;
   }
 }
 
-/* ---------- 2D 绘制（背景层 / 特效层） ---------- */
-function tex(g2, stops) {
-  const c = document.createElement('canvas'); c.width = 64; c.height = 1;
-  const g = c.getContext('2d'), grad = g.createLinearGradient(0, 0, 64, 0);
-  stops.forEach(s => grad.addColorStop(s[0], s[1]));
-  g.fillStyle = grad; g.fillRect(0, 0, 64, 1); return c;
-}
-function glowTex(c) {
-  const s = 192, cv = document.createElement('canvas'); cv.width = cv.height = s;
-  const g = cv.getContext('2d'), gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-  gr.addColorStop(0, rgba(c, .85)); gr.addColorStop(.45, rgba(c, .3)); gr.addColorStop(1, rgba(c, 0));
-  g.fillStyle = gr; g.fillRect(0, 0, s, s); return cv;
-}
-let TX, GLOW;
-function initTex() {
-  TX = {
-    band: tex(0, [[0, 'rgba(255,255,255,0)'], [.42, 'rgba(255,250,235,.9)'], [.5, 'rgba(255,255,255,1)'],
-      [.58, 'rgba(255,250,235,.9)'], [1, 'rgba(255,255,255,0)']]),
-    gL: tex(0, [[0, rgba(GREEN, 0)], [.55, rgba(GREEN, .55)], [1, rgba(GREEN, 1)]]),
-    rR: tex(0, [[0, rgba(RED, 1)], [.45, rgba(RED, .55)], [1, rgba(RED, 0)]]),
-  };
-  GLOW = glowTex([255, 244, 220]);
-}
-
-function ribbon(ctx, t, top, bot, slices, widthAt, alphaAt, anchor) {
-  const h = (bot - top) / slices;
-  for (let i = 0; i < slices; i++) {
-    const y0 = top + h * i, d = (i + .5) / slices;
-    const a = alphaAt(d, i), w = widthAt(d, i);
-    if (a <= .004 || w <= .5) continue;
-    const x = frontAt(y0 + h / 2) + FX.jit;
-    ctx.globalAlpha = a;
-    ctx.drawImage(t, anchor < 0 ? x - w : anchor > 0 ? x : x - w / 2, y0, w, h + 1);
+/* ---------- 背景：三间房拼成的长卷 ---------- */
+/* 只画镜头里看得见的那一两间。三张图各两千多宽，全画一遍白费两倍填充。
+   背景**不跟着震**：机位是固定的，整幅一起震就得把背景放大做 overscan 才不
+   露边；震动留给人、弹幕和粒子 —— 那些才是正在发生冲突的东西。 */
+function drawWorld(ctx, rooms) {
+  let x = -(FX.camX - MID);
+  for (let i = 0; i < rooms.length; i++) {
+    const w = WORLD.rooms[i];
+    if (x + w > 0 && x < W) ctx.drawImage(rooms[i], Math.round(x), 0, w, H);
+    x += w;
   }
-}
-
-/* k 是整体强度。这条线要画两遍：一遍在角色之下当背景光柱，一遍以更低的
-   强度叠在角色之上 —— 两个人正好在中间抢东西，只画在下面的话对抗线全程
-   被两具身体挡死，而它是这个玩法唯一的战况读数。 */
-function drawLine(ctx, k = 1) {
-  const pulse = .76 + Math.sin(S.t * 13) * .14 + Math.sin(S.t * 29) * .08;
-  const depth = d => .42 + d * .58;
-  const yAt = d => TOP + (BOT - TOP) * d;
-  const fade = d => Math.min(1, d * 7) * Math.min(1, (1 - d) * 9);
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  const sideW = d => (92 + d * 150) * (.55 + heatAt(yAt(d)) * .45);
-  const sideA = d => pulse * depth(d) * (.35 + heatAt(yAt(d)) * .65) * fade(d) * .38 * k;
-  ribbon(ctx, TX.gL, TOP, BOT, 26, sideW, sideA, -1);
-  ribbon(ctx, TX.rR, TOP, BOT, 26, sideW, sideA, +1);
-  ribbon(ctx, TX.band, TOP, BOT, 56,
-    (d, i) => (16 + d * 40) * (.86 + Math.sin(S.t * 21 + i * .4) * .14) * (.42 + heatAt(yAt(d)) * .85),
-    d => pulse * depth(d) * (.3 + heatAt(yAt(d)) * .8) * fade(d) * 0.95 * k, 0);
-  ctx.globalAlpha = heatAt(BOT) * .3 * k;
-  ctx.drawImage(GLOW, frontAt(BOT - 40) + FX.jit - 96, BOT - 168, 192, 192);
-  ctx.restore(); ctx.globalAlpha = 1;
-}
-
-/* 对抗线的替代画法（?line=2）。
-   原来那根贯穿全屏的发光柱（?line=1）在这张底图上表现力差，根因和白闪过曝
-   是同一个：它走 lighter，而底图是明亮客厅 —— 浅绿墙本来就接近饱和，往上
-   加光几乎不改变什么，只剩一团雾；龙王那边同样的写法很炸，是因为它的底图
-   是暗色战场。更要命的是它正好横在两个人中间，把抢手机的手和脸挡掉了，而
-   那是这个玩法唯一值得看的东西。
-
-   所以战线改成在地上走：深色带 + 势力色描边，靠轮廓而不是靠发光，明亮底图
-   上反而更显眼；又完全不挡人。读数一点没少 —— 战线横坐标仍然是 frontAt，
-   和手机、顶端指针、地面辉光同一个源。 */
-function drawFrontGround(ctx, bias) {
-  const R = P.rug, col = Math.abs(bias) < 0.06 ? [250, 250, 250] : (bias > 0 ? GREEN : RED);
-  const N = 14;
-  const xs = [], ys = [], ws = [];
-  for (let i = 0; i <= N; i++) {
-    const d = i / N, y = R.top + (R.bot - R.top) * d;
-    ys.push(y); xs.push(frontAt(y) + FX.jit);
-    ws.push(8 + d * 20);          // 下宽上窄，跟着地毯的透视走
-  }
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(R.tl, R.top); ctx.lineTo(R.tr, R.top);
-  ctx.lineTo(R.br, R.bot); ctx.lineTo(R.bl, R.bot); ctx.closePath();
-  ctx.clip();
-  ctx.beginPath();
-  for (let i = 0; i <= N; i++) (i ? ctx.lineTo : ctx.moveTo).call(ctx, xs[i] - ws[i], ys[i]);
-  for (let i = N; i >= 0; i--) ctx.lineTo(xs[i] + ws[i], ys[i]);
-  ctx.closePath();
-  /* 双描边：外圈暗、内圈势力色。单描边在地毯的绿和地板的米色上各有一段
-     会掉对比，而这条带子从地毯一直压到地板边缘，横跨两种底色。 */
-  ctx.fillStyle = 'rgba(22,18,26,.70)';
-  ctx.fill();
-  ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(12,10,16,.55)'; ctx.stroke();
-  ctx.lineWidth = 3.5; ctx.strokeStyle = rgba(col, .98); ctx.stroke();
-  ctx.restore();
-}
-
-/* 战线在画面顶端的读数：一个不会被任何东西挡住的指针。
-   它能脱离地面带单独存在（?line=3，默认），而且这正是推荐的用法 —— 地上
-   那条带子横在两个人的腿中间，激烈的时候被挡掉大半，剩下的半截读起来像
-   一根立在地上的杆子；指针在画面顶端，既不挡人也永远看得见。
-   完全不画（?line=0）也能看出谁占优（地面辉光、血条都在），但读不
-   出战线此刻**具体**压在哪一条竖线上，而手机位移就是这个玩法的进度条。 */
-function drawFrontMark(ctx, bias) {
-  const col = Math.abs(bias) < 0.06 ? [255, 255, 255] : (bias > 0 ? GREEN : RED);
-  /* 指针整体压到 HUD 下沿之外。它的 x 随对抗线跑、三角有 42px 宽，留在原来
-     的 TOP-2 会横着划过血条和拉力条 —— HUD 一放大就没地方躲了。
-     TOP+88 = 216：三角占 200~232，正好接在 HUD 下沿（196）之下；竖线到 268，
-     离人物帧顶 308 还有 40px。HUD 再长高就要把这个数一起推。 */
-  const y = TOP + 88, x = frontAt(y) + FX.jit;
-  ctx.save();
-  ctx.strokeStyle = 'rgba(12,14,20,.6)'; ctx.lineWidth = 11;
-  ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 52); ctx.stroke();
-  ctx.strokeStyle = rgba(col, .98); ctx.lineWidth = 6;
-  ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 52); ctx.stroke();
-  ctx.fillStyle = rgba(col, 1);
-  ctx.beginPath();
-  ctx.moveTo(x, y + 16); ctx.lineTo(x - 21, y - 16); ctx.lineTo(x + 21, y - 16);
-  ctx.closePath(); ctx.fill();
-  ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(12,14,20,.7)'; ctx.stroke();
-  ctx.restore();
-}
-
-/* 地面辉光：手机被拽向谁，谁脚下的地就烧起来，浓度 = 领先幅度。
-   不用"线两侧分色"——拔河里绳结被拽过去不等于对面丢了地盘，
-   那个画法在极端档会把颜色铺反。 */
-function drawGround(ctx, bias) {
-  const R = P.rug, span = R.bot - R.top, k = Math.abs(bias);
-  if (k < 0.02) return;
-  const col = bias > 0 ? GREEN : RED;
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(R.tl, R.top); ctx.lineTo(R.tr, R.top);
-  ctx.lineTo(R.br, R.bot); ctx.lineTo(R.bl, R.bot); ctx.closePath();
-  ctx.clip();
-  ctx.globalCompositeOperation = 'lighter';
-  const win = bias > 0 ? 0 : W;                       // 赢家所在的那一侧
-  const g = ctx.createLinearGradient(win, 0, W - win, 0);
-  g.addColorStop(0, rgba(col, 0.42 * k));
-  g.addColorStop(1, rgba(col, 0.04 * k));
-  ctx.fillStyle = g; ctx.fillRect(0, R.top, W, span);
-  // 手机正下方的落点亮斑：战线此刻具体压在地上的哪个位置
-  const fx = frontAt(R.bot - 90) + FX.jit;
-  const rg = ctx.createRadialGradient(fx, R.bot - 70, 0, fx, R.bot - 70, 250);
-  rg.addColorStop(0, rgba(col, 0.30 + 0.28 * k));
-  rg.addColorStop(1, rgba(col, 0));
-  ctx.fillStyle = rg; ctx.fillRect(0, R.top, W, span);
-  ctx.restore();
 }
 
 /* ── HUD ──
-   顶上一侧是一个整体：头像 · 队名 · 血条 · 拉力条，左右严格镜像。做成一个
-   单元是因为观众要在半秒内读出"绿色这边是谁、他还剩多少、他现在猛不猛"——
-   零散摆着的色块做不到这件事，那是调试面板不是直播画面。
+   顶上三行，从上到下：
+     名字行   头像 · 队名 · 这一方已经把对面拽过来多少米（左右镜像）
+     距离条   全宽一根。正中是起点（客厅正中），往左是女生卧室、往右是电竞房，
+              条上按三间房分段铺底色 —— 它同时是小地图：手机图标在哪一段，两个人
+              此刻就在谁的房间里。从正中到手机那一截涂领先方的颜色。
+     拉力     两边的数并排摆在正中（见 drawPowerText）
+   时钟跨在名字行正中。
 
-   三个数各有各的位置，谁也不冒充谁：
-     血条   存量。只减不增，归零就输，所以它最大、最上面。
-     侵蚀带 血条末端那截脉动的暖色 —— 宽度 = 再这样扣两秒会没掉的量。
-            血量制下掉血是连续的小数，一秒扣一滴时血条几乎不动，光看长度
-            读不出"正在挨打"。这截暖色就是把 S.dpsA/B 画出来。
-     拉力条 存量之下的细条。双方一起涨 = 在对拼（谁也不掉血）；长出来的
-            那一截才是战况。开方标度是为了让小额礼物也推得动它。
-   中间是时钟，时钟下面一行小字直接报"此刻每秒扣谁多少血"——这是全屏唯一
-   一处把因果写成字的地方，僵持时它就写"僵持"。 */
+   距离条是**一根**，不是左右两条：位置是一个数（S.pos），拽过来多少对面就
+   退回去多少，劈成两条读起来像两个人各自有一份血，那是上一版的模型。 */
 
 // 两侧严格镜像：右侧的 x 一律由 W - x - w 推出来，改一处两边一起动
 const UI = {
   /* 直播间里这块画面会被缩到手机屏的三分之一宽，条细一点、字小一号就彻底
-     看不清了。所以横向**顶满**：头像缩成贴在队名左边的小圆，血条从边缘 18px
-     一直铺到离中线 20px，两条之间只留 40px 缝。
-     竖向吃到 196 为止 —— 对抗线的指针三角跟着降到 200 才开始横扫全宽，越过去
-     就会被它划一道（指针的 x 随对抗线跑，不是待在中间）。这条线不是定数：
-     HUD 要长高就得把 drawFrontMark 里的 y 一起往下推，两处必须一起改。
-     排这一块要连**描边**一起算：文字的 lineWidth 5 会往外扩 2.5px，按字号
-     算出来刚好够的位置，画出来就啃到血条底边了。 */
+     看不清了。所以距离条横向**顶满**，从左边缘 18px 铺到右边缘 18px。
+     排这一块要连**描边**一起算：文字的 lineWidth 5 会往外扩 2.5px。 */
   avR: 30, avCX: 44, avCY: 35,       // 头像圆：左侧圆心，右侧 = W - 它
-  barX: 18, barW: 442, barY: 68, barH: 44,    // 血条（68~112）
-  /* 时钟在血条**上方**、拉力在血条**下方**。两块都在中间那段，左右是头像和队名。
-     拉力那条带子 120~196：85px 的数字墨区约 61px，上下各留 7px。和血条之间
-     留 8px 缝 —— 两条深色描边贴在一起会并成一道粗黑带，读成"血条破了"。 */
-  clkCY: 33,                         // 时钟那一行的中心（血条上面）
-  pwCY: 158,                         // 拉力那一行的中心（血条下面，见 drawPowerText）
-  sk: 12,                            // 斜切量：顶边相对底边右移多少（右侧取反）
+  barX: 18, barY: 68, barH: 44,      // 距离条（68~112），宽 = W - 2×barX
+  clkCY: 33,                         // 时钟那一行的中心（距离条上面）
+  pwCY: 158,                         // 拉力那一行的中心（距离条下面，见 drawPowerText）
+  sk: 12,                            // 斜切量：梯形两端各内切多少
 };
 
 /* HUD 自己的表现层状态。单独放一坨，是为了让人一眼看出改这里不会改谁输谁赢 ——
    战况全在 S 里，这里只有"闪一下""跳一下"这种活儿。 */
 const HUD = {
   avA: null, avB: null,   // 两张头像（assets/ui/av_*.webp，加载不到就画纯色盘）
-  lfA: 0, lfB: 0,         // 注入闪光余量：礼物砸进来那一下，拉力条整条亮一次
+  lfA: 0, lfB: 0,         // 注入闪光余量：礼物砸进来那一下，拉力数字整个亮一次
   pfA: 0, pfB: 0,         // 上一帧的拉力，用来把"礼物注入"和"自然增长"分开
-  hfA: 0, hfB: 0,         // 掉血闪光余量：血条整条白闪一下
-  phA: 100, phB: 100,     // 上一帧的血量，用来认出"又跌过一个整点"
+  mf: 0,                  // 过米闪光余量：距离条每跨过一整米，手机图标亮一下
+  pm: 0,                  // 上一帧的位置，用来认出"又跨过一米"
   t: 0,                   // 脉动用的自走时钟
   pin: -1,                // ?hudflash= 把闪光钉住，见下（-1 = 不钉，正常衰减）
-  hpin: -1,               // ?hphit= 把掉血闪光钉住
 };
 
 /* 斜切平行四边形：顶边相对底边横移 sk。直播 HUD 不用正方角是有道理的 ——
@@ -1200,26 +994,19 @@ function hudTick(dt) {
   }
   HUD.pfA = S.fA; HUD.pfB = S.fB;
 
-  /* 掉血闪光：血量**每跌过一个整点**闪一次，不是"血量在变就亮着"。
-     按连续变化判的话，挨打期间每一帧都满足条件，闪光常亮 —— 读出来是
-     "这条是白的"，不是"正在掉"。按整点跨越，掉得越快闪得越密（dps 3.2
-     大约每 0.3 秒一次，碾压时几乎连成一片），节拍本身就是挨打的强度。
-     衰减 7/秒（约 0.14 秒灭）：dps 3.2 时占空比四成五，看得出一下一下；
-     4.5/秒试过，占空比到七成，读出来是"这条一直是白的"。被碾时（dps 10+）
-     它确实会连成一片 —— 那时"一直在闪"正是要表达的意思。 */
-  if (HUD.hpin >= 0) HUD.hfA = HUD.hfB = HUD.hpin;
-  else {
-    if (Math.floor(S.hpA) < Math.floor(HUD.phA)) HUD.hfA = 1;
-    if (Math.floor(S.hpB) < Math.floor(HUD.phB)) HUD.hfB = 1;
-    HUD.hfA = Math.max(0, HUD.hfA - dt * 7);
-    HUD.hfB = Math.max(0, HUD.hfB - dt * 7);
-  }
-  HUD.phA = S.hpA; HUD.phB = S.hpB;
+  /* 过米闪光：位置**每跨过一个整米**闪一次，不是"在动就亮着"。按连续变化判
+     的话，被拖期间每一帧都满足条件，闪光常亮，读出来是"这个图标是白的"。
+     按整米跨越，拖得越快闪得越密，节拍本身就是速度。（血条时代掉血闪光的
+     同一条规矩，衰减也沿用那次试出来的 7/秒。） */
+  if (Math.floor(S.pos) !== Math.floor(HUD.pm)) HUD.mf = 1;
+  HUD.mf = Math.max(0, HUD.mf - dt * 7);
+  HUD.pm = S.pos;
 }
 
 function drawAvatar(ctx, A) {
   const img = A ? HUD.avA : HUD.avB, c = A ? GREEN : RED;
-  const dps = A ? S.dpsA : S.dpsB, hp = A ? S.hpA : S.hpB;
+  // 正在被拖走的那一方：往右拖是查岗党被拖，往左拖是灭迹党被拖
+  const dragged = A ? S.vel < -0.01 : S.vel > 0.01;
   const cx = A ? UI.avCX : W - UI.avCX, cy = UI.avCY, r = UI.avR;
   ctx.save();
   ctx.beginPath(); ctx.arc(cx, cy, r + 4, 0, 7); ctx.fillStyle = 'rgba(8,10,14,.92)'; ctx.fill();
@@ -1233,8 +1020,8 @@ function drawAvatar(ctx, A) {
     ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
     ctx.restore();
   } else { ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = rgba(c, .55); ctx.fill(); }
-  // 挨打时外圈红色脉动：谁在掉血，扫一眼头像就知道，不用去比两条的长度
-  if (dps > 0.01) {
+  // 被拖时外圈暖橙脉动：谁正在被拖走，扫一眼头像就知道
+  if (dragged) {
     const k = 0.5 + 0.5 * Math.sin(HUD.t * 7.5);
     ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, 7);
     ctx.lineWidth = 3; ctx.strokeStyle = `rgba(255,190,72,${0.34 + 0.56 * k})`; ctx.stroke();
@@ -1242,7 +1029,7 @@ function drawAvatar(ctx, A) {
   /* 圈色就是身份：赢了镀金、倒下转灰、其余时候是队色。结算画面上观众第一眼
      找的是脸，让脸自己把结果说了，比在中间多写一行字快。 */
   const win = S.phase === 'over' && (A ? S.winner > 0 : S.winner < 0);
-  const out = hp <= 0 || (S.phase === 'over' && S.winner !== 0 && !win);
+  const out = S.phase === 'over' && S.winner !== 0 && !win;
   ctx.beginPath(); ctx.arc(cx, cy, r + 1.5, 0, 7);
   ctx.lineWidth = win ? 4.5 : 3.5;
   if (win) { ctx.shadowColor = 'rgba(255,208,80,.95)'; ctx.shadowBlur = 18; }
@@ -1251,83 +1038,104 @@ function drawAvatar(ctx, A) {
   ctx.restore();
 }
 
-function drawHpBar(ctx, A) {
-  const hp = clamp(A ? S.hpA : S.hpB, 0, 100), dps = A ? S.dpsA : S.dpsB;
-  const c = A ? GREEN : RED, hf = A ? HUD.hfA : HUD.hfB;
-  const x = A ? UI.barX : W - UI.barX - UI.barW, w = UI.barW, y = UI.barY, h = UI.barH;
-  const sk = A ? UI.sk : -UI.sk, fw = w * hp / 100;
+/* 米 → 距离条上的横坐标。正（查岗党拽过来）往左。 */
+const barAt = (m) => MID - m / NUM.END * (W / 2 - UI.barX);
+
+function drawDistBar(ctx) {
+  const x = UI.barX, w = W - 2 * UI.barX, y = UI.barY, h = UI.barH, sk = UI.sk;
+  const pos = clamp(S.pos, -NUM.END, NUM.END), px = barAt(pos);
+  const lead = pos > 0 ? GREEN : RED;
   ctx.save();
-  // 见血了才报警：低于两成整条外缘透红呼吸，观众远远地就知道有人要没了
-  if (hp < 20) {
-    const k = 0.5 + 0.5 * Math.sin(HUD.t * 5.5);
-    ctx.save(); ctx.shadowColor = `rgba(255,60,50,${0.5 + 0.45 * k})`; ctx.shadowBlur = 16;
-    skew(ctx, x - 2, y - 2, w + 4, h + 4, sk); ctx.fillStyle = 'rgba(255,60,50,.22)'; ctx.fill();
+
+  /* 快被拖到头了：终点那一端透红呼吸。按离终点剩多少算，不按领先多少 ——
+     观众要知道的是"还有几步就完了"。 */
+  const danger = Math.abs(pos) / NUM.END;
+  if (danger > 0.75) {
+    const k = (0.5 + 0.5 * Math.sin(HUD.t * 5.5)) * (danger - 0.75) / 0.25;
+    const ex = pos > 0 ? x : x + w - 120;
+    ctx.save(); ctx.shadowColor = `rgba(255,60,50,${0.5 + 0.45 * k})`; ctx.shadowBlur = 18;
+    ctx.fillStyle = `rgba(255,60,50,${0.18 + 0.3 * k})`; ctx.fillRect(ex, y - 3, 120, h + 6);
     ctx.restore();
   }
-  // 掉了一点血：外框先渗出一圈白光，条还没看清缩了多少，余光已经报过信了
-  if (hf > 0.001) {
-    ctx.save();
-    ctx.shadowColor = `rgba(255,255,255,${0.95 * hf})`; ctx.shadowBlur = 26 * hf;
-    skew(ctx, x - 3, y - 3, w + 6, h + 6, sk);
-    ctx.fillStyle = `rgba(255,255,255,${0.30 * hf})`; ctx.fill();
-    ctx.restore();
-  }
-  /* 外框带投影：底图是照片，HUD 不浮起来就像直接印在墙上。偏移只给 4px，
-     再多就从"贴在画面前面"变成"飘在半空"了。 */
+
+  // 外框带投影：HUD 不浮起来就像直接印在墙上
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,.42)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
-  skew(ctx, x - 3, y - 3, w + 6, h + 6, sk); ctx.fillStyle = 'rgba(6,8,11,.88)'; ctx.fill();
+  plate(ctx, x - 3, y - 3, w + 6, h + 6, sk); ctx.fillStyle = 'rgba(6,8,11,.88)'; ctx.fill();
   ctx.restore();
 
-  skew(ctx, x, y, w, h, sk); ctx.save(); ctx.clip();
-  ctx.fillStyle = 'rgba(16,19,25,.70)'; ctx.fillRect(x - 20, y, w + 40, h);
-  // 空槽里的斜纹：让"还剩多少"有个可数的底，纯黑一块读不出刻度
-  ctx.fillStyle = 'rgba(255,255,255,.045)';
-  for (let i = -2; i * 20 < w + 40; i++) { skew(ctx, x + i * 20, y, 9, h, sk); ctx.fill(); }
+  plate(ctx, x, y, w, h, sk); ctx.save(); ctx.clip();
+  ctx.fillStyle = 'rgba(16,19,25,.70)'; ctx.fillRect(x, y, w, h);
+  /* 三间房的底色分段 —— 小地图。按 world.json 现算门在几米，换背景不用改这里。
+     压得很淡：它是地图不是战况，领先方的颜色要能盖在它上面读得出来。 */
+  if (WORLD) {
+    const dA = (WORLD.center - WORLD.rooms[0]) / P.pxPerM;                    // 卧室门（正）
+    const dB = -(WORLD.rooms[0] + WORLD.rooms[1] - WORLD.center) / P.pxPerM;  // 电竞房门（负）
+    const seg = [[NUM.END, dA, 'rgba(255,150,190,.30)', '女生卧室'],
+                 [dA, dB, 'rgba(170,220,160,.20)', '客厅'],
+                 [dB, -NUM.END, 'rgba(130,110,230,.34)', '电竞房']];
+    ctx.font = 'bold 19px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const [m0, m1, c, name] of seg) {
+      const a0 = barAt(m0), a1 = barAt(m1);
+      ctx.fillStyle = c; ctx.fillRect(a0, y, a1 - a0, h);
+      ctx.fillStyle = 'rgba(255,255,255,.34)'; ctx.fillText(name, (a0 + a1) / 2, y + h / 2 + 1);
+    }
+    // 门：一道竖缝
+    ctx.fillStyle = 'rgba(255,255,255,.30)';
+    for (const m of [dA, dB]) ctx.fillRect(barAt(m) - 1, y, 2, h);
+  }
 
+  /* 从起点到手机：领先方的颜色。四段渐变 + 顶部高光 + 底边一道暗，是一根
+     有圆度的管，不是一块涂了渐变的色块（血条时代定下的形制，照用）。 */
+  const f0 = Math.min(px, MID), fw = Math.abs(px - MID);
   if (fw > 0.5) {
-    const fx0 = A ? x : x + w - fw;
-    /* 四段渐变而不是三段：多出来的 0.18 那一档把亮面收窄成一条，条子就从
-       "涂了个渐变的色块"变成"一根有圆度的管"。底边那道暗是它的厚度。 */
     const g = ctx.createLinearGradient(0, y, 0, y + h);
-    g.addColorStop(0, rgba(c.map(v => Math.min(255, v * 1.30 | 0)), 1));
-    g.addColorStop(0.18, rgba(c.map(v => Math.min(255, v * 1.12 | 0)), 1));
-    g.addColorStop(0.58, rgba(c, 1));
-    g.addColorStop(1, rgba(c.map(v => v * 0.52 | 0), 1));
-    ctx.fillStyle = g; ctx.fillRect(fx0, y, fw, h);
-    // 顶上的高光也做成渐变收尾，平涂一块白会在条上留一道生硬的分界
+    g.addColorStop(0, rgba(lead.map(v => Math.min(255, v * 1.30 | 0)), .92));
+    g.addColorStop(0.18, rgba(lead.map(v => Math.min(255, v * 1.12 | 0)), .92));
+    g.addColorStop(0.58, rgba(lead, .92));
+    g.addColorStop(1, rgba(lead.map(v => v * 0.52 | 0), .92));
+    ctx.fillStyle = g; ctx.fillRect(f0, y, fw, h);
     const hg = ctx.createLinearGradient(0, y, 0, y + h * 0.30);
     hg.addColorStop(0, 'rgba(255,255,255,.26)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = hg; ctx.fillRect(fx0, y, fw, h * 0.30);
-    ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.fillRect(fx0, y + h - 3, fw, 3);
-    /* 侵蚀带 —— 末端正在被啃掉的那截。宽度按"再扣两秒会没多少"算，所以
-       对面刷得越猛这截越宽，一眼能看出是被小刀割还是被大哥碾。 */
-    if (dps > 0.01) {
-      const er = Math.min(clamp(w * dps / 100 * 4.5, 22, w * 0.34), fw);
-      const ex = A ? x + fw - er : x + w - fw;
-      const pk = 0.42 + 0.38 * Math.sin(HUD.t * 7.5);
-      const eg = ctx.createLinearGradient(A ? ex : ex + er, 0, A ? ex + er : ex, 0);
-      eg.addColorStop(0, 'rgba(255,190,60,0)');
-      eg.addColorStop(1, `rgba(255,222,110,${0.26 + 0.5 * pk})`);
-      ctx.fillStyle = eg; ctx.fillRect(ex, y, er, h);
+    ctx.fillStyle = hg; ctx.fillRect(f0, y, fw, h * 0.30);
+    ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.fillRect(f0, y + h - 3, fw, 3);
+
+    /* 正在被拖：填充里有一串箭头朝拖的方向流。流速跟着 S.vel 走，停下来箭头
+       就停 —— 距离条本身只显示"已经拖了多远"，这串箭头回答"现在还在拖吗、
+       拖得多快"。血条时代的侵蚀带是同一个职责。 */
+    if (Math.abs(S.vel) > 0.01) {
+      const dir = S.vel > 0 ? -1 : 1, gap = 34;
+      const ph = ((HUD.t * (40 + Math.abs(S.vel) * 60)) % gap) * dir;
+      ctx.save(); ctx.beginPath(); ctx.rect(f0, y, fw, h); ctx.clip();
+      ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      for (let cx = f0 - gap + ph; cx < f0 + fw + gap; cx += gap) {
+        ctx.beginPath();
+        ctx.moveTo(cx - 6 * dir, y + 11); ctx.lineTo(cx + 6 * dir, y + h / 2); ctx.lineTo(cx - 6 * dir, y + h - 11);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
-    // 掉血那一下整条压一层白：色块本身在闪，余光扫到也知道是自己在掉
-    if (hf > 0.001) {
-      ctx.fillStyle = `rgba(255,255,255,${0.50 * hf})`;
-      ctx.fillRect(fx0, y, fw, h);
-    }
-    /* 末端亮口：血条的"当前位置"，退的时候这一条在动，比看整块色块灵敏。
-       掉血时从 4px 张开到 22px —— 缩短是从这一端发生的，光就该在这儿最亮。 */
-    const lip = 4 + 18 * hf;
-    ctx.fillStyle = 'rgba(255,255,255,.88)';
-    ctx.fillRect(A ? x + fw - lip : x + w - fw, y, lip, h);
   }
+  // 刻度：每 5 米一道淡缝，起点那道白而粗
+  ctx.fillStyle = 'rgba(0,0,0,.28)';
+  for (let m = -NUM.END + 5; m < NUM.END; m += 5) if (m) ctx.fillRect(barAt(m) - 1, y + h - 10, 2, 10);
   ctx.restore();
-  skew(ctx, x, y, w, h, sk);
+  plate(ctx, x, y, w, h, sk);
   ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.26)'; ctx.stroke();
-  // 顶边再压一道更亮的短线：光从上面来，框的上沿该比下沿亮
-  ctx.save(); skew(ctx, x, y, w, h, sk); ctx.clip();
-  ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(x - 20, y, w + 40, 1.5);
+  ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fillRect(MID - 2, y - 5, 4, h + 10);
+
+  /* 手机图标：就是正在被抢的那部手机，它在条上的位置就是两个人在世界里的位置。
+     比一个三角滑块多交代了一件事 —— 被拖来拖去的是什么。过一整米亮一下。 */
+  const iw = 30, ih = 54, ix = px - iw / 2, iy = y + h / 2 - ih / 2;
+  ctx.save();
+  if (HUD.mf > 0.01) { ctx.shadowColor = `rgba(255,255,255,${HUD.mf})`; ctx.shadowBlur = 22 * HUD.mf; }
+  ctx.beginPath(); ctx.roundRect(ix, iy, iw, ih, 7);
+  ctx.fillStyle = '#15161b'; ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 3.5; ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(ix + 5, iy + 7, iw - 10, ih - 16, 3);
+  ctx.fillStyle = rgba(Math.abs(pos) < 0.05 ? [230, 236, 246] : lead, .95); ctx.fill();
   ctx.restore();
   ctx.restore();
 }
@@ -1337,10 +1145,10 @@ function drawHpBar(ctx, A) {
    只有 80 时差值能到四万），画条只能开方压缩 —— 压完小额礼物推不动它、大额又
    早早顶到头，两头都读不出来。写成数字两头都准：刷一件跳一截，跳多少和礼物的
    push 值一一对应。
-   放正中：分列左右两侧时没人会去比，而这两个数**必须放在一起比** —— 扣血算的
-   就是它们的差，差过了 X 才有人掉血。并排摆着，"我比他多多少"不用算。
+   放正中：分列左右两侧时没人会去比，而这两个数**必须放在一起比** —— 拖动速度
+   算的就是它们的差，差过了 X 才拖得动。并排摆着，"我比他多多少"不用算。
    它比倒计时显眼一档也是故意的：观众刷礼物改变的是这个数，不是那个钟。
-   排在血条**下方**：上方那行归时钟。 */
+   排在距离条**下方**：上方那行归时钟和名字。 */
 function drawPowerText(ctx) {
   const cy = UI.pwCY;
   ctx.save();
@@ -1385,29 +1193,23 @@ function drawPowerText(ctx) {
 }
 
 function drawHUD(ctx) {
-  const hA = clamp(S.hpA, 0, 100), hB = clamp(S.hpB, 0, 100);
   ctx.save();
+  drawDistBar(ctx);
   for (const A of [true, false]) {
     ctx.textBaseline = 'middle';
     drawAvatar(ctx, A);
-    drawHpBar(ctx, A);
-    /* 队名和百分比并排在血条**上方**的外侧，条里一个字都不放。
-       放进条里试过两版，压外端会在残血时和末端亮口叠在一起，压内端满血时
-       又被侵蚀带盖住 —— 填充的末端迟早要扫过整条，数字待在条里就没有安全
-       位置。挪出来之后两边各是一行"谁 · 剩多少"，条本身只管长度。
-       放外侧是为了避开中线：那儿归时钟和战况读数。 */
-    const hv = A ? hA : hB, ox = A ? 1 : -1;
+    /* 队名 + 这一方拽过来的米数，并排在距离条**上方**的外侧。只写自己拽过来
+       的那部分：对面占优时自己这边是 0.0 —— 两个数一个在涨另一个就是 0，
+       哪边的数在跳，就是哪边在赢。 */
+    const m = Math.max(0, A ? S.pos : -S.pos), ox = A ? 1 : -1;
     const nx = (A ? UI.avCX : W - UI.avCX) + ox * (UI.avR + 12);   // 队名从头像右缘起
     ctx.textAlign = A ? 'left' : 'right';
     ctx.font = 'bold 30px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
     txt(ctx, A ? '查岗党' : '灭迹党', nx, UI.avCY, '#fff', 6);
     ctx.font = 'bold 37px ui-monospace,Menlo,monospace';
-    txt(ctx, hv.toFixed(0) + '%', nx + ox * 114, UI.avCY, hv < 20 ? '#ff8a7a' : '#fff', 6.5);
+    txt(ctx, m.toFixed(1) + 'm', nx + ox * 114, UI.avCY,
+        m > 0.05 ? rgba((A ? GREEN : RED).map(v => Math.min(255, v * 1.15 | 0)), 1) : '#fff', 6.5);
   }
-
-  /* 两条血条中间那道 40px 缝**故意空着**。试过在里面放一个左右各半边队色的
-     小菱形：满血时两条填充顶到缝边，菱形被夹成一条细缝，只剩"碎"。
-     两边顶在一起的感觉，血条端部的斜切已经说清楚了。 */
 
   /* 时钟和拉力**不等开局**：页面一打开就摆在那儿（时钟满时长、拉力 0:0）。
      等 phase 变成 play 才画的话，观众进直播间看到的是半块 HUD，第一件礼物
@@ -1419,22 +1221,17 @@ function drawHUD(ctx) {
     if (S.phase === 'sudden') { tip = `绝杀 ${S.sudden.toFixed(0)}`; col = '#ff6a5a'; bg = 'rgba(52,8,10,.86)'; }
     else if (S.phase === 'over') { tip = S.winner > 0 ? '查岗党胜' : S.winner < 0 ? '灭迹党胜' : '平局'; col = '#ffd45a'; bg = 'rgba(46,34,6,.88)'; }
     else if (S.stand > 0) { tip = `反击 ${S.stand.toFixed(0)}`; col = '#ffd45a'; bg = 'rgba(46,34,6,.86)'; }
-    /* 时钟和战况读数并排成一行，放在血条上方；拉力在血条下方。
-       倒计时排在拉力对面、字也小一号是有意的：观众刷礼物改变的是拉力，
-       不是那个钟；钟只在最后半分钟才重要，而那时它会变成"绝杀 18"自己跳出来。 */
     drawPowerText(ctx);
-    const d = S.dpsA > 0.01 ? S.dpsA : S.dpsB, hurtA = S.dpsA > 0.01;
-    const over = S.phase === 'over';
-    // 还没开局时不写"僵持"——那是对局里"谁都没掉血"的读数，待机时写它是假的
-    const note = over || idle ? '' : d > 0.01
-      ? (hurtA ? `◀ 每秒 ${d.toFixed(1)}` : `每秒 ${d.toFixed(1)} ▶`) : '僵 持';
+    const v = Math.abs(S.vel), over = S.phase === 'over';
+    // 还没开局时不写"僵持"——那是对局里"谁都拖不动谁"的读数，待机时写它是假的
+    const note = over || idle ? '' : v > 0.01
+      ? (S.vel > 0 ? `◀ ${v.toFixed(1)}米/秒` : `${v.toFixed(1)}米/秒 ▶`) : '僵 持';
     ctx.textBaseline = 'middle';
     ctx.font = `bold ${over ? 27 : 23}px ui-monospace,Menlo,monospace`;
     const tw = ctx.measureText(tip).width;
     ctx.font = 'bold 21px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
     const nw = note ? ctx.measureText(note).width + 18 : 0;
-    /* 这块底板得跟着内容伸缩 —— 它下面 18px 就是指针三角横扫的那一行，
-       写死一个够宽的值会在"僵持"时空出一大片压在画面上。 */
+    // 底板跟着内容伸缩：写死一个够宽的值会在"僵持"时空出一大片压在名字上
     const bw = tw + nw + 46, bx = MID - bw / 2;
     ctx.save();
     /* 常态用和拉力板同一套梯形；绝杀/反击/结算这三种要变色，就还用它们
@@ -1452,7 +1249,7 @@ function drawHUD(ctx) {
     if (note) {
       ctx.font = 'bold 21px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
       txt(ctx, note, bx + 23 + tw + 18, UI.clkCY,
-          d > 0.01 ? '#ffd86e' : 'rgba(232,236,242,.70)', 4);
+          v > 0.01 ? '#ffd86e' : 'rgba(232,236,242,.70)', 4);
     }
   }
   ctx.restore();
@@ -1464,7 +1261,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 (async function boot() {
   const cvBg = document.getElementById('bg'), cvCh = document.getElementById('ch'), cvFx = document.getElementById('fx');
   const bctx = cvBg.getContext('2d'), cctx = cvCh.getContext('2d'), fctx = cvFx.getContext('2d');
-  initTex();
 
   /* ?sim=1 纯数值快进：不渲染、不发弹幕，只跑 battle，用来核对局长和手感。
      数值调参不该靠看画面 —— 一局十二分钟，肉眼比对两组参数根本比不出来，
@@ -1483,37 +1279,37 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     while (S.phase !== 'over' && el < cap) {
       S.fA += injA * H; S.fB += injB * H;
       battle(H); el += H;
-      // 挨打那一方掉到半血 / 只剩两成的时刻 —— 局长看的是血，不是手机位置
-      const low = Math.min(S.hpA, S.hpB);
-      if (mark50 < 0 && low <= 50) mark50 = el;
-      if (mark80 < 0 && low <= 20) mark80 = el;
+      // 被拖出去一半 / 八成的时刻 —— 局长看的是位置，不是此刻的姿态
+      const far = Math.abs(S.pos) / NUM.END;
+      if (mark50 < 0 && far >= 0.5) mark50 = el;
+      if (mark80 < 0 && far >= 0.8) mark80 = el;
     }
     const fmt = (v) => v < 0 ? '—' : `${v / 60 | 0}:${String(v % 60 | 0).padStart(2, '0')}`;
     document.getElementById('msg').textContent =
-      `注入 ${injA}:${injB}／秒 → 结束于 ${fmt(el)}  血 ${S.hpA.toFixed(1)}:${S.hpB.toFixed(1)}  `
+      `注入 ${injA}:${injB}／秒 → 结束于 ${fmt(el)}  位置 ${S.pos.toFixed(1)}m  `
       + `拉力 ${S.fA.toFixed(0)}:${S.fB.toFixed(0)}  差 ${(S.fA - S.fB).toFixed(0)}  `
-      + `对抗线 p=${S.p.toFixed(1)}  `
-      + `半血 ${fmt(mark50)}  两成血 ${fmt(mark80)}  `
+      + `姿态 p=${S.p.toFixed(1)}  `
+      + `过半 ${fmt(mark50)}  八成 ${fmt(mark80)}  `
       + `${S.winner > 0 ? '查岗党胜' : S.winner < 0 ? '灭迹党胜' : '平/未分'}`;
     document.title = 'SIMDONE ' + document.getElementById('msg').textContent;
     return;
   }
 
 
-  /* 弹幕命中的是对抗线在**它自己那个高度**上的横坐标，不是中点。所以从不同
-     高度飞来的弹幕会在不同的行注入冲量 —— 在这之前所有命中都发生在 phoneY
-     一个位置上，那条线永远只在同一处抖。 */
+  /* 弹幕往手机那条竖线上打。发射高度按人物站位给：从头顶往上一点到膝盖，
+     脸那一段常规火力要绕开（见 ammo.js）。这几个数跟着 GROUND 走 —— 人物
+     挪了，弹幕的高度自动跟着挪。 */
   Ammo.init({
     W, frontAt,
-    /* 命中只负责演出，**不扣血也不推手机**。血是双方拉力差每秒扣出来的、手机
-       位置是拉力差的读数（都见 battle）—— 让命中再推一次，等于同一份伤害算
-       两遍，而且会把"两边都在刷时谁也不掉血"这条最要紧的手感破坏掉。
-       弹幕是拉力的表现形式，不是伤害的来源。 */
+    band: { top: GROUND - 660, bot: GROUND - 90, face: [GROUND - 600, GROUND - 490] },
+    /* 命中只负责演出，**不拖人**。位置是双方拉力差每秒拖出来的（见 battle）
+       —— 让命中再推一次，等于同一份力算两遍，而且会把"两边都在刷时谁也拖不动
+       谁"这条最要紧的手感破坏掉。弹幕是拉力的表现形式，不是位移的来源。 */
     onHit(p) {
       impact(-p.from, p.y, p.exec ? 4 : p.g.power, RECIPE[p.g.recipe]);
     },
     /* 对冲掉的那些在中线互相撞掉：粒子照爆，但不推角色、不染色、不顿帧。
-       它要回答的问题只有一个 —— "我刷了礼物怎么手机没动"。答案就在画面上：
+       它要回答的问题只有一个 —— "我刷了礼物怎么没拖动"。答案就在画面上：
        你的东西被对面在半空撞掉了。 */
     onClash(p, x) {
       RECIPE[p.g.recipe].burst(x, p.y, p.from, 0.42);
@@ -1521,16 +1317,20 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     },
   });
 
-  /* 气泡挂在手机上 —— phonePos 是对抗线在手机高度上的横坐标，跟手机、地面
-     辉光同一个源，所以消息永远是从正在被抢的那部手机里冒出来的。 */
+  /* 气泡挂在手机上 —— phonePos 取自当前贴图里标好的手机点，所以消息永远是
+     从正在被抢的那部手机里冒出来的。 */
   Bubble.init({ phoneAt: phonePos });
 
-  const bg = await load('assets/bg.jpg');
-  /* 每 1% 一张。缺的档位解码失败是预期内的，取 null 交给 FrameSeq 映射到邻居。 */
-  const frames = await Promise.all(
-    Array.from({ length: 101 }, (_, p) =>
-      load(`assets/frames/f${String(p).padStart(3, '0')}.png`).catch(() => null)));
-  const seq = new FrameSeq(frames);
+  /* 长卷背景与姿势贴图，都由 v14/build.py 生成。world.json 是它们的说明书：
+     每间房多宽、客厅正中在哪、每张贴图的锚点和手机位置。 */
+  const vq = Q0.get('v') ? '?v=' + encodeURIComponent(Q0.get('v')) : '';
+  WORLD = await (await fetch('assets/world/world.json' + vq)).json();
+  WORLD.total = WORLD.rooms.reduce((a, b) => a + b, 0);
+  const rooms = await Promise.all(WORLD.rooms.map((_, i) => load(`assets/world/room${i}.webp`)));
+  const poseNames = Object.keys(WORLD.poses);
+  const poseImgs = {};
+  await Promise.all(poseNames.map(n => load(`assets/world/pose_${n}.webp`).then(im => { poseImgs[n] = im; })));
+  const actors = new PoseView(poseImgs);
   /* HUD 头像。离线从 girl.png / boy.png 裁好的 160 方图，两张共 21KB ——
      立绘原图是 760×1145，只为取两个脸去加载它们不值当。 */
   [HUD.avA, HUD.avB] = await Promise.all(
@@ -1545,7 +1345,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Particles.loadShapes(Q0.get('v'), noSpr),
   ]);
   document.getElementById('msg').textContent =
-    `${frames.filter(Boolean).length}/101 档 · 每 1%` +
+    `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` +
     (sprOK.some(Boolean) ? ` · 物品转盘 ${sprOK.filter(Boolean).length}` : '') +
     (shpOK.some(Boolean) ? ` · 粒子 ${shpOK.filter(Boolean).length}` : '') +
     (resN ? ` · 结算 ${resN}` : '');
@@ -1595,68 +1395,54 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     if (Q.get('liveStop') === '1') { stopAll = true; live = false; }
   }
   if (Q.has('p')) { S.p = clamp(+Q.get('p'), 0, 100); S.auto = false; }
+  // ?pos=<米> 直接把两个人摆到某个位置（正 = 往左、进女生卧室），截各房间的样子用
+  if (Q.has('pos')) S.pos = clamp(+Q.get('pos'), -NUM.END, NUM.END);
   /* 自动演示默认就是关的（见 S.auto），?auto=1 才打开 —— 展示时它会自己来回
      拽手机，观众分不清哪一下是刷礼物推的。?auto=0 保留着，写脚本时不用管
      默认值是什么。 */
   if (Q.get('auto') === '0') S.auto = false;
   if (Q.get('auto') === '1') S.auto = true;
-  /* X / M / Z 三个数就地试：?x=30&m=1000&z=5。Z 决定局长 —— 5 是需求例子里
-     那个"差 1000 每秒扣 5%"（约 70 秒一局），0.27 是 12 分钟局长的值。 */
+  /* X / M / V_Z 三个数就地试：?x=30&m=1000&vz=1.5。V_Z 决定局长 —— 1.5 是从
+     需求例子"差 1000 每秒扣 5%"换算来的（约 70 秒一局）；?end= 改终点多远。 */
   if (Q.has('x')) NUM.PULL_X = Math.max(0, +Q.get('x'));
   if (Q.has('m')) NUM.PULL_M = Math.max(1, +Q.get('m'));
-  if (Q.has('z')) NUM.HP_Z = Math.max(0, +Q.get('z'));
+  if (Q.has('vz')) NUM.V_Z = Math.max(0, +Q.get('vz'));
+  if (Q.has('end')) NUM.END = clamp(+Q.get('end'), 5, 30);
   if (Q.has('linefull')) NUM.LINE_FULL = Math.max(1, +Q.get('linefull'));
   /* 钉住闪光。两个都在这里**当场写一次值**，不能只设 pin 等 hudTick 去写 ——
      ?liveStop 把主循环停在 `render(); return`，hudTick 一次都不会跑，
      只设 pin 的话截出来的永远是没闪光的那一帧（踩过）。 */
   // ?hudflash=0..1 钉住拉力的注入闪光，专门用来截"礼物砸进来那一下"的形态
   if (Q.has('hudflash')) { HUD.pin = clamp(+Q.get('hudflash'), 0, 1); HUD.lfA = HUD.lfB = HUD.pin; }
-  // ?hphit=0..1 钉住掉血闪光。它 0.22 秒就灭，不钉住截不到
-  if (Q.has('hphit')) { HUD.hpin = clamp(+Q.get('hphit'), 0, 1); HUD.hfA = HUD.hfB = HUD.hpin; }
   if (Q.has('overt')) Result.setPin(Math.max(0, +Q.get('overt')));   // 结算定帧
-  if (Q.has('line')) S.line = clamp(+Q.get('line') | 0, 0, 3);
   // ?zoom=1 用画布原生尺寸铺开，截图时才看得清脸和手的实际画法
   if (Q.get('zoom') === '1') document.getElementById('stage').style.width = W + 'px';
   document.getElementById('pv').value = S.p;
   document.getElementById('auto').checked = S.auto;
   for (let i = 0; i < 90; i++) derive(1 / 60);   // 预热，让指数趋近收敛到位
 
-  /* 震动只作用在"正在发生冲突的东西"上 —— 对抗线、角色、粒子。
-     房间和地毯不动：机位是固定的，整幅画面一起震就得把背景放大做 overscan
-     才不露边，而背景一放大，地毯四角那组标定坐标就全偏了。HUD 也不震，它
-     不在场景里。 */
-  /* 拆成三段是因为它本来就是三张画布、三种代价：底版每帧重画一张 960x1334
-     的照片，角色每帧重画一张 900 高的 PNG，特效层则随着场上有多少东西线性
-     涨。"哪一层在拖后腿"只有分开计时才答得出，而合在一个函数里就只能猜。 */
+  /* 震动只作用在"正在发生冲突的东西"上 —— 角色、弹幕、粒子。背景不震（见
+     drawWorld），HUD 也不震，它不在场景里。
+     拆成三段是因为它本来就是三张画布、三种代价：背景每帧画一两张房间图，
+     角色每帧画一张贴图，特效层则随着场上有多少东西线性涨。"哪一层在拖后腿"
+     只有分开计时才答得出，而合在一个函数里就只能猜。 */
   function renderBg() {
-    const bias = (FX.pDraw - 50) / 50;
-    const ox = Particles.off.x, oy = Particles.off.y;
     bctx.clearRect(0, 0, W, H);
-    bctx.drawImage(bg, 0, 0, W, H);
-    drawGround(bctx, bias);
-    bctx.save(); bctx.translate(ox, oy);
-    if (S.line === 1) drawLine(bctx);
-    else if (S.line === 2) drawFrontGround(bctx, bias);
-    bctx.restore();
+    drawWorld(bctx, rooms);
   }
 
   function renderActors() {
     const ox = Particles.off.x, oy = Particles.off.y;
     cctx.clearRect(0, 0, W, H);
     cctx.save(); cctx.translate(ox, oy);
-    seq.draw(cctx, FX.pDraw, FX.actorX, FX.punch, FX.tint, FX.tintA);
+    actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.punch, FX.tint, FX.tintA);
     cctx.restore();
   }
 
   function renderFx() {
-    const bias = (FX.pDraw - 50) / 50;
     const ox = Particles.off.x, oy = Particles.off.y;
     fctx.clearRect(0, 0, W, H);
     fctx.save(); fctx.translate(ox, oy);
-    /* line=1 要在角色之上再叠一遍，否则光柱全程被两具身体挡死；line=2 的
-       带子在地上，挡住了也没关系 —— 顶端那个指针替它做读数。 */
-    if (S.line === 1) drawLine(fctx, 0.42);
-    else if (S.line >= 2) drawFrontMark(fctx, bias);
     // 气泡在弹幕之下：它贴在后面那堵墙上，弹幕是前景，飞过时该压过去
     Bubble.draw(fctx);
     /* 弹幕在角色之上、粒子之下：它飞向两个人中间，画在角色底下的话命中前
@@ -1664,12 +1450,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Ammo.draw(fctx);
     Particles.draw(fctx);
     fctx.restore();
-    /* 血条读 S.hpA / S.hpB，不读手机位置。手机位置是"这一刻谁拽赢了"，会
-       来回晃、也会被对面追回去；血量是"这段时间里被压了多久"的累计，只减
-       不增。两者本来就是两件事 —— 拔河时绳子来回而没有人真的前进，正是这个
-       意思，而血条要回答的是"这么耗下去谁先倒"。 */
-    /* 结算全屏接管：演出图铺满整幅，血条不再画。顶上那两条属于对局中，
-       结果已经写在画面里（谁在抡枕头、谁跪着哭），再摆一遍是重复。 */
+    /* 结算全屏接管：演出图铺满整幅，距离条不再画。结果已经写在画面里
+       （谁在抡枕头、谁跪着哭），再摆一遍是重复。 */
     if (S.phase === 'over') Result.draw(fctx);
     else drawHUD(fctx);
     Particles.drawFlash(fctx, W, H);
@@ -1677,26 +1459,21 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 
   function render() { renderBg(); renderActors(); renderFx(); }
 
-  /* ?strip=N 出一条连帧胶片：一次看清 N 个档位之间过不过得去。
-     动画在静止截图里看不出问题，只有把相邻档位并排摆着才看得出哪一格在跳。 */
-  if (Q.has('strip')) {
-    // 胶片要的是各档之间的**纯**差异，拉锯会给每格叠上同一个偏移，关掉
-    P.sway = 0;
-    const n = clamp(+Q.get('strip') | 0, 2, 21), sc = 0.5;
-    const out = document.createElement('canvas');
+  /* 并排出胶片的公共部分：n 格，每格先跑 setup(i) 再渲染，左上角写 label(i)。 */
+  function filmstrip(n, setup, label) {
+    const sc = 0.5, out = document.createElement('canvas');
     out.width = n * W * sc; out.height = H * sc;
     const o = out.getContext('2d');
     o.fillStyle = '#0c0e12'; o.fillRect(0, 0, out.width, out.height);
     for (let i = 0; i < n; i++) {
-      S.p = i * 100 / (n - 1); S.auto = false;
-      FX.phoneX = MID; FX.rowOff.fill(0); FX.rowHeat.fill(0); S.t = 3.0;
-      for (let k = 0; k < 150; k++) derive(1 / 60);
+      setup(i);
       render();
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
-      o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 86, 26);
-      o.fillStyle = '#fff'; o.font = '600 15px system-ui';
-      o.fillText(`p=${S.p.toFixed(0)}`, dx + 8, 18);
+      const t = label(i);
+      o.font = '600 15px system-ui';
+      o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, o.measureText(t).width + 16, 26);
+      o.fillStyle = '#fff'; o.fillText(t, dx + 8, 18);
     }
     const stage = document.getElementById('stage');
     stage.style.width = out.width + 'px';
@@ -1704,46 +1481,29 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     stage.innerHTML = '';
     out.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
     stage.appendChild(out);
+  }
+
+  /* ?strip=1 五种动作 × 各自该在的房间并排摆：一次看清动作、背景、距离条、
+     手机位置四样东西对不对得上。p 定动作、pos 定卷到哪 —— 两者本来由同一个
+     拉力差推出来，这里分开给是为了每格都落在一个有代表性的位置上。 */
+  if (Q.has('strip')) {
+    const cells = [[50, 0], [70, 6], [95, 22], [30, -6], [5, -22]];
+    filmstrip(cells.length, (i) => {
+      [S.p, S.pos] = cells[i]; S.vel = (S.p - 50) / 50 * NUM.V_Z; S.t = 3.0;
+      FX.pose = 'n'; FX.poseT = 0;
+      for (let k = 0; k < 20; k++) derive(1 / 60);
+    }, (i) => `p=${cells[i][0]} pos=${cells[i][1]}m  ${FX.pose}/${FX.frame}`);
     return;
   }
 
-  /* ?swaystrip=N 看空闲拉锯：**同一个 S.p**，只让时间往前走，N 格并排。
-     这是唯一能看清它的办法 —— 拉锯是纯时间函数，单张截图里跟静止画面长得
-     一模一样，而两张不同时刻的截图又分不清"是拉锯在动"还是"页面还没加载完"。
-     每格标出 pDraw 与手机 x，位移直接读数。
-     ?swayp= 定在哪个进度看（默认 50）；越靠近端点 calm 越小，拉锯该越弱，
-     这条也靠它验证。?swayms= 每格之间推进多少毫秒（默认 700）。
-     ?swayfire= 给查岗党一侧注入这么多火力（净差＝它本身）—— 验的是"战况正在
-     被推时拉锯有没有让位"。给 0 和给 230（一件爱的爆炸③）各拍一条，前者该摆、
-     后者该基本不动，两条并排看就知道让位是不是真的生效了。 */
-  if (Q.has('swaystrip')) {
-    const n = clamp(+Q.get('swaystrip') | 0, 2, 12), sc = 0.5;
-    const MS = clamp(+(Q.get('swayms') || 700), 60, 4000) / 1000;
-    S.p = clamp(+(Q.get('swayp') || 50), 0, 100); S.auto = false;
-    const fire = clamp(+(Q.get('swayfire') || 0), 0, 4000);
-    S.fA = fire; S.fB = 0;
-    const out = document.createElement('canvas');
-    out.width = n * W * sc; out.height = H * sc;
-    const o = out.getContext('2d');
-    o.fillStyle = '#0c0e12'; o.fillRect(0, 0, out.width, out.height);
-    // 先空跑两秒：phoneX 是趋近过去的，不预热的话第一格还停在画面正中
-    S.t = 0;
-    for (let k = 0; k < 120; k++) { S.t += 1 / 60; derive(1 / 60); }
-    for (let i = 0; i < n; i++) {
-      if (i) for (let k = 0, m = Math.round(MS * 60); k < m; k++) { S.t += 1 / 60; derive(1 / 60); }
-      render();
-      const dx = i * W * sc;
-      for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
-      o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 196, 26);
-      o.fillStyle = '#fff'; o.font = '600 15px system-ui';
-      o.fillText(`t=${S.t.toFixed(1)}s  pDraw=${FX.pDraw.toFixed(1)}  x=${FX.phoneX.toFixed(0)}`, dx + 8, 18);
-    }
-    const stage = document.getElementById('stage');
-    stage.style.width = out.width + 'px';
-    stage.style.aspectRatio = `${out.width}/${out.height}`;
-    stage.innerHTML = '';
-    out.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
-    stage.appendChild(out);
+  /* ?loopstrip=1 僵持循环的 8 格按播放顺序并排 —— 循环帧之间抖不抖、手机
+     是不是在来回走，只有摊开才看得出来。 */
+  if (Q.has('loopstrip')) {
+    filmstrip(LOOP_N.length, (i) => {
+      S.p = 50; S.pos = 0; S.vel = 0; FX.pose = 'n';
+      FX.poseT = (i + 0.5) / P.loopFps;
+      derive(0);
+    }, (i) => `${i} ${FX.frame}  手机 x=${FX.phoneX.toFixed(0)}`);
     return;
   }
 
@@ -1843,35 +1603,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     return;
   }
 
-  /* ?linestrip=1 把对抗线的三种画法并排摆着比。三档各截一张再拼是不行的
-     —— 每张 headless 截图要等一百秒，而且三张之间 S.t 不同，线的抖动相位
-     对不上，看到的差别有一半是相位差不是画法差。 */
-  if (Q.has('linestrip')) {
-    const sc = 0.5, names = ['line=0 全去掉', 'line=1 原发光柱', 'line=2 地面战线+指针', 'line=3 只要指针'];
-    S.auto = false; S.t = 3.0;
-    for (let k = 0; k < 150; k++) derive(1 / 60);
-    const out = document.createElement('canvas');
-    out.width = names.length * W * sc; out.height = H * sc;
-    const o = out.getContext('2d');
-    o.fillStyle = '#0c0e12'; o.fillRect(0, 0, out.width, out.height);
-    for (let i = 0; i < names.length; i++) {
-      S.line = i;
-      render();
-      const dx = i * W * sc;
-      for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
-      o.fillStyle = 'rgba(0,0,0,.72)'; o.fillRect(dx, 0, 160, 26);
-      o.fillStyle = '#ffd36b'; o.font = '600 15px system-ui';
-      o.fillText(`${names[i]}  p=${S.p.toFixed(0)}`, dx + 8, 18);
-    }
-    const stage = document.getElementById('stage');
-    stage.style.width = out.width + 'px';
-    stage.style.aspectRatio = `${out.width}/${out.height}`;
-    stage.innerHTML = '';
-    out.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
-    stage.appendChild(out);
-    return;
-  }
-
   /* ?fxstrip=N 出一条特效胶片：打一下，然后每 MS 毫秒抓一格。
      特效是瞬时的，单张截图什么也验证不了 —— 只有把同一次命中的前后若干
      毫秒并排摆着，才看得出顿帧有没有生效、冲击波是不是沿线传出去了、
@@ -1910,7 +1641,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       if (i === 0) {
         o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 26, 132, 24);
         o.fillStyle = '#ffd36b';
-        o.fillText(`${Q.get('fxrecipe') || 'thud'} p${power} line${S.line}`, dx + 8, 42);
+        o.fillText(`${Q.get('fxrecipe') || 'thud'} p${power}`, dx + 8, 42);
       }
     }
     const stage = document.getElementById('stage');
@@ -2057,7 +1788,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        什么样"，不是死图。
        阶段和计时器必须一起冻：只冻血量的话，绝杀的累计照走（lead 被冻在一个
        大值上，等于每一帧都在给它加码），截一张残血图能等出个"查岗党胜"来。 */
-    const k = { p: S.p, hpA: S.hpA, hpB: S.hpB, clock: S.clock, phase: S.phase,
+    const k = { p: S.p, pos: S.pos, vel: S.vel, clock: S.clock, phase: S.phase,
                 big: S.big, sudden: S.sudden, stand: S.stand, winner: S.winner };
     battle(dt);
     if (freeze) Object.assign(S, k);
@@ -2065,6 +1796,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       S.p += dir * dt * 9 * (0.35 + Math.abs(Math.sin(S.t * .27)) * 1.5);
       if (S.p > 97) { S.p = 97; dir = -1; } if (S.p < 3) { S.p = 3; dir = 1; }
     }
+    if (S.phase === 'idle') drift(dt);
     if (S.phase !== 'idle') document.getElementById('pv').value = S.p;
     else if (S.auto) document.getElementById('pv').value = S.p;
     derive(dt); hudTick(dt);
@@ -2078,8 +1810,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const mm = Math.max(0, S.clock);
     document.getElementById('stat').textContent =
       (S.phase === 'idle'
-        ? `p=${S.p.toFixed(1)}  对抗线x=${phonePos()[0].toFixed(0)}  f${String(seq.shown).padStart(3, '0')}  `
-        : `血 ${S.hpA.toFixed(1)}:${S.hpB.toFixed(1)}  拉力 ${S.fA.toFixed(0)}:${S.fB.toFixed(0)}  `
+        ? `p=${S.p.toFixed(1)}  位置${S.pos.toFixed(1)}m  手机x=${FX.phoneX.toFixed(0)}  ${actors.shown}  `
+        : `位置 ${S.pos.toFixed(1)}m ${S.vel.toFixed(2)}m/s  拉力 ${S.fA.toFixed(0)}:${S.fB.toFixed(0)}  `
           + `差${(S.fA - S.fB).toFixed(0)}  p=${S.p.toFixed(1)}  `
           + `${(mm / 60 | 0)}:${String(mm % 60 | 0).padStart(2, '0')}`
           + (S.phase === 'sudden' ? `  绝杀${S.sudden.toFixed(0)}` : '')
@@ -2127,9 +1859,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   }
   document.getElementById('start').onclick = () => {
     if (S.phase === 'idle') { startMatch(); document.getElementById('start').textContent = '回到调试台'; }
-    else { S.phase = 'idle'; S.fA = S.fB = 0; S.clock = NUM.MATCH; Ammo.clear(); document.getElementById('start').textContent = '开始对局'; }
+    else { S.phase = 'idle'; S.fA = S.fB = 0; S.p = 50; S.pos = 0; S.clock = NUM.MATCH; Ammo.clear(); document.getElementById('start').textContent = '开始对局'; }
   };
-  const lv = document.getElementById('lv');
-  lv.value = S.line;
-  lv.onchange = () => S.line = +lv.value;
 })();

@@ -6,8 +6,9 @@
  * 观众不需要认出飞过来的是什么，光看节奏就知道这一发有多重。加新礼物只往
  * main.js 的 GIFT 表里添一行，这个文件不用动；除非要加新物品的画法。
  *
- * 命中判定用的是 frontAt(y) —— 对抗线在弹幕**自己那个高度**上的真实横坐标，
- * 不是中点。所以不同高度飞来的弹幕会在不同的行注入冲量，那条线才活得起来。
+ * 命中判定用的是 frontAt(y) —— 手机所在的那条竖线在弹幕高度上的横坐标。
+ * 发射高度的范围由 main.js 按人物站位传进来（init 的 band），这里不写死
+ * 画面几何：人物的大小和站位换过不止一次，每次都是这几个数先对不上。
  *
  * 物品目前是代码画的：几何剪影 + 粗描边 + 高对比色。飞行物在画面上只有
  * 60~160px 而且高速移动，这个精度足够验证节奏 —— 而节奏是这个功能的全部。
@@ -21,8 +22,14 @@ const Ammo = (function () {
   const queue = [];          // 待发射：连珠的后续几颗、重投的预警期
   const warns = [];          // 预警箭头
   let frontAt = null, onHit = null, onClash = null, W = 960;
+  /* 发射高度带：top~bot 是弹幕会飞的高度（大致就是人物从头到膝盖），
+     face 是两张脸所在的那一段 —— 常规火力要绕开它，见 launch。 */
+  let band = { top: 380, bot: 900, face: [520, 610] };
 
-  function init(o) { frontAt = o.frontAt; onHit = o.onHit; onClash = o.onClash || (() => {}); W = o.W || 960; }
+  function init(o) {
+    frontAt = o.frontAt; onHit = o.onHit; onClash = o.onClash || (() => {}); W = o.W || 960;
+    if (o.band) band = o.band;
+  }
 
   /* 独占窗口。档 4 落地后的这一段时间里，别的东西不许出现在屏幕上 ——
      这是最强的一种表现手段，而且不需要任何新的粒子技术：观众看到的是
@@ -510,7 +517,7 @@ const Ammo = (function () {
       if (o.gift && pending.length < 6) pending.push([g, fixedY, o]);
       return;
     }
-    const y0 = fixedY != null ? fixedY : 380 + Math.random() * 520;
+    const y0 = fixedY != null ? fixedY : band.top + Math.random() * (band.bot - band.top);
     if (o.exec) {
       /* 处决：预警拉长到半秒多，让全场先看见它要来；体积按 1.8 倍压过来。
          这是"倾倒式"演出的简化实现 —— 等美术到位再换成真正的倾泻，
@@ -520,13 +527,13 @@ const Ammo = (function () {
       return;
     }
     /* 常规火力：一发就是一发，不走连珠那一串。
-       高度要避开两个人的脸（520~610）—— 火力弹幕是连绵不断的，糊在脸上的话
+       高度要避开两个人的脸（band.face）—— 火力弹幕是连绵不断的，糊在脸上的话
        整局都看不清表情，而表情是这个玩法仅有的两个可读信息之一。礼物弹幕是
        孤立事件，遮一下无妨；常态的那一路不行。 */
     if (o.one) {
       const yy = fixedY != null ? fixedY : (Math.random() < 0.45
-        ? 366 + Math.random() * 140          // 脸以上：沙发靠背那一带
-        : 636 + Math.random() * 300);        // 脸以下：手和腿那一带
+        ? band.top + Math.random() * Math.max(0, band.face[0] - 14 - band.top)   // 脸以上
+        : band.face[1] + 26 + Math.random() * Math.max(0, band.bot - band.face[1] - 26)); // 脸以下：手和腿
       queue.push({ t: 0, g, y: clampY(yy), clash: o.clash });
       return;
     }
@@ -546,7 +553,7 @@ const Ammo = (function () {
     }
   }
 
-  const clampY = (y) => y < 300 ? 300 : y > 960 ? 960 : y;
+  const clampY = (y) => y < band.top - 60 ? band.top - 60 : y > band.bot + 60 ? band.bot + 60 : y;
   const clamp01 = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
 
   /* 轨迹环形缓冲的长度。原来是 8 帧，看着够，实际不够：被子 850px/s，八帧
