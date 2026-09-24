@@ -26,15 +26,26 @@ const P = {
      （距离条上的房间分段按 world.json 现算，不用这两个数）。 */
   pxPerM: 82,
 
-  /* 姿态怎么选：按 S.p 的偏离量 |bias|（0 = 势均力敌，1 = 拉力差顶满）。
+  /* 姿态怎么选：两把尺取更狼狈的那个 ——
+       拉力：S.p 的偏离量 |bias|（0 = 势均力敌，1 = 拉力差顶满）—— 一件大礼物能瞬间把人拽倒；
+       距离：|S.pos| / END（0 = 客厅正中，1 = 到头）—— 被拖得越远倒得越低。
+     只看拉力的话，礼物刷得匀时拉力差几乎不变，一整局停在同一档：实测 2:1 对刷
+     94 秒全是僵持，人站着被平移 30 米。距离这把尺保证每局四档都看得到。
+     例外：被拖远的那方正在往回拽（拉力反号且够跪那档）时只看拉力 —— 他在反攻，
+     不能还趴着。
      带回差（hys）：刚好压在门槛上时，拉锯的一点点抖动会让动作一秒换好几次，
      读出来是抽搐。进门槛要超过 +hys，退出来要低于 -hys。 */
   /* 落后方被拉倒分三档，一档比一档低：跪着 → 往前扑倒 → 趴在地上被拖。
-     领先方全程站着、面朝对方倒退着拽（任何一档都不转身）。 */
-  kneelAt: 0.22,   // 超过它：落后方被拽得跪下
-  fallAt: 0.45,    // 超过它：落后方往前扑倒（一条腿跪着、一条腿往后滑）
-  lieAt: 0.68,     // 超过它：落后方趴在地上被拖
+     领先方全程站着、面朝对方倒退着拽（任何一档都不转身）。
+     四档**平分**（用户定）：两把尺都按 1/4、2/4、3/4 切 —— 拉力差 250/500/750，
+     距离 7.5/15/22.5 米。 */
+  kneelAt: 0.25,   // 超过它：落后方被拽得跪下
+  fallAt: 0.50,    // 超过它：落后方往前扑倒（一条腿跪着、一条腿往后滑）
+  lieAt: 0.75,     // 超过它：落后方趴在地上被拖
   hys: 0.05,
+  /* 一次只走一档，每档至少停这么久。一件戒指盒能让拉力差 1 秒内从 0 冲到
+     趴下那档，不拦的话跪和扑倒各一闪而过；人摔倒本来也是先跪、再扑、再趴。 */
+  stageHold: 0.6,
   /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
      来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
   loopFps: 8,
@@ -84,9 +95,9 @@ const NUM = {
   /* 拖到哪算赢：离客厅正中 END 米。30 米正好在两头房间的深处（见 P.pxPerM）。
      改它不用动背景：镜头按米数算，房间只是铺在那儿的地皮。 */
   END: 30,
-  /* 姿态的满幅刻度：拉力差到这么多，姿态读数 p 就顶到 0 或 100（拖在地上）。
-     取 1000 是让它和上面的 M 共用一把尺 —— 被拽倒的那一刻，正好就是"每秒
-     拖 V_Z 米"的那一刻，动作和速度对得上。 */
+  /* 姿态的满幅刻度：拉力差到这么多，姿态读数 p 就顶到 0 或 100。
+     取 1000 是让它和上面的 M 共用一把尺。试过 2000（= 拖动速度封顶时的差）：
+     标杆的一方猛刷 23:0 拉力差只有 516，整局停在僵持 —— 太钝。 */
   LINE_FULL: 1000,
   LINE_RATE: 2.2,  // 姿态读数趋近拉力差的速率（时间常数 0.45 秒）
 
@@ -244,8 +255,9 @@ function battle(dt) {
 /* 调试台（idle）不跑数值：姿态由滑块或自动演示直接给 S.p。位置照同一把尺子
    从 S.p 积分出来 —— 不然拖滑块只换动作、背景不动，看不出卷轴对不对。 */
 function drift(dt) {
-  const bias = (S.p - 50) / 50;
-  S.vel = Math.abs(bias) * NUM.LINE_FULL > NUM.PULL_X ? bias * NUM.V_Z : 0;
+  const bias = (S.p - 50) / 50, gap = Math.abs(bias) * NUM.LINE_FULL;
+  // 跟 battle() 同一个公式：差值 → 速度，封顶 V_MAX
+  S.vel = gap > NUM.PULL_X ? Math.sign(bias) * Math.min(NUM.V_MAX, gap / NUM.PULL_M * NUM.V_Z) : 0;
   S.pos = clamp(S.pos + S.vel * dt, -NUM.END, NUM.END);
 }
 
@@ -316,18 +328,23 @@ let WORLD = null;
    这是拔河里"谁也没占上风"的样子：一直在使劲、一直在来回，但哪头也没赢。 */
 const LOOP_N = ['n0', 'nL1', 'nL2', 'nL1', 'n0', 'nR1', 'nR2', 'nR1'];
 
-/* 由 |bias| 选动作，带回差。返回 n，或 a/b + K(跪) F(扑倒) L(趴)。 */
+/* 由 |bias|（derive 里两把尺取大之后的值）选动作，带回差。返回 n，或 a/b + K(跪) F(扑倒) L(趴)。
+   held = 当前这档已经停够 P.stageHold：没停够就不换；停够了也只往目标走一档。
+   局势翻转（原来男方倒、现在女方占优）时，先一档档站回僵持，再往另一边倒。 */
 const STAGES = 'KFL';
-function pickPose(prev, bias) {
+function pickPose(prev, bias, held) {
   const k = Math.abs(bias), side = bias > 0 ? 'a' : 'b';
   const lvl = prev === 'n' ? 0 : STAGES.indexOf(prev[1]) + 1;
   const same = prev === 'n' || prev[0] === side;
   const at = [P.kneelAt, P.fallAt, P.lieAt];
+  let want = 0;
   // 回差只对"留在原档"起作用：已经趴下的，要掉到 lieAt-hys 以下才撑起来
-  for (let l = 3; l >= 1; l--) {
-    if (k > ((same && lvl >= l) ? at[l - 1] - P.hys : at[l - 1] + P.hys)) return side + STAGES[l - 1];
+  if (same) for (let l = 3; l >= 1; l--) {
+    if (k > (lvl >= l ? at[l - 1] - P.hys : at[l - 1] + P.hys)) { want = l; break; }
   }
-  return 'n';
+  if (want === lvl || !held) return prev;
+  const next = lvl + Math.sign(want - lvl);
+  return next === 0 ? 'n' : (lvl === 0 ? side : prev[0]) + STAGES[next - 1];
 }
 
 function derive(dt) {
@@ -340,7 +357,10 @@ function derive(dt) {
 
   // p 大 = 查岗党(女方,在左)占优 = 两个人被往左拽
   const bias = (S.p - 50) / 50;
-  const pose = pickPose(FX.pose, bias);
+  const dist = S.pos / NUM.END;
+  const back = Math.sign(bias) !== Math.sign(dist) && Math.abs(bias) >= P.kneelAt;
+  const sev = back || Math.abs(bias) >= Math.abs(dist) ? bias : dist;
+  const pose = pickPose(FX.pose, sev, FX.poseT >= P.stageHold);
   if (pose !== FX.pose) { FX.pose = pose; FX.poseT = 0; } else FX.poseT += dt;
 
   /* 这一帧用哪张图。僵持走循环；被拉倒的三档现在各只有一张图，先靠颠步
@@ -1492,11 +1512,11 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      手机位置四样东西对不对得上。p 定动作、pos 定卷到哪 —— 两者本来由同一个
      拉力差推出来，这里分开给是为了每格都落在一个有代表性的位置上。 */
   if (Q.has('strip')) {
-    const cells = [[50, 0], [66, 4], [80, 12], [95, 24], [34, -4], [20, -12], [5, -24]];
+    const cells = [[50, 0], [68, 4], [81, 12], [95, 24], [32, -4], [19, -12], [5, -24]];
     filmstrip(cells.length, (i) => {
       [S.p, S.pos] = cells[i]; S.vel = (S.p - 50) / 50 * NUM.V_Z; S.t = 3.0;
       FX.pose = 'n'; FX.poseT = 0;
-      for (let k = 0; k < 20; k++) derive(1 / 60);
+      for (let k = 0; k < 240; k++) derive(1 / 60);   // 逐档每档停 stageHold，要走够
     }, (i) => `p=${cells[i][0]} pos=${cells[i][1]}m  ${FX.pose}/${FX.frame}`);
     return;
   }
