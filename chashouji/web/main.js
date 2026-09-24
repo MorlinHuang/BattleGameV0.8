@@ -46,6 +46,10 @@ const P = {
   /* 一次只走一档，每档至少停这么久。一件戒指盒能让拉力差 1 秒内从 0 冲到
      趴下那档，不拦的话跪和扑倒各一闪而过；人摔倒本来也是先跪、再扑、再趴。 */
   stageHold: 0.6,
+  /* 补帧（僵持 → 跪）每张占多少狼狈度：7 张 + 僵持循环 = 8 格铺满 0~kneelAt。 */
+  tweenStep: 0.25 / 8,
+  tweenHys: 0.25,  // 回差：越过交界 1/4 格才换张
+  frameRate: 2.5,  // 取景偏移的趋近速率（时间常数 0.4 秒）
   /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
      来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
   loopFps: 8,
@@ -142,6 +146,8 @@ const FX = {
   bob: 0,                            // 颠步的上下位移
   phoneX: MID, phoneY: 750,          // 手机在屏幕上的位置 —— 弹幕打它、气泡从它冒
   struggle: 1,                       // 僵持度 0~1，气泡的冒出节奏读它
+  tw: 0,                             // 当前播到第几张补帧（0 = 僵持循环）
+  frameOff: 0,                       // 镜头为了取景往外框中点偏了多少（像素）
 
   hitX: 0, hitV: 0,                  // 角色被推开的位移与速度
   punch: 0,                          // 缩放脉冲
@@ -365,7 +371,20 @@ function derive(dt) {
 
   /* 这一帧用哪张图。僵持走循环；被拉倒的三档现在各只有一张图，先靠颠步
      （bob）假装在走 —— 循环帧画出来之后，这三档也换成跟僵持一样的数组。 */
-  if (FX.pose === 'n') {
+  /* 补帧：僵持 → 跪 这一段按狼狈度逐张播（world.json 的 tweens，每张占 P.tweenStep）。
+     狼狈度随拖出去的距离涨，所以被越拖越远时往前播、拽回来时倒着播 —— 腿的迈步
+     方向自然跟着位移方向走。只有 0 那一格用僵持循环。回差 P.tweenHys 格：狼狈度
+     压在两格交界上抖时不来回闪。目前只画了查岗党占优（a）这一段。 */
+  const tw = WORLD && WORLD.tweens && WORLD.tweens[sev > 0 ? 'a' : 'b'];
+  if (FX.pose === 'n' && tw && tw.length) {
+    const want = Math.abs(sev) / P.tweenStep;
+    if (want > FX.tw + 1 + P.tweenHys || want < FX.tw - P.tweenHys) FX.tw = Math.min(tw.length, Math.floor(want));
+  } else FX.tw = 0;
+
+  if (FX.pose === 'n' && FX.tw > 0) {
+    FX.frame = tw[FX.tw - 1];
+    FX.bob = 0;
+  } else if (FX.pose === 'n') {
     FX.frame = LOOP_N[Math.floor(FX.poseT * P.loopFps) % LOOP_N.length];
     FX.bob = 0;
   } else {
@@ -381,9 +400,14 @@ function derive(dt) {
   /* 镜头：两个人在世界里的位置 = 客厅正中 − 米数 × 每米像素（往左拖是正）。
      镜头跟着他们走，但不出世界的边 —— 走到头时镜头停住、人往画面边上走，
      这正是"拖到墙根了"的样子。 */
+  /* 取景：补帧里赢的那一方钉在锚点上不动，输的那方跨步时整组人比屏幕宽、偏向一边
+     （男方后腿伸出去，右边出画 150px）。镜头缓缓往"这一帧外框的中点"偏过去 ——
+     偏的是镜头不是人，背景跟着一起挪，人在地板上不会滑。 */
+  const fm = WORLD && WORLD.poses[FX.frame];
+  if (fm) FX.frameOff += (fm.w / 2 - fm.ax - FX.frameOff) * approach(dt, P.frameRate);
   if (WORLD) {
     const wx = WORLD.center - S.pos * P.pxPerM;
-    FX.camX = clamp(wx, MID, WORLD.total - MID);
+    FX.camX = clamp(wx + FX.frameOff, MID, WORLD.total - MID);
     FX.pairX = MID + (wx - FX.camX);
   }
   FX.struggle = 1 - Math.abs(bias) * 0.78;          // 僵持度：五五开时最高
@@ -1529,6 +1553,18 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       FX.poseT = (i + 0.5) / P.loopFps;
       derive(0);
     }, (i) => `${i} ${FX.frame}  手机 x=${FX.phoneX.toFixed(0)}`);
+    return;
+  }
+
+  /* ?tweenstrip=1 僵持 → 跪 的补帧按狼狈度摊开（查岗党占优那一段），最后一格是跪。
+     看腿是不是一步步迈、人有没有横跳、镜头取景偏了多少。 */
+  if (Q.has('tweenstrip')) {
+    const n = WORLD.tweens.a.length + 2;
+    filmstrip(n, (i) => {
+      const k = i < n - 1 ? (i + 0.5) * P.tweenStep : 0.4;
+      S.p = 50 + 50 * k; S.pos = 0; S.vel = 0; FX.pose = 'n'; FX.poseT = 0; FX.tw = 0; FX.frameOff = 0;
+      for (let j = 0; j < 240; j++) derive(1 / 60);
+    }, (i) => `${FX.frame}  偏 ${FX.frameOff.toFixed(0)}px`);
     return;
   }
 

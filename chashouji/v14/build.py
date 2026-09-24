@@ -103,7 +103,10 @@ def find_phone(rgb, al):
     return best
 
 
-def build_pose(name, path, feet_align=False):
+def build_pose(name, path, feet_align=False, anchor=None):
+    """anchor：直接指定锚点在**原图**里的像素坐标 (x, 脚底 y)，不按本张自己算。
+    补帧用：它们已被 tween/align.py 对到僵持帧的坐标系，锚点必须跟僵持帧同一个点，
+    按各自外框或脚算就又把对齐抵消了。"""
     rgb, al = cutout(path)
     ph = find_phone(rgb, al)
     rgb = edge_extend(rgb, al)
@@ -113,7 +116,9 @@ def build_pose(name, path, feet_align=False):
     ys, xs = np.where(a > 0.06)
     x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
     foot = y1
-    if feet_align:
+    if anchor:
+        cx, foot = anchor[0] * SCALE, anchor[1] * SCALE
+    elif feet_align:
         band = a[foot - int((foot - y0) * 0.08):foot]
         cx = (band.sum(0) * np.arange(a.shape[1])).sum() / band.sum()
     else:
@@ -124,7 +129,7 @@ def build_pose(name, path, feet_align=False):
             'ax': round(float(cx - x0), 1), 'ay': int(foot - y0)}
     if ph:
         meta['phone'] = [round(ph[0] * SCALE - x0, 1), round(ph[1] * SCALE - y0, 1)]
-    return meta, im
+    return meta, im, (cx / SCALE, foot / SCALE)
 
 
 def main():
@@ -155,12 +160,34 @@ def main():
         ('bK', 'pose/24_男优_女跪.png', False), ('bF', 'pose/25_男优_女扑倒.png', False),
         ('bL', 'pose/26_男优_女趴.png', False),
     ]:
-        meta, im = build_pose(name, os.path.join(HERE, f), feet)
+        meta, im, raw = build_pose(name, os.path.join(HERE, f), feet)
         poses[name] = meta
         sheet.append((name, meta, im))
         print(name, meta)
+        if name == 'n0':
+            n0_anchor = raw
 
-    json.dump({'rooms': rooms, 'center': center, 'height': H, 'poses': poses},
+    # 补帧：僵持 → 跪 之间每 4% 一张（tween/<边>/aligned/sNNN.png，已由 align.py 对到
+    # 僵持帧坐标、四周加了 PAD）。锚点 = 僵持帧的锚点 + PAD，保证整段里赢的那一方站着不动。
+    from tween.align import PAD
+    tweens = {}
+    for side in 'ab':
+        d = os.path.join(HERE, 'tween', side, 'aligned')
+        if not os.path.isdir(d):
+            continue
+        tweens[side] = []
+        for f in sorted(os.listdir(d)):
+            n = int(f[1:4])
+            if f.startswith('s') and 0 < n < 33 and n % 4 == 0:   # s001 是试做的 1% 帧，跟僵持几乎一样，不用
+                name = f't{side}{n:02d}'
+                meta, im, _ = build_pose(name, os.path.join(d, f),
+                                         anchor=(n0_anchor[0] + PAD, n0_anchor[1] + PAD))
+                poses[name] = meta
+                sheet.append((name, meta, im))
+                tweens[side].append(name)
+                print(name, meta)
+
+    json.dump({'rooms': rooms, 'center': center, 'height': H, 'poses': poses, 'tweens': tweens},
               open(os.path.join(OUT, 'world.json'), 'w'), ensure_ascii=False, indent=1)
     print('rooms', rooms, 'total', sum(rooms), 'center', center)
 
