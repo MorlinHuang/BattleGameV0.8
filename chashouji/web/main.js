@@ -46,10 +46,13 @@ const P = {
   /* 一次只走一档，每档至少停这么久。一件戒指盒能让拉力差 1 秒内从 0 冲到
      趴下那档，不拦的话跪和扑倒各一闪而过；人摔倒本来也是先跪、再扑、再趴。 */
   stageHold: 0.6,
-  /* 步态：背景每卷过这么多世界像素，赢的那一方走完一个循环（四格 = 两步）。
-     步态按**位移**推进、不按时间：背景不动脚就不动，被拽回来就倒着播 —— 脚跟地板
-     的关系由它决定。调小 = 步子碎而快，调大 = 步子大而慢（脚在地上打滑感变强）。 */
-  gaitCycle: 100,
+  /* 步态：八格一个循环（两步），按**位移**推进、不按时间 —— 背景不动脚就不动，被拽回来
+     就倒着播。一个循环对应背景卷过多少像素，由 build.py 按每档原图里两脚的间距量出来
+     （world.json 的 gaits[档].cycle，约 400~650）：这样站地的那只脚在画面上往前挪的速度
+     正好等于地板卷过去的速度，脚像钉在地上。
+     gaitSlip 是在这个基础上的倍率：1 = 脚不打滑；调大 = 步子更碎更快，但脚会在地上往后蹭。
+     以前固定 100（四格版），步频是地板的五倍多，看着像在冰上倒腾。 */
+  gaitSlip: 1,
   /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
      来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
   loopFps: 8,
@@ -377,9 +380,9 @@ function derive(dt) {
   } else if (gait) {
     // 往赢的那一方拖 = 正着走（倒退）；被拽回来 = 倒着播（往前走）
     const toward = FX.pose[0] === 'a' ? 1 : -1;
-    FX.gaitPh += S.vel * toward * dt * P.pxPerM / P.gaitCycle;
-    const n = gait.length;
-    FX.frame = gait[((Math.floor(FX.gaitPh * n) % n) + n) % n];
+    FX.gaitPh += S.vel * toward * dt * P.pxPerM * P.gaitSlip / gait.cycle;
+    const n = gait.frames.length;
+    FX.frame = gait.frames[((Math.floor(FX.gaitPh * n) % n) + n) % n];
     FX.bob = 0;
   } else {
     FX.frame = FX.pose;
@@ -1548,7 +1551,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* ?gaitstrip=aK 把某一档的步态循环按顺序摊开：两条腿是不是交替往后、上半身
      有没有跟着跳。 */
   if (Q.has('gaitstrip')) {
-    const g = WORLD.gaits[Q.get('gaitstrip') || 'aK'];
+    const g = WORLD.gaits[Q.get('gaitstrip') || 'aK'].frames;
     const p = { a: 81, b: 19 }[g[0][0]];
     filmstrip(g.length, (i) => {
       S.p = p; S.pos = 0; S.vel = 0; FX.pose = g[0]; FX.poseT = 0;

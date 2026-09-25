@@ -13,8 +13,8 @@
 电竞房那边同理。切点的像素位置是对着原图量出来的（CUT_*），换图必须重量。
 
 ────────── 角色贴图怎么对齐 ──────────
-所有姿势用**同一个缩放**（SCALE）：生图时都写死了"站立身高约占画面 78%、脚底在 92%"，
-而且都以僵持帧为参考图生成，实测人物尺寸一致。逐张按面积归一化反而有害 ——
+基准缩放 SCALE，被拉倒各档再按赢方的头补一个系数（head_scale）——生图时虽然写死了"站立身高约占画面 78%"，
+扑倒/趴那几张实测还是画小了 5~9%。尺子只能用头，不能用面积 ——
 坐在地上被拖的那个人面积本来就小，按面积放大就把他放成巨人。
 锚点 = (外框中点 x, 脚底线 y)：引擎把锚点对到屏幕中线与地面线上。按外框而不是质心：
 拖地姿势宽约 1000px，比屏幕还宽，按质心对齐会让一侧整整多出画 100 多像素。
@@ -32,6 +32,7 @@ import os
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
+from scipy.signal import fftconvolve
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', 'web', 'assets', 'world')
@@ -70,6 +71,20 @@ def plant_feet(frame, base, mask):
     lo = np.minimum(np.floor(rows).astype(int), len(block) - 2); t = (rows - lo)[:, None, None]
     a[y0:, x0:x1] = np.round(block[lo] * (1 - t) + block[lo + 1] * t).astype(np.int16)
     return a
+
+
+def stride(base, mask):
+    """原图里赢方两只脚之间的距离（原图像素）= 一步的长度。base 是双脚着地那一格：
+    站地的脚在半个循环里正好从身后挪到身前，走过的就是这一段。
+    取地面线往上 90 行里的前景列（前脚常比后脚高 40 多行，只取 40 行会漏掉它），按最大的空隙切成两只脚，量两块中心的距离。"""
+    ys, xs = np.nonzero(np.array(Image.open(mask))[..., 3] == 0)
+    x0, x1 = xs.min(), xs.max() + 1
+    b = np.array(Image.open(base).convert('RGB')).astype(np.int16)[:, x0:x1]
+    fg = keyed(b) < 60
+    floor = np.nonzero(fg.sum(1) > 2)[0].max()
+    cols = np.nonzero(fg[floor - 90:floor + 1].any(0))[0]
+    cut = np.argmax(np.diff(cols))
+    return cols[cut + 1:].mean() - cols[:cut + 1].mean()
 
 
 def cutout(path, lo=60, hi=150):
@@ -130,7 +145,38 @@ def find_phone(rgb, al):
     return best
 
 
-def build_pose(name, path, feet_align=False, anchor=None):
+# 量人有多大的尺子：赢的那一方的头，框是对着 pose_n0.webp 量的（换 n0 必须重量）。
+# 头的大小不随姿势变；身高会被前倾压矮、睡衣面积会被两腿互相遮挡带偏（v13 吃过亏）
+HEAD = {'a': (115, 40, 205, 135), 'b': (740, 10, 860, 120)}
+
+
+def _gray(im):
+    c = Image.new('RGBA', im.size, (255, 255, 255, 255)); c.alpha_composite(im.convert('RGBA'))
+    return np.array(c.convert('L')).astype(np.float32)
+
+
+def head_scale(ref, im, side):
+    """im 里赢方的头是 ref（僵持）里的几倍：多尺度归一化互相关，取最像的那个尺度。
+    方差太小的窗口（白底）不算，否则分母趋零、分数爆到几十。"""
+    b = HEAD[side]
+    T = _gray(ref)[b[1]:b[3], b[0]:b[2]]
+    G = _gray(im); w = G.shape[1]
+    G = G[:, :w // 2 + 60] if side == 'a' else G[:, w // 2 - 60:]
+    ones = None
+    best = (-1, 1.0)
+    for k in np.arange(0.80, 1.12, 0.01):
+        t = np.array(Image.fromarray(T).resize((round(T.shape[1] * k), round(T.shape[0] * k)), Image.LANCZOS))
+        t = t - t.mean(); tt = (t ** 2).sum(); ones = np.ones_like(t)
+        num = fftconvolve(G, t[::-1, ::-1], 'valid')
+        s1 = fftconvolve(G, ones, 'valid'); s2 = fftconvolve(G ** 2, ones, 'valid')
+        var = s2 - s1 * s1 / t.size
+        r = np.where(var > 0.3 * tt, num / np.sqrt(np.maximum(var, 1) * tt), 0).max()
+        if r > best[0]:
+            best = (r, k)
+    return best[1]
+
+
+def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE):
     """path 可以是文件，也可以是处理过的 RGB 数组（步态帧踩地之后，见 plant_feet）。
     anchor：直接指定锚点在**原图**里的像素坐标 (x, 脚底 y)，不按本张自己算。
     步态帧用：它们只重画了腿，其余像素跟原姿势一模一样，锚点必须跟原姿势同一个点，
@@ -139,13 +185,13 @@ def build_pose(name, path, feet_align=False, anchor=None):
     ph = find_phone(rgb, al)
     rgb = edge_extend(rgb, al)
     im = Image.fromarray(np.concatenate([rgb, al[..., None] * 255], -1).astype(np.uint8), 'RGBA')
-    im = im.resize((round(im.width * SCALE), round(im.height * SCALE)), Image.LANCZOS)
+    im = im.resize((round(im.width * scale), round(im.height * scale)), Image.LANCZOS)
     a = np.array(im)[..., 3].astype(np.float32) / 255
     ys, xs = np.where(a > 0.06)
     x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
     foot = y1
     if anchor:
-        cx, foot = anchor[0] * SCALE, anchor[1] * SCALE
+        cx, foot = anchor[0] * scale, anchor[1] * scale
     elif feet_align:
         band = a[foot - int((foot - y0) * 0.08):foot]
         cx = (band.sum(0) * np.arange(a.shape[1])).sum() / band.sum()
@@ -156,8 +202,8 @@ def build_pose(name, path, feet_align=False, anchor=None):
     meta = {'w': int(x1 - x0), 'h': int(y1 - y0),
             'ax': round(float(cx - x0), 1), 'ay': int(foot - y0)}
     if ph:
-        meta['phone'] = [round(ph[0] * SCALE - x0, 1), round(ph[1] * SCALE - y0, 1)]
-    return meta, im, (cx / SCALE, foot / SCALE)
+        meta['phone'] = [round(ph[0] * scale - x0, 1), round(ph[1] * scale - y0, 1)]
+    return meta, im, (cx / scale, foot / scale)
 
 
 def main():
@@ -178,6 +224,7 @@ def main():
 
     poses = {}
     anchors = {}      # 每张关键姿势的锚点（原图坐标），步态帧沿用
+    scales = {}       # 被拉倒各档按头补过的缩放，步态帧沿用
     sheet = []
     for name, f, feet in [
         ('n0', 'loop/n0.png', True), ('nL1', 'loop/nL1.png', True), ('nL2', 'loop/nL2.png', True),
@@ -190,28 +237,44 @@ def main():
         ('bL', 'pose/26_男优_女趴.png', False),
     ]:
         meta, im, raw = build_pose(name, os.path.join(HERE, f), feet)
+        if name == 'n0':
+            ref = im
+        elif name[0] in 'ab':
+            # 被拉倒三档是各自生成的，扑倒/趴那几张人整个被画小了一成左右（头只有僵持的
+            # 0.91~0.95）。礼物一砸动作掉进这几档、又因为回差要停好一阵，看着就是
+            # "人突然变小很久"。按头的比例把整张补回来（输的那个人一起放，他们是同一张画）
+            k = head_scale(ref, im, name[0])
+            scales[name] = SCALE / k
+            print(name, 'head %.2f' % k)
+            meta, im, raw = build_pose(name, os.path.join(HERE, f), feet, scale=scales[name])
         poses[name] = meta
         sheet.append((name, meta, im))
         print(name, meta)
         anchors[name] = raw
 
-    # 步态循环：gait/<姿势>/ 下 base.png（= 该姿势原图）+ mask.png + p2~p4，四格一个循环（两步）。
-    # p2~p4 是拿 base 做蒙版局部重绘、**只重画赢的那一方的腿**得来的，其余像素原样，
-    # 所以锚点直接沿用 base 那张的锚点 —— 各算各的外框就会让上半身跟着腿横跳。
+    # 步态循环：gait/<姿势>/ 下 base.png（= 该姿势原图，第 0 格）+ mask.png + f1~f7，八格一个循环（两步）：
+    #   0 双脚着地 → 1 前脚跟离地 → 2 抬起的脚从站地那条腿旁边穿过 → 3 往身后伸、快落地
+    #   → 4 两腿换位双脚着地 → 5~7 同 1~3 换另一条腿
+    # 站地的那只脚从身后一路移到身前、抬起的那只从身前摆到身后，每格都挪一点 —— 四格版每格
+    # 脚都要跳一大截，用户原话"后腿非常不连贯"。f* 都是拿 base 做蒙版局部重绘、**只重画赢的
+    # 那一方的腿**得来的，其余像素原样，所以锚点直接沿用 base 那张 —— 各算各的外框会让上半身跟着腿横跳。
     gaits = {}
     for name, base_raw in anchors.items():
         d = os.path.join(HERE, 'gait', name)
         if not os.path.isdir(d):
             continue
-        gaits[name] = [name]
-        for k in (2, 3, 4):
-            g = f'{name}_g{k}'
-            img = plant_feet(os.path.join(d, f'p{k}.png'), os.path.join(d, 'base.png'), os.path.join(d, 'mask.png'))
-            meta, im, _ = build_pose(g, img, anchor=base_raw)
+        k = scales.get(name, SCALE)
+        frames = [name]
+        for f in range(1, 8):
+            g = f'{name}_g{f}'
+            img = plant_feet(os.path.join(d, f'f{f}.png'), os.path.join(d, 'base.png'), os.path.join(d, 'mask.png'))
+            meta, im, _ = build_pose(g, img, anchor=base_raw, scale=k)
             poses[g] = meta
             sheet.append((g, meta, im))
-            gaits[name].append(g)
-            print(g, meta)
+            frames.append(g)
+        cycle = round(2 * stride(os.path.join(d, 'base.png'), os.path.join(d, 'mask.png')) * k)
+        gaits[name] = {'frames': frames, 'cycle': cycle}
+        print(name, 'gait cycle', cycle, 'px')
 
     json.dump({'rooms': rooms, 'center': center, 'height': H, 'poses': poses, 'gaits': gaits},
               open(os.path.join(OUT, 'world.json'), 'w'), ensure_ascii=False, indent=1)

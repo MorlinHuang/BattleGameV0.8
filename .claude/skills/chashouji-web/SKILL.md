@@ -110,7 +110,8 @@ const FX = { pose, poseT, frame, camX, pairX, bob, phoneX, phoneY, struggle,
 
 动作七档：`n` 僵持（8 格循环 `LOOP_N`，5 张来回用）/ `aK` `aF` `aL` 查岗党占优、男方
 跪·扑倒·趴 / `bK` `bF` `bL` 反之（`pickPose` 按 `STAGES='KFL'` 逐档比门槛）。
-**步态**：有 `WORLD.gaits[pose]` 的档走步态循环，相位 `FX.gaitPh += vel·朝向·dt·pxPerM / P.gaitCycle`（按位移不按时间：背景不动脚不动，拽回来倒着播）；没画步态的档仍是单张 + 颠步。`?gaitstrip=aK` 摊开看。**被拉倒三档目前各只有一张图** —— 画出循环帧后把 `derive` 里那个分支换成跟僵持一样的数组，并删掉 bob。
+**步态**：被拉倒六档（aK aF aL bK bF bL）都有 `WORLD.gaits[pose] = {frames: [8 张], cycle: 像素}`，相位 `FX.gaitPh += vel·朝向·dt·pxPerM·P.gaitSlip / gait.cycle`（按位移不按时间：背景不动脚不动，拽回来倒着播）。`cycle` 是 build.py 按原图两脚间距量的步幅×2（400~650），`gaitSlip=1` 时站地的脚跟地板同速、不打滑；以前固定 `gaitCycle=100`，步频是地板的五倍，读成"冰上倒腾"。`?gaitstrip=aK` 摊开看（窗口要 3600×760 才装得下八格）。僵持档 n 挪动时还没有步态。
+**人物大小**：被拉倒各档是各自生图的，扑倒/趴画小了 5~9%，build.py 用赢方的头做多尺度匹配（`head_scale`，框对着 pose_n0 量）逐档补缩放；用户看到的症状是"被礼物砸中后人物变小很长时间"（掉进这几档又因回差停很久）。
 
 **空闲拉锯（`P.sway` / `FX.pDraw` / `FX.busy`）和对抗线形变（`rowOff/rowImp/frontAt(y)`）
 已随 v14 删除**：前者是为了"僵在同一帧"加的，现在僵持本身就是循环；后者画在地毯上，
