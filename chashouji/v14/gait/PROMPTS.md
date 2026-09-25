@@ -31,3 +31,8 @@ PHASE：
 - PASSING: one foot is planted flat on the floor DIRECTLY UNDER the hips, that leg nearly straight and vertical, bearing all the weight; the other leg is lifted, knee bent, its foot a little off the floor right next to the planted ankle, swinging past it toward the back.
 - REACH: one foot is planted flat on the floor slightly IN FRONT of the hips, leg angled, bearing weight; the other leg is extended BACKWARD, knee almost straight, its foot low and about to touch down on the floor behind (toes just above the floor).
 （"BEHIND/IN FRONT" 后面要写明是画面的左还是右：女生往左退，身后 = 左；男生往右退，身后 = 右。）
+
+## 换装（2026-09-25，女 A 粉吊带短裤 / 男 B 敞开浅蓝睡衣 + 藏青短裤）
+关键姿势：`generate_image images=[旧姿势, outfit/n0_new.png]`（第二张只当服装参考），prompt 开头 "Image 1 is the frame to edit; image 2 is the OUTFIT reference only (ignore its poses). Keep image 1 EXACTLY …"，姿势基本不走样。旧衣服的图在 `*/old_outfit1/`。
+步态 WHO / PANTS 换成：a = "the cartoon woman on the LEFT (pink pajama shorts, white bunny slippers), facing RIGHT"；b = "the cartoon man on the RIGHT (navy blue shorts above the knee, black cat slippers), facing LEFT"。
+**不要写 "bare legs"**：女生腿部局部重绘带这个词时被内容审核拒了（422 declined），去掉后通过。男生 PASSING 也被拒过一次，改成 "backward-stepping" + 写明哪只脚站地后通过。
