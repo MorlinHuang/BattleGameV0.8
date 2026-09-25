@@ -45,9 +45,36 @@ CUT_LIVING_L = 75
 CUT_BOY_L = 140
 
 
+def keyed(a):
+    """品红度 m = min(R,B) - G，m 大 = 幕布。a 必须是有符号类型（uint8 相减会下溢）"""
+    return np.minimum(a[..., 0], a[..., 2]) - a[..., 1]
+
+
+def plant_feet(frame, base, mask):
+    """步态帧的脚踩回地面。局部重绘出来的腿普遍比原图短一截（实测 20~55 原图像素），
+    站着的那只脚悬在半空，播起来一步一飘（偶尔也有画长了、脚陷进地板的）。上半身不能往下挪 —— 扑倒/趴的那一档，输的人
+    就贴在地上，整张下移他会陷进地板。所以只把蒙版那一块（胯以下）竖着拉长：蒙版顶边
+    那一行不动（跟没重画的胯接得上），最低的那只脚落到原图的地面线上。"""
+    ys, xs = np.nonzero(np.array(Image.open(mask))[..., 3] == 0)
+    x0, x1, y0 = xs.min(), xs.max() + 1, ys.min()
+    a = np.array(Image.open(frame).convert('RGB').resize(Image.open(base).size)).astype(np.int16)
+    b = np.array(Image.open(base).convert('RGB')).astype(np.int16)
+
+    def floor(img):
+        return np.nonzero((keyed(img[:, x0:x1]) < 60).sum(1) > 2)[0].max()
+    want, got = floor(b), floor(a)
+    # 输出第 r 行取原图第 y0 + (r-y0)·(got-y0)/(want-y0) 行：r=want 正好取到脚底。
+    # 脚画低了（got > want）同一个式子就是往回压，越出图底的行取品红底
+    rows = y0 + (np.arange(y0, a.shape[0]) - y0) * (got - y0) / (want - y0)
+    block = np.concatenate([a[:, x0:x1], np.tile(a[-1:, x0:x1], (80, 1, 1))]).astype(np.float32)
+    lo = np.minimum(np.floor(rows).astype(int), len(block) - 2); t = (rows - lo)[:, None, None]
+    a[y0:, x0:x1] = np.round(block[lo] * (1 - t) + block[lo + 1] * t).astype(np.int16)
+    return a
+
+
 def cutout(path, lo=60, hi=150):
-    a = np.array(Image.open(path).convert('RGB')).astype(np.int16)   # int16：uint8 相减会下溢
-    m = np.minimum(a[..., 0], a[..., 2]) - a[..., 1]
+    a = path if isinstance(path, np.ndarray) else np.array(Image.open(path).convert('RGB')).astype(np.int16)
+    m = keyed(a)
     alpha = np.clip((hi - m) / (hi - lo), 0, 1)
     edge = ndimage.binary_dilation(alpha < 0.99, np.ones((3, 3))) & (alpha > 0.01)
     rgb = a.astype(np.float32)
@@ -104,7 +131,8 @@ def find_phone(rgb, al):
 
 
 def build_pose(name, path, feet_align=False, anchor=None):
-    """anchor：直接指定锚点在**原图**里的像素坐标 (x, 脚底 y)，不按本张自己算。
+    """path 可以是文件，也可以是处理过的 RGB 数组（步态帧踩地之后，见 plant_feet）。
+    anchor：直接指定锚点在**原图**里的像素坐标 (x, 脚底 y)，不按本张自己算。
     步态帧用：它们只重画了腿，其余像素跟原姿势一模一样，锚点必须跟原姿势同一个点，
     按各自外框算的话腿一抬外框就变，整个人会跟着横跳。"""
     rgb, al = cutout(path)
@@ -167,7 +195,7 @@ def main():
         print(name, meta)
         anchors[name] = raw
 
-    # 步态循环：gait/<姿势>/ 下 base.png（= 该姿势原图）+ p2~p4，四格一个循环（两步）。
+    # 步态循环：gait/<姿势>/ 下 base.png（= 该姿势原图）+ mask.png + p2~p4，四格一个循环（两步）。
     # p2~p4 是拿 base 做蒙版局部重绘、**只重画赢的那一方的腿**得来的，其余像素原样，
     # 所以锚点直接沿用 base 那张的锚点 —— 各算各的外框就会让上半身跟着腿横跳。
     gaits = {}
@@ -178,7 +206,8 @@ def main():
         gaits[name] = [name]
         for k in (2, 3, 4):
             g = f'{name}_g{k}'
-            meta, im, _ = build_pose(g, os.path.join(d, f'p{k}.png'), anchor=base_raw)
+            img = plant_feet(os.path.join(d, f'p{k}.png'), os.path.join(d, 'base.png'), os.path.join(d, 'mask.png'))
+            meta, im, _ = build_pose(g, img, anchor=base_raw)
             poses[g] = meta
             sheet.append((g, meta, im))
             gaits[name].append(g)
