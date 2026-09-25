@@ -110,7 +110,7 @@ const FX = { pose, poseT, frame, camX, pairX, bob, phoneX, phoneY, struggle,
 
 动作七档：`n` 僵持（8 格循环 `LOOP_N`，5 张来回用）/ `aK` `aF` `aL` 查岗党占优、男方
 跪·扑倒·趴 / `bK` `bF` `bL` 反之（`pickPose` 按 `STAGES='KFL'` 逐档比门槛）。
-**补帧**：僵持档里按狼狈度播 `WORLD.tweens.a`（`P.tweenStep`=0.25/8 一张，回差 `tweenHys`），被拖越远往前播、拽回来倒着播；镜头按当前帧外框中点缓动取景（`FX.frameOff`，`P.frameRate`），偏镜头不偏人。`?tweenstrip=1` 摊开看。**被拉倒三档目前各只有一张图** —— 画出循环帧后把 `derive` 里那个分支换成跟僵持一样的数组，并删掉 bob。
+**步态**：有 `WORLD.gaits[pose]` 的档走步态循环，相位 `FX.gaitPh += vel·朝向·dt·pxPerM / P.gaitCycle`（按位移不按时间：背景不动脚不动，拽回来倒着播）；没画步态的档仍是单张 + 颠步。`?gaitstrip=aK` 摊开看。**被拉倒三档目前各只有一张图** —— 画出循环帧后把 `derive` 里那个分支换成跟僵持一样的数组，并删掉 bob。
 
 **空闲拉锯（`P.sway` / `FX.pDraw` / `FX.busy`）和对抗线形变（`rowOff/rowImp/frontAt(y)`）
 已随 v14 删除**：前者是为了"僵在同一帧"加的，现在僵持本身就是循环；后者画在地毯上，

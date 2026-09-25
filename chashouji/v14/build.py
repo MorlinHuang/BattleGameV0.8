@@ -105,8 +105,8 @@ def find_phone(rgb, al):
 
 def build_pose(name, path, feet_align=False, anchor=None):
     """anchor：直接指定锚点在**原图**里的像素坐标 (x, 脚底 y)，不按本张自己算。
-    补帧用：它们已被 tween/align.py 对到僵持帧的坐标系，锚点必须跟僵持帧同一个点，
-    按各自外框或脚算就又把对齐抵消了。"""
+    步态帧用：它们只重画了腿，其余像素跟原姿势一模一样，锚点必须跟原姿势同一个点，
+    按各自外框算的话腿一抬外框就变，整个人会跟着横跳。"""
     rgb, al = cutout(path)
     ph = find_phone(rgb, al)
     rgb = edge_extend(rgb, al)
@@ -149,6 +149,7 @@ def main():
     center = rooms[0] + round((L.width / 2 - CUT_LIVING_L) * s)
 
     poses = {}
+    anchors = {}      # 每张关键姿势的锚点（原图坐标），步态帧沿用
     sheet = []
     for name, f, feet in [
         ('n0', 'loop/n0.png', True), ('nL1', 'loop/nL1.png', True), ('nL2', 'loop/nL2.png', True),
@@ -164,30 +165,26 @@ def main():
         poses[name] = meta
         sheet.append((name, meta, im))
         print(name, meta)
-        if name == 'n0':
-            n0_anchor = raw
+        anchors[name] = raw
 
-    # 补帧：僵持 → 跪 之间每 4% 一张（tween/<边>/aligned/sNNN.png，已由 align.py 对到
-    # 僵持帧坐标、四周加了 PAD）。锚点 = 僵持帧的锚点 + PAD，保证整段里赢的那一方站着不动。
-    from tween.align import PAD
-    tweens = {}
-    for side in 'ab':
-        d = os.path.join(HERE, 'tween', side, 'aligned')
+    # 步态循环：gait/<姿势>/ 下 base.png（= 该姿势原图）+ p2~p4，四格一个循环（两步）。
+    # p2~p4 是拿 base 做蒙版局部重绘、**只重画赢的那一方的腿**得来的，其余像素原样，
+    # 所以锚点直接沿用 base 那张的锚点 —— 各算各的外框就会让上半身跟着腿横跳。
+    gaits = {}
+    for name, base_raw in anchors.items():
+        d = os.path.join(HERE, 'gait', name)
         if not os.path.isdir(d):
             continue
-        tweens[side] = []
-        for f in sorted(os.listdir(d)):
-            n = int(f[1:4])
-            if f.startswith('s') and 0 < n < 33 and n % 4 == 0:   # s001 是试做的 1% 帧，跟僵持几乎一样，不用
-                name = f't{side}{n:02d}'
-                meta, im, _ = build_pose(name, os.path.join(d, f),
-                                         anchor=(n0_anchor[0] + PAD, n0_anchor[1] + PAD))
-                poses[name] = meta
-                sheet.append((name, meta, im))
-                tweens[side].append(name)
-                print(name, meta)
+        gaits[name] = [name]
+        for k in (2, 3, 4):
+            g = f'{name}_g{k}'
+            meta, im, _ = build_pose(g, os.path.join(d, f'p{k}.png'), anchor=base_raw)
+            poses[g] = meta
+            sheet.append((g, meta, im))
+            gaits[name].append(g)
+            print(g, meta)
 
-    json.dump({'rooms': rooms, 'center': center, 'height': H, 'poses': poses, 'tweens': tweens},
+    json.dump({'rooms': rooms, 'center': center, 'height': H, 'poses': poses, 'gaits': gaits},
               open(os.path.join(OUT, 'world.json'), 'w'), ensure_ascii=False, indent=1)
     print('rooms', rooms, 'total', sum(rooms), 'center', center)
 
