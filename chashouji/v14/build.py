@@ -37,7 +37,10 @@ from scipy.signal import fftconvolve
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', 'web', 'assets', 'world')
 H = 1334
-SCALE = 0.66          # 1536×1024 的生图 → 引擎像素。站立的人约 600 高
+# 1536×1024 的生图 → 引擎像素。站立的人约 400 高。
+# 原来是 0.66（约 600 高），用户嫌人占画面太大，要"镜头拉远、人变成现在的 2/3"：
+# 人和房间一起缩 2/3（房间见 main() 里的 *_ext.png），不能只缩人 —— 沙发会比人大一圈
+SCALE = 0.44
 K = np.ones((3, 3), np.float32)
 
 # 门的切点（原图 1659×948 坐标）：卧室留到右边缘；客厅从它左门的右门框起、
@@ -147,6 +150,7 @@ def find_phone(rgb, al):
 
 # 量人有多大的尺子：赢的那一方的头，框是对着 pose_n0.webp 量的（换 n0 必须重量）。
 # 头的大小不随姿势变；身高会被前倾压矮、睡衣面积会被两腿互相遮挡带偏（v13 吃过亏）
+HEAD_AT = 0.66    # 下面这两个框是 SCALE=0.66 时量的，SCALE 变了按比例换算
 HEAD = {'a': (115, 40, 205, 135), 'b': (740, 10, 860, 120)}
 
 
@@ -158,7 +162,7 @@ def _gray(im):
 def head_scale(ref, im, side):
     """im 里赢方的头是 ref（僵持）里的几倍：多尺度归一化互相关，取最像的那个尺度。
     方差太小的窗口（白底）不算，否则分母趋零、分数爆到几十。"""
-    b = HEAD[side]
+    b = [round(v * SCALE / HEAD_AT) for v in HEAD[side]]
     T = _gray(ref)[b[1]:b[3], b[0]:b[2]]
     G = _gray(im); w = G.shape[1]
     G = G[:, :w // 2 + 60] if side == 'a' else G[:, w // 2 - 60:]
@@ -193,8 +197,9 @@ def edges(solid, phone):
     h, w = solid.shape
     px, py = phone
     cut = solid.copy()
-    bx0, bx1 = int(px - 90), int(px + 90)
-    by0, by1 = int(py - 70), int(py + 70)
+    k = SCALE / HEAD_AT                        # 挖的这块是在 0.66 下定的：±90 × ±70
+    bx0, bx1 = int(px - 90 * k), int(px + 90 * k)
+    by0, by1 = int(py - 70 * k), int(py + 70 * k)
     cut[max(0, by0):by1, max(0, bx0):bx1] = False
     lab, n = ndimage.label(cut)
     sizes = ndimage.sum(cut, lab, range(1, n + 1))
@@ -256,9 +261,13 @@ def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE):
 def main():
     os.makedirs(OUT, exist_ok=True)
     bg = os.path.join(HERE, 'bg')
-    G = Image.open(f'{bg}/girlroom_raw.png').convert('RGB')
-    L = Image.open(f'{bg}/living_raw.png').convert('RGB')
-    B = Image.open(f'{bg}/boyroom_raw.png').convert('RGB')
+    G = Image.open(f'{bg}/girlroom_ext.png').convert('RGB')
+    L = Image.open(f'{bg}/living_ext.png').convert('RGB')
+    B = Image.open(f'{bg}/boyroom_ext.png').convert('RGB')
+    # *_ext.png = 原图上面补画了 424 行墙面（到天花板顶角线）、下面补了 49 行地板（bg/ext/ 里是
+    # 补画用的画布、蒙版和生成图）。镜头拉远 2/3 以后，原图只占屏幕 889 高，地面线仍在 GROUND，
+    # 上面空出来的那一截要有东西。原图像素原样保留，补画部分做过顶角线对齐、接缝调色、门洞上方
+    # 加了墙角线（两间房的墙色在那儿交界）。宽度没变，所以 CUT_* 仍按原图量
     s = H / G.height
     parts = [G, L.crop((CUT_LIVING_L, 0, L.width, L.height)), B.crop((CUT_BOY_L, 0, B.width, B.height))]
     rooms = []
