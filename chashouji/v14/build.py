@@ -176,6 +176,52 @@ def head_scale(ref, im, side):
     return best[1]
 
 
+EDGE_STEP = 6     # 轮廓按行采样的间距（引擎像素）
+
+
+def edges(solid, phone):
+    """礼物打到哪儿才算"碰到人"：每 EDGE_STEP 行量一次两个人**朝着对方那一侧**的轮廓。
+    a = 女生（左）最靠右的那个像素，灭迹党（从右边飞来）的礼物打在这里；
+    b = 男生（右）最靠左的那个像素，查岗党的礼物打在这里。
+    这一行没有那个人（头顶上方、趴下后的上半截）记 -1。飞来的礼物会先路过自己那一方
+    的人，那不算碰到。
+
+    分人不能按手机那条竖线一刀切：男生跪/扑的时候前脚会伸过手机线，切下来就算成了女生。
+    两个人只在手机和四只手那里连着 —— 把手机周围一块挖掉，剩下的连通块里最大的两块就是
+    两个人；零碎的（发梢、被挖断的手指）按离谁近归谁；挖掉的那一块里仍按手机中线分。
+    连续不到 3 个像素的零星点（抗锯齿毛边）不算，不然礼物会在头发梢上空爆。"""
+    h, w = solid.shape
+    px, py = phone
+    cut = solid.copy()
+    bx0, bx1 = int(px - 90), int(px + 90)
+    by0, by1 = int(py - 70), int(py + 70)
+    cut[max(0, by0):by1, max(0, bx0):bx1] = False
+    lab, n = ndimage.label(cut)
+    sizes = ndimage.sum(cut, lab, range(1, n + 1))
+    big = np.argsort(sizes)[::-1][:2] + 1
+    cxs = ndimage.center_of_mass(cut, lab, big)
+    girl, boy = (big[0], big[1]) if cxs[0][1] < cxs[1][1] else (big[1], big[0])
+    cg, cb = ndimage.center_of_mass(cut, lab, [girl, boy])
+    side = np.zeros(n + 1, np.int8)           # 1 = 女生，2 = 男生
+    for k, c in enumerate(ndimage.center_of_mass(cut, lab, range(1, n + 1)), 1):
+        side[k] = 1 if abs(c[1] - cg[1]) < abs(c[1] - cb[1]) else 2
+    who = side[lab]
+    xs = np.arange(w)[None, :]
+    box = solid & ~cut
+    who[box & (xs < px)] = 1
+    who[box & (xs >= px)] = 2
+
+    def run3(m):
+        return m & np.roll(m, 1, 1) & np.roll(m, 2, 1)
+    ga, bb = run3(who == 1), run3(np.roll(who == 2, -2, 1))
+    a, b = [], []
+    for y in range(0, h, EDGE_STEP):
+        la, rb = np.nonzero(ga[y])[0], np.nonzero(bb[y])[0]
+        a.append(int(la.max()) if len(la) else -1)
+        b.append(int(rb.min()) if len(rb) else -1)
+    return {'step': EDGE_STEP, 'a': a, 'b': b}
+
+
 def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE):
     """path 可以是文件，也可以是处理过的 RGB 数组（步态帧踩地之后，见 plant_feet）。
     anchor：直接指定锚点在**原图**里的像素坐标 (x, 脚底 y)，不按本张自己算。
@@ -203,6 +249,7 @@ def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE):
             'ax': round(float(cx - x0), 1), 'ay': int(foot - y0)}
     if ph:
         meta['phone'] = [round(ph[0] * scale - x0, 1), round(ph[1] * scale - y0, 1)]
+        meta['edge'] = edges(np.array(im)[..., 3] > 127, meta['phone'])
     return meta, im, (cx / scale, foot / scale)
 
 

@@ -431,10 +431,11 @@ function derive(dt) {
 
    side: +1 打向查岗党(左/女方)，-1 打向灭迹党(右/男方)
    power: 1 点赞级  2 普通礼物  3 大礼物 */
-function impact(side, y, power, recipe) {
+/* x：爆在哪儿（弹幕传它碰到轮廓的那一点）；不给就爆在挨打那个人这个高度的轮廓上 */
+function impact(side, y, power, recipe, x) {
   const r = recipe || RECIPE.thud;
   const s = power >= 4 ? 2.8 : power === 3 ? 1.7 : power === 2 ? 1.0 : 0.55;
-  const x = frontAt(y);
+  if (x == null) x = frontAt(y, -side) ?? FX.phoneX;
 
   FX.hitV += -side * 320 * s;
   FX.punch = Math.max(FX.punch, 0.045 * s);
@@ -900,10 +901,41 @@ const GIFT = {
   photo:   { name: '相框',   from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
 };
 
-/* 弹幕往手机那条竖线上打：任何高度都返回手机的横坐标。
-   以前这里是一条会弯、会被冲击波推着晃的对抗线，那条线画在客厅地毯上；
-   背景一卷，地毯就走了，线也就没了立足的地方。战况读数现在是顶上的距离条。 */
-const frontAt = () => FX.phoneX;
+/* 礼物碰到**挨打那个人的轮廓**才爆：在它的飞行高度上，对方身体朝着这边的那条边在哪儿。
+   from = +1（查岗党从左边扔）打男生，-1 打女生；路过自己这方的人不算碰到。
+   轮廓是 build.py 按行量好的（world.json 的 poses[帧].edge，每 step 行一个，-1 = 这行没这个人），
+   这里再叠上当前的站位、被推开的位移（hitX）、颠步和受击放大（punch，以脚底为锚）。
+   以前任何高度都打在手机那条竖线上：打头的、打腿的都在半空同一条线上碎掉，碰不到人。
+   这一行没有人（头顶上方、对方趴下后的上半截）就往上下找最近的一行，找 EDGE_SNAP 像素
+   以内；再没有返回 null —— 那一发从人身边飞过去。发射时已经把高度压进了对方身体的范围
+   （targetSpan），走到这一步只会是飞行途中对方正好倒下。 */
+const EDGE_SNAP = 80;
+function frontAt(y, from) {
+  const m = WORLD && WORLD.poses[FX.frame];
+  if (!m || !m.edge) return FX.phoneX;
+  const e = m.edge, row = from > 0 ? e.b : e.a, k = 1 + FX.punch;
+  const i = Math.round(((y - GROUND - FX.bob) / k + m.ay) / e.step);
+  for (let d = 0; d * e.step <= EDGE_SNAP; d++) {
+    for (const j of d ? [i - d, i + d] : [i]) {
+      if (row[j] >= 0) return FX.pairX + FX.hitX + (row[j] - m.ax) * k;
+    }
+  }
+  return null;
+}
+/* 挨打那个人此刻在屏幕上占的高度范围 [上, 下]。发射高度要落在这里面 —— 对方趴下以后
+   只剩贴地那一截，按站着的人给的高度带去扔，大半都会从他头顶上飞过去。 */
+function targetSpan(from) {
+  const m = WORLD && WORLD.poses[FX.frame];
+  if (!m || !m.edge) return null;
+  const e = m.edge, row = from > 0 ? e.b : e.a, k = 1 + FX.punch;
+  let lo = -1, hi = -1;
+  for (let j = 0; j < row.length; j++) if (row[j] >= 0) { if (lo < 0) lo = j; hi = j; }
+  if (lo < 0) return null;
+  const at = (j) => GROUND + FX.bob + (j * e.step - m.ay) * k;
+  return [at(lo), at(hi)];
+}
+// 对冲掉的那些不碰人，在中线（手机）前互相撞掉
+const midAt = () => FX.phoneX;
 const phonePos = () => [FX.phoneX, FX.phoneY];
 
 /* ---------- 角色：姿势贴图 ---------- */
@@ -1341,13 +1373,13 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      脸那一段常规火力要绕开（见 ammo.js）。这几个数跟着 GROUND 走 —— 人物
      挪了，弹幕的高度自动跟着挪。 */
   Ammo.init({
-    W, frontAt,
+    W, frontAt, midAt, targetSpan,
     band: { top: GROUND - 660, bot: GROUND - 90, face: [GROUND - 600, GROUND - 490] },
     /* 命中只负责演出，**不拖人**。位置是双方拉力差每秒拖出来的（见 battle）
        —— 让命中再推一次，等于同一份力算两遍，而且会把"两边都在刷时谁也拖不动
        谁"这条最要紧的手感破坏掉。弹幕是拉力的表现形式，不是位移的来源。 */
-    onHit(p) {
-      impact(-p.from, p.y, p.exec ? 4 : p.g.power, RECIPE[p.g.recipe]);
+    onHit(p, x) {
+      impact(-p.from, p.y, p.exec ? 4 : p.g.power, RECIPE[p.g.recipe], x);
     },
     /* 对冲掉的那些在中线互相撞掉：粒子照爆，但不推角色、不染色、不顿帧。
        它要回答的问题只有一个 —— "我刷了礼物怎么没拖动"。答案就在画面上：

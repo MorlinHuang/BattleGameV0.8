@@ -115,7 +115,15 @@ const FX = { pose, poseT, frame, camX, pairX, bob, phoneX, phoneY, struggle,
 
 **空闲拉锯（`P.sway` / `FX.pDraw` / `FX.busy`）和对抗线形变（`rowOff/rowImp/frontAt(y)`）
 已随 v14 删除**：前者是为了"僵在同一帧"加的，现在僵持本身就是循环；后者画在地毯上，
-地毯会被卷走。`frontAt(y)` 现在恒等于手机 x。
+地毯会被卷走。
+
+**礼物命中 = 碰到挨打那个人的轮廓**（2026-09-25 用户定）：`frontAt(y, from)` 返回挨打那个人在这个高度上
+朝这边的轮廓 x（from=+1 打男生，-1 打女生；路过自己那方的人不算）。轮廓由 build.py `edges()` 按行量好存在
+`poses[帧].edge = {step, a: 女生右沿, b: 男生左沿}`（-1 = 这行没人）；分人按连通块（先挖掉手机周围），
+不按手机竖线一刀切 —— 男生跪/扑时前脚会伸过手机线。运行时叠 pairX/hitX/bob/punch。
+这一行没人就找上下 80px 内最近的一行，再没有返回 null、那发飞出画面；`targetSpan(from)` 在**出手那一刻**
+把高度压进对方身体范围（对方趴下时不会从头顶飞过）。对冲的仍在 `midAt()`（手机 x）前撞掉。
+验证：`?ammostrip=10&ammoms=150&ammogift=pillow&ammoy=640`（头）/ `ammoy=1010`（腿），加 `p=95` 看趴档。
 
 ## HUD：距离条一根 + 名字行 + 拉力牌
 

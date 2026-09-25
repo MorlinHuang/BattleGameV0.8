@@ -1,4 +1,4 @@
-/* ammo.js —— 礼物弹幕：飞过去，撞到对抗线才算数
+/* ammo.js —— 礼物弹幕：飞过去，碰到对方的人才算数
  *
  * 分两层，跟 fx.js 的"形态 vs 题材"是同一个分法：
  *   样式（volley / single / heavy）—— 三种，管发射节奏与体量
@@ -6,7 +6,9 @@
  * 观众不需要认出飞过来的是什么，光看节奏就知道这一发有多重。加新礼物只往
  * main.js 的 GIFT 表里添一行，这个文件不用动；除非要加新物品的画法。
  *
- * 命中判定用的是 frontAt(y) —— 手机所在的那条竖线在弹幕高度上的横坐标。
+ * 命中判定用的是 frontAt(y, from) —— 挨打那个人在弹幕高度上朝这边的轮廓（main.js 给）；
+ * 这一行没人时返回 null，那一发就从旁边飞过去。对冲掉的那些不碰人，在 midAt()（手机那条
+ * 中线）前互相撞掉。发射时高度压进 targetSpan(from)：对方趴下以后只剩贴地那一截。
  * 发射高度的范围由 main.js 按人物站位传进来（init 的 band），这里不写死
  * 画面几何：人物的大小和站位换过不止一次，每次都是这几个数先对不上。
  *
@@ -21,13 +23,14 @@ const Ammo = (function () {
   const act = [], pool = [];
   const queue = [];          // 待发射：连珠的后续几颗、重投的预警期
   const warns = [];          // 预警箭头
-  let frontAt = null, onHit = null, onClash = null, W = 960;
+  let frontAt = null, midAt = null, targetSpan = null, onHit = null, onClash = null, W = 960;
   /* 发射高度带：top~bot 是弹幕会飞的高度（大致就是人物从头到膝盖），
      face 是两张脸所在的那一段 —— 常规火力要绕开它，见 launch。 */
   let band = { top: 380, bot: 900, face: [520, 610] };
 
   function init(o) {
-    frontAt = o.frontAt; onHit = o.onHit; onClash = o.onClash || (() => {}); W = o.W || 960;
+    frontAt = o.frontAt; midAt = o.midAt || (() => frontAt(0, 1)); targetSpan = o.targetSpan || (() => null);
+    onHit = o.onHit; onClash = o.onClash || (() => {}); W = o.W || 960;
     if (o.band) band = o.band;
   }
 
@@ -587,8 +590,12 @@ const Ammo = (function () {
     if (act.length >= MAX) pool.push(act.shift());
     const g = q.g, sp = SPEED[g.style] || 900;
     const p = pool.pop() || {};
-    p.g = g; p.item = g.item; p.r = q.exec ? g.r * 1.8 : g.r; p.y = q.y;
+    p.g = g; p.item = g.item; p.r = q.exec ? g.r * 1.8 : g.r;
     p.from = g.from;
+    /* 高度压进对方身体此刻占的范围（上下各收 20，别擦着头顶/脚底）。在出手这一刻取，
+       不在 launch 里取：重投有预警、连珠一串要排 0.5 秒，那期间人可能已经倒下了。 */
+    const sp0 = targetSpan(g.from);
+    p.y = sp0 ? Math.min(Math.max(q.y, sp0[0] + 20), sp0[1] - 20) : q.y;
     p.exec = !!q.exec;
     p.clash = !!q.clash;
     // 对撞点落在自己这一侧一点，错开一些 —— 全撞在同一条线上会读成一堵墙
@@ -660,21 +667,21 @@ const Ammo = (function () {
       p.hi = (p.hi + 1) & TMASK;
       p.hx[p.hi] = p.x; p.hr[p.hi] = p.rot;
 
-      const fx = frontAt(p.y);
+      const fx = frontAt(p.y, p.from), mx = midAt();
       /* 走完了全程的多少。色晕靠它在命中前一路烧起来 —— 观众在撞上之前就
          知道这一发要到了，而这正是弹幕能制造期待的唯一窗口。 */
-      const span = fx - p.x0;
+      const span = (fx ?? mx) - p.x0;
       p.near = span === 0 ? 1 : clamp01((p.x - p.x0) / span);
       if (p.clash) {
         // 对冲掉的那些飞不到人身上，在中线前撞掉
-        const cx = fx - p.from * p.clashOff;
+        const cx = mx - p.from * p.clashOff;
         if (p.from > 0 ? p.x >= cx : p.x <= cx) {
           act.splice(i, 1); pool.push(p);
           onClash(p, cx);
           continue;
         }
       }
-      const hit = p.from > 0 ? p.x >= fx : p.x <= fx;
+      const hit = fx != null && (p.from > 0 ? p.x >= fx : p.x <= fx);
       if (hit) {
         act.splice(i, 1); pool.push(p);
         /* 独占窗口从**命中那一刻**才开始。原来写在 launch 里，可处决要飞一秒半
@@ -683,7 +690,7 @@ const Ammo = (function () {
         if (p.exec) lock = 0.8;
         onHit(p, fx);
       } else if (p.x < -400 || p.x > W + 400) {
-        // 对抗线被推到极端位置时弹幕可能追不上，别让它永远飞下去
+        // 没碰到人（这一行没人）就飞出画面，别让它永远飞下去
         act.splice(i, 1); pool.push(p);
       }
     }
