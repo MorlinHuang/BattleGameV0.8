@@ -114,6 +114,8 @@ function Crew(cfg) {
 
   /* 碰到对方了没有（有就返回命中点 [x, y]）。
      站着：飞到落点那一列、高度离落点 F.miss 以内算正中；打偏了碰到对方轮廓前沿（o.front）也算。
+     雾团大、判定宽（miss 60），擦着头顶飞过也算 —— 命中点按飞到的高度记的话，爆点一路叠到头顶上方
+     （男生被拖倒、脸很低时成了一根橙色烟柱）。所以 F.snap 给了就把命中点收到落点上下 snap 像素以内。
      倒地（落点第三项 'top'）：落到这一列的上沿（o.top）以下 —— 不看前沿：横躺时每一行的前沿都是
      伸出去的手臂和头，浇背的水一降到那几行就会全碎在头上。 */
   function hitTest(d, tg) {
@@ -122,7 +124,8 @@ function Crew(cfg) {
       const top = o.top && o.top(d.x);
       return top != null && d.y >= top ? [d.x, top] : null;
     }
-    if (tg && past(tg[0]) && Math.abs(d.y - tg[1]) < F.miss) return [tg[0], d.y];
+    if (tg && past(tg[0]) && Math.abs(d.y - tg[1]) < F.miss)
+      return [tg[0], F.snap == null ? d.y : tg[1] + Math.max(-F.snap, Math.min(F.snap, d.y - tg[1]))];
     const fr = o.front(d.y);
     return fr != null && past(fr) ? [fr, d.y] : null;
   }
@@ -185,52 +188,109 @@ function Crew(cfg) {
         const v = F.V * (1 + (Math.random() - 0.5) * 2 * F.vJit);
         const vx = face * v * Math.cos(a), vy = -v * Math.sin(a);
         ps.push({ x: m[0] + vx * age, y: m[1] + vy * age + 0.5 * F.G * age * age, vx, vy: vy + F.G * age,
-                  t: age, u, b, seq: b.seq++ });
+                  t: age, u, b, seq: b.seq++, j: Math.random() });
       }
     }
   }
 
-  /* 人：角色层、自己主角之前画（被主角挡住）；bs 按远近排好，远的先画。先 rot 层（转过的）再 fix 层。 */
-  function drawActor(ctx) {
-    if (!img) return;
-    for (const b of bs) {
-      const p = pose(b), [x, y, s] = p, [cx, cy] = pivotAt(p);
-      const X = x - spr.foot[0] * s, Y = y - spr.foot[1] * s;
-      ctx.save();
-      ctx.translate(cx, cy); ctx.rotate(-face * b.aim); ctx.translate(-cx, -cy);
-      ctx.drawImage(img, X, Y, img.width * s, img.height * s);
-      ctx.restore();
-      ctx.drawImage(imgFix, X, Y, imgFix.width * s, imgFix.height * s);
-    }
+  /* 画的顺序（层级）交给 main.js：items() 给出这一帧要画的每一样东西和它的远近 s，main.js 把哥们、闺蜜的
+     合在一起按 s 从远到近排，全画在**两个主角之前**。
+     每个人自己的那股水 / 雾紧跟在他本人之后（从他枪口出来，盖在他身上），被比他近的人挡住。
+     喷的东西在主角身后：帮手站得比主角远，水 / 雾从主角身后穿过去，碰到对方身体轮廓就被对方挡住 ——
+     "被挡住的那一截"本身就读成打中了（溅开的水花在特效层，照样盖在人身上）。
+     画在主角之上的话（第一版），哥们的水从男生脑袋上横穿过去，像把男生的头切开。 */
+  function items() {
+    if (!img) return [];
+    const out = [], groups = new Map();
+    for (const d of ps) { const g = groups.get(d.b); g ? g.push(d) : groups.set(d.b, [d]); }
+    for (const b of bs) out.push({ s: b.s, draw: (ctx) => drawOne(ctx, b) });
+    /* 人已离场、水还在飞的，按原来那个人的远近画 */
+    for (const [b, g] of groups) out.push({ s: b.s + 1e-6, draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
+    return out;
   }
 
-  function drawFluid(ctx) { if (ps.length) F.draw(ctx, ps, bs); }
+  /* 一个人：先 rot 层（转过的）再 fix 层 */
+  function drawOne(ctx, b) {
+    const p = pose(b), [x, y, s] = p, [cx, cy] = pivotAt(p);
+    const X = x - spr.foot[0] * s, Y = y - spr.foot[1] * s;
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(-face * b.aim); ctx.translate(-cx, -cy);
+    ctx.drawImage(img, X, Y, img.width * s, img.height * s);
+    ctx.restore();
+    ctx.drawImage(imgFix, X, Y, imgFix.width * s, imgFix.height * s);
+  }
 
   const active = () => bs.length > 0;
   function reset() { bs.length = 0; ps.length = 0; }
 
-  return { init, load, summon, update, drawActor, drawFluid, active, reset };
+  return { init, load, summon, update, items, active, reset };
 }
 
-/* 水柱（哥们）：同一个人出口顺序相邻、离得不远的水滴连成线，外加一段喷口 → 最新一滴
-   （最新那滴已经飞了最多一帧 ~23 像素，不补的话水柱跟枪口之间是空的）。
-   三遍描线 STROKE：深蓝描边 → 浅蓝水身 → 白色高光 —— 浅蓝在浅绿墙上不描边就化掉了。 */
-const WATER_STROKE = [[26, 'rgba(24,70,140,.75)'], [19, 'rgba(110,196,255,.95)'], [6, 'rgba(255,255,255,.9)']];
-function drawStream(ctx, ps, bs) {
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (const [lw, col] of WATER_STROKE) {
-    ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.beginPath();
-    const last = new Map();                 // 几个人的水滴在 ps 里是交错的，按人找上一滴
-    for (const b of ps) {
-      const a = last.get(b.b); last.set(b.b, b);
-      if (!a || b.seq !== a.seq + 1 || Math.hypot(b.x - a.x, b.y - a.y) > 60) continue;
-      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+/* 水柱（哥们）。ps 是同一个人喷出去的水滴（按出口顺序），b 是这个人（已离场为 null）。
+   相邻两滴连成一段，外加一段喷口 → 最新一滴（最新那滴已经飞了最多一帧 ~23 像素，不补的话水柱跟枪口之间是空的）。
+   第一版三遍等粗描线（深蓝描边 26 → 浅蓝 19 → 白芯 6）读成**光柱**：从头到尾一样粗、白芯连成一条、边缘硬，
+   是霓虹灯管不是水。水该有的几样：
+     · 出口细、越飞越散越粗（WATER.w0 → w1，飞 grow 秒长满），也越飞越透（a1）；
+     · 飞到后半段（t > breakT）会断：每滴出口时抽一次，WATER.brk 的概率在它身后断开，断开处两头画成水珠；
+     · 高光不是一条线，是贴着上沿、一段有一段没有的碎亮光（seq 按 glint 取模）；
+     · 水柱周围甩出细水沫（每滴按自己的随机数 j 偏到两侧）。
+   颜色仍要深蓝托底（浅蓝在浅绿墙上不描边就化掉），但托底是半透明的淡描边，不是实线框。 */
+const WATER = {
+  w0: 7, w1: 20, grow: 0.3,          // 出口宽、长满宽（像素）、多久长满（秒）
+  a1: 0.55,                          // 飞到 grow 之后水身剩多少不透明度（出口 1）
+  breakT: 0.14, brk: 0.16,           // 飞过多少秒以后开始会断、每滴身后断开的概率
+  edge: [40, 110, 190], body: [150, 214, 255], glint: [4, 7],   // 描边色、水身色、高光：每 7 段亮 4 段
+  mist: 0.35,                        // 水沫：每滴甩出的概率（按 j 取，同一滴每帧一样，不闪）
+};
+function drawStream(ctx, ps, b) {
+  const W = WATER, wOf = (d) => W.w0 + (W.w1 - W.w0) * Math.min(1, d.t / W.grow);
+  const aOf = (d) => 1 - (1 - W.a1) * Math.min(1, d.t / W.grow);
+  /* 连成段：[前一滴, 这一滴]；喷口那一段用一个 t=0 的假水滴 */
+  const segs = [];
+  for (let i = 1; i < ps.length; i++) {
+    const p = ps[i - 1], d = ps[i];
+    if (d.seq !== p.seq + 1 || Math.hypot(d.x - p.x, d.y - p.y) > 60) continue;
+    if (d.t > W.breakT && d.j < W.brk) continue;           // 断开
+    segs.push([p, d]);
+  }
+  const last = ps[ps.length - 1];
+  if (b && b.m && last && Math.hypot(last.x - b.m[0], last.y - b.m[1]) < 60)
+    segs.push([last, { x: b.m[0], y: b.m[1], t: 0, seq: last.seq + 1, j: 1 }]);
+  ctx.lineCap = 'round';
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
+  /* 描边 → 水身：两遍，每段按两头的平均宽度/透明度 */
+  for (const [pad, col, k] of [[5, W.edge, 0.5], [0, W.body, 0.85]]) {
+    for (const [p, d] of segs) {
+      const m = { t: (p.t + d.t) / 2 };
+      ctx.lineWidth = wOf(m) + pad; ctx.strokeStyle = rgba(col, aOf(m) * k);
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(d.x, d.y); ctx.stroke();
     }
-    for (const b of bs) {
-      const a = last.get(b);
-      if (b.m && a && Math.hypot(a.x - b.m[0], a.y - b.m[1]) < 60) { ctx.moveTo(b.m[0], b.m[1]); ctx.lineTo(a.x, a.y); }
-    }
-    ctx.stroke();
+  }
+  /* 断开之后的水珠：后半段没连上的水滴，各画一颗 */
+  const linked = new Set(); for (const [p, d] of segs) { linked.add(p); linked.add(d); }
+  for (const d of ps) {
+    if (linked.has(d) && d.j >= W.brk) continue;
+    const r = wOf(d) * (0.35 + 0.2 * ((d.j * 7) % 1));   // 大小按 j 散开一点，同一滴每帧一样
+    ctx.fillStyle = rgba(W.edge, aOf(d) * 0.6); ctx.beginPath(); ctx.arc(d.x, d.y, r + 2, 0, 6.283); ctx.fill();
+    ctx.fillStyle = rgba(W.body, aOf(d) * 0.9); ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, 6.283); ctx.fill();
+  }
+  /* 碎高光：贴着上沿（法线朝上那侧偏 1/4 宽），隔几段亮一段 */
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.beginPath();
+  for (const [p, d] of segs) {
+    if (d.seq % W.glint[1] >= W.glint[0]) continue;
+    const dx = d.x - p.x, dy = d.y - p.y, L = Math.hypot(dx, dy) || 1;
+    let nx = dy / L, ny = -dx / L; if (ny > 0) { nx = -nx; ny = -ny; }
+    const o = wOf({ t: (p.t + d.t) / 2 }) * 0.25;
+    ctx.moveTo(p.x + nx * o, p.y + ny * o); ctx.lineTo(d.x + nx * o, d.y + ny * o);
+  }
+  ctx.stroke();
+  /* 水沫：飞过 breakT 的水滴，按 j 甩到两侧一点 */
+  for (const d of ps) {
+    if (d.t < W.breakT || d.j > W.mist) continue;
+    const k = d.j / W.mist, off = (k - 0.5) * 2 * wOf(d) * 1.3, r = 1.8 + 2 * k;
+    const vl = Math.hypot(d.vx, d.vy) || 1, x = d.x - d.vy / vl * off, y = d.y + d.vx / vl * off;
+    ctx.fillStyle = rgba(W.edge, 0.55); ctx.beginPath(); ctx.arc(x, y, r + 1.2, 0, 6.283); ctx.fill();
+    ctx.fillStyle = rgba(W.body, 0.95); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
   }
 }
 
@@ -255,7 +315,7 @@ function drawMist(ctx, ps) {
    sweep：瞄点在对方身上 u=0.5 附近两个不公约的正弦叠起来乱扫；w 要跟水在空中的时间（~0.35s）比，
    快了（2.3/5.3 rad/s）前后水滴落点差太远，水柱折成"7"字，1.2/2.8 才是一条顺着甩的抛物线。
    zone：对方倒地后每 every 秒随机换一个部位（u∈lo~hi：后脑、背、屁股、腿），在它前后 ±span 扫。
-   fluid：出口速度 V、重力 G，每人每秒 rate 滴；miss 见 hitTest；hitEvery 每人多久补一下命中反馈。 */
+   fluid：出口速度 V、重力 G，每人每秒 rate 滴；miss、snap 见 hitTest；hitEvery 每人多久补一下命中反馈。 */
 const Buddy = Crew({
   face: -1,
   spr: { rot: 'assets/world/buddy_up.webp', fix: 'assets/world/buddy_lo.webp',
@@ -283,10 +343,10 @@ const MIST = {
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
   max: 3, gap: 0.3,
   rows: [[0.74, 0.80], [0.66, 0.71], [0.58, 0.63]],
-  aim: { lo: -0.35, hi: 0.35, rate: 2.4, follow: 10 },
+  aim: { lo: -0.7, hi: 0.35, rate: 2.4, follow: 10 },
   sweep: { a: [0.3, 0.15], w: [1.3, 3.1] },
   zone: null,
-  fluid: { V: 1100, G: 60, drag: 1.0, rate: 90, spread: 0.1, vJit: 0.15, life: 0.8, miss: 60, hitEvery: 0.3, floor: false,
+  fluid: { V: 1100, G: 60, drag: 1.0, rate: 90, spread: 0.1, vJit: 0.15, life: 0.8, miss: 60, snap: 12, hitEvery: 0.3, floor: false,
            draw: drawMist },
 };
 const Bestie = Crew(MIST);

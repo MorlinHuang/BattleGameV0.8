@@ -1775,8 +1775,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const ox = Particles.off.x, oy = Particles.off.y;
     cctx.clearRect(0, 0, W, H);
     cctx.save(); cctx.translate(ox, oy);
-    Buddy.drawActor(cctx);            // 哥们在男生斜后方、闺蜜在女生斜后方，先画，被主角挡住
-    Bestie.drawActor(cctx);
+    /* 哥们在男生斜后方、闺蜜在女生斜后方：连同各自喷的水 / 雾按远近排好，全在主角之前画，被主角挡住（crew.js items） */
+    for (const it of [...Buddy.items(), ...Bestie.items()].sort((a, b) => a.s - b.s)) it.draw(cctx);
     actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(cctx);
     cctx.restore();
@@ -1790,8 +1790,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Bubble.draw(fctx);
     /* 弹幕在角色之上、粒子之下：它飞向两个人中间，画在角色底下的话命中前
        最后那段就被身体挡掉了；而粒子是命中的爆炸，该盖在弹幕上面。 */
-    Buddy.drawFluid(fctx);            // 水柱、喷雾越过主角头顶，跟弹幕一样在角色之上
-    Bestie.drawFluid(fctx);
     Ammo.draw(fctx);
     Particles.draw(fctx);
     fctx.restore();
