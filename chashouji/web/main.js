@@ -951,8 +951,9 @@ const GIFT = {
   // 查岗党（女方，在左，from=+1）
   /* 口红（2026-09-26 替换发卡）：一次礼物三支、隔 0.5 秒一支，瞄男生的腰和大腿（aim: 'hip'，他的藏青短裤），
      也**只在那里碰撞**；淡红管身，砸中是粉色爆点，在短裤上留下粉点（stain）。常规火力那一路也飞口红，
-     但照旧按外轮廓碰、不留点。发卡的贴图和矢量画法留在 ammo.js 当备选。 */
-  lipstick:{ name: '口红',   from: +1, style: 'single', item: 'lipstick', r: 34, n: 3, gap: 0.5, aim: 'hip', stain: true,
+     但照旧按外轮廓碰、不留点。发卡的贴图和矢量画法留在 ammo.js 当备选。
+     r 34→28（用户：口红体积过大）；香蕉 34→40（用户：稍微变大）。贴图按新 r 重渲（screen_r），描边仍是 2.8px。 */
+  lipstick:{ name: '口红',   from: +1, style: 'single', item: 'lipstick', r: 28, n: 3, gap: 0.5, aim: 'hip', stain: true,
              spin: 5.7, power: 1, recipe: 'rouge',   push: 1 },
   pillow:  { name: '抱枕',   from: +1, style: 'single', item: 'pillow',  r: 56,       spin: 5.7, power: 2, recipe: 'feather', push: 20 },
   bouquet: { name: '花束',   from: +1, style: 'heavy',  item: 'bouquet', r: 76,       spin: 6.7, power: 3, recipe: 'petal',   push: 230 },
@@ -964,7 +965,7 @@ const GIFT = {
   /* 香蕉（2026-09-26 替换瓜子）：一次礼物三根、隔 0.5 秒一根（gap），瞄女生的脸（aim），碰撞点也是脸
      （穿过手臂、头发边，贴到脸上才爆）；砸中是白色爆点，脸上留下白点（stain，见 stainAt）。常规火力
      那一路也飞香蕉，但照旧避开脸（ammo.js 的 free），所以白点只在刷礼物时出现。飞行 0.55s，spin = π/0.55。 */
-  banana:  { name: '香蕉',   from: -1, style: 'single', item: 'banana',  r: 34, n: 3, gap: 0.5, aim: 'face', stain: true,
+  banana:  { name: '香蕉',   from: -1, style: 'single', item: 'banana',  r: 40, n: 3, gap: 0.5, aim: 'face', stain: true,
              spin: 5.7, power: 1, recipe: 'cream',   push: 1 },
   gamepad: { name: '手柄',   from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 5.7, power: 2, recipe: 'debris',  push: 20 },
   milktea: { name: '奶茶',   from: -1, style: 'heavy',  item: 'milktea', r: 72,       spin: 6.7, power: 3, recipe: 'splash',  push: 230 },

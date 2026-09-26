@@ -429,8 +429,8 @@ const Ammo = (function () {
     photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.38 },
     hairpin: { src: 'assets/items/hairpin_atlas.webp', n: 36, cols: 6, cell: 138, scale: 1.42 },
     seed:    { src: 'assets/items/seed_atlas.webp',    n: 36, cols: 6, cell: 130, scale: 1.34 },
-    banana:  { src: 'assets/items/banana_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.11 },
-    lipstick:{ src: 'assets/items/lipstick_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.11 },
+    banana:  { src: 'assets/items/banana_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.09 },
+    lipstick:{ src: 'assets/items/lipstick_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.13 },
     pillow:  { src: 'assets/items/pillow_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.16 },
     gamepad: { src: 'assets/items/gamepad_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.06 },
   };

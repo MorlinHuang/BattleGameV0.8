@@ -63,4 +63,4 @@ mid = Vector([(lo[k] + hi[k]) / 2 for k in range(3)])
 s = NOMINAL / max(hi[k] - lo[k] for k in range(3))
 ob.matrix_world = Matrix.Diagonal((s, s, s, 1.0)) @ Matrix.Translation(-mid)
 
-render_turntable('lipstick', active=ob, lean=20, tilt=0.25, roll=0.15, screen_r=34)
+render_turntable('lipstick', active=ob, lean=20, tilt=0.25, roll=0.15, screen_r=28)

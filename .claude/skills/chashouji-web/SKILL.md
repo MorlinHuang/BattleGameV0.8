@@ -349,8 +349,8 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 - 看结算：`?live=1&liveA=200&liveB=0&livet=120&overt=3`（灭迹党胜把 A/B 对调）。
 
 ## 瞄部位的档 1：香蕉 / 口红（2026-09-26，替换瓜子 / 发卡）
-- `GIFT.banana`（灭迹党）：`n:3, gap:0.5, aim:'face', stain:true, recipe:'cream'`（白爆点 + 女生脸上白点）。
-- `GIFT.lipstick`（查岗党）：`n:3, gap:0.5, aim:'hip', stain:true, recipe:'rouge'`（粉爆点 + 男生短裤上粉点），淡红管身。
+- `GIFT.banana`（灭迹党）：`r:40, n:3, gap:0.5, aim:'face', stain:true, recipe:'cream'`（白爆点 + 女生脸上白点）。
+- `GIFT.lipstick`（查岗党）：`r:28, n:3, gap:0.5, aim:'hip', stain:true, recipe:'rouge'`（粉爆点 + 男生短裤上粉点），淡红管身。
 - **碰撞点是部位，不是外轮廓**：ammo.js 出手时 `p.aimKey = Math.random()`，每帧 `aimAt(g, key)` 重取 [碰撞 x, y]，
   高度按 `1-exp(-12dt)` 追过去、x 到了就爆（人倒下/迈步部位跟着挪）。没有 aimKey 的照旧走 `frontAt`。
 - main.js `aimAt`：face = 脸朝对方那半边（`f[0] - from*0.5r`）、上下 ±0.2r；hip = `hipOf().pts` 第 key 行的左沿 +5。
