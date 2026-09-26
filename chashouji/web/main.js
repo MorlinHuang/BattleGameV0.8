@@ -308,7 +308,8 @@ function giveGift(side, key) {
   }
   if (it.tier >= 1) {
     const g = GIFT[ITEM_OF[side > 0 ? 'L' : 'R'][it.tier]];
-    Ammo.launch(g, null, { gift: true, exec: it.tier === 4 });
+    if (g.style === 'buddy') Buddy.summon();
+    else Ammo.launch(g, null, { gift: true, exec: it.tier === 4 });
   } else {
     // 免费档不飞实体，只在自己那侧冒一小串火花 —— 它买的是参与感，不是战力
     RECIPE.star.burst(side > 0 ? 46 : W - 46, 300 + Math.random() * 520, -side, 0.3);
@@ -328,6 +329,7 @@ function startMatch() {
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
+  Buddy.reset();
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
@@ -728,6 +730,34 @@ const RECIPE = {
     },
   },
 
+  /* 水枪滋中（哥们，档 3 右）。水是透明的，浅蓝在浅绿墙 + 米色地板上一样化掉，所以跟奶茶一样
+     靠**深色托底**：水花环下面垫深蓝环、水珠一律墨线描边。drip 是每一滴水打上去的小碎花
+     （一秒几十滴，只溅两三颗、不震屏），burst 是 impact 调的那一下。 */
+  water: {
+    tint: [196, 228, 255],
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 14 * s, r1: 70 * s, life: 0.16, rgb: [214, 238, 255], a: 0.9 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 110 * s, life: 0.28, rgb: [24, 70, 140], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 108 * s, life: 0.28, rgb: [120, 200, 255], lw: 3.5 * s });
+      for (let i = 0; i < Math.round(12 * s); i++) {
+        const a = (Math.random() - 0.5) * 2.8;
+        const sp = (200 + Math.random() * 420) * s;
+        const d = (5 + Math.random() * 6) * s;
+        Particles.spawn({ kind: 'chip', shape: 'pearl', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 220,
+                          g: 1100, drag: 0.98, life: 0.4 + Math.random() * 0.35, w: d, h: d,
+                          rot: 0, vrot: 0, rgb: i % 3 ? [120, 200, 255] : [230, 246, 255], edge: INK, lw: 1.5, a: 1 });
+      }
+    },
+    drip(x, y, side) {
+      for (let i = 0; i < 2; i++) {
+        const a = (Math.random() - 0.5) * 2.6, sp = 120 + Math.random() * 260, d = 4 + Math.random() * 4;
+        Particles.spawn({ kind: 'chip', shape: 'pearl', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 160,
+                          g: 1100, drag: 0.98, life: 0.3 + Math.random() * 0.25, w: d, h: d,
+                          rot: 0, vrot: 0, rgb: [120, 200, 255], edge: INK, lw: 1.3, a: 1 });
+      }
+    },
+  },
+
   /* 奶茶泼一身（档 3 右）。和花瓣正好相反：液体是**重**的，落地就停，
      所以走 debris 的物理参数而不是 feather 的 —— 一杯奶茶泼出去要是像羽毛
      那样飘半秒，读起来就成了雾。 */
@@ -921,7 +951,7 @@ const SHOP = {
    见过的，就是吵到最后砸过来的是一束花。 */
 const ITEM_OF = {
   L: [null, 'lipstick', 'pillow', 'bouquet', 'ringbox'],
-  R: [null, 'banana',  'gamepad', 'milktea', 'photo'],
+  R: [null, 'banana',  'gamepad', 'buddy',   'photo'],
 };
 
 /* 三种样式的差别是节奏与体量，不是物品：
@@ -969,6 +999,10 @@ const GIFT = {
              spin: 5.7, power: 1, recipe: 'cream',   push: 1 },
   gamepad: { name: '手柄',   from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 5.7, power: 2, recipe: 'debris',  push: 20 },
   milktea: { name: '奶茶',   from: -1, style: 'heavy',  item: 'milktea', r: 72,       spin: 6.7, power: 3, recipe: 'splash',  push: 230 },
+  /* 哥们（2026-09-26 替换奶茶）：不飞东西，男生的肌肉哥们蹦到他斜后方、端水枪朝女生乱滋 2.5 秒
+     （buddy.js）。style 'buddy' 让 giveGift 走 Buddy.summon 而不是 Ammo.launch。
+     第一股水打上去按档 3 的分量来一下（顿帧、震屏），之后每 0.3 秒按档 1 轻轻补一下。奶茶那行留着当备选。 */
+  buddy:   { name: '哥们',   from: -1, style: 'buddy',  power: 3, recipe: 'water', push: 230 },
   photo:   { name: '相框',   from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
 };
 
@@ -1565,6 +1599,29 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      从正在被抢的那部手机里冒出来的。 */
   Bubble.init({ phoneAt: phonePos });
 
+  /* 哥们站在男生身体右沿再往右；水滴碰女生的轮廓（跟礼物同一个 frontAt），瞄点在她身上下扫 */
+  Buddy.init({
+    W, ground: () => GROUND + FX.bob,
+    boyRight() {
+      const h = hipOf(), f = faceOf('b');
+      return Math.max(h ? h.box[2] : 0, f ? f[0] + f[2] : 0, FX.phoneX + 120);
+    },
+    /* 女生身上的落点：u=0 脸、u=1 膝盖附近。手机那一行（上下 ARM_GAP）是伸出去的手臂，跳过去 ——
+       落在那里就是在滋手机。脸那一段碰脸的前沿，其余碰那一行的身体前沿。 */
+    girlTarget(u) {
+      const f = faceOf('a'), sp = targetSpan(-1);
+      if (!f || !sp) return null;
+      const ARM_GAP = 60, lo = f[1], hi = sp[1] - (sp[1] - sp[0]) * 0.15;
+      let y = lo + (hi - lo) * u;
+      if (Math.abs(y - FX.phoneY) < ARM_GAP) y = FX.phoneY + (u < 0.5 ? -ARM_GAP : ARM_GAP);
+      if (Math.abs(y - f[1]) < f[2]) return [f[0] + 0.5 * f[2], y];
+      const x = frontAt(y, -1);
+      return x == null ? null : [x, y];
+    },
+    onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
+    onHit: (x, y, first) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE.water, x),
+  });
+
   /* 长卷背景与姿势贴图，都由 v14/build.py 生成。world.json 是它们的说明书：
      每间房多宽、客厅正中在哪、每张贴图的锚点和手机位置。 */
   const vq = Q0.get('v') ? '?v=' + encodeURIComponent(Q0.get('v')) : '';
@@ -1587,6 +1644,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   const [sprOK, shpOK] = await Promise.all([
     Ammo.loadSprites(Q0.get('v'), noSpr),
     Particles.loadShapes(Q0.get('v'), noSpr),
+    Buddy.load(Q0.get('v'), noSpr),
   ]);
   document.getElementById('msg').textContent =
     `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` +
@@ -1679,6 +1737,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const ox = Particles.off.x, oy = Particles.off.y;
     cctx.clearRect(0, 0, W, H);
     cctx.save(); cctx.translate(ox, oy);
+    Buddy.drawActor(cctx);            // 哥们在男生斜后方，先画，被男生挡住
     actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(cctx);
     cctx.restore();
@@ -1692,6 +1751,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Bubble.draw(fctx);
     /* 弹幕在角色之上、粒子之下：它飞向两个人中间，画在角色底下的话命中前
        最后那段就被身体挡掉了；而粒子是命中的爆炸，该盖在弹幕上面。 */
+    Buddy.drawWater(fctx);            // 水柱越过男生头顶，跟弹幕一样在角色之上
     Ammo.draw(fctx);
     Particles.draw(fctx);
     fctx.restore();
@@ -1790,7 +1850,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     o.fillStyle = '#0c0e12'; o.fillRect(0, 0, out.width, out.height);
 
     // ?ammoy=aim：不钉高度，让瞄部位的礼物（香蕉瞄脸、口红瞄腰腿）按实际逻辑瞄
-    Ammo.launch(g, Q.get('ammoy') === 'aim' ? null : clamp(+(Q.get('ammoy') || 560), 300, 960), { gift: true });
+    if (g.style === 'buddy') Buddy.summon();
+    else Ammo.launch(g, Q.get('ammoy') === 'aim' ? null : clamp(+(Q.get('ammoy') || 560), 300, 960), { gift: true });
     let el = 0;
     for (let i = 0; i < n; i++) {
       const step = i === 0 ? 1 / 60 : MS;
@@ -1798,6 +1859,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         const d = Particles.tick(1 / 60);
         Particles.update(1 / 60);
         Ammo.update(d);
+        Buddy.update(d);
         Bubble.update(d, FX.struggle);
         derive(d); hudTick(d);
       }
@@ -2033,6 +2095,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        这一下"的可视化，冻住它就迟到了；而正在飞的弹幕是**下一下**的前奏，
        顿帧的意思就是全世界停下来看这一击，此刻别的东西还在飞就散掉了。 */
     Ammo.update(dt);
+    Buddy.update(dt);
     // 气泡跟着逻辑时钟：顿帧时它也该停，那半秒全世界都在看刚才那一击
     Bubble.update(dt, FX.struggle);
     S.t += dt;

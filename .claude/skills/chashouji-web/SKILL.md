@@ -362,3 +362,11 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 - 看效果：`?ammostrip=6&ammoms=260&ammogift=lipstick&ammoy=aim`（`ammoy=aim` 不钉高度，走真实瞄准）。
 - 贴图 `tools/3d/banana.py` / `lipstick.py`：lean=20；**view_transform=Standard**（AgX 把黄压成芥末、把淡红压成豆沙粉）。
   发卡、瓜子的贴图和矢量画法仍留在 ammo.js 当备选。
+
+## 哥们（2026-09-26 替换奶茶，灭迹党档 3）
+- `GIFT.buddy`：`style:'buddy'` → giveGift / ammostrip 走 `Buddy.summon()`（buddy.js），不走 Ammo。奶茶那行留作备选。
+- buddy.js：角色层画人（男生**之前**画，被挡住），特效层画水柱；`T` 时间轴 蹦进 0.35 → 滋 2.5 → 蹦出 0.4，途中再刷只续滋，不叠人。
+- 立绘 `assets/world/buddy.webp`（`v14/buddy/src1.png` 用 build 的 cutout 抠、×0.34），`SPR.foot/muzzle` 是贴图像素，depth 0.88。
+- 水滴按 `girlTarget(u)`（main.js，u=0 脸→1 膝盖，跳过手机那行 ±60）反算抛物线，飞到落点横坐标就碎；**不碰外轮廓**，否则全炸在手机上。
+- 命中：第一股 `impact(+1, …, power 3, RECIPE.water)`，之后每 0.3s power 1；每滴 `RECIPE.water.drip`。
+- 看效果：`?ammostrip=6&ammoms=450&ammogift=buddy`（可加 `pos=-29` 看女生趴地）。
