@@ -1646,15 +1646,18 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
     onHit: (x, y, first) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE.water, x),
   });
-  /* 闺蜜（查岗党）→ 男生的脸。落点在他脸朝女生那半边，上下 ±0.6 个半径乱晃；他跪下、趴下，脸跟着走。 */
+  /* 闺蜜（查岗党）→ 男生的脸。落点在脸的**中上部**（眼睛那一带）：x 往女生那边 0.3 个半径，y 从脸心往上 0.55
+     到往下 0.05 个半径乱晃；他跪下、趴下，脸跟着走。
+     不取下半张脸：男生被拖倒时脸朝下贴地，伸出去的胳膊正好横在下半张脸前面，爆点全落在胳膊上。
+     front 给 null：没打中脸的雾就散掉，不在身体轮廓上爆 —— 雾本来就不是砸的东西，碰胳膊炸开读成打胳膊。 */
   Bestie.init({
     W, ground: () => GROUND + FX.bob, horizon,
     zone: () => [Math.max(FX.phoneX - 60, 420), -40],   // 女生身后到屏幕左沿很窄，只许出画 40
     target(u) {
       const f = faceOf('b');
-      return f && [f[0] - 0.5 * f[2], f[1] + (u - 0.5) * 1.2 * f[2]];
+      return f && [f[0] - 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]];
     },
-    front: (y) => offArm(y) ? null : frontAt(y, +1),
+    front: () => null,
     onSplash: (x, y) => RECIPE.pepper.drip(x, y, -1),
     onHit: (x, y, first) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE.pepper, x),
   });

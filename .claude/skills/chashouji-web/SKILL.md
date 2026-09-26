@@ -366,6 +366,8 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 ## 哥们（2026-09-26 替换奶茶，灭迹党档 3）
 - **档 3 两个帮手角色都在 crew.js**（2026-09-26 buddy.js 改写成工厂 `Crew(cfg)`）：`Buddy`（灭迹党哥们，face −1，水柱）、`Bestie`（查岗党闺蜜，face +1，防狼喷雾）。GIFT 里 `style:'crew', crew:'buddy'|'bestie'`，giveGift / ammostrip 走 `CREW[g.crew].summon()`；`?ammogift=bestie&buddyn=3`。
 - 每个帮手两层立绘：`rot` 绕 `pivot` 转（哥们腰以上 / 闺蜜伸直的手臂+喷雾罐），`fix` 不动、画在上面盖住接缝。闺蜜 `v14/bestie/make.py`：手臂层 = y≤300 且（x≥630 且 y≥222，或 x≥700），身体层切线处渐隐 12 像素；K=0.4 让头半径 = 女主 30。
+- **帮手分层**（2026-09-26）：`spr.body{src,pivot,k}`（绕腰转总仰角 k 份）、可选 `spr.arm{src,pivot}`（挂在 body 上绕肩转剩下的）、`spr.lo`（不动，画最上）；顺序 arm → body → lo。哥们 body k 1 无 arm；闺蜜 `src2.png`（罐子放大到小灭火器）三层 arm/up/lo，k 0.3。`cfg.anim`：pulse [0.42 按, 0.14 松]、kick [手臂上甩 0.12, 上身后仰 0.05, 衰减 10]、lean 0.08 喷时前探、bob [3, 2.6] 平衡车浮 —— 只转一条胳膊读成静帧。
+- 闺蜜落点取脸中上部（x f0−0.3r、y f1−0.55r~+0.05r），`front: () => null` 没中的雾直接散：男生被拖倒时胳膊横在下半张脸前，爆点全在胳膊上。
 - 闺蜜喷雾命中点 `fluid.snap 12`：收到脸上下 12 像素内（雾团判定宽 miss 60，按飞到的高度记会在头顶叠成烟柱）；手臂 `aim.lo -0.7`（-0.35 够不到男生被拖倒后的脸，雾从头顶飘过）。
 - **比例按透视**：`rows` 就是缩放 s（1 = 跟自己主角一样大，两张立绘都按头半径对齐主角出的图），脚底抬高 `(地面 − 视平线) × (1 − s)`，视平线 `HORIZON_UP=350`（男生站着眼睛高）。第一版哥们 s 0.86~0.95 + 另给抬高，站男生身后却比他壮一圈。现 rows 0.58~0.80。
 - 闺蜜的 fluid：雾 V 1100、drag 1、G 60、rate 90、散角 0.1，`drawMist` 两遍淡圆（深橙红 0.08 托底 + 亮橙 0.16）。太浓读成喷火器、太稀是一串橙点。`RECIPE.pepper` 命中用 soft 雾团 + 两圈环，**不用 dot**（发光贴图叠在脸上中心发白，像着火）。落点只瞄男生脸（`faceOf('b')` 朝女生那半边 ±0.6r），`zone` 喷口最多到手机左 60、外沿只许出画 40（女生身后到屏幕左沿很窄）。

@@ -1,10 +1,14 @@
 /* crew.js —— 档 3 的两个"帮手"角色（2026-09-26）：灭迹党的**哥们**（替换奶茶）、查岗党的**闺蜜**（替换花束）。
  *
  * 不是飞行物，是**角色**：踩着滑板 / 平衡车从自己那一侧画外滑进来，停在自己主角身后的随机位置，
- * 朝对方喷一阵，再滑出去。位移全交给脚下的滑板/平衡车，人只做一个动作 —— **一部分身体绕转轴转，
- * 喷口跟着落点瞄**。立绘切成两层（v14/buddy/make.py、v14/bestie/make.py）：
- *   rot 层绕 pivot 转（哥们：腰以上整个上半身；闺蜜：伸直的那条手臂 + 喷雾罐），
- *   fix 层不动、**画在 rot 之上**（哥们的裤腰 / 闺蜜的肩膀盖住接缝）。
+ * 朝对方喷一阵，再滑出去。位移全交给脚下的滑板/平衡车，人只做一个动作 —— **身体绕转轴转，
+ * 喷口跟着落点瞄**。立绘切成几层（v14/buddy/make.py、v14/bestie/make.py），画的顺序 arm → body → lo：
+ *   body 绕腰（body.pivot）转，转总仰角的 body.k 份（哥们 1：整个上半身端着枪转；闺蜜 0.3：上身跟着前倾）；
+ *   arm（可无）挂在 body 上、绕肩（arm.pivot）转剩下的，喷口在它上面；body 画在 arm 之上，肩膀盖住手臂根；
+ *   lo 不动、画在最上，裤腰 / 腰盖住接缝。
+ * anim（可无）是闺蜜那种"呲—呲—"一段段按的喷法：按一下（pulse.on 秒）松一下（pulse.off 秒），
+ * 每次按下手臂后坐往上一震（kick），上身喷的时候往前探（lean）；平衡车上人轻轻浮（bob）。
+ * 只转一条胳膊、其余一动不动（闺蜜第一版）读成静帧。
  *
  * **由落点反推枪口**：每帧看该打对方身上哪一点（o.target(u)），按喷出物的出口速度 V 和重力 G 反解要的
  * 仰角，转轴按转速上限 aim.rate 转过去、夹在 aim.lo~hi；喷出物**永远沿喷口此刻的方向、以 V 射出**。
@@ -23,7 +27,9 @@
 function Crew(cfg) {
   const { face, spr, aim: AIM, T } = cfg;       // face：-1 朝左（站右边），+1 朝右（站左边）
   const F = cfg.fluid;
-  let img = null, imgFix = null, o = {};
+  const L = { arm: spr.arm && spr.arm.src, body: spr.body.src, lo: spr.lo };   // 要加载的几层
+  const A = cfg.anim || null;
+  let img = null, o = {};                        // img：{ arm, body, lo } 三张图（arm 可无）
   const bs = [], ps = [];                        // 在场的人、喷出去的东西（水滴 / 雾团）
 
   function init(opt) { o = opt; }
@@ -36,8 +42,9 @@ function Crew(cfg) {
       i.onerror = () => ok(null);
       i.src = src + (v ? '?v=' + encodeURIComponent(v) : '');
     });
-    return Promise.all([one(spr.rot), one(spr.fix)]).then(([r, f]) => {
-      if (r && f) { img = r; imgFix = f; }
+    const ks = Object.keys(L).filter(k => L[k]);
+    return Promise.all(ks.map(k => one(L[k]))).then((ims) => {
+      if (ims.every(Boolean)) { img = {}; ks.forEach((k, i) => { img[k] = ims[i]; }); }
       return !!img;
     });
   }
@@ -69,7 +76,8 @@ function Crew(cfg) {
     const free = cfg.rows.filter(R => !bs.some(b => b.s >= R[0] && b.s <= R[1]));
     const pool = free.length ? free : cfg.rows, R = pool[Math.floor(Math.random() * pool.length)];
     bs.push({ t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
-              r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0 });
+              r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
+              pt: 0, kick: 0, lean: 0 });
     bs.sort((a, b) => a.s - b.s);          // 远的先画
   }
 
@@ -79,7 +87,7 @@ function Crew(cfg) {
      横向按**喷口**排：o.zone() = [喷口最多伸到哪（靠对方那边）, 人的外沿最多到哪（可以出画一点）]，
      r=0 喷口顶到第一个数，r=1 外沿顶到第二个数。 */
   function pose(b) {
-    const s = b.s, [near, edge] = o.zone(), wid = img ? img.width : 400;
+    const s = b.s, [near, edge] = o.zone(), wid = img ? img.lo.width : 400;
     let far = face < 0 ? edge - (wid - spr.muzzle[0]) * s : edge + spr.muzzle[0] * s;
     far = face < 0 ? Math.max(near, far) : Math.min(near, far);
     const x1 = near + (far - near) * b.r + (spr.foot[0] - spr.muzzle[0]) * s;
@@ -90,18 +98,30 @@ function Crew(cfg) {
     if (t < T.enter) x = off + (x1 - off) * easeOut(t / T.enter);                             // 滑进来，减速停住
     else if (t > se) { const u = Math.min(1, (t - se) / T.exit); x = x1 + (off - x1) * u * u; }  // 往后溜出去
     else x = x1 + Math.sin((t - T.enter) * 1.1 + b.ph) * 10 * s + Math.sin(t * 47) * 1.5 * s;  // 慢慢晃 + 后坐抖
-    return [x, y + Math.abs(Math.sin(t * 31)) * -1.2, s];                                     // 轮子压地面的细颤
+    const bob = A ? Math.sin(t * A.bob[1] + b.ph) * A.bob[0] * s : 0;                          // 平衡车上轻轻浮
+    return [x, y + Math.abs(Math.sin(t * 31)) * -1.2 + bob, s];                               // 轮子压地面的细颤
   }
 
-  /* 转轴和喷口的屏幕坐标。rot 层在 canvas 上转 φ（顺时针为正）；喷口朝 face 那边，
+  /* 贴图上的点 → 屏幕坐标（没转之前）。转角：canvas 上转 φ（顺时针为正）；喷口朝 face 那边，
      仰角 θ（抬高为正）对应 φ = −face·θ，出口方向 (face·cosθ, −sinθ)。 */
-  function pivotAt(p) {
-    return [p[0] + (spr.pivot[0] - spr.foot[0]) * p[2], p[1] + (spr.pivot[1] - spr.foot[1]) * p[2]];
+  const at = (p, q) => [p[0] + (q[0] - spr.foot[0]) * p[2], p[1] + (q[1] - spr.foot[1]) * p[2]];
+  function turn(q, c, th) {
+    const ph = -face * th, co = Math.cos(ph), si = Math.sin(ph), dx = q[0] - c[0], dy = q[1] - c[1];
+    return [c[0] + dx * co - dy * si, c[1] + dx * si + dy * co];
   }
-  function muzzle(p, th) {
-    const [cx, cy] = pivotAt(p), dx = (spr.muzzle[0] - spr.pivot[0]) * p[2], dy = (spr.muzzle[1] - spr.pivot[1]) * p[2];
-    const ph = -face * th, c = Math.cos(ph), s = Math.sin(ph);
-    return [cx + dx * c - dy * s, cy + dx * s + dy * c];
+  /* 喷口指向 th 时两层各转多少：[上身, 手臂（绝对，含上身）]。后坐 kick 把手臂往上甩、上身往后仰；
+     喷的时候上身往前探 lean。没 arm 的（哥们）上身就是全部，= th。 */
+  function angles(b, th) {
+    if (!spr.arm) return [th, th];
+    const k = A ? b.kick : 0, ln = A ? b.lean : 0;
+    return [spr.body.k * th - (A ? A.lean : 0) * ln + (A ? A.kick[1] : 0) * k, th + (A ? A.kick[0] : 0) * k];
+  }
+  function muzzle(p, th, b) {
+    const [bt, at_] = angles(b, th), c = at(p, spr.body.pivot), m = at(p, spr.muzzle);
+    if (!spr.arm) return turn(m, c, bt);
+    const sh = at(p, spr.arm.pivot), sh1 = turn(sh, c, bt);
+    const m1 = turn(m, sh, at_);                   // 手臂绕肩转到 at_（绝对角），再跟着肩膀平移
+    return [m1[0] + sh1[0] - sh[0], m1[1] + sh1[1] - sh[1]];
   }
 
   /* 出口速度 V、重力 G，打中 (dx, dy)（屏幕坐标）要的仰角（低弹道）。够不着就按 45°。 */
@@ -171,20 +191,31 @@ function Crew(cfg) {
       if (tg) {
         want = b.aim;
         for (let k = 0; k < 6; k++) {
-          const m0 = muzzle(p, want);
+          const m0 = muzzle(p, want, b);
           want = Math.min(AIM.hi, Math.max(AIM.lo, elevation(tg[0] - m0[0], tg[1] - m0[1])));
         }
       }
       b.aim += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.aim));
       b.m = null;
-      if (b.t < T.enter || b.t > se || !tg) continue;
+      const spraying = b.t >= T.enter && b.t <= se && tg;
+      if (A) {                                   // 一段段按：每次按下后坐一震；喷的时候上身往前探
+        b.kick *= Math.exp(-A.kick[2] * dt);
+        b.lean += ((spraying ? 1 : 0) - b.lean) * (1 - Math.exp(-dt * 6));
+        if (spraying) {
+          const cyc = A.pulse[0] + A.pulse[1];
+          if (b.pt === 0 || Math.floor((b.pt + dt) / cyc) > Math.floor(b.pt / cyc)) b.kick = 1;
+          b.pt += dt;
+        }
+      }
+      if (!spraying) continue;
+      if (A && (b.pt % (A.pulse[0] + A.pulse[1])) > A.pulse[0]) { b.emit = 0; continue; }   // 松开那一下
       /* 喷：从转过之后的喷口，沿喷口方向，速度 V（雾再加一点散角和快慢）。一帧攒够几个就出几个，
          每个按它**实际该出口的时刻**补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩。 */
       b.emit += dt * F.rate;
-      const m = b.m = muzzle(p, b.aim);
+      const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm ? 1 : 0];   // 沿喷口此刻真的指向（含后坐）
       while (b.emit >= 1) {
         b.emit -= 1;
-        const age = b.emit / F.rate, a = b.aim + (Math.random() - 0.5) * 2 * F.spread;
+        const age = b.emit / F.rate, a = dir + (Math.random() - 0.5) * 2 * F.spread;
         const v = F.V * (1 + (Math.random() - 0.5) * 2 * F.vJit);
         const vx = face * v * Math.cos(a), vy = -v * Math.sin(a);
         ps.push({ x: m[0] + vx * age, y: m[1] + vy * age + 0.5 * F.G * age * age, vx, vy: vy + F.G * age,
@@ -209,15 +240,18 @@ function Crew(cfg) {
     return out;
   }
 
-  /* 一个人：先 rot 层（转过的）再 fix 层 */
+  /* 一个人：上身系里先画手臂（再绕肩转）、再画上身，最后画不动的下身 */
   function drawOne(ctx, b) {
-    const p = pose(b), [x, y, s] = p, [cx, cy] = pivotAt(p);
+    const p = pose(b), [x, y, s] = p, [bt, at_] = angles(b, b.aim);
     const X = x - spr.foot[0] * s, Y = y - spr.foot[1] * s;
+    const put = (im) => ctx.drawImage(im, X, Y, im.width * s, im.height * s);
+    const spin = (q, th) => { const [cx, cy] = at(p, q); ctx.translate(cx, cy); ctx.rotate(-face * th); ctx.translate(-cx, -cy); };
     ctx.save();
-    ctx.translate(cx, cy); ctx.rotate(-face * b.aim); ctx.translate(-cx, -cy);
-    ctx.drawImage(img, X, Y, img.width * s, img.height * s);
+    spin(spr.body.pivot, bt);
+    if (img.arm) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(img.arm); ctx.restore(); }
+    put(img.body);
     ctx.restore();
-    ctx.drawImage(imgFix, X, Y, imgFix.width * s, imgFix.height * s);
+    put(img.lo);
   }
 
   const active = () => bs.length > 0;
@@ -318,8 +352,8 @@ function drawMist(ctx, ps) {
    fluid：出口速度 V、重力 G，每人每秒 rate 滴；miss、snap 见 hitTest；hitEvery 每人多久补一下命中反馈。 */
 const Buddy = Crew({
   face: -1,
-  spr: { rot: 'assets/world/buddy_up.webp', fix: 'assets/world/buddy_lo.webp',
-         foot: [260, 436], muzzle: [2, 78], pivot: [266, 190] },
+  spr: { body: { src: 'assets/world/buddy_up.webp', pivot: [266, 190], k: 1 }, lo: 'assets/world/buddy_lo.webp',
+         foot: [260, 436], muzzle: [2, 78] },
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
   max: 3, gap: 0.3,
   rows: [[0.74, 0.80], [0.66, 0.71], [0.58, 0.63]],
@@ -330,16 +364,20 @@ const Buddy = Crew({
            draw: drawStream },
 });
 
-/* 闺蜜：v14/bestie/src1.png 比基尼、踩平衡车、单手伸直举防狼喷雾。rot = 伸直的右臂 + 喷雾罐（绕肩关节转），
-   fix = 其余。只瞄男生的脸（喷雾就是冲眼睛去的），所以 sweep 幅度小、不分倒地部位（zone: null）。
-   手臂转的范围比哥们弯腰小（lo/hi ±0.35）：胳膊再往下压就戳到自己胸口了。
+/* 闺蜜：v14/bestie/src2.png 比基尼、踩平衡车、单手伸直举一罐小灭火器那么大的防狼喷雾。
+   arm = 伸直的右臂 + 喷雾罐（绕肩），body = 腰以上（绕腰，转总仰角的 k 份：跟着往下瞄时上身一起前倾），lo = 腰以下 + 平衡车。
+   只瞄男生的脸（喷雾就是冲眼睛去的），所以 sweep 幅度小、不分倒地部位（zone: null）。
+   aim.lo -0.7：男生被拖倒后脸贴着地，-0.35 压不下去，雾从他头顶上飘过去。
+   anim：pulse [按几秒, 松几秒]；kick [手臂往上甩, 上身往后仰, 衰减快慢]；lean 喷的时候上身往前探多少；bob [浮多高, 多快]。
    fluid：雾出口快、阻力大（drag）、几乎不受重力，飞一段就散（life）；每个雾团 ±spread 散角、±vJit 快慢，
    合起来是一个张开的喷锥。雾要**密而透**：雾团多（rate 90）、彼此重叠连成一片，但每团很淡（见 drawMist）。
    太浓（不透明度 0.5）三个人一起喷成一条橙色烟带，读成喷火器；太稀（rate 45、半径小）是一串分开的橙点。 */
 const MIST = {
   face: +1,
-  spr: { rot: 'assets/world/bestie_rot.webp', fix: 'assets/world/bestie_fix.webp',
-         foot: [108, 481], muzzle: [274, 55], pivot: [122, 100] },
+  spr: { arm: { src: 'assets/world/bestie_arm.webp', pivot: [122, 100] },
+         body: { src: 'assets/world/bestie_up.webp', pivot: [98, 197], k: 0.3 }, lo: 'assets/world/bestie_lo.webp',
+         foot: [108, 481], muzzle: [285, 15] },
+  anim: { pulse: [0.42, 0.14], kick: [0.12, 0.05, 10], lean: 0.08, bob: [3, 2.6] },
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
   max: 3, gap: 0.3,
   rows: [[0.74, 0.80], [0.66, 0.71], [0.58, 0.63]],
