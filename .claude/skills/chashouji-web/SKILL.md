@@ -129,7 +129,7 @@ main.js 里"跟人一样大"的像素数都写成原值 × ZOOM：`pxPerM`（82�
 `poses[帧].edge = {step, a: 女生右沿, b: 男生左沿}`（-1 = 这行没人）；分人按连通块（先挖掉手机周围），
 不按手机竖线一刀切 —— 男生跪/扑时前脚会伸过手机线。运行时叠 pairX/hitX/bob。
 这一行没人就找上下 80px 内最近的一行，再没有返回 null、那发飞出画面；`targetSpan(from)` 在**出手那一刻**
-把高度压进对方身体范围（对方趴下时不会从头顶飞过）。对冲的仍在 `midAt()`（手机 x）前撞掉。
+把高度压进对方身体范围（对方趴下时不会从头顶飞过）。（中线对撞随常规火力一起删了。）
 验证：`?ammostrip=10&ammoms=150&ammogift=pillow&ammoy=640`（头）/ `ammoy=1010`（腿），加 `p=95` 看趴档。
 
 ## HUD：距离条一根 + 名字行 + 拉力牌
@@ -356,7 +356,7 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 - main.js `aimAt`：face = 脸朝对方那半边（`f[0] - from*0.5r`）、上下 ±0.2r；hip = `hipOf().pts` 第 key 行的左沿 +5。
 - 留点 `stainAt(part, x, y)`：只有瞄准命中（aimKey）才留；存部位归一化坐标（脸：以脸半径为单位；短裤：外框 0~1），
   每部位最多 14 个、9 秒、`STAIN_LOOK` 管颜色。
-- 常规火力（emitFire）左飞口红、右飞香蕉，走 `one` → `free`：不瞄、不留点。
+- **没有常规火力了**（2026-09-26 删 emitFire / budA / NUM.SHOT / ammo 的 clash、one、free）：以前火力每消耗 9 点自动飞一根香蕉/口红，刷哥们(230) 会夹带二十多根香蕉，用户报"点哥们出现其他礼物"。现在画面只有刷的那件礼物自己的演出；对冲只在拉力条上读。验证：`tools/clicktest.js`（点一件、记 5 秒 Ammo.count）。
 - 部位数据：build.py `head_find` → `face:{a,b}:[x,y,r]`（步态帧沿用 base）；`hip_find` → `hip:{box,pts}`，按**藏青色相**抠男生短裤，
   每张图（含步态格）各量一次，pts 是 9 行 `[左沿, y, 右沿]`。换男生裤子颜色必须改 hip_find 的色阈。
 - 看效果：`?ammostrip=6&ammoms=260&ammogift=lipstick&ammoy=aim`（`ammoy=aim` 不钉高度，走真实瞄准）。
@@ -369,5 +369,5 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 - 立绘两层 `assets/world/buddy_up.webp`（头躯干双臂水枪）/`buddy_lo.webp`（裤腿滑板）：`v14/buddy/make.py`（skate1.png 踩滑板，×0.37）在裤腰 `CUT=186` 切开、肚皮往下补 `BELLY` 行，打印 `SPR.foot/muzzle/pivot`。上半身绕 pivot（裤腰正中）转，下层后画压住接缝。滑板替掉走路动作。
 - 站位**按枪口排**：`sprayZone()`=[枪口最左 min(phoneX+100, W-420), 人右沿最多 W+90]，横向 r 随机；远近分 `ROWS` 三排（每人占一排，远排小、高 LIFT 140）—— 横向只剩 ~140 像素，靠远近把几股水的起点上下错开，否则从同一点分叉读成"7"字。
 - **由落点反推枪**：瞄点平滑跟随（`AIM.follow`，步态硬切帧会抖）→ 按固定 `V=1250` 反解仰角（与枪口位置互相依赖，迭代 6 次）→ 上半身按 `AIM.rate` 转过去、夹在 `AIM.lo~hi`；水**永远沿枪管以 V 射出**（每滴反解初速试过：前后两滴速度差大，水柱成锯齿）。打偏：离落点 `MISS` 内算中，否则碰 `girlFront`（轮廓、跳过手机那行 `BUDDY_ARM_GAP`）溅开。
-- **女生倒地**（`girlDown()` = 帧名 bF/bL 开头）：`girlTarget` 沿身体从头到脚取上沿上的点（`girlTop(x)` 查 world.json `edge.top`，build.py 按列量的女生上沿），返回第三项 `'top'`；buddy.js 每人每 `ZONE.every` 秒随机挑一个部位（u∈`ZONE.lo~hi`，背/屁股/腿）小幅扫；碰撞按"落到这一列上沿以下"，**不看前沿**（横躺时每行前沿都是手臂和头，浇背的水会全碎在头上）。落空的水在地板上溅开。扫动 `SWEEP=[1.2,2.8]` rad/s —— 快了（2.3/5.3）前后水滴落点差太远折成"7"。瞄点 u 从脸到大腿上段（`sp[1]-0.35h`）。水柱线宽 `STROKE` 26/19/6。连线按人找上一滴（几个人的水滴在 drops 里交错）。
+- **女生倒地**（`girlDown()` = 帧名 bF/bL 开头）：`girlTarget` 沿身体从头到脚取上沿上的点（`girlTop(x)` 查 world.json `edge.top`，build.py 按列量的女生上沿），返回第三项 `'top'`；buddy.js 每人每 `ZONE.every` 秒随机挑一个部位（u∈`ZONE.lo~hi`，背/屁股/腿）小幅扫；碰撞按"落到这一列上沿以下"，**不看前沿**（横躺时每行前沿都是手臂和头，浇背的水会全碎在头上）。落空的水在地板上溅开。出水按每滴实际出枪时刻补飞（掉帧不起疙瘩）；画线补一段枪口→最新一滴。扫动 `SWEEP=[1.2,2.8]` rad/s —— 快了（2.3/5.3）前后水滴落点差太远折成"7"。瞄点 u 从脸到大腿上段（`sp[1]-0.35h`）。水柱线宽 `STROKE` 26/19/6。连线按人找上一滴（几个人的水滴在 drops 里交错）。
 - 看效果：`?ammostrip=6&ammoms=450&ammogift=buddy&buddyn=3`（buddyn 一次叫几个；可加 `pos=-29` 看女生趴地）。

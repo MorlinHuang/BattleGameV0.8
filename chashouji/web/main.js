@@ -115,7 +115,6 @@ const NUM = {
   LINE_FULL: 1000,
   LINE_RATE: 2.2,  // 姿态读数趋近拉力差的速率（时间常数 0.45 秒）
 
-  SHOT: 9,         // 每消耗这么多火力打出一发弹幕 —— 弹幕就是火力的消耗形式
   MATCH: 720,      // 单局 12 分钟
   SUDDEN_LEAD: 0.35, // 被拖出去 END 的这么多（35% = 10.5 米），持续 SUDDEN_WAIT 秒就进绝杀
   SUDDEN_WAIT: 60,
@@ -133,7 +132,6 @@ const S = {
   fA: 0, fB: 0,                       // 拉力（火力）：A=查岗党(左) B=灭迹党(右)
   pos: 0,                             // 位置（米）：胜负只看它。正 = 被拖向左边（查岗党占优）
   vel: 0,                             // 此刻每秒被拖多少米（带符号，battle 算出来的读数，HUD 画它）
-  budA: 0, budB: 0,                   // 发射预算：火力消耗到一发弹幕的量就打一发
   debA: 0, debB: 0, debKA: 0, debKB: 0,  // 受到的注入减益：剩余秒数与折扣
   clock: NUM.MATCH, phase: 'idle',    // idle 不跑数值（诊断与老演示模式）/ play / sudden / over
   big: 0, sudden: 0,
@@ -191,13 +189,9 @@ function battle(dt) {
   S.fA = Math.max(0, S.fA - useA);
   S.fB = Math.max(0, S.fB - useB);
 
-  /* 打出去的火力就是屏幕上的弹幕。消耗多少就打多少发 —— 于是"对冲掉的那
-     部分"和"穿过去的那部分"在画面上是分开的：前者在中线撞掉，后者才砸到人
-     身上。观众刷了礼物手机没动时，屏幕上有答案：你的东西被对面在半空撞掉了。 */
-  const denA = burn + NUM.LOSS * S.fA, denB = burn + NUM.LOSS * S.fB;
-  S.budA += useA; S.budB += useB;
-  emitFire(+1, denA > 0 ? burn / denA : 0);
-  emitFire(-1, denB > 0 ? burn / denB : 0);
+  /* 火力的消耗不再变成屏幕上的弹幕（2026-09-26 去掉 emitFire）：以前每消耗 SHOT=9 点就飞一根
+     香蕉/口红，刷一个哥们（230）会陆续冒出二十多根香蕉，观众点的是哥们、看到的是香蕉。
+     现在画面上只有刷的那件礼物自己的演出；火力对冲只在拉力条上读。 */
 
   /* ── 胜负层：位置 ──
      拉力差（= 双方火力之差）一件事管两头：**当下**它决定两个人摆哪套动作，
@@ -277,18 +271,6 @@ function drift(dt) {
 
 function finish(who) { S.phase = 'over'; S.winner = who; S.vel = 0; S.overT = 0; }
 
-/* 火力转成弹幕。clash 的那些飞到中线就互相撞掉，只有剩下的才砸到人身上 ——
-   这是"对冲"唯一的可视化，没有它观众看不懂自己刷的东西去哪了。 */
-function emitFire(side, clashRatio) {
-  const bud = side > 0 ? 'budA' : 'budB';
-  let n = 0;
-  while (S[bud] >= NUM.SHOT && n < 3) { S[bud] -= NUM.SHOT; n++; }
-  for (let i = 0; i < n; i++) {
-    const g = GIFT[side > 0 ? 'lipstick' : 'banana'];
-    Ammo.launch(g, null, { one: true, clash: Math.random() < clashRatio });
-  }
-}
-
 /* 送一件礼物。数值走火力，表现走弹幕 —— 两件事同一个入口，但不是同一层。 */
 function giveGift(side, key) {
   const it = SHOP[key]; if (!it) return;
@@ -322,7 +304,7 @@ function hexDebuff(side, k, sec) {
 }
 
 function startMatch() {
-  S.p = 50; S.fA = S.fB = 0; S.budA = S.budB = 0;
+  S.p = 50; S.fA = S.fB = 0;
   S.pos = 0; S.vel = 0;
   S.debA = S.debB = S.debKA = S.debKB = 0;
   S.clock = NUM.MATCH; S.phase = 'play';
@@ -955,7 +937,7 @@ const ITEM_OF = {
 };
 
 /* 三种样式的差别是节奏与体量，不是物品：
-     volley 连珠  一串小件快速飞来，每颗单独命中 —— 也是常规火力用的那一种
+     volley 连珠  一串小件快速飞来，每颗单独命中
      single 单投  单件中等速度，看得清是什么东西
      heavy  重投  先预警再慢慢压过来
    观众不需要认出飞过来的是什么，光看节奏就知道这一发有多重。
@@ -980,8 +962,8 @@ const ITEM_OF = {
 const GIFT = {
   // 查岗党（女方，在左，from=+1）
   /* 口红（2026-09-26 替换发卡）：一次礼物三支、隔 0.5 秒一支，瞄男生的腰和大腿（aim: 'hip'，他的藏青短裤），
-     也**只在那里碰撞**；淡红管身，砸中是粉色爆点，在短裤上留下粉点（stain）。常规火力那一路也飞口红，
-     但照旧按外轮廓碰、不留点。发卡的贴图和矢量画法留在 ammo.js 当备选。
+     也**只在那里碰撞**；淡红管身，砸中是粉色爆点，在短裤上留下粉点（stain）。
+     发卡的贴图和矢量画法留在 ammo.js 当备选。
      r 34→28（用户：口红体积过大）；香蕉 34→40（用户：稍微变大）。贴图按新 r 重渲（screen_r），描边仍是 2.8px。 */
   lipstick:{ name: '口红',   from: +1, style: 'single', item: 'lipstick', r: 28, n: 3, gap: 0.5, aim: 'hip', stain: true,
              spin: 5.7, power: 1, recipe: 'rouge',   push: 1 },
@@ -993,8 +975,7 @@ const GIFT = {
   ringbox: { name: '戒指盒', from: +1, style: 'heavy',  item: 'ringbox', r: 64,       spin: 6.7, power: 4, recipe: 'bloom',   push: 600 },
   // 灭迹党（男方，在右，from=-1）
   /* 香蕉（2026-09-26 替换瓜子）：一次礼物三根、隔 0.5 秒一根（gap），瞄女生的脸（aim），碰撞点也是脸
-     （穿过手臂、头发边，贴到脸上才爆）；砸中是白色爆点，脸上留下白点（stain，见 stainAt）。常规火力
-     那一路也飞香蕉，但照旧避开脸（ammo.js 的 free），所以白点只在刷礼物时出现。飞行 0.55s，spin = π/0.55。 */
+     （穿过手臂、头发边，贴到脸上才爆）；砸中是白色爆点，脸上留下白点（stain，见 stainAt）。飞行 0.55s，spin = π/0.55。 */
   banana:  { name: '香蕉',   from: -1, style: 'single', item: 'banana',  r: 40, n: 3, gap: 0.5, aim: 'face', stain: true,
              spin: 5.7, power: 1, recipe: 'cream',   push: 1 },
   gamepad: { name: '手柄',   from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 5.7, power: 2, recipe: 'debris',  push: 20 },
@@ -1583,25 +1564,17 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   }
 
 
-  /* 弹幕往手机那条竖线上打。发射高度按人物站位给：从头顶往上一点到膝盖，
-     脸那一段常规火力要绕开（见 ammo.js）。这几个数跟着 GROUND 走 —— 人物
-     挪了，弹幕的高度自动跟着挪。 */
+  /* 弹幕往手机那条竖线上打。发射高度按人物站位给：从头顶往上一点到膝盖。
+     这几个数跟着 GROUND 走 —— 人物挪了，弹幕的高度自动跟着挪。 */
   Ammo.init({
     W, frontAt, midAt, targetSpan, aimAt,
-    band: { top: GROUND - 660 * ZOOM, bot: GROUND - 90 * ZOOM, face: [GROUND - 600 * ZOOM, GROUND - 490 * ZOOM] },
+    band: { top: GROUND - 660 * ZOOM, bot: GROUND - 90 * ZOOM },
     /* 命中只负责演出，**不拖人**。位置是双方拉力差每秒拖出来的（见 battle）
        —— 让命中再推一次，等于同一份力算两遍，而且会把"两边都在刷时谁也拖不动
        谁"这条最要紧的手感破坏掉。弹幕是拉力的表现形式，不是位移的来源。 */
     onHit(p, x) {
       impact(-p.from, p.y, p.exec ? 4 : p.g.power, RECIPE[p.g.recipe], x);
       if (p.g.stain && p.aimKey != null) stainAt(p.g.aim, x, p.y);
-    },
-    /* 对冲掉的那些在中线互相撞掉：粒子照爆，但不推角色、不染色、不顿帧。
-       它要回答的问题只有一个 —— "我刷了礼物怎么没拖动"。答案就在画面上：
-       你的东西被对面在半空撞掉了。 */
-    onClash(p, x) {
-      RECIPE[p.g.recipe].burst(x, p.y, p.from, 0.42);
-      Particles.addShake(0.6);
     },
   });
 
@@ -2015,12 +1988,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     if (bOff === 'ammo' || bOff === 'both') Ammo.draw = () => {};
     if (bOff === 'part' || bOff === 'both') Particles.draw = () => {};
 
-    /* 压测必须走真实链路：礼物注入火力 → 火力自动派弹幕 → 一部分在中线对撞。
-       直接 Ammo.launch 测出来的是旧模型的密度，而新模型场上还多着常规火力那
-       一路，负载完全是另一回事。 */
+    /* 压测走真实链路：giveGift（注入火力 + 放礼物自己的演出），不直接调 Ammo.launch。 */
     /* 礼物组合要贴近真实分布：小额是绝大多数，神秘空投八件里才有一件。
        四种等概率轮流的话，每 1.2 秒就来一次处决，那不是压测是造假 —— 独占窗口
-       会一直开着，常规火力全被挡掉，量出来的负载比真实情况低一个数量级。 */
+       会一直开着，礼物全在排队，量出来的负载比真实情况低。 */
     const gnames = ['wand', 'wand', 'mirror', 'wand', 'boom', 'wand', 'mirror', 'drop'];
     const T = { logic: 0, bg: 0, ch: 0, fx: 0, all: 0 };
     const each = new Float64Array(N);
@@ -2187,8 +2158,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   // 三个配方都由查岗党打出去，落在灭迹党身上；力度由上面那个下拉决定
   /* 礼物按钮只负责发射，进度和特效都等弹幕真的撞上对抗线才结算 —— 玩法和
      演出走的是同一个事件，观众看到的因果关系才对得上。 */
-  /* 礼物按钮注入火力，而不是直接发弹幕。发不发、发几颗由火力的消耗量决定
-     （见 emitFire）—— 于是"刷得越多扔得越密"是从数值里长出来的，不是写死的。 */
+  /* 礼物按钮注入火力（数值），同时放这件礼物自己的演出（giveGift）—— 只放它自己的，不夹带别的弹幕。 */
   /* 按钮上写的是**飞出来的那件东西**，不是平台礼物名。九件平台礼物两边共用，
      左右两排按钮于是长得一模一样（仙女棒、魔法镜……），可点下去左边飞口红、
      右边飞香蕉 —— 看着同一个名字，对不上号。标签由 ITEM_OF + GIFT.name 现算，

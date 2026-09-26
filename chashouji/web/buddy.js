@@ -195,13 +195,18 @@ const Buddy = (function () {
         }
       }
       b.aim += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.aim));
+      b.m = null;
       if (b.t < T.enter || b.t > se || !tg) continue;
-      /* 出水：从转过之后的枪口，沿枪管方向，固定速度 V */
+      /* 出水：从转过之后的枪口，沿枪管方向，固定速度 V。
+         一帧里攒够几滴就出几滴，每滴按它**实际该出枪的时刻**补飞一段（age = 剩余的 emit / RATE）。
+         不补的话帧一卡（实时跑常见 50~100ms 一帧），几滴从同一点同时出发叠成一坨，水柱一段一段起疙瘩。 */
       b.emit += dt * RATE;
-      const m = muzzle(p, b.aim), vx = -V * Math.cos(b.aim), vy = -V * Math.sin(b.aim);
+      const m = b.m = muzzle(p, b.aim), vx = -V * Math.cos(b.aim), vy = -V * Math.sin(b.aim);
       while (b.emit >= 1) {
         b.emit -= 1;
-        drops.push({ x: m[0], y: m[1], vx, vy, t: 0, u, b, seq: b.seq++ });
+        const age = b.emit / RATE;
+        drops.push({ x: m[0] + vx * age, y: m[1] + vy * age + 0.5 * G * age * age, vx, vy: vy + G * age,
+                     t: age, u, b, seq: b.seq++ });
       }
     }
   }
@@ -232,6 +237,11 @@ const Buddy = (function () {
         const a = last.get(b.b); last.set(b.b, b);
         if (!a || b.seq !== a.seq + 1 || Math.hypot(b.x - a.x, b.y - a.y) > 60) continue;
         ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      }
+      /* 枪口 → 最新一滴：最新那滴出枪后已经飞了最多一帧（~23 像素），不补这段水柱跟枪口之间是空的 */
+      for (const b of bs) {
+        const a = last.get(b);
+        if (b.m && a && Math.hypot(a.x - b.m[0], a.y - b.m[1]) < 60) { ctx.moveTo(b.m[0], b.m[1]); ctx.lineTo(a.x, a.y); }
       }
       ctx.stroke();
     }

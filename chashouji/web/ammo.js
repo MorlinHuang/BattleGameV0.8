@@ -24,22 +24,20 @@ const Ammo = (function () {
   const act = [], pool = [];
   const queue = [];          // 待发射：连珠的后续几颗、重投的预警期
   const warns = [];          // 预警箭头
-  let frontAt = null, midAt = null, targetSpan = null, aimAt = null, onHit = null, onClash = null, W = 960;
-  /* 发射高度带：top~bot 是弹幕会飞的高度（大致就是人物从头到膝盖），
-     face 是两张脸所在的那一段 —— 常规火力要绕开它，见 launch。 */
-  let band = { top: 380, bot: 900, face: [520, 610] };
+  let frontAt = null, midAt = null, targetSpan = null, aimAt = null, onHit = null, W = 960;
+  /* 发射高度带：top~bot 是弹幕会飞的高度（大致就是人物从头到膝盖） */
+  let band = { top: 380, bot: 900 };
 
   function init(o) {
     frontAt = o.frontAt; midAt = o.midAt || (() => frontAt(0, 1)); targetSpan = o.targetSpan || (() => null);
     aimAt = o.aimAt || (() => null);
-    onHit = o.onHit; onClash = o.onClash || (() => {}); W = o.W || 960;
+    onHit = o.onHit; W = o.W || 960;
     if (o.band) band = o.band;
   }
 
   /* 独占窗口。档 4 落地后的这一段时间里，别的东西不许出现在屏幕上 ——
      这是最强的一种表现手段，而且不需要任何新的粒子技术：观众看到的是
-     "全世界让开，只有这一下"。礼物级的排队补发，常规火力直接丢掉
-     （它只是火力的表现，数值那边早就算过了，少画几发不影响战况）。 */
+     "全世界让开，只有这一下"。这期间刷的礼物排队（最多 6 件），窗口过了再补发。 */
   let lock = 0;
   const pending = [];
 
@@ -570,17 +568,6 @@ const Ammo = (function () {
       queue.push({ t: 0.55, g, y: y0, exec: true });
       return;
     }
-    /* 常规火力：一发就是一发，不走连珠那一串。
-       高度要避开两个人的脸（band.face）—— 火力弹幕是连绵不断的，糊在脸上的话
-       整局都看不清表情，而表情是这个玩法仅有的两个可读信息之一。礼物弹幕是
-       孤立事件，遮一下无妨；常态的那一路不行。 */
-    if (o.one) {
-      const yy = fixedY != null ? fixedY : (Math.random() < 0.45
-        ? band.top + Math.random() * Math.max(0, band.face[0] - 14 - band.top)   // 脸以上
-        : band.face[1] + 26 + Math.random() * Math.max(0, band.bot - band.face[1] - 26)); // 脸以下：手和腿
-      queue.push({ t: 0, g, y: clampY(yy), clash: o.clash, free: true });
-      return;
-    }
     if (g.gap) {
       /* 一次礼物分几回扔、每回隔 gap 秒（香蕉 / 口红：三根、隔 0.5 秒）。跟连珠的差别是节奏：
          连珠 70ms 一颗读成"一把撒过去"，隔半秒一根读成"一根接一根地砸"。 */
@@ -644,16 +631,13 @@ const Ammo = (function () {
     /* aim —— 瞄对方身上的一个部位（香蕉 'face' 女生的脸、口红 'hip' 男生的腰和大腿），**碰撞点也是
        那个部位**，不是外轮廓：香蕉从女生伸出来的手臂、头发边上穿过去，贴到脸上才爆。
        aimKey 是这一发在部位里挑的哪一点（0~1），飞行途中每帧按它重取 —— 人跪下 / 趴下 / 迈步，
-       部位跟着挪，弹道一路微调高度追过去（见 update）。常规火力（free）不瞄，诊断胶片钉了高度的也不瞄。 */
+       部位跟着挪，弹道一路微调高度追过去（见 update）。诊断胶片钉了高度的不瞄。 */
     p.aimKey = null;
-    if (g.aim && !q.free && !q.fixed) {
+    if (g.aim && !q.fixed) {
       const t = aimAt(g, p.aimKey = Math.random());
       if (t) p.y = t[1]; else p.aimKey = null;
     }
     p.exec = !!q.exec;
-    p.clash = !!q.clash;
-    // 对撞点落在自己这一侧一点，错开一些 —— 全撞在同一条线上会读成一堵墙
-    p.clashOff = 20 + Math.random() * 90;
     p.x = g.from > 0 ? -g.r - 40 : W + g.r + 40;
     p.vx = g.from * sp * (1 + (Math.random() - 0.5) * 2 * (JIT[g.style] || 0.2));
     p.ax = ACC[g.style] || 0;
@@ -733,21 +717,11 @@ const Ammo = (function () {
          知道这一发要到了，而这正是弹幕能制造期待的唯一窗口。 */
       const span = (fx ?? mx) - p.x0;
       p.near = span === 0 ? 1 : clamp01((p.x - p.x0) / span);
-      if (p.clash) {
-        // 对冲掉的那些飞不到人身上，在中线前撞掉
-        const cx = mx - p.from * p.clashOff;
-        if (p.from > 0 ? p.x >= cx : p.x <= cx) {
-          act.splice(i, 1); pool.push(p);
-          onClash(p, cx);
-          continue;
-        }
-      }
       const hit = fx != null && (p.from > 0 ? p.x >= fx : p.x <= fx);
       if (hit) {
         act.splice(i, 1); pool.push(p);
         /* 独占窗口从**命中那一刻**才开始。原来写在 launch 里，可处决要飞一秒半
-           才落地 —— 等它真砸上的时候窗口早过期了，而飞行途中反倒把常规火力全
-           丢光，画面空成一片。"全世界停下来看这一击"说的是这一击落地之后。 */
+           才落地 —— 等它真砸上的时候窗口早过期了。"全世界停下来看这一击"说的是这一击落地之后。 */
         if (p.exec) lock = 0.8;
         onHit(p, fx);
       } else if (p.x < -400 || p.x > W + 400) {
