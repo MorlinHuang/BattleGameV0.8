@@ -36,7 +36,7 @@ from scipy.signal import fftconvolve
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', 'web', 'assets', 'world')
-H = 1334
+H = 1707      # 画布高 = 960 宽下的 9:16（最终 1080×1920）。背景 *_ext.png 高 1818，缩放系数与原 1334/1421 一致
 # 1536×1024 的生图 → 引擎像素。站立的人约 400 高。
 # 原来是 0.66（约 600 高），用户嫌人占画面太大，要"镜头拉远、人变成现在的 2/3"：
 # 人和房间一起缩 2/3（房间见 main() 里的 *_ext.png），不能只缩人 —— 沙发会比人大一圈

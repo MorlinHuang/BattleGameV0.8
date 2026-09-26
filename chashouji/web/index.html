@@ -7,25 +7,31 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#0c0e12;color:#e8ecf2;font:14px/1.6 system-ui,"PingFang SC","Microsoft YaHei",sans-serif;
-       display:flex;flex-direction:column;align-items:center;gap:12px;padding:14px}
+       display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 14px}
   h1{font-size:17px;font-weight:600;letter-spacing:.02em}
-  #stage{position:relative;width:min(46vw,420px);aspect-ratio:960/1334;border-radius:12px;
-         overflow:hidden;box-shadow:0 12px 44px rgba(0,0,0,.6)}
+  /* 最终画面是 1080×1920 竖屏（9:16）。画布 960×1707 = 同一比例；舞台按窗口高度放满。
+     下面那截（1334 以下）是补画出来的地板，调试按钮就叠在这截地板上 —— 正式直播时按钮
+     不存在，那块就是地板，不能是纯黑 */
+  #stage{position:relative;width:min(calc(100vw - 28px),calc((100vh - 60px) * 9 / 16));aspect-ratio:960/1707;
+         border-radius:12px;overflow:hidden;box-shadow:0 12px 44px rgba(0,0,0,.6);container-type:inline-size}
   #stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   #fx{touch-action:none}
-  .panel{width:min(46vw,420px);display:flex;flex-direction:column;gap:9px}
-  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  /* 1334/1707 = 78.2%：按钮区从这里往下，正好是原来 960×1334 画面底边以下补出来的地板 */
+  .panel{position:absolute;left:0;right:0;top:78.2%;bottom:0;padding:1.6cqw 2.5cqw;
+         display:flex;flex-direction:column;justify-content:center;gap:1.3cqw;font-size:2.7cqw;
+         background:linear-gradient(rgba(12,14,18,0),rgba(12,14,18,.35) 30%)}
+  .row{display:flex;align-items:center;gap:1.5cqw;flex-wrap:nowrap}
   input[type=range]{flex:1;accent-color:#7ed957}
-  button{background:#1b2029;color:#e8ecf2;border:1px solid #2c333f;border-radius:7px;
-         padding:7px 13px;font-size:13px;cursor:pointer;font-family:inherit}
+  button{background:rgba(27,32,41,.82);color:#e8ecf2;border:1px solid #2c333f;border-radius:1.4cqw;
+         padding:1.1cqw 2cqw;font-size:2.7cqw;cursor:pointer;font-family:inherit;white-space:nowrap}
   button:hover{background:#242b36}
-  .side{font-size:12px;color:#8b95a3;min-width:42px}
+  .side{font-size:2.6cqw;color:#e8ecf2;text-shadow:0 1px 3px #000;min-width:8cqw}
   .side.g{color:#9ee87a} .side.r{color:#ff9b9b}
-  select{background:#1b2029;color:#e8ecf2;border:1px solid #2c333f;border-radius:6px;
-         padding:5px 7px;font-size:13px;font-family:inherit;cursor:pointer}
+  select{background:rgba(27,32,41,.82);color:#e8ecf2;border:1px solid #2c333f;border-radius:1.2cqw;
+         padding:.8cqw 1.2cqw;font-size:2.6cqw;font-family:inherit;cursor:pointer}
   #hitL{border-color:#4a7a33;color:#9ee87a} #hitR{border-color:#7a3a3a;color:#ff9b9b}
-  label{display:flex;align-items:center;gap:5px;color:#aab3c0;font-size:13px;cursor:pointer;user-select:none}
-  #stat,#msg{font:12px ui-monospace,Menlo,monospace;color:#6d7683}
+  label{display:flex;align-items:center;gap:1cqw;color:#e8ecf2;text-shadow:0 1px 3px #000;font-size:2.6cqw;cursor:pointer;user-select:none}
+  #stat,#msg{font:2.2cqw ui-monospace,Menlo,monospace;color:#6d7683}
   /* 逐帧战况读数是开发信息，默认不出现 —— 这个页面要拿给合作方体验。?dev=1 打开 */
   #devrow{display:none}
 </style>
@@ -34,11 +40,9 @@
 <h1>查手机</h1>
 
 <div id="stage">
-  <canvas id="bg" width="960" height="1334"></canvas>
-  <canvas id="ch" width="960" height="1334"></canvas>
-  <canvas id="fx" width="960" height="1334"></canvas>
-</div>
-
+  <canvas id="bg" width="960" height="1707"></canvas>
+  <canvas id="ch" width="960" height="1707"></canvas>
+  <canvas id="fx" width="960" height="1707"></canvas>
 <div class="panel">
   <div class="row">
     <button id="hitL">查岗党 +7</button>
@@ -66,12 +70,11 @@
   </div>
   <div class="row">
     <button id="start">开始对局</button>
-  </div>
-  <div class="row">
     <label>直击力度<select id="pw"><option value="1">点赞级</option><option value="2" selected>普通礼物</option><option value="3">大礼物</option></select></label>
     <label><input id="auto" type="checkbox">自动演示</label>
   </div>
   <div class="row" id="devrow"><span id="stat"></span><span id="msg"></span></div>
+</div>
 </div>
 
 <script>

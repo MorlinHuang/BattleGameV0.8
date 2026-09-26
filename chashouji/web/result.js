@@ -16,7 +16,8 @@
  * 整体是"贴纸"。原先血条那套硬朗斜切金属条配到这张插画上会像两个软件拼在
  * 一起 —— 插画是圆的，UI 就得是圆的。
  *
- * 版式（960×1334，上下两头留给 UI，中间整块留给人）：
+ * 版式（画布 960×1707，UI 仍排在上面 1334 那块里，上下两头留给 UI，中间整块留给人；
+ * 1334 以下是演出图往下延展的地板，直播时被平台评论区盖着，网页版叠调试按钮）：
  *   0~210     判词贴纸 + 本局胜者角标；右上角常驻"下一局"倒计时
  *   214~390   台词气泡（在赢家头的**外侧**上方，压墙不压脸）
  *   390~1040  演出区，一个 UI 元素都不放
@@ -131,9 +132,10 @@ const Result = (function () {
     let g = ctx.createLinearGradient(0, 0, 0, 230);
     g.addColorStop(0, 'rgba(22,26,36,.23)'); g.addColorStop(1, 'rgba(22,26,36,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, 230);
-    g = ctx.createLinearGradient(0, H - 270, 0, H);
+    // 下面这层托的是数据卡（1058~1300），按 1334 那块的底边算，不跟画布高度走
+    g = ctx.createLinearGradient(0, 1334 - 270, 0, 1334);
     g.addColorStop(0, 'rgba(20,22,32,0)'); g.addColorStop(1, 'rgba(20,22,32,.41)');
-    ctx.fillStyle = g; ctx.fillRect(0, H - 270, W, 270);
+    ctx.fillStyle = g; ctx.fillRect(0, 1334 - 270, W, 270);
 
     // ── 判词贴纸：1.38 倍砸下来 ─────────────────────────────
     const k1 = ease((t - 0.35) / 0.5);

@@ -338,3 +338,12 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 
 - `index.html` 底部那段**说明文字要跟着改**——它是给用户看的，代码改了文字没改
   就是错的（已发生过：改成按距离回溯 16 帧后，说明里还写着"记了八帧轨迹"）。
+
+
+## 画布 960×1707（2026-09-26，最终 1080×1920 竖屏）
+- `main.js` `H = 1707`，`build.py` `H = 1707`。玩法版式（HUD、`GROUND=1195`、礼物弹道、结算 UI 卡片 1058~1300）仍按原 960×1334 排，
+  **1334 以下 373px 是背景往下补画的地板**（`v14/bg/*_ext.png` 高 1818，补画过程在 `v14/bg/ext2/`），直播时被平台评论区盖着。
+- `index.html`：舞台按窗口高度放满（9:16），调试面板 `.panel` 挪进 `#stage`、`top:78.2%` 叠在补出的地板上，字号用 `cqw` 随舞台缩放。
+  strip 类诊断会 `stage.innerHTML=''`，面板随之消失，不影响截图。
+- 结算图 `assets/ui/win_*.webp` 也是 960×1707（上面 1334 构图不变，下面是地板）；头像 `av_*.webp` 从新 `loop/n0.png` 裁。
+- 看结算：`?live=1&liveA=200&liveB=0&livet=120&overt=3`（灭迹党胜把 A/B 对调）。
