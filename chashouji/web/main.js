@@ -1599,19 +1599,19 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      从正在被抢的那部手机里冒出来的。 */
   Bubble.init({ phoneAt: phonePos });
 
-  /* 哥们站在男生身体右沿再往右；水滴碰女生的轮廓（跟礼物同一个 frontAt），瞄点在她身上下扫 */
+  /* 哥们站在男生那一侧：sprayZone = [枪口最左能到哪, 人的右沿最多到哪]。枪口不越过手机右边 100 像素
+     （再往左水就是竖着往下落），右沿允许出画 90 像素。但手机很靠右时（女生被拖着趴地）枪口最左不能
+     超过 W-420，否则人一大半出画。buddy.js 在里面随机抽位置。
+     水滴瞄女生身上的点（不碰轮廓），见 girlTarget */
   Buddy.init({
     W, ground: () => GROUND + FX.bob,
-    boyRight() {
-      const h = hipOf(), f = faceOf('b');
-      return Math.max(h ? h.box[2] : 0, f ? f[0] + f[2] : 0, FX.phoneX + 120);
-    },
-    /* 女生身上的落点：u=0 脸、u=1 膝盖附近。手机那一行（上下 ARM_GAP）是伸出去的手臂，跳过去 ——
+    sprayZone: () => [Math.min(FX.phoneX + 100, W - 420), W + 90],
+    /* 女生身上的落点：u=0 脸、u=1 大腿上段（再往下水就朝下扎了）。手机那一行（上下 ARM_GAP）是伸出去的手臂，跳过去 ——
        落在那里就是在滋手机。脸那一段碰脸的前沿，其余碰那一行的身体前沿。 */
     girlTarget(u) {
       const f = faceOf('a'), sp = targetSpan(-1);
       if (!f || !sp) return null;
-      const ARM_GAP = 60, lo = f[1], hi = sp[1] - (sp[1] - sp[0]) * 0.15;
+      const ARM_GAP = 60, lo = f[1], hi = sp[1] - (sp[1] - sp[0]) * 0.35;
       let y = lo + (hi - lo) * u;
       if (Math.abs(y - FX.phoneY) < ARM_GAP) y = FX.phoneY + (u < 0.5 ? -ARM_GAP : ARM_GAP);
       if (Math.abs(y - f[1]) < f[2]) return [f[0] + 0.5 * f[2], y];
@@ -1850,7 +1850,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     o.fillStyle = '#0c0e12'; o.fillRect(0, 0, out.width, out.height);
 
     // ?ammoy=aim：不钉高度，让瞄部位的礼物（香蕉瞄脸、口红瞄腰腿）按实际逻辑瞄
-    if (g.style === 'buddy') Buddy.summon();
+    if (g.style === 'buddy') for (let k = +(Q.get('buddyn') || 1); k > 0; k--) Buddy.summon();   // ?buddyn=3 一次叫几个
     else Ammo.launch(g, Q.get('ammoy') === 'aim' ? null : clamp(+(Q.get('ammoy') || 560), 300, 960), { gift: true });
     let el = 0;
     for (let i = 0; i < n; i++) {

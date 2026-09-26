@@ -365,8 +365,8 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 
 ## 哥们（2026-09-26 替换奶茶，灭迹党档 3）
 - `GIFT.buddy`：`style:'buddy'` → giveGift / ammostrip 走 `Buddy.summon()`（buddy.js），不走 Ammo。奶茶那行留作备选。
-- buddy.js：角色层画人（男生**之前**画，被挡住），特效层画水柱；`T` 时间轴 蹦进 0.35 → 滋 2.5 → 蹦出 0.4，途中再刷只续滋，不叠人。
-- 立绘 `assets/world/buddy.webp`（`v14/buddy/src1.png` 用 build 的 cutout 抠、×0.34），`SPR.foot/muzzle` 是贴图像素，depth 0.88。
-- 水滴按 `girlTarget(u)`（main.js，u=0 脸→1 膝盖，跳过手机那行 ±60）反算抛物线，飞到落点横坐标就碎；**不碰外轮廓**，否则全炸在手机上。
-- 命中：第一股 `impact(+1, …, power 3, RECIPE.water)`，之后每 0.3s power 1；每滴 `RECIPE.water.drip`。
-- 看效果：`?ammostrip=6&ammoms=450&ammogift=buddy`（可加 `pos=-29` 看女生趴地）。
+- buddy.js：角色层画人（男生**之前**画，被挡住），特效层画水柱。每人 `T` 滑进 0.55 → 滋 2.5 → 溜出 0.5；同时最多 `MAX=3` 个，满了再刷 = 给剩余时间最短的那个 `spray += T.spray`。
+- 立绘 `assets/world/buddy.webp`：`v14/buddy/make.py`（skate1.png 踩滑板，×0.37）抠、打印 `SPR.foot/muzzle`。滑板替掉走路动作，人只一张端枪图。
+- 站位**按枪口排**：`sprayZone()`=[枪口最左 min(phoneX+100, W-420), 人右沿最多 W+90]，横向 r 随机；远近分 `ROWS` 三排（每人占一排，远排小、高 LIFT 140）—— 横向只剩 ~140 像素，靠远近把几股水的起点上下错开，否则从同一点分叉读成"7"字。
+- 水：出枪速度固定 `V=1250`，按落点反解低弹道仰角（`launch`）；扫动 `SWEEP=[1.2,2.8]` rad/s —— 快了（2.3/5.3）前后水滴落点差太远折成"7"。瞄点 u 从脸到大腿上段（`sp[1]-0.35h`）。水柱线宽 `STROKE` 26/19/6。连线按人找上一滴（几个人的水滴在 drops 里交错）。
+- 看效果：`?ammostrip=6&ammoms=450&ammogift=buddy&buddyn=3`（buddyn 一次叫几个；可加 `pos=-29` 看女生趴地）。
