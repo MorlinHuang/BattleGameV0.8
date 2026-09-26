@@ -236,7 +236,10 @@ def edges(solid, phone):
     分人不能按手机那条竖线一刀切：男生跪/扑的时候前脚会伸过手机线，切下来就算成了女生。
     两个人只在手机和四只手那里连着 —— 把手机周围一块挖掉，剩下的连通块里最大的两块就是
     两个人；零碎的（发梢、被挖断的手指）按离谁近归谁；挖掉的那一块里仍按手机中线分。
-    连续不到 3 个像素的零星点（抗锯齿毛边）不算，不然礼物会在头发梢上空爆。"""
+    连续不到 3 个像素的零星点（抗锯齿毛边）不算，不然礼物会在头发梢上空爆。
+
+    top = 女生每 EDGE_STEP 列最高的那个像素（没有记 -1）：她倒地以后哥们的水从上往下浇在
+    她的腿、背上，碰的是上沿不是前沿。"""
     h, w = solid.shape
     px, py = phone
     cut = solid.copy()
@@ -267,7 +270,11 @@ def edges(solid, phone):
         la, rb = np.nonzero(ga[y])[0], np.nonzero(bb[y])[0]
         a.append(int(la.max()) if len(la) else -1)
         b.append(int(rb.min()) if len(rb) else -1)
-    return {'step': EDGE_STEP, 'a': a, 'b': b}
+    top = []
+    for x in range(0, w, EDGE_STEP):
+        ys = np.nonzero(ga[:, x])[0]
+        top.append(int(ys.min()) if len(ys) else -1)
+    return {'step': EDGE_STEP, 'a': a, 'b': b, 'top': top}
 
 
 def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE):

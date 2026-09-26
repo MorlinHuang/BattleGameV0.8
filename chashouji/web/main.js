@@ -1055,6 +1055,16 @@ function faceOf(who) {
   return [poseX(m, fx + d * 0.2 * r), poseY(m, fy + 0.15 * r), r * 0.8];
 }
 
+/* 女生倒下了没有（男生赢的跌倒、趴地两档，含它们的步态格）。倒下以后哥们的水改浇她的背和腿。 */
+const girlDown = () => /^b[FL]/.test(FX.frame);
+/* 女生在屏幕横坐标 x 那一列的上沿（build.py 每 EDGE_STEP 列量的 edge.top），这一列没有她返回 null */
+function girlTop(x) {
+  const m = WORLD && WORLD.poses[FX.frame], t = m && m.edge && m.edge.top;
+  if (!t) return null;
+  const j = Math.round((x - FX.pairX - FX.hitX + m.ax) / m.edge.step);
+  return t[j] >= 0 ? poseY(m, t[j]) : null;
+}
+
 /* 男生的腰和大腿（他的藏青短裤）此刻在屏幕上的外框 [x0, y0, x1, y1] 与落点行。
    build.py 每张贴图都量了（步态格腿在动，短裤跟着变）：pts 是短裤上均匀取的几行，
    每行 [左沿, y, 右沿] —— 口红从左边飞来，碰的是左沿。 */
@@ -1612,6 +1622,16 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     girlTarget(u) {
       const f = faceOf('a'), sp = targetSpan(-1);
       if (!f || !sp) return null;
+      /* 倒地：她横躺着，沿身体从头（u=0，脸后面一点）到脚（u=1）取上沿上的点 —— 水从上往下浇。
+         第三项 'top' 告诉 buddy.js 碰撞按上沿判（水滴落到这一列的上沿以下就算打中）。
+         脚那头取到最左有她的那一列往里 EDGE_STEP×2，贴着脚尖浇会像浇在地上。 */
+      if (girlDown()) {
+        const m = WORLD.poses[FX.frame], t = m.edge.top, st = m.edge.step;
+        const j0 = t.findIndex(v => v >= 0) + 2;
+        const x0 = poseX(m, j0 * st), x1 = f[0];
+        const x = x1 + (x0 - x1) * u, y = girlTop(x);
+        return y == null ? null : [x, y, 'top'];
+      }
       const ARM_GAP = BUDDY_ARM_GAP, lo = f[1], hi = sp[1] - (sp[1] - sp[0]) * 0.35;
       let y = lo + (hi - lo) * u;
       if (Math.abs(y - FX.phoneY) < ARM_GAP) y = FX.phoneY + (u < 0.5 ? -ARM_GAP : ARM_GAP);
@@ -1620,6 +1640,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       return x == null ? null : [x, y];
     },
     // 打偏的水碰她身体轮廓也溅开；手机那一行（伸出去的手臂）不算，理由同 girlTarget
+    girlTop,
+    girlDown,
     girlFront: (y) => Math.abs(y - FX.phoneY) < BUDDY_ARM_GAP ? null : frontAt(y, -1),
     onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
     onHit: (x, y, first) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE.water, x),

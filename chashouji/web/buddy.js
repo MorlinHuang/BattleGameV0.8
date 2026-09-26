@@ -50,6 +50,10 @@ const Buddy = (function () {
      扫动的快慢要跟水在空中的时间（约 0.35 秒）比：扫得快，前后出枪的水滴落点差太远，一股水
      折成闪电（4.1 / 9.7 rad/s）或"7"字（2.3 / 5.3，固定出枪速度以后）；1.2 / 2.8 才是一条顺着甩的抛物线。 */
   const RATE = 55, V = 1250, G = 900, HIT_EVERY = 0.3, SWEEP = [1.2, 2.8], MISS = 90;
+  /* 女生倒地以后（o.girlDown）：不再从头到腿整条扫（那样一直冲着脸滋，水还得拐着弯往下扎），
+     每人每 ZONE.every 秒随机挑一个部位（u 在 ZONE.lo~hi 之间：后脑、背、屁股、腿），
+     在它前后 ±ZONE.span 里小幅扫。换部位时枪按 AIM.rate 甩过去。 */
+  const ZONE = { every: 1.0, lo: 0.2, hi: 0.85, span: 0.1 };   // 0.2 以前是头、0.85 以后是脚尖，少浇
   /* 水柱三遍描线的线宽与颜色：深蓝描边 → 浅蓝水身 → 白色高光 */
   const STROKE = [[26, 'rgba(24,70,140,.75)'], [19, 'rgba(110,196,255,.95)'], [6, 'rgba(255,255,255,.9)']];
 
@@ -142,13 +146,21 @@ const Buddy = (function () {
       const d = drops[i];
       d.vy += G * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.t += dt;
       const tg = o.girlTarget(d.u), b = d.b;
-      const fr = o.girlFront(d.y);
-      const hx = tg && d.x <= tg[0] && Math.abs(d.y - tg[1]) < MISS ? tg[0] : fr != null && d.x <= fr ? fr : null;
+      /* 碰撞三种：倒地（tg[2]='top'）水滴落到这一列她的上沿以下；站着到了落点那一列且高度不差 MISS；
+         站着时打偏了碰到她的轮廓前沿。倒地时不看前沿：她横躺着，每一行的前沿都是伸出去的手臂和头，
+         浇背和腿的水一降到她那几行就会全在头上碎掉。 */
+      const down = tg && tg[2] === 'top';
+      const fr = down ? null : o.girlFront(d.y), top = down ? o.girlTop(d.x) : null;
+      let hx = null, hy = d.y;
+      if (top != null && d.y >= top) { hx = d.x; hy = top; }
+      else if (tg && !tg[2] && d.x <= tg[0] && Math.abs(d.y - tg[1]) < MISS) hx = tg[0];
+      else if (fr != null && d.x <= fr) hx = fr;
       if (hx != null) {
         drops.splice(i, 1);
-        o.onSplash(hx, d.y);
-        if (bs.includes(b) && b.hitCd <= 0) { o.onHit(hx, d.y, b.first); b.first = false; b.hitCd = HIT_EVERY; }
-      } else if (d.t > 1.6 || d.x < -50) drops.splice(i, 1);
+        o.onSplash(hx, hy);
+        if (bs.includes(b) && b.hitCd <= 0) { o.onHit(hx, hy, b.first); b.first = false; b.hitCd = HIT_EVERY; }
+      } else if (d.y > o.ground()) { drops.splice(i, 1); o.onSplash(d.x, o.ground()); }   // 落空的在地板上溅开
+      else if (d.t > 1.6 || d.x < -50) drops.splice(i, 1);
     }
     for (let i = bs.length - 1; i >= 0; i--) {
       const b = bs[i];
@@ -157,7 +169,15 @@ const Buddy = (function () {
       if (b.t >= se + T.exit) { bs.splice(i, 1); continue; }
       /* 瞄：此刻该打的落点 → 要的仰角 → 上半身按转速上限转过去。滑进来时就开始瞄，溜走时枪放平 */
       const tt = b.t + b.ph;
-      const u = Math.min(1, Math.max(0, 0.5 + 0.32 * Math.sin(tt * SWEEP[0]) + 0.2 * Math.sin(tt * SWEEP[1] + 1.3)));
+      let u;
+      if (o.girlDown()) {
+        if (b.zone == null || (b.zoneT -= dt) <= 0) { b.zone = ZONE.lo + Math.random() * (ZONE.hi - ZONE.lo); b.zoneT = ZONE.every; }
+        u = b.zone + ZONE.span * (0.65 * Math.sin(tt * SWEEP[0]) + 0.35 * Math.sin(tt * SWEEP[1] + 1.3));
+      } else {
+        b.zone = null;
+        u = 0.5 + 0.32 * Math.sin(tt * SWEEP[0]) + 0.2 * Math.sin(tt * SWEEP[1] + 1.3);
+      }
+      u = Math.min(1, Math.max(0, u));
       /* 瞄点平滑跟随：女生的步态是硬切帧，脸和身体逐帧跳，直接瞄的话枪跟着抖、水柱折成锯齿。
          要的仰角跟枪口位置互相依赖（枪一转枪口就挪），迭代几次到收敛（每次误差缩到 ~0.7 倍以下）。 */
       const p = pose(b), raw = b.t <= se && o.girlTarget(u);
