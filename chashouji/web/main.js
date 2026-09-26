@@ -72,7 +72,6 @@ const P = {
   /* 挨一下之后的反应：角色被推开又弹回。人是硬的，推得动、马上站回来。 */
   hitK: 620,         // 角色回中的弹力
   hitDamp: 0.90,     // 角色横向速度的阻尼
-  punchDecay: 0.88,  // 缩放脉冲的衰减
   tintDecay: 0.82,   // 染色的衰减
 };
 
@@ -160,7 +159,6 @@ const FX = {
   gaitPh: 0,                         // 步态相位（循环数，带小数），只随位移变
 
   hitX: 0, hitV: 0,                  // 角色被推开的位移与速度
-  punch: 0,                          // 缩放脉冲
   tint: [255, 255, 255], tintA: 0,   // 命中染色
 };
 
@@ -425,8 +423,6 @@ function derive(dt) {
     FX.phoneY = GROUND + FX.bob + (m.phone[1] - m.ay);
   }
 
-  FX.punch *= Math.pow(P.punchDecay, dt * 60);
-  if (FX.punch < 0.002) FX.punch = 0;
   FX.tintA *= Math.pow(P.tintDecay, dt * 60);
   if (FX.tintA < 0.004) FX.tintA = 0;
 }
@@ -446,7 +442,6 @@ function impact(side, y, power, recipe, x) {
   if (x == null) x = frontAt(y, -side) ?? FX.phoneX;
 
   FX.hitV += -side * 320 * ZOOM * s;
-  FX.punch = Math.max(FX.punch, 0.045 * s);
   /* 染色只是"挨了一下"的提示，不是照明。超过 0.21 角色的线稿和睡衣花纹就被
      洗掉了，而那正是这个玩法唯一能看的东西 —— 所以它有一个**可读性天花板**，
      档 3 起就顶在那儿，档 4 不会更红。写成 min(天花板, …) 而不是 min(1.4, s)，
@@ -912,7 +907,7 @@ const GIFT = {
 /* 礼物碰到**挨打那个人的轮廓**才爆：在它的飞行高度上，对方身体朝着这边的那条边在哪儿。
    from = +1（查岗党从左边扔）打男生，-1 打女生；路过自己这方的人不算碰到。
    轮廓是 build.py 按行量好的（world.json 的 poses[帧].edge，每 step 行一个，-1 = 这行没这个人），
-   这里再叠上当前的站位、被推开的位移（hitX）、颠步和受击放大（punch，以脚底为锚）。
+   这里再叠上当前的站位、被推开的位移（hitX）和颠步。
    以前任何高度都打在手机那条竖线上：打头的、打腿的都在半空同一条线上碎掉，碰不到人。
    这一行没有人（头顶上方、对方趴下后的上半截）就往上下找最近的一行，找 EDGE_SNAP 像素
    以内；再没有返回 null —— 那一发从人身边飞过去。发射时已经把高度压进了对方身体的范围
@@ -921,11 +916,11 @@ const EDGE_SNAP = 80;
 function frontAt(y, from) {
   const m = WORLD && WORLD.poses[FX.frame];
   if (!m || !m.edge) return FX.phoneX;
-  const e = m.edge, row = from > 0 ? e.b : e.a, k = 1 + FX.punch;
-  const i = Math.round(((y - GROUND - FX.bob) / k + m.ay) / e.step);
+  const e = m.edge, row = from > 0 ? e.b : e.a;
+  const i = Math.round((y - GROUND - FX.bob + m.ay) / e.step);
   for (let d = 0; d * e.step <= EDGE_SNAP; d++) {
     for (const j of d ? [i - d, i + d] : [i]) {
-      if (row[j] >= 0) return FX.pairX + FX.hitX + (row[j] - m.ax) * k;
+      if (row[j] >= 0) return FX.pairX + FX.hitX + row[j] - m.ax;
     }
   }
   return null;
@@ -935,11 +930,11 @@ function frontAt(y, from) {
 function targetSpan(from) {
   const m = WORLD && WORLD.poses[FX.frame];
   if (!m || !m.edge) return null;
-  const e = m.edge, row = from > 0 ? e.b : e.a, k = 1 + FX.punch;
+  const e = m.edge, row = from > 0 ? e.b : e.a;
   let lo = -1, hi = -1;
   for (let j = 0; j < row.length; j++) if (row[j] >= 0) { if (lo < 0) lo = j; hi = j; }
   if (lo < 0) return null;
-  const at = (j) => GROUND + FX.bob + (j * e.step - m.ay) * k;
+  const at = (j) => GROUND + FX.bob + j * e.step - m.ay;
   return [at(lo), at(hi)];
 }
 // 对冲掉的那些不碰人，在中线（手机）前互相撞掉
@@ -953,15 +948,15 @@ const phonePos = () => [FX.phoneX, FX.phoneY];
 class PoseView {
   constructor(imgs) { this.imgs = imgs; }
 
-  /* punch 是缩放脉冲，tint 是命中染色 —— 角色是预渲染图，做不了受击变形，
-     打击反馈只能来自贴图之外。缩放以脚底为锚，人挨了一下会"胀"一下但脚不
-     离地；染色走 source-atop，只盖在已画出的角色像素上，不会糊到背景。 */
-  draw(ctx, name, x, y, punch, tint, tintA) {
+  /* tint 是命中染色 —— 角色是预渲染图，做不了受击变形，打击反馈只能来自贴图之外。
+     染色走 source-atop，只盖在已画出的角色像素上，不会糊到背景。
+     受击**不缩放**：以前挨一下会以脚底为锚"胀"4.5%~13% 再在零点几秒里缩回，缩回的那一下
+     读成"人突然变小"，用户原话"受击后人物明显变小了，很奇怪"。 */
+  draw(ctx, name, x, y, tint, tintA) {
     const img = this.imgs[name], m = WORLD.poses[name];
     if (!img) return;
-    const k = 1 + (punch || 0);
-    const w = m.w * k, h = m.h * k;
-    const dx = x - m.ax * k, dy = y - m.ay * k;
+    const w = m.w, h = m.h;
+    const dx = x - m.ax, dy = y - m.ay;
     ctx.drawImage(img, dx, dy, w, h);
     if (tintA > 0.004) {
       ctx.save();
@@ -1516,7 +1511,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const ox = Particles.off.x, oy = Particles.off.y;
     cctx.clearRect(0, 0, W, H);
     cctx.save(); cctx.translate(ox, oy);
-    actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.punch, FX.tint, FX.tintA);
+    actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     cctx.restore();
   }
 

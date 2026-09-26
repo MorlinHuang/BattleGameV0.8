@@ -60,7 +60,7 @@ world.json       rooms 各宽 · center 客厅正中的世界 x（=0 米，3396�
 **`P` —— 参数表**（表现手感）：`pxPerM=82` 米→世界像素（±30 米正好停在两头房间深处、
 镜头不露边）/ `kneelAt=0.25` `fallAt=0.50` `lieAt=0.75` `hys=0.05` 选动作的门槛与回差 / `stageHold=0.6` 一次只走一档、每档至少停这么久。**两把尺取更狼狈的**：拉力 |S.p−50|/50 与距离 |S.pos|/END；被拖远的一方在往回拽（拉力反号且 ≥kneelAt）时只看拉力。只看拉力时 2:1 对刷 94 秒全是僵持（人站着被平移 30 米），这是加距离尺的原因；`LINE_FULL` 试过 2000 同样太钝，保持 1000/
 `loopFps=8` 僵持循环格速 / `bobHz` `bobPx` 单张动作的颠步（**占位**，循环帧画出来就删）/
-`hitK` `hitDamp` 角色被推开的弹力与阻尼 / `punchDecay` `tintDecay` 脉冲与染色衰减。
+`hitK` `hitDamp` 角色被推开的弹力与阻尼 / `tintDecay` 染色衰减。**受击不缩放人**（2026-09-26 删了 punch：胀一下再缩回读成"人变小"，用户要求大小不变、只留闪色）。
 
 **`GIFT` —— 礼物表**（加/改礼物只动这张）：
 
@@ -98,7 +98,7 @@ photo:   { from:-1, style:'heavy',  item:'photo',   r:68,      power:4, recipe:'
 const S = { p: 50, pos: 0, vel: 0, fA: 0, fB: 0, t: 0, auto: false, ... };
 // pos 是胜负真源（米，正 = 往左拖进女生卧室）；vel 是 battle 顺手写出的读数（米/秒，带符号）
 const FX = { pose, poseT, frame, camX, pairX, bob, phoneX, phoneY, struggle,
-             hitX, hitV, punch, tint, tintA };   // 全部由 derive(dt) 算出
+             hitX, hitV, tint, tintA };   // 全部由 derive(dt) 算出
 ```
 
 **三个数，别混**（2026-09-24 起）：
@@ -127,7 +127,7 @@ main.js 里"跟人一样大"的像素数都写成原值 × ZOOM：`pxPerM`（82�
 **礼物命中 = 碰到挨打那个人的轮廓**（2026-09-25 用户定）：`frontAt(y, from)` 返回挨打那个人在这个高度上
 朝这边的轮廓 x（from=+1 打男生，-1 打女生；路过自己那方的人不算）。轮廓由 build.py `edges()` 按行量好存在
 `poses[帧].edge = {step, a: 女生右沿, b: 男生左沿}`（-1 = 这行没人）；分人按连通块（先挖掉手机周围），
-不按手机竖线一刀切 —— 男生跪/扑时前脚会伸过手机线。运行时叠 pairX/hitX/bob/punch。
+不按手机竖线一刀切 —— 男生跪/扑时前脚会伸过手机线。运行时叠 pairX/hitX/bob。
 这一行没人就找上下 80px 内最近的一行，再没有返回 null、那发飞出画面；`targetSpan(from)` 在**出手那一刻**
 把高度压进对方身体范围（对方趴下时不会从头顶飞过）。对冲的仍在 `midAt()`（手机 x）前撞掉。
 验证：`?ammostrip=10&ammoms=150&ammogift=pillow&ammoy=640`（头）/ `ammoy=1010`（腿），加 `p=95` 看趴档。
