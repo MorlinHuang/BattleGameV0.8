@@ -364,6 +364,10 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
   发卡、瓜子的贴图和矢量画法仍留在 ammo.js 当备选。
 
 ## 哥们（2026-09-26 替换奶茶，灭迹党档 3）
+- **档 3 两个帮手角色都在 crew.js**（2026-09-26 buddy.js 改写成工厂 `Crew(cfg)`）：`Buddy`（灭迹党哥们，face −1，水柱）、`Bestie`（查岗党闺蜜，face +1，防狼喷雾）。GIFT 里 `style:'crew', crew:'buddy'|'bestie'`，giveGift / ammostrip 走 `CREW[g.crew].summon()`；`?ammogift=bestie&buddyn=3`。
+- 每个帮手两层立绘：`rot` 绕 `pivot` 转（哥们腰以上 / 闺蜜伸直的手臂+喷雾罐），`fix` 不动、画在上面盖住接缝。闺蜜 `v14/bestie/make.py`：手臂层 = y≤300 且（x≥630 且 y≥222，或 x≥700），身体层切线处渐隐 12 像素；K=0.4 让头半径 = 女主 30。
+- **比例按透视**：`rows` 就是缩放 s（1 = 跟自己主角一样大，两张立绘都按头半径对齐主角出的图），脚底抬高 `(地面 − 视平线) × (1 − s)`，视平线 `HORIZON_UP=350`（男生站着眼睛高）。第一版哥们 s 0.86~0.95 + 另给抬高，站男生身后却比他壮一圈。现 rows 0.58~0.80。
+- 闺蜜的 fluid：雾 V 1100、drag 1、G 60、rate 90、散角 0.1，`drawMist` 两遍淡圆（深橙红 0.08 托底 + 亮橙 0.16）。太浓读成喷火器、太稀是一串橙点。`RECIPE.pepper` 命中用 soft 雾团 + 两圈环，**不用 dot**（发光贴图叠在脸上中心发白，像着火）。落点只瞄男生脸（`faceOf('b')` 朝女生那半边 ±0.6r），`zone` 喷口最多到手机左 60、外沿只许出画 40（女生身后到屏幕左沿很窄）。
 - `GIFT.buddy`：`style:'buddy'` → giveGift / ammostrip 走 `Buddy.summon()`（buddy.js），不走 Ammo。奶茶那行留作备选。
 - buddy.js：角色层画人（男生**之前**画，被挡住），特效层画水柱。每人 `T` 滑进 0.55 → 滋 2.5 → 溜出 0.5；同时最多 `MAX=3` 个，满了再刷 = 给剩余时间最短的那个 `spray += T.spray`。
 - 立绘两层 `assets/world/buddy_up.webp`（头躯干双臂水枪）/`buddy_lo.webp`（裤腿滑板）：`v14/buddy/make.py`（skate1.png 踩滑板，×0.37）在裤腰 `CUT=186` 切开、肚皮往下补 `BELLY` 行，打印 `SPR.foot/muzzle/pivot`。上半身绕 pivot（裤腰正中）转，下层后画压住接缝。滑板替掉走路动作。

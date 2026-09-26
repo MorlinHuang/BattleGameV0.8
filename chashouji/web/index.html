@@ -50,14 +50,14 @@
     <button id="hitR">灭迹党 +7</button>
   </div>
   <!-- 按钮文字由 main.js 按 ITEM_OF + GIFT.name 覆写成实际飞出来的物品名（左边
-       口红/抱枕/花束/戒指盒，右边香蕉/手柄/奶茶/相框）。这里写的只是没跑 JS 时
+       口红/抱枕/闺蜜/戒指盒，右边香蕉/手柄/哥们/相框）。这里写的只是没跑 JS 时
        的回退，data-shop 才是真的入口 —— 它指的是平台礼物，数值从那边来。 -->
   <div class="row">
     <span class="side g">查岗党</span>
     <button data-shop="like" data-side="1">点赞 ⓪</button>
     <button data-shop="wand" data-side="1">口红 ①</button>
     <button data-shop="mirror" data-side="1">抱枕 ②</button>
-    <button data-shop="boom" data-side="1">花束 ③</button>
+    <button data-shop="boom" data-side="1">闺蜜 ③</button>
     <button data-shop="drop" data-side="1">戒指盒 ④</button>
   </div>
   <div class="row">
@@ -86,7 +86,7 @@
 (function () {
   var v = new URLSearchParams(location.search).get('v');
   var q = v ? '?v=' + encodeURIComponent(v) : '';
-  var fs = ['fx.js', 'ammo.js', 'buddy.js', 'bubble.js', 'result.js', 'main.js'];
+  var fs = ['fx.js', 'ammo.js', 'crew.js', 'bubble.js', 'result.js', 'main.js'];
   for (var i = 0; i < fs.length; i++) document.write('<scr' + 'ipt src="' + fs[i] + q + '"></scr' + 'ipt>');
   /* 读数行本身要留着（截图与压测都往里写），只是默认藏起来。这里必须写死 'flex'
      而不是清空 —— 清空只是去掉行内样式，#devrow{display:none} 那条还在，行还是不出来。 */
