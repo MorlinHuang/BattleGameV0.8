@@ -159,25 +159,33 @@ def _gray(im):
     return np.array(c.convert('L')).astype(np.float32)
 
 
-def head_scale(ref, im, side):
-    """im 里赢方的头是 ref（僵持）里的几倍：多尺度归一化互相关，取最像的那个尺度。
-    方差太小的窗口（白底）不算，否则分母趋零、分数爆到几十。"""
+def head_find(ref, im, side):
+    """在 im 里找 ref（僵持）里那张脸：多尺度归一化互相关，返回 (尺度, 脸中心 x, 脸中心 y, 半径)，
+    坐标是 im 的像素。方差太小的窗口（白底）不算，否则分母趋零、分数爆到几十。
+    side = 'a' 女生（左半边找）/ 'b' 男生（右半边找）。"""
     b = [round(v * SCALE / HEAD_AT) for v in HEAD[side]]
     T = _gray(ref)[b[1]:b[3], b[0]:b[2]]
     G = _gray(im); w = G.shape[1]
-    G = G[:, :w // 2 + 60] if side == 'a' else G[:, w // 2 - 60:]
-    ones = None
-    best = (-1, 1.0)
+    off = 0 if side == 'a' else w // 2 - 60
+    G = G[:, :w // 2 + 60] if side == 'a' else G[:, off:]
+    best = (-1, 1.0, 0, 0, 0, 0)
     for k in np.arange(0.80, 1.12, 0.01):
         t = np.array(Image.fromarray(T).resize((round(T.shape[1] * k), round(T.shape[0] * k)), Image.LANCZOS))
         t = t - t.mean(); tt = (t ** 2).sum(); ones = np.ones_like(t)
         num = fftconvolve(G, t[::-1, ::-1], 'valid')
         s1 = fftconvolve(G, ones, 'valid'); s2 = fftconvolve(G ** 2, ones, 'valid')
         var = s2 - s1 * s1 / t.size
-        r = np.where(var > 0.3 * tt, num / np.sqrt(np.maximum(var, 1) * tt), 0).max()
-        if r > best[0]:
-            best = (r, k)
-    return best[1]
+        r = np.where(var > 0.3 * tt, num / np.sqrt(np.maximum(var, 1) * tt), 0)
+        i = np.unravel_index(r.argmax(), r.shape)
+        if r[i] > best[0]:
+            best = (r[i], k, i[1], i[0], t.shape[1], t.shape[0])
+    _, k, x, y, tw, th = best
+    return k, off + x + tw / 2, y + th / 2, tw / 2
+
+
+def head_scale(ref, im, side):
+    """im 里赢方的头是 ref（僵持）里的几倍。"""
+    return head_find(ref, im, side)[0]
 
 
 EDGE_STEP = 6     # 轮廓按行采样的间距（引擎像素）
@@ -303,6 +311,9 @@ def main():
             scales[name] = SCALE / k
             print(name, 'head %.2f' % k)
             meta, im, raw = build_pose(name, os.path.join(HERE, f), feet, scale=scales[name])
+        # 两张脸在贴图里的位置（香蕉朝女生的脸飞、脸上的白点跟着脸走）：[x, y, 半径]
+        ref_ = im if name == 'n0' else ref
+        meta['face'] = {s_: [round(v, 1) for v in head_find(ref_, im, s_)[1:]] for s_ in 'ab'}
         poses[name] = meta
         sheet.append((name, meta, im))
         print(name, meta)
@@ -325,6 +336,7 @@ def main():
             g = f'{name}_g{f}'
             img = plant_feet(os.path.join(d, f'f{f}.png'), os.path.join(d, 'base.png'), os.path.join(d, 'mask.png'))
             meta, im, _ = build_pose(g, img, anchor=base_raw, scale=k)
+            meta['face'] = poses[name]['face']      # 只重画了腿，脸和 base 同一处
             poses[g] = meta
             sheet.append((g, meta, im))
             frames.append(g)

@@ -284,7 +284,7 @@ function emitFire(side, clashRatio) {
   let n = 0;
   while (S[bud] >= NUM.SHOT && n < 3) { S[bud] -= NUM.SHOT; n++; }
   for (let i = 0; i < n; i++) {
-    const g = GIFT[side > 0 ? 'hairpin' : 'seed'];
+    const g = GIFT[side > 0 ? 'hairpin' : 'banana'];
     Ammo.launch(g, null, { one: true, clash: Math.random() < clashRatio });
   }
 }
@@ -327,6 +327,7 @@ function startMatch() {
   S.clock = NUM.MATCH; S.phase = 'play';
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
+  stains.length = 0;
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
@@ -423,6 +424,7 @@ function derive(dt) {
     FX.phoneY = GROUND + FX.bob + (m.phone[1] - m.ay);
   }
 
+  tickStains(dt);
   FX.tintA *= Math.pow(P.tintDecay, dt * 60);
   if (FX.tintA < 0.004) FX.tintA = 0;
 }
@@ -588,6 +590,35 @@ const RECIPE = {
         Particles.spawn({ kind: 'spark', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 120,
                           g: 900, drag: 0.985, life: 0.2 + Math.random() * 0.22,
                           rgb: [255, 198, 70], lw: 1.4 + Math.random() * 2 * s });
+      }
+    },
+  },
+
+  /* 香蕉砸中：白色爆点。白色在浅绿墙 + 米色地板上几乎加不亮（见上面的配色规矩），所以白色
+     全部靠**深色托底**才立得住：白环下面先垫一圈深灰环、白团一律带墨线描边。
+     香蕉是档 1（s=0.55），尺寸按这个给足 —— 按别的配方的基数乘 0.55 只剩十几像素。 */
+  cream: {
+    tint: [255, 255, 255],
+    burst(x, y, side, s) {
+      const k = 0.5 + s;                                   // 档 1 → 1.05
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * k, r1: 64 * k, life: 0.16, rgb: [255, 255, 255], a: 0.95 });
+      Particles.spawn({ kind: 'ring', x, y, r: 8 * k, r1: 92 * k, life: 0.26, rgb: [86, 78, 92], lw: 8 * k });
+      Particles.spawn({ kind: 'ring', x, y, r: 8 * k, r1: 90 * k, life: 0.26, rgb: [255, 255, 255], lw: 4.5 * k });
+      for (let i = 0; i < Math.round(12 * k); i++) {
+        const a = (Math.random() - 0.5) * 2.8;
+        const sp = (180 + Math.random() * 420) * k;
+        const d = (7 + Math.random() * 9) * k;
+        Particles.spawn({ kind: 'chip', shape: 'pearl', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 200,
+                          g: 900, drag: 0.975, life: 0.45 + Math.random() * 0.4, w: d, h: d,
+                          rot: Math.random() * 6.28, vrot: 0,
+                          rgb: [255, 255, 255], edge: INK, lw: 1.6, a: 1 });
+      }
+      for (let i = 0; i < Math.round(10 * k); i++) {
+        const a = (Math.random() - 0.5) * 2.4;
+        const sp = (260 + Math.random() * 460) * k;
+        Particles.spawn({ kind: 'spark', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 120,
+                          g: 900, drag: 0.985, life: 0.16 + Math.random() * 0.2,
+                          rgb: [255, 255, 255], lw: 1.6 + Math.random() * 1.8 * k });
       }
     },
   },
@@ -862,7 +893,7 @@ const SHOP = {
    见过的，就是吵到最后砸过来的是一束花。 */
 const ITEM_OF = {
   L: [null, 'hairpin', 'pillow', 'bouquet', 'ringbox'],
-  R: [null, 'seed',    'gamepad', 'milktea', 'photo'],
+  R: [null, 'banana',  'gamepad', 'milktea', 'photo'],
 };
 
 /* 三种样式的差别是节奏与体量，不是物品：
@@ -898,7 +929,11 @@ const GIFT = {
      绽放里 —— 所以本体不必再大，大的是绽开的东西。 */
   ringbox: { name: '戒指盒', from: +1, style: 'heavy',  item: 'ringbox', r: 64,       spin: 6.7, power: 4, recipe: 'bloom',   push: 600 },
   // 灭迹党（男方，在右，from=-1）
-  seed:    { name: '瓜子',   from: -1, style: 'volley', item: 'seed',    r: 21, n: 8, spin: 8.8, power: 1, recipe: 'star',    push: 1 },
+  /* 香蕉（2026-09-26 替换瓜子）：一次礼物三根、隔 1 秒一根（gap），飞行高度对准女生的脸（aim），
+     砸中是白色爆点，打在脸上还会留下白点（stain，见 stainFace）。常规火力那一路也飞香蕉，
+     但照旧避开脸（ammo.js 的 free），所以白点只在刷礼物时出现。飞行 0.55s，spin = π/0.55。 */
+  banana:  { name: '香蕉',   from: -1, style: 'single', item: 'banana',  r: 34, n: 3, gap: 1.0, aim: 'face', stain: true,
+             spin: 5.7, power: 1, recipe: 'cream',   push: 1 },
   gamepad: { name: '手柄',   from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 5.7, power: 2, recipe: 'debris',  push: 20 },
   milktea: { name: '奶茶',   from: -1, style: 'heavy',  item: 'milktea', r: 72,       spin: 6.7, power: 3, recipe: 'splash',  push: 230 },
   photo:   { name: '相框',   from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
@@ -939,6 +974,46 @@ function targetSpan(from) {
 }
 // 对冲掉的那些不碰人，在中线（手机）前互相撞掉
 const midAt = () => FX.phoneX;
+
+/* 某个人的脸此刻在屏幕上的位置 [x, y, 半径]。who = 'a' 女生 / 'b' 男生。
+   build.py 量的是整颗头（含头发）的中心，脸在朝对方那一侧、偏下一点，这里挪过去。 */
+function faceOf(who) {
+  const m = WORLD && WORLD.poses[FX.frame];
+  if (!m || !m.face) return null;
+  const [fx, fy, r] = m.face[who], d = who === 'a' ? 1 : -1;
+  return [FX.pairX + FX.hitX + fx + d * 0.2 * r - m.ax, GROUND + FX.bob + fy + 0.15 * r - m.ay, r * 0.8];
+}
+// 弹幕要的是"挨打那个人"的脸：from=+1 打男生，-1 打女生
+const faceAt = (from) => faceOf(from > 0 ? 'b' : 'a');
+
+/* 脸上的白点：香蕉（GIFT.stain）砸在脸上留下的。坐标存成"相对脸中心、以脸半径为单位"，
+   人跪下 / 趴下、脸换了位置，白点跟着走。挂 STAIN.life 秒，最后 STAIN.fade 秒淡掉；
+   最多 STAIN.max 个，满了挤掉最老的 —— 三根香蕉连着砸，脸上也就十来个点，糊满了就看不清表情。 */
+const STAIN = { max: 14, life: 9, fade: 1.5 };
+const stains = [];
+function stainFace(who, y) {
+  const f = faceOf(who);
+  if (!f || Math.abs(y - f[1]) > f[2] * 1.3) return;            // 没打在脸这个高度上，不留
+  const v0 = Math.max(-0.7, Math.min(0.7, (y - f[1]) / f[2]));
+  for (let i = 0, n = 2 + Math.floor(Math.random() * 3); i < n; i++) {
+    if (stains.length >= STAIN.max) stains.shift();
+    stains.push({ who, u: (Math.random() - 0.5) * 1.3, v: v0 + (Math.random() - 0.5) * 0.7,
+                  r: 2.5 + Math.random() * 3.5, t: 0 });
+  }
+}
+function tickStains(dt) {
+  for (let i = stains.length - 1; i >= 0; i--) if ((stains[i].t += dt) >= STAIN.life) stains.splice(i, 1);
+}
+function drawStains(ctx) {
+  for (const d of stains) {
+    const f = faceOf(d.who); if (!f) continue;
+    ctx.globalAlpha = Math.min(1, (STAIN.life - d.t) / STAIN.fade);
+    ctx.beginPath(); ctx.arc(f[0] + d.u * f[2], f[1] + d.v * f[2], d.r, 0, 6.2832);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(96,86,100,.8)'; ctx.stroke();   // 白在肤色上要一圈灰边才立得住
+  }
+  ctx.globalAlpha = 1;
+}
 const phonePos = () => [FX.phoneX, FX.phoneY];
 
 /* ---------- 角色：姿势贴图 ---------- */
@@ -1376,13 +1451,14 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      脸那一段常规火力要绕开（见 ammo.js）。这几个数跟着 GROUND 走 —— 人物
      挪了，弹幕的高度自动跟着挪。 */
   Ammo.init({
-    W, frontAt, midAt, targetSpan,
+    W, frontAt, midAt, targetSpan, faceAt,
     band: { top: GROUND - 660 * ZOOM, bot: GROUND - 90 * ZOOM, face: [GROUND - 600 * ZOOM, GROUND - 490 * ZOOM] },
     /* 命中只负责演出，**不拖人**。位置是双方拉力差每秒拖出来的（见 battle）
        —— 让命中再推一次，等于同一份力算两遍，而且会把"两边都在刷时谁也拖不动
        谁"这条最要紧的手感破坏掉。弹幕是拉力的表现形式，不是位移的来源。 */
     onHit(p, x) {
       impact(-p.from, p.y, p.exec ? 4 : p.g.power, RECIPE[p.g.recipe], x);
+      if (p.g.stain) stainFace(p.from > 0 ? 'b' : 'a', p.y);
     },
     /* 对冲掉的那些在中线互相撞掉：粒子照爆，但不推角色、不染色、不顿帧。
        它要回答的问题只有一个 —— "我刷了礼物怎么没拖动"。答案就在画面上：
@@ -1512,6 +1588,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     cctx.clearRect(0, 0, W, H);
     cctx.save(); cctx.translate(ox, oy);
     actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
+    drawStains(cctx);
     cctx.restore();
   }
 
@@ -1620,7 +1697,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const o = out.getContext('2d');
     o.fillStyle = '#0c0e12'; o.fillRect(0, 0, out.width, out.height);
 
-    Ammo.launch(g, clamp(+(Q.get('ammoy') || 560), 300, 960));
+    // ?ammoy=face：不钉高度，让瞄脸的礼物（香蕉）按实际逻辑瞄
+    Ammo.launch(g, Q.get('ammoy') === 'face' ? null : clamp(+(Q.get('ammoy') || 560), 300, 960), { gift: true });
     let el = 0;
     for (let i = 0; i < n; i++) {
       const step = i === 0 ? 1 / 60 : MS;

@@ -23,13 +23,14 @@ const Ammo = (function () {
   const act = [], pool = [];
   const queue = [];          // 待发射：连珠的后续几颗、重投的预警期
   const warns = [];          // 预警箭头
-  let frontAt = null, midAt = null, targetSpan = null, onHit = null, onClash = null, W = 960;
+  let frontAt = null, midAt = null, targetSpan = null, faceAt = null, onHit = null, onClash = null, W = 960;
   /* 发射高度带：top~bot 是弹幕会飞的高度（大致就是人物从头到膝盖），
      face 是两张脸所在的那一段 —— 常规火力要绕开它，见 launch。 */
   let band = { top: 380, bot: 900, face: [520, 610] };
 
   function init(o) {
     frontAt = o.frontAt; midAt = o.midAt || (() => frontAt(0, 1)); targetSpan = o.targetSpan || (() => null);
+    faceAt = o.faceAt || (() => null);
     onHit = o.onHit; onClash = o.onClash || (() => {}); W = o.W || 960;
     if (o.band) band = o.band;
   }
@@ -68,6 +69,14 @@ const Ammo = (function () {
 
   /* 一颗瓜子壳：尖头朝 +x、钝头朝 -x，长 1.6r 宽 0.78r。
      两头都画成尖的话读起来像叶子或者杏仁，钝的那头才是瓜子。 */
+  /* 一根香蕉的弯月形：中心线是一段下凹的圆弧，两头收尖。长 ±r、最粗 0.34r。 */
+  function bananaPath(ctx, r) {
+    ctx.moveTo(-r, -0.10 * r);
+    ctx.quadraticCurveTo(0, 0.78 * r, r, -0.22 * r);      // 外弧（下沿）
+    ctx.quadraticCurveTo(0, 0.12 * r, -r, -0.10 * r);     // 内弧（上沿）
+    ctx.closePath();
+  }
+
   function kernel(ctx, r) {
     ctx.moveTo(r * 0.80, 0);
     ctx.quadraticCurveTo(r * 0.25, r * 0.39, -r * 0.45, r * 0.34);
@@ -102,6 +111,16 @@ const Ammo = (function () {
       ctx.lineJoin = 'miter'; ctx.stroke(); ctx.lineJoin = 'round';
       ctx.beginPath(); ctx.arc(0, -r * 0.76, r * 0.26, 0, 6.2832);
       ctx.fillStyle = '#ffb8d4'; ctx.fill(); ink(ctx, r * 0.085);
+    },
+
+    // 香蕉（没有贴图时的矢量兜底）：黄身 + 深色果柄与尖头
+    banana(ctx, r) {
+      ctx.beginPath(); bananaPath(ctx, r);
+      ctx.fillStyle = '#ffd21e'; ctx.fill(); ink(ctx, r * 0.09);
+      ctx.beginPath(); ctx.arc(-r * 0.98, -r * 0.12, r * 0.09, 0, 6.2832);
+      ctx.fillStyle = '#5e6a1e'; ctx.fill();
+      ctx.beginPath(); ctx.arc(r * 0.97, -r * 0.21, r * 0.07, 0, 6.2832);
+      ctx.fillStyle = '#3a2616'; ctx.fill();
     },
 
     /* 瓜子：一撮五颗，不是一颗。同样是为了内部结构 —— 单颗水滴的结构密度是 0，
@@ -300,6 +319,7 @@ const Ammo = (function () {
       ctx.moveTo(r * 0.26, -r * 0.76);
       ctx.arc(0, -r * 0.76, r * 0.26, 0, 6.2832);
     },
+    banana(ctx, r) { ctx.beginPath(); bananaPath(ctx, r); },
     // 瓜子：五颗交叉的水滴，轮廓本身就是"一撮"的识别点
     seed(ctx, r) {
       ctx.beginPath();
@@ -357,7 +377,7 @@ const Ammo = (function () {
      琥珀与青。观众看一眼弹道的颜色就知道这一发是谁打的。 */
   const AURA = {
     hairpin: [255, 64, 156], pillow: [255, 92, 164], quilt: [255, 76, 148],
-    seed: [255, 148, 48], gamepad: [64, 206, 255], box: [255, 136, 40],
+    seed: [255, 148, 48], banana: [255, 206, 40], gamepad: [64, 206, 255], box: [255, 136, 40],
     bouquet: [255, 48, 110], ringbox: [255, 186, 56],
     milktea: [255, 158, 72], photo: [255, 206, 140],
   };
@@ -390,6 +410,7 @@ const Ammo = (function () {
     photo:   { src: 'assets/items/photo_atlas.webp',   n: 36, cols: 6, cell: 336, scale: 1.38 },
     hairpin: { src: 'assets/items/hairpin_atlas.webp', n: 36, cols: 6, cell: 138, scale: 1.42 },
     seed:    { src: 'assets/items/seed_atlas.webp',    n: 36, cols: 6, cell: 130, scale: 1.34 },
+    banana:  { src: 'assets/items/banana_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.11 },
     pillow:  { src: 'assets/items/pillow_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.16 },
     gamepad: { src: 'assets/items/gamepad_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.06 },
   };
@@ -489,7 +510,7 @@ const Ammo = (function () {
      拖在浅粉抱枕后面读起来像一团影子或者污渍 —— 那是"另一个东西"，而拖尾
      应该是它自己甩出来的。 */
   const TAIL = {
-    hairpin: '176,64,112', seed: '58,42,26', pillow: '196,116,150',
+    hairpin: '176,64,112', seed: '58,42,26', banana: '150,110,20', pillow: '196,116,150',
     gamepad: '38,46,58', quilt: '198,112,148', box: '126,82,48',
     bouquet: '150,42,72', milktea: '132,94,58',
     ringbox: '150,58,92', photo: '120,88,54',
@@ -537,10 +558,14 @@ const Ammo = (function () {
       const yy = fixedY != null ? fixedY : (Math.random() < 0.45
         ? band.top + Math.random() * Math.max(0, band.face[0] - 14 - band.top)   // 脸以上
         : band.face[1] + 26 + Math.random() * Math.max(0, band.bot - band.face[1] - 26)); // 脸以下：手和腿
-      queue.push({ t: 0, g, y: clampY(yy), clash: o.clash });
+      queue.push({ t: 0, g, y: clampY(yy), clash: o.clash, free: true });
       return;
     }
-    if (g.style === 'volley') {
+    if (g.gap) {
+      /* 一次礼物分几回扔、每回隔 gap 秒（香蕉：三根、隔 1 秒）。跟连珠的差别是节奏：
+         连珠 70ms 一颗读成"一把撒过去"，隔一秒一根读成"一根接一根地砸"。 */
+      for (let i = 0; i < (g.n || 1); i++) queue.push({ t: i * g.gap, g, y: y0, fixed: fixedY != null });
+    } else if (g.style === 'volley') {
       // 连珠：排成一串，间隔 70ms。每一颗单独判定、单独触发一次小命中，
       // 读起来是"哒哒哒"一串轻击而不是一下
       for (let i = 0; i < (g.n || 8); i++)
@@ -596,6 +621,12 @@ const Ammo = (function () {
        不在 launch 里取：重投有预警、连珠一串要排 0.5 秒，那期间人可能已经倒下了。 */
     const sp0 = targetSpan(g.from);
     p.y = sp0 ? Math.min(Math.max(q.y, sp0[0] + 20), sp0[1] - 20) : q.y;
+    /* aim: 'face' —— 飞行高度对准对方的脸（香蕉）。同样在出手这一刻取：人跪下/趴下以后脸的高度
+       差出一两百像素。常规火力那一路（free）照旧按自己的高度飞、避开脸。诊断胶片给了固定高度的也不瞄。 */
+    if (g.aim === 'face' && !q.free && !q.fixed) {
+      const f = faceAt(g.from);
+      if (f) p.y = f[1] + (Math.random() - 0.5) * f[2] * 0.4;
+    }
     p.exec = !!q.exec;
     p.clash = !!q.clash;
     // 对撞点落在自己这一侧一点，错开一些 —— 全撞在同一条线上会读成一堵墙

@@ -347,3 +347,11 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
   strip 类诊断会 `stage.innerHTML=''`，面板随之消失，不影响截图。
 - 结算图 `assets/ui/win_*.webp` 也是 960×1707（上面 1334 构图不变，下面是地板）；头像 `av_*.webp` 从新 `loop/n0.png` 裁。
 - 看结算：`?live=1&liveA=200&liveB=0&livet=120&overt=3`（灭迹党胜把 A/B 对调）。
+
+## 香蕉（2026-09-26 替换瓜子，灭迹党档 1）
+- `GIFT.banana`：`n:3, gap:1.0`（ammo.js launch 的 gap 分支，一根隔一秒）、`aim:'face'`（fire() 出手时取 `faceAt(from)` 的高度）、
+  `stain:true`（onHit → `stainFace`，打在脸那个高度才留白点，最多 14 个、9 秒、跟着脸走）、`recipe:'cream'` 白爆点（深色托底环 + 墨线白团）。
+- 常规火力（emitFire）也飞香蕉，但走 `one` → `free`，照旧避开脸，不留白点。
+- 脸位置：build.py `head_find` 给每张姿势量 `face:{a,b}:[x,y,r]`（步态帧沿用 base），main.js `faceOf(who)` 换到屏幕。
+- 看效果：`?ammostrip=6&ammoms=480&ammogift=banana&ammoy=face`（`ammoy=face` 不钉高度，按真实瞄脸逻辑）。
+- 贴图 `tools/3d/banana.py`：lean=20（45 会转到两头对镜头认不出）；**view_transform=Standard**（AgX 把黄压成土黄/芥末）。
