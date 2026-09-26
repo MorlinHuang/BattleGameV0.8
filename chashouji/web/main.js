@@ -1603,6 +1603,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      （再往左水就是竖着往下落），右沿允许出画 90 像素。但手机很靠右时（女生被拖着趴地）枪口最左不能
      超过 W-420，否则人一大半出画。buddy.js 在里面随机抽位置。
      水滴瞄女生身上的点（不碰轮廓），见 girlTarget */
+  const BUDDY_ARM_GAP = 60;           // 手机那一行上下各多少像素算"伸出去的手臂"，哥们的水不落在这
   Buddy.init({
     W, ground: () => GROUND + FX.bob,
     sprayZone: () => [Math.min(FX.phoneX + 100, W - 420), W + 90],
@@ -1611,13 +1612,15 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     girlTarget(u) {
       const f = faceOf('a'), sp = targetSpan(-1);
       if (!f || !sp) return null;
-      const ARM_GAP = 60, lo = f[1], hi = sp[1] - (sp[1] - sp[0]) * 0.35;
+      const ARM_GAP = BUDDY_ARM_GAP, lo = f[1], hi = sp[1] - (sp[1] - sp[0]) * 0.35;
       let y = lo + (hi - lo) * u;
       if (Math.abs(y - FX.phoneY) < ARM_GAP) y = FX.phoneY + (u < 0.5 ? -ARM_GAP : ARM_GAP);
       if (Math.abs(y - f[1]) < f[2]) return [f[0] + 0.5 * f[2], y];
       const x = frontAt(y, -1);
       return x == null ? null : [x, y];
     },
+    // 打偏的水碰她身体轮廓也溅开；手机那一行（伸出去的手臂）不算，理由同 girlTarget
+    girlFront: (y) => Math.abs(y - FX.phoneY) < BUDDY_ARM_GAP ? null : frontAt(y, -1),
     onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
     onHit: (x, y, first) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE.water, x),
   });

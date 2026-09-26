@@ -1,16 +1,22 @@
 /* buddy.js —— 灭迹党档 3「哥们」（2026-09-26 替换奶茶；同日改滑板、多人）
  *
  * 不是飞行物，是一个**角色**：男生的肌肉哥们踩着滑板从右边滑进来，停在男生那一侧的随机位置，
- * 端着水枪朝女生乱滋一阵，再滑出去。滑板替掉了走路/蹦跳动作 —— 人只要一张端枪滋水的立绘，
- * 位移全交给滑板。画风跟两个主角同一套（预渲染立绘，v14/buddy/make.py 抠的），不走礼物那套 3D 转盘。
+ * 端着水枪朝女生乱滋一阵，再滑出去。滑板替掉了走路/蹦跳动作 —— 位移全交给滑板，
+ * 人只做一个动作：**上半身绕腰转，枪管跟着水流瞄**。立绘在腰上切成两层（v14/buddy/make.py）：
+ * 上半身（头、躯干、双臂、水枪）绕 pivot 转，下半身（裤子、腿、滑板）不动、画在上面，裤腰盖住接缝。
+ * 画风跟两个主角同一套（预渲染立绘），不走礼物那套 3D 转盘。
  *
  * 同时最多 MAX 个。满了再刷，不加人，给剩余时间最短的那个续一段 T.spray。
  *
  * 分层：人画在角色层、**男生底下**（都在男生斜后方）；水柱画在特效层，越过男生头顶飞向女生。
  *
- * 水柱是一串水滴：每一滴出枪时挑好落在女生身上的哪一点（girlTarget(u)，u=0 脸 → 1 膝盖），
- * **出枪速度固定**（V），按那一点反解低弹道的仰角 —— 水从枪口顺着枪管方向射出去、再被重力压弯，
- * 读得出是一股有速度的水。（旧版按距离给飞行时间反算速度，近处的滴初速朝上翘，枪口那段水乱指。）
+ * 水柱是一串水滴：每一滴出枪时挑好落在女生身上的哪一点（girlTarget(u)，u=0 脸 → 1 大腿）。
+ * **由落点反推枪**：按固定出枪速度 V 反解打中那一点的低弹道仰角，上半身朝这个角转过去（有转速上限
+ * AIM.rate、角度夹在 AIM.lo~AIM.hi）；水滴**永远沿枪管此刻的方向、以固定速度 V** 从转过之后的枪口射出。
+ * 水落在哪只由枪角决定：枪平滑地转，水柱就是一条平滑变形的抛物线（真水管就是这样）。
+ * （试过每滴按"这个枪角要打中落点"反解初速：枪没转到位、瞄点跳过手机那行时前后两滴速度差很多，水柱成锯齿。）
+ * 所以枪没转到位时水会打偏一点：飞到落点那一列、高度离落点 MISS 像素以内算正中；偏了的碰到她身体轮廓
+ * （girlFront）也溅开 —— 不然偏的水穿过她的身子飞到画面另一头；从她头顶上方偏过去的就飞走。
  * 飞到那一点的横坐标就碎（每帧按同一个 u 重取，人动了跟着走）。**不碰外轮廓**：她伸出去的手臂和
  * 手机那一行轮廓在最前面，碰轮廓的话滋胸口的水全在手机上炸开，读成"滋手机"。
  *
@@ -23,8 +29,14 @@ const Buddy = (function () {
   /* 一个哥们的时间轴（秒）：滑进来 → 滋 → 滑出去 */
   const T = { enter: 0.55, spray: 2.5, exit: 0.5 };
   const MAX = 3;               // 场上最多几个哥们；满了再刷 = 给剩余时间最短的那个续 T.spray
-  /* 立绘：v14/buddy/make.py 抠的。foot 是两组滑板轮子正中的底边、muzzle 是枪口，都是贴图像素。 */
-  const SPR = { src: 'assets/world/buddy.webp', foot: [260, 436], muzzle: [2, 78] };
+  /* 立绘：v14/buddy/make.py 抠的两层，同一张画布。foot 是两组滑板轮子正中的底边、muzzle 是枪口
+     （枪管在贴图里是水平朝左的）、pivot 是上半身的转轴（裤腰正中），都是贴图像素。 */
+  const SPR = { up: 'assets/world/buddy_up.webp', lo: 'assets/world/buddy_lo.webp',
+                foot: [260, 436], muzzle: [2, 78], pivot: [266, 190] };
+  /* 上半身转角（弧度，正 = 枪口抬高）：最低 lo、最高 hi —— 再往下弯就不是端枪是鞠躬了；
+     rate 是每秒最多转多少：瞄点跳过手机那一行时是跳变的，枪不能跟着瞬移。
+     follow 是瞄点平滑跟随的快慢（1/秒）。 */
+  const AIM = { lo: -0.52, hi: 0.21, rate: 2.4, follow: 10 };
   /* 站位：每个哥们出场时随机抽一个远近 depth（最远的比最近的脚底高 LIFT 像素、缩到 DEPTH[0]）
      和一个横向位置 r∈[0,1]。横向按**枪口**排，不按滑板：滑板站姿两脚分得开，脚到枪口有 258 像素，
      按脚排的话枪口伸到手机那儿，离女生太近，水几乎竖着往下落。
@@ -37,22 +49,26 @@ const Buddy = (function () {
      瞄点在女生身上从头到膝盖乱扫（sweep 两个不公约的正弦叠起来，读成"乱滋"不是来回刷）。
      扫动的快慢要跟水在空中的时间（约 0.35 秒）比：扫得快，前后出枪的水滴落点差太远，一股水
      折成闪电（4.1 / 9.7 rad/s）或"7"字（2.3 / 5.3，固定出枪速度以后）；1.2 / 2.8 才是一条顺着甩的抛物线。 */
-  const RATE = 55, V = 1250, G = 900, HIT_EVERY = 0.3, SWEEP = [1.2, 2.8];
+  const RATE = 55, V = 1250, G = 900, HIT_EVERY = 0.3, SWEEP = [1.2, 2.8], MISS = 90;
   /* 水柱三遍描线的线宽与颜色：深蓝描边 → 浅蓝水身 → 白色高光 */
   const STROKE = [[26, 'rgba(24,70,140,.75)'], [19, 'rgba(110,196,255,.95)'], [6, 'rgba(255,255,255,.9)']];
 
-  let img = null, o = {};
+  let img = null, imgLo = null, o = {};
   const bs = [], drops = [];
 
   function init(opt) { o = opt; }
 
   function load(v, off) {
     if (off) return Promise.resolve(false);
-    return new Promise((ok) => {
+    const one = (src) => new Promise((ok) => {
       const i = new Image();
-      i.onload = () => { img = i; ok(true); };
-      i.onerror = () => ok(false);
-      i.src = SPR.src + (v ? '?v=' + encodeURIComponent(v) : '');
+      i.onload = () => ok(i);
+      i.onerror = () => ok(null);
+      i.src = src + (v ? '?v=' + encodeURIComponent(v) : '');
+    });
+    return Promise.all([one(SPR.up), one(SPR.lo)]).then(([u, l]) => {
+      if (u && l) { img = u; imgLo = l; }
+      return !!img;
     });
   }
 
@@ -82,7 +98,7 @@ const Buddy = (function () {
     const free = ROWS.filter(R => !bs.some(b => b.s >= R[0] && b.s <= R[1]));
     const R = (free.length ? free : ROWS)[Math.floor(Math.random() * (free.length || ROWS.length))];
     const d = R[0] + Math.random() * (R[1] - R[0]);
-    bs.push({ t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6,
+    bs.push({ t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
               r: pickR(), s: d, lift: LIFT * (DEPTH[1] - d) / (DEPTH[1] - DEPTH[0]), seq: 0 });
     bs.sort((a, b) => a.s - b.s);          // 远的先画
   }
@@ -103,16 +119,22 @@ const Buddy = (function () {
     return [x, y + Math.abs(Math.sin(t * 31)) * -1.2, s];     // 轮子压地面的细颤
   }
 
-  function muzzle(p) {
-    return [p[0] + (SPR.muzzle[0] - SPR.foot[0]) * p[2], p[1] + (SPR.muzzle[1] - SPR.foot[1]) * p[2]];
+  /* 转轴和枪口的屏幕坐标。枪管朝左，上半身转 a（canvas 顺时针为正 = 枪口抬高），
+     枪口绕 pivot 转同一个角，出水方向就是 (-cos a, -sin a)。 */
+  function pivotAt(p) {
+    return [p[0] + (SPR.pivot[0] - SPR.foot[0]) * p[2], p[1] + (SPR.pivot[1] - SPR.foot[1]) * p[2]];
+  }
+  function muzzle(p, a) {
+    const [cx, cy] = pivotAt(p), dx = (SPR.muzzle[0] - SPR.pivot[0]) * p[2], dy = (SPR.muzzle[1] - SPR.pivot[1]) * p[2];
+    const c = Math.cos(a), s = Math.sin(a);
+    return [cx + dx * c - dy * s, cy + dx * s + dy * c];
   }
 
-  /* 固定出枪速度 V，打中 (dx, dy)（屏幕坐标，dx<0 朝左）的低弹道初速度。够不着就按 45° 打。 */
-  function launch(dx, dy) {
+  /* 固定出枪速度 V，打中 (dx, dy)（屏幕坐标，dx<0 朝左）要的仰角（低弹道）。够不着就按 45°。 */
+  function elevation(dx, dy) {
     const D = Math.abs(dx), h = -dy, v2 = V * V;
     const disc = v2 * v2 - G * (G * D * D + 2 * h * v2);
-    const th = disc >= 0 ? Math.atan((v2 - Math.sqrt(disc)) / (G * D)) : Math.PI / 4;
-    return [Math.sign(dx) * V * Math.cos(th), -V * Math.sin(th)];
+    return disc >= 0 ? Math.atan((v2 - Math.sqrt(disc)) / (G * D)) : Math.PI / 4;
   }
 
   function update(dt) {
@@ -120,10 +142,12 @@ const Buddy = (function () {
       const d = drops[i];
       d.vy += G * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.t += dt;
       const tg = o.girlTarget(d.u), b = d.b;
-      if (tg && d.x <= tg[0]) {
+      const fr = o.girlFront(d.y);
+      const hx = tg && d.x <= tg[0] && Math.abs(d.y - tg[1]) < MISS ? tg[0] : fr != null && d.x <= fr ? fr : null;
+      if (hx != null) {
         drops.splice(i, 1);
-        o.onSplash(tg[0], d.y);
-        if (bs.includes(b) && b.hitCd <= 0) { o.onHit(tg[0], d.y, b.first); b.first = false; b.hitCd = HIT_EVERY; }
+        o.onSplash(hx, d.y);
+        if (bs.includes(b) && b.hitCd <= 0) { o.onHit(hx, d.y, b.first); b.first = false; b.hitCd = HIT_EVERY; }
       } else if (d.t > 1.6 || d.x < -50) drops.splice(i, 1);
     }
     for (let i = bs.length - 1; i >= 0; i--) {
@@ -131,27 +155,48 @@ const Buddy = (function () {
       b.t += dt; b.hitCd -= dt;
       const se = sprayEnd(b);
       if (b.t >= se + T.exit) { bs.splice(i, 1); continue; }
-      if (b.t < T.enter || b.t > se) continue;
+      /* 瞄：此刻该打的落点 → 要的仰角 → 上半身按转速上限转过去。滑进来时就开始瞄，溜走时枪放平 */
+      const tt = b.t + b.ph;
+      const u = Math.min(1, Math.max(0, 0.5 + 0.32 * Math.sin(tt * SWEEP[0]) + 0.2 * Math.sin(tt * SWEEP[1] + 1.3)));
+      /* 瞄点平滑跟随：女生的步态是硬切帧，脸和身体逐帧跳，直接瞄的话枪跟着抖、水柱折成锯齿。
+         要的仰角跟枪口位置互相依赖（枪一转枪口就挪），迭代几次到收敛（每次误差缩到 ~0.7 倍以下）。 */
+      const p = pose(b), raw = b.t <= se && o.girlTarget(u);
+      if (raw) {
+        const k = b.tg ? 1 - Math.exp(-dt * AIM.follow) : 1;
+        b.tg = b.tg ? [b.tg[0] + (raw[0] - b.tg[0]) * k, b.tg[1] + (raw[1] - b.tg[1]) * k] : raw;
+      }
+      const tg = raw && b.tg;
+      let want = 0;
+      if (tg) {
+        want = b.aim;
+        for (let k = 0; k < 6; k++) {
+          const m0 = muzzle(p, want);
+          want = Math.min(AIM.hi, Math.max(AIM.lo, elevation(tg[0] - m0[0], tg[1] - m0[1])));
+        }
+      }
+      b.aim += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.aim));
+      if (b.t < T.enter || b.t > se || !tg) continue;
+      /* 出水：从转过之后的枪口，沿枪管方向，固定速度 V */
       b.emit += dt * RATE;
-      const m = muzzle(pose(b));
+      const m = muzzle(p, b.aim), vx = -V * Math.cos(b.aim), vy = -V * Math.sin(b.aim);
       while (b.emit >= 1) {
         b.emit -= 1;
-        const tt = b.t + b.ph;
-        const u = Math.min(1, Math.max(0, 0.5 + 0.32 * Math.sin(tt * SWEEP[0]) + 0.2 * Math.sin(tt * SWEEP[1] + 1.3)));
-        const tg = o.girlTarget(u);
-        if (!tg) continue;
-        const [vx, vy] = launch(tg[0] - m[0], tg[1] - m[1]);
         drops.push({ x: m[0], y: m[1], vx, vy, t: 0, u, b, seq: b.seq++ });
       }
     }
   }
 
-  // 人：角色层，男生之前画（被男生挡住）；bs 按远近排好，远的先画
+  /* 人：角色层，男生之前画（被男生挡住）；bs 按远近排好，远的先画。
+     先画转过的上半身，再画不动的下半身 —— 裤腰压在肚皮上，接缝藏在裤腰底下。 */
   function drawActor(ctx) {
     if (!img) return;
     for (const b of bs) {
-      const [x, y, s] = pose(b);
+      const p = pose(b), [x, y, s] = p, [cx, cy] = pivotAt(p);
+      ctx.save();
+      ctx.translate(cx, cy); ctx.rotate(b.aim); ctx.translate(-cx, -cy);
       ctx.drawImage(img, x - SPR.foot[0] * s, y - SPR.foot[1] * s, img.width * s, img.height * s);
+      ctx.restore();
+      ctx.drawImage(imgLo, x - SPR.foot[0] * s, y - SPR.foot[1] * s, imgLo.width * s, imgLo.height * s);
     }
   }
 
