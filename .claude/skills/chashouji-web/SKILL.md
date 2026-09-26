@@ -348,10 +348,17 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 - 结算图 `assets/ui/win_*.webp` 也是 960×1707（上面 1334 构图不变，下面是地板）；头像 `av_*.webp` 从新 `loop/n0.png` 裁。
 - 看结算：`?live=1&liveA=200&liveB=0&livet=120&overt=3`（灭迹党胜把 A/B 对调）。
 
-## 香蕉（2026-09-26 替换瓜子，灭迹党档 1）
-- `GIFT.banana`：`n:3, gap:1.0`（ammo.js launch 的 gap 分支，一根隔一秒）、`aim:'face'`（fire() 出手时取 `faceAt(from)` 的高度）、
-  `stain:true`（onHit → `stainFace`，打在脸那个高度才留白点，最多 14 个、9 秒、跟着脸走）、`recipe:'cream'` 白爆点（深色托底环 + 墨线白团）。
-- 常规火力（emitFire）也飞香蕉，但走 `one` → `free`，照旧避开脸，不留白点。
-- 脸位置：build.py `head_find` 给每张姿势量 `face:{a,b}:[x,y,r]`（步态帧沿用 base），main.js `faceOf(who)` 换到屏幕。
-- 看效果：`?ammostrip=6&ammoms=480&ammogift=banana&ammoy=face`（`ammoy=face` 不钉高度，按真实瞄脸逻辑）。
-- 贴图 `tools/3d/banana.py`：lean=20（45 会转到两头对镜头认不出）；**view_transform=Standard**（AgX 把黄压成土黄/芥末）。
+## 瞄部位的档 1：香蕉 / 口红（2026-09-26，替换瓜子 / 发卡）
+- `GIFT.banana`（灭迹党）：`n:3, gap:0.5, aim:'face', stain:true, recipe:'cream'`（白爆点 + 女生脸上白点）。
+- `GIFT.lipstick`（查岗党）：`n:3, gap:0.5, aim:'hip', stain:true, recipe:'rouge'`（粉爆点 + 男生短裤上粉点），淡红管身。
+- **碰撞点是部位，不是外轮廓**：ammo.js 出手时 `p.aimKey = Math.random()`，每帧 `aimAt(g, key)` 重取 [碰撞 x, y]，
+  高度按 `1-exp(-12dt)` 追过去、x 到了就爆（人倒下/迈步部位跟着挪）。没有 aimKey 的照旧走 `frontAt`。
+- main.js `aimAt`：face = 脸朝对方那半边（`f[0] - from*0.5r`）、上下 ±0.2r；hip = `hipOf().pts` 第 key 行的左沿 +5。
+- 留点 `stainAt(part, x, y)`：只有瞄准命中（aimKey）才留；存部位归一化坐标（脸：以脸半径为单位；短裤：外框 0~1），
+  每部位最多 14 个、9 秒、`STAIN_LOOK` 管颜色。
+- 常规火力（emitFire）左飞口红、右飞香蕉，走 `one` → `free`：不瞄、不留点。
+- 部位数据：build.py `head_find` → `face:{a,b}:[x,y,r]`（步态帧沿用 base）；`hip_find` → `hip:{box,pts}`，按**藏青色相**抠男生短裤，
+  每张图（含步态格）各量一次，pts 是 9 行 `[左沿, y, 右沿]`。换男生裤子颜色必须改 hip_find 的色阈。
+- 看效果：`?ammostrip=6&ammoms=260&ammogift=lipstick&ammoy=aim`（`ammoy=aim` 不钉高度，走真实瞄准）。
+- 贴图 `tools/3d/banana.py` / `lipstick.py`：lean=20；**view_transform=Standard**（AgX 把黄压成芥末、把淡红压成豆沙粉）。
+  发卡、瓜子的贴图和矢量画法仍留在 ammo.js 当备选。

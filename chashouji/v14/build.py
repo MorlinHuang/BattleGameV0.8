@@ -188,6 +188,35 @@ def head_scale(ref, im, side):
     return head_find(ref, im, side)[0]
 
 
+HIP_ROWS = 9      # 男生短裤上取几行做口红的落点
+
+
+def hip_find(im):
+    """男生的腰和大腿在 im 里的位置：他的藏青短裤（口红朝这里飞、粉点留在这里）。
+    藏青是整张图里唯一偏蓝的暗色块（女生粉、衬衫浅蓝、头发黑），按色相直接抠，不用模板。
+    返回 {'box': [x0, y0, x1, y1], 'pts': [[左沿, y, 右沿], ...]}：box 取 2%~98% 分位（去掉头发里
+    零星的蓝黑像素），pts 是在短裤上下 10%~90% 之间均匀取 HIP_ROWS 行、每行**最靠左那一段**
+    藏青（宽于 12 像素）的左右沿 —— 口红从左边飞来，先碰到的是这一段的左沿。"""
+    a = np.array(im.convert('RGBA')).astype(int)
+    r, g, b, al = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
+    nav = (al > 200) & (b > r + 25) & (b > g + 10) & (r < 110) & (b < 170)
+    nav[:, :a.shape[1] // 3] = False
+    ys, xs = np.nonzero(nav)
+    x0, x1 = np.percentile(xs, [2, 98]); y0, y1 = np.percentile(ys, [2, 98])
+    pts = []
+    for y in np.linspace(y0 + 0.1 * (y1 - y0), y0 + 0.9 * (y1 - y0), HIP_ROWS).round().astype(int):
+        row = nav[y]; x = 0
+        while x < len(row):
+            if row[x]:
+                e = x
+                while e < len(row) and row[e]: e += 1
+                if e - x > 12:
+                    pts.append([x, int(y), e - 1]); break
+                x = e
+            x += 1
+    return {'box': [round(float(v), 1) for v in (x0, y0, x1, y1)], 'pts': pts}
+
+
 EDGE_STEP = 6     # 轮廓按行采样的间距（引擎像素）
 
 
@@ -314,6 +343,7 @@ def main():
         # 两张脸在贴图里的位置（香蕉朝女生的脸飞、脸上的白点跟着脸走）：[x, y, 半径]
         ref_ = im if name == 'n0' else ref
         meta['face'] = {s_: [round(v, 1) for v in head_find(ref_, im, s_)[1:]] for s_ in 'ab'}
+        meta['hip'] = hip_find(im)
         poses[name] = meta
         sheet.append((name, meta, im))
         print(name, meta)
@@ -337,6 +367,7 @@ def main():
             img = plant_feet(os.path.join(d, f'f{f}.png'), os.path.join(d, 'base.png'), os.path.join(d, 'mask.png'))
             meta, im, _ = build_pose(g, img, anchor=base_raw, scale=k)
             meta['face'] = poses[name]['face']      # 只重画了腿，脸和 base 同一处
+            meta['hip'] = hip_find(im)              # 腿换了，短裤跟着变，每格重量
             poses[g] = meta
             sheet.append((g, meta, im))
             frames.append(g)

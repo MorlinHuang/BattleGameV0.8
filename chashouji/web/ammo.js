@@ -9,6 +9,7 @@
  * 命中判定用的是 frontAt(y, from) —— 挨打那个人在弹幕高度上朝这边的轮廓（main.js 给）；
  * 这一行没人时返回 null，那一发就从旁边飞过去。对冲掉的那些不碰人，在 midAt()（手机那条
  * 中线）前互相撞掉。发射时高度压进 targetSpan(from)：对方趴下以后只剩贴地那一截。
+ * 瞄部位的礼物（GIFT.aim）例外：碰撞点是 aimAt(g, key) 给的那个部位，不是外轮廓。
  * 发射高度的范围由 main.js 按人物站位传进来（init 的 band），这里不写死
  * 画面几何：人物的大小和站位换过不止一次，每次都是这几个数先对不上。
  *
@@ -23,14 +24,14 @@ const Ammo = (function () {
   const act = [], pool = [];
   const queue = [];          // 待发射：连珠的后续几颗、重投的预警期
   const warns = [];          // 预警箭头
-  let frontAt = null, midAt = null, targetSpan = null, faceAt = null, onHit = null, onClash = null, W = 960;
+  let frontAt = null, midAt = null, targetSpan = null, aimAt = null, onHit = null, onClash = null, W = 960;
   /* 发射高度带：top~bot 是弹幕会飞的高度（大致就是人物从头到膝盖），
      face 是两张脸所在的那一段 —— 常规火力要绕开它，见 launch。 */
   let band = { top: 380, bot: 900, face: [520, 610] };
 
   function init(o) {
     frontAt = o.frontAt; midAt = o.midAt || (() => frontAt(0, 1)); targetSpan = o.targetSpan || (() => null);
-    faceAt = o.faceAt || (() => null);
+    aimAt = o.aimAt || (() => null);
     onHit = o.onHit; onClash = o.onClash || (() => {}); W = o.W || 960;
     if (o.band) band = o.band;
   }
@@ -77,6 +78,13 @@ const Ammo = (function () {
     ctx.closePath();
   }
 
+  // 口红管身（到内管顶为止）：宽 0.72r、高 ±0.9r 的上下两段台阶，膏体另画
+  function lipstickPath(ctx, r) {
+    ctx.moveTo(-0.36 * r, 0.9 * r); ctx.lineTo(-0.36 * r, 0.02 * r); ctx.lineTo(-0.3 * r, 0.02 * r);
+    ctx.lineTo(-0.3 * r, -0.38 * r); ctx.lineTo(0.3 * r, -0.38 * r); ctx.lineTo(0.3 * r, 0.02 * r);
+    ctx.lineTo(0.36 * r, 0.02 * r); ctx.lineTo(0.36 * r, 0.9 * r); ctx.closePath();
+  }
+
   function kernel(ctx, r) {
     ctx.moveTo(r * 0.80, 0);
     ctx.quadraticCurveTo(r * 0.25, r * 0.39, -r * 0.45, r * 0.34);
@@ -111,6 +119,16 @@ const Ammo = (function () {
       ctx.lineJoin = 'miter'; ctx.stroke(); ctx.lineJoin = 'round';
       ctx.beginPath(); ctx.arc(0, -r * 0.76, r * 0.26, 0, 6.2832);
       ctx.fillStyle = '#ffb8d4'; ctx.fill(); ink(ctx, r * 0.085);
+    },
+
+    // 口红（没有贴图时的矢量兜底）：淡红管身 + 金箍 + 斜切的深红膏体，竖着
+    lipstick(ctx, r) {
+      ctx.beginPath(); lipstickPath(ctx, r);
+      ctx.fillStyle = '#ff9aa2'; ctx.fill(); ink(ctx, r * 0.085);
+      ctx.beginPath(); ctx.moveTo(-0.22 * r, -0.38 * r); ctx.lineTo(-0.22 * r, -0.62 * r);
+      ctx.lineTo(0.22 * r, -0.88 * r); ctx.lineTo(0.22 * r, -0.38 * r); ctx.closePath();
+      ctx.fillStyle = '#e8364e'; ctx.fill(); ink(ctx, r * 0.085);
+      ctx.fillStyle = '#f2c14e'; ctx.fillRect(-0.38 * r, 0.02 * r, 0.76 * r, 0.16 * r);
     },
 
     // 香蕉（没有贴图时的矢量兜底）：黄身 + 深色果柄与尖头
@@ -320,6 +338,7 @@ const Ammo = (function () {
       ctx.arc(0, -r * 0.76, r * 0.26, 0, 6.2832);
     },
     banana(ctx, r) { ctx.beginPath(); bananaPath(ctx, r); },
+    lipstick(ctx, r) { ctx.beginPath(); lipstickPath(ctx, r); ctx.rect(-0.22 * r, -0.88 * r, 0.44 * r, 0.5 * r); },
     // 瓜子：五颗交叉的水滴，轮廓本身就是"一撮"的识别点
     seed(ctx, r) {
       ctx.beginPath();
@@ -376,7 +395,7 @@ const Ammo = (function () {
      取每件物品主色的高饱和版，顺带把阵营也读出来：查岗党偏粉紫，灭迹党偏
      琥珀与青。观众看一眼弹道的颜色就知道这一发是谁打的。 */
   const AURA = {
-    hairpin: [255, 64, 156], pillow: [255, 92, 164], quilt: [255, 76, 148],
+    hairpin: [255, 64, 156], lipstick: [255, 118, 128], pillow: [255, 92, 164], quilt: [255, 76, 148],
     seed: [255, 148, 48], banana: [255, 206, 40], gamepad: [64, 206, 255], box: [255, 136, 40],
     bouquet: [255, 48, 110], ringbox: [255, 186, 56],
     milktea: [255, 158, 72], photo: [255, 206, 140],
@@ -411,6 +430,7 @@ const Ammo = (function () {
     hairpin: { src: 'assets/items/hairpin_atlas.webp', n: 36, cols: 6, cell: 138, scale: 1.42 },
     seed:    { src: 'assets/items/seed_atlas.webp',    n: 36, cols: 6, cell: 130, scale: 1.34 },
     banana:  { src: 'assets/items/banana_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.11 },
+    lipstick:{ src: 'assets/items/lipstick_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.11 },
     pillow:  { src: 'assets/items/pillow_atlas.webp',  n: 36, cols: 6, cell: 160, scale: 1.16 },
     gamepad: { src: 'assets/items/gamepad_atlas.webp', n: 36, cols: 6, cell: 160, scale: 1.06 },
   };
@@ -510,7 +530,7 @@ const Ammo = (function () {
      拖在浅粉抱枕后面读起来像一团影子或者污渍 —— 那是"另一个东西"，而拖尾
      应该是它自己甩出来的。 */
   const TAIL = {
-    hairpin: '176,64,112', seed: '58,42,26', banana: '150,110,20', pillow: '196,116,150',
+    hairpin: '176,64,112', lipstick: '200,72,88', seed: '58,42,26', banana: '150,110,20', pillow: '196,116,150',
     gamepad: '38,46,58', quilt: '198,112,148', box: '126,82,48',
     bouquet: '150,42,72', milktea: '132,94,58',
     ringbox: '150,58,92', photo: '120,88,54',
@@ -562,8 +582,8 @@ const Ammo = (function () {
       return;
     }
     if (g.gap) {
-      /* 一次礼物分几回扔、每回隔 gap 秒（香蕉：三根、隔 1 秒）。跟连珠的差别是节奏：
-         连珠 70ms 一颗读成"一把撒过去"，隔一秒一根读成"一根接一根地砸"。 */
+      /* 一次礼物分几回扔、每回隔 gap 秒（香蕉 / 口红：三根、隔 0.5 秒）。跟连珠的差别是节奏：
+         连珠 70ms 一颗读成"一把撒过去"，隔半秒一根读成"一根接一根地砸"。 */
       for (let i = 0; i < (g.n || 1); i++) queue.push({ t: i * g.gap, g, y: y0, fixed: fixedY != null });
     } else if (g.style === 'volley') {
       // 连珠：排成一串，间隔 70ms。每一颗单独判定、单独触发一次小命中，
@@ -621,11 +641,14 @@ const Ammo = (function () {
        不在 launch 里取：重投有预警、连珠一串要排 0.5 秒，那期间人可能已经倒下了。 */
     const sp0 = targetSpan(g.from);
     p.y = sp0 ? Math.min(Math.max(q.y, sp0[0] + 20), sp0[1] - 20) : q.y;
-    /* aim: 'face' —— 飞行高度对准对方的脸（香蕉）。同样在出手这一刻取：人跪下/趴下以后脸的高度
-       差出一两百像素。常规火力那一路（free）照旧按自己的高度飞、避开脸。诊断胶片给了固定高度的也不瞄。 */
-    if (g.aim === 'face' && !q.free && !q.fixed) {
-      const f = faceAt(g.from);
-      if (f) p.y = f[1] + (Math.random() - 0.5) * f[2] * 0.4;
+    /* aim —— 瞄对方身上的一个部位（香蕉 'face' 女生的脸、口红 'hip' 男生的腰和大腿），**碰撞点也是
+       那个部位**，不是外轮廓：香蕉从女生伸出来的手臂、头发边上穿过去，贴到脸上才爆。
+       aimKey 是这一发在部位里挑的哪一点（0~1），飞行途中每帧按它重取 —— 人跪下 / 趴下 / 迈步，
+       部位跟着挪，弹道一路微调高度追过去（见 update）。常规火力（free）不瞄，诊断胶片钉了高度的也不瞄。 */
+    p.aimKey = null;
+    if (g.aim && !q.free && !q.fixed) {
+      const t = aimAt(g, p.aimKey = Math.random());
+      if (t) p.y = t[1]; else p.aimKey = null;
     }
     p.exec = !!q.exec;
     p.clash = !!q.clash;
@@ -698,7 +721,14 @@ const Ammo = (function () {
       p.hi = (p.hi + 1) & TMASK;
       p.hx[p.hi] = p.x; p.hr[p.hi] = p.rot;
 
-      const fx = frontAt(p.y, p.from), mx = midAt();
+      let fx;
+      const t = p.aimKey != null && aimAt(p.g, p.aimKey);
+      if (t) {
+        /* 追部位：高度按指数趋近（与帧率无关），x 就是部位朝这边的那条边 */
+        p.y += (t[1] - p.y) * (1 - Math.exp(-dt * 12));
+        fx = t[0];
+      } else fx = frontAt(p.y, p.from);
+      const mx = midAt();
       /* 走完了全程的多少。色晕靠它在命中前一路烧起来 —— 观众在撞上之前就
          知道这一发要到了，而这正是弹幕能制造期待的唯一窗口。 */
       const span = (fx ?? mx) - p.x0;
