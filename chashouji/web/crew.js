@@ -64,8 +64,9 @@ function Crew(cfg) {
     return best;
   }
 
-  /* sk（可无）：指定形象编号（cfg.skins 的下标）；不给就挑场上没人用的。组调度（CrewGroup）用它指定。 */
+  /* sk（可无）：指定形象编号（cfg.skins 的下标，越界夹到两头）；不给就挑场上没人用的。诊断参数 ?skin= 用它。 */
   function summon(sk) {
+    if (sk != null) sk = Math.max(0, Math.min(cfg.skins.length - 1, sk | 0));
     const staying = bs.filter(b => b.t <= sprayEnd(b));
     if (bs.length >= cfg.max) {
       if (staying.length) {               // 满了：剩余时间最短的续一段
@@ -361,22 +362,7 @@ function Crew(cfg) {
 
   /* 诊断用：在场的人（只读），?crewlog=1 时 main.js 打印瞄准角 */
   const peek = () => bs;
-  return { init, load, summon, freeSkins, update, items, active, reset, peek };
-}
-
-/* 同一件礼物、几个 Crew 共用"三个形象"：召唤时在所有成员的空闲形象里随机挑一个（同时在场的一定各不相同）；
-   全满了就随便挑一个在场的成员续一段（Crew.summon 满员时自己会续）。只管召唤，其余接口 main.js 逐个调。 */
-function CrewGroup(members) {
-  return {
-    summon(pick) {
-      if (pick != null) return members[Math.max(0, Math.min(members.length - 1, pick | 0))].summon();   // ?bestie=<成员下标> 强制（越界夹到两头）
-      const opts = [];
-      members.forEach((m, mi) => m.freeSkins().forEach(sk => opts.push([mi, sk])));
-      if (opts.length) { const [mi, sk] = opts[Math.floor(Math.random() * opts.length)]; return members[mi].summon(sk); }
-      const on = members.filter(m => m.active());
-      (on.length ? on : members)[Math.floor(Math.random() * (on.length || members.length))].summon();
-    },
-  };
+  return { init, load, summon, update, items, active, reset, peek };
 }
 
 /* 水柱（哥们）。ps 是同一个人喷出去的水滴（按出口顺序），b 是这个人（已离场为 null）。
@@ -497,11 +483,10 @@ const MIST = {
   spr: { src: 'assets/world/bestie%n_%k.webp', arm: { src: 'arm', pivot: [127, 103] },
          body: { src: 'up', pivot: [103, 200], k: 0.3 }, lo: { src: 'lo' },
          foot: [113, 483], muzzle: [290, 18] },
-  skins: [1, 2],                    // src2 棕色高马尾红比基尼白平衡车 / src3 黑短发条纹比基尼粉平衡车
-                                    // （第三个形象 src4 金发双马尾 2026-09-27 换成了下面的真相喷雾，贴图 bestie3_* 留着备选）
+  skins: [1, 2, 3],                 // src2 棕色高马尾红比基尼白平衡车 / src3 黑短发条纹比基尼粉平衡车 / src4 金发双马尾黑比基尼紫平衡车
   anim: { pulse: [0.42, 0.14], kick: [0.12, 0.05, 10], lean: 0.08, bob: [3, 2.6] },
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
-  max: 2, gap: 0.3,                 // = 形象数：满员时续时间而不是再加一个重复形象（三个形象的第三个是 Truth，组合封顶 3 人）
+  max: 3, gap: 0.3,                 // = 形象数：满员时续时间，不会加出重复形象
   rows: [[0.74, 0.80], [0.66, 0.71], [0.58, 0.63]],
   aim: { lo: -0.7, hi: 0.35, rate: 2.4, follow: 10 },
   sweep: { a: [0.3, 0.15], w: [1.3, 3.1] },
@@ -573,7 +558,8 @@ function drawTruth(ctx, ps, b) {
 
 /* 真相喷雾：v14/truth/src1.png。用户认可的概念图（concept/gift-spray/）改出来的游戏立绘：
    金发绿挑染、青柠色赛车服短裙白色过膝靴，右肩扛一罐比她人还长的「真相喷雾」。
-   跟平衡车闺蜜同一件礼物（档 3 左，GIFT.bestie），是它三个形象里的一个（CrewGroup 调度）；站位、出场都不一样，单独一份配置。
+   女生第五档礼物「真相女神」（档 4 左，GIFT.truth，2026-09-27 替掉戒指盒；之前短暂当过闺蜜的第三个形象）。
+   档 4 的"贵"靠出场：她冲下来的那 1.4 秒全场压暗、只有她亮着，再打一条名字条（main.js truthIntro）。
 
    **她不站地，被罐子的后坐力顶在半空**（move 'hover'，悬停点 main.js perch）。为什么：竖屏里两个主角占着下半屏中间，
    女主左边只剩 ~100 像素宽，大号全身角色塞不进去 —— 试过两版站地的：
@@ -612,5 +598,3 @@ const TRUTH = {
            draw: drawTruth },
 };
 const Truth = Crew(TRUTH);
-/* 闺蜜这件礼物的三个形象：平衡车两个 + 真相喷雾一个，召唤时随机挑空着的（main.js CREW.bestie） */
-const BestieGroup = CrewGroup([Bestie, Truth]);

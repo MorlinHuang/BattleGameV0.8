@@ -248,7 +248,7 @@ assets/ui/win_b2.webp  灭迹党胜·命中（怼到她面前）
 | `?bubblestrip=N&bubblems=M` | 气泡胶片，四种消息轮流强制推 |
 | `?bench=1&benchframes=N&benchrate=M` | 连点压测 |
 | `?benchoff=ammo\|part\|both` | 关掉某层做差值分账 |
-| `?bestie=0\|1` | 配 `ammogift=bestie`：强制出平衡车闺蜜（0）或真相喷雾（1），不给随机 |
+| `?skin=0\|1\|2` | 配 crew 类礼物（`ammogift=bestie/buddy/truth`）：强制出第几个形象（cfg.skins 下标，越界夹两头），不给挑空着的 |
 | `?crewlog=1` | 胶片模式下每格往控制台打真相喷雾的 aim / want / 落点 / 喷口（`--dump-dom --enable-logging=stderr` 抓 CONSOLE 行） |
 
 **新加诊断模式时照这个套路**：每格强制指定内容，不要碰运气等随机——
@@ -376,8 +376,7 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 - **比例按透视**：`rows` 就是缩放 s（1 = 跟自己主角一样大，两张立绘都按头半径对齐主角出的图），脚底抬高 `(地面 − 视平线) × (1 − s)`，视平线 `HORIZON_UP=350`（男生站着眼睛高）。第一版哥们 s 0.86~0.95 + 另给抬高，站男生身后却比他壮一圈。现 rows 0.58~0.80。
 - 闺蜜的 fluid：雾 V 1100、drag 1、G 60、rate 90、散角 0.1，`drawMist` 两遍淡圆（深橙红 0.08 托底 + 亮橙 0.16）。太浓读成喷火器、太稀是一串橙点。`RECIPE.pepper` 命中用 soft 雾团 + 两圈环，**不用 dot**（发光贴图叠在脸上中心发白，像着火）。落点只瞄男生脸（`faceOf('b')` 朝女生那半边 ±0.6r），`zone` 喷口最多到手机左 60、外沿只许出画 40（女生身后到屏幕左沿很窄）。
 - `GIFT.buddy`：`style:'buddy'` → giveGift / ammostrip 走 `Buddy.summon()`（buddy.js），不走 Ammo。奶茶那行留作备选。
-- **真相喷雾**（2026-09-27，闺蜜第三个形象，替换金发双马尾 bestie3）：`crew.js` `TRUTH` + `drawTruth`，立绘 `v14/truth/make.py` → `truth1_up|lo.webp`（腰以上含罐子 / 腰以下；垂过腰的长发归上层）。
-  闺蜜礼物 = `CrewGroup([Bestie(skins 1,2), Truth])`，召唤在所有成员的空闲形象里随机挑。
+- **真相女神 / 真相喷雾**（2026-09-27 先做成闺蜜第三形象，当天用户改为**女生档 4、替掉戒指盒**：`ITEM_OF.L[4]='truth'`、`GIFT.truth` power 4、`CREW.truth`；闺蜜还原三个平衡车 skins [1,2,3]）。档 4 的"贵"靠出场：main.js `INTRO` 按她自己的 b.t 全场压暗（画在主角后、她之前）+ 名字条，续时间/召回不重播。`ammogift=truth` 拍胶片。`crew.js` `TRUTH` + `drawTruth`，立绘 `v14/truth/make.py` → `truth1_up|lo.webp`（腰以上含罐子 / 腰以下；垂过腰的长发归上层）。
   **她不站地**（`move:'hover'`，main.js `perch` / `HOVER`）：竖屏女主左边只剩 ~100 宽，站身后被长发挡掉身子、站前面罐子盖住女主的脸，只有上半屏的墙是空的。
   `whole.pivot` = 扛罐的肩（罐子轴线上）：整个人绕它转着瞄，**按转轴一步反解仰角**（喷口离脸一两百、转动半径三百多，按喷口迭代会振荡，实测停在 −0.45 / 顶到 +0.1）。
   两轮对抗审查（`chashouji/shots/review/truth_review_1|2.md`）定下的几条：喷口离脸必须 ≥~170（她缩到 s 0.86~0.9、`fluid.V` 650、`r0` 20、`flare` 小），否则只看得到"罐口一朵星+脸上一团"；

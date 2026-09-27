@@ -1070,8 +1070,8 @@ const SHOP = {
    这不是折中，是两段要的东西本来就不同：档 1~2 一局出现上百次，它的好处恰恰
    是不够特别；档 3~4 一局只有几次，要的是"我没见过"—— 而这个题材里观众最没
    见过的，就是吵到最后砸过来的是一束花。 */
-// 档 3 的两个帮手角色（crew.js），GIFT[..].crew 指到这里
-const CREW = { buddy: Buddy, bestie: BestieGroup };   // 闺蜜 = 平衡车两个形象 + 真相喷雾（crew.js CrewGroup）
+// 档 3 的两个帮手角色 + 档 4 左的真相女神（crew.js），GIFT[..].crew 指到这里
+const CREW = { buddy: Buddy, bestie: Bestie, truth: Truth };
 const RAIN = { durian: DurianRain, sockball: SockRain };
 
 /* 高跟鞋砸头（档 1 左，榴莲鞋雨里的四只鞋）：爆点颜色跟鞋走（用户定的）—— 鞋跟"咔"一下，小而硬：
@@ -1107,7 +1107,7 @@ function heelRecipe([hi, lo]) {
 const HEEL_RECIPE = Object.fromEntries(Object.entries(HEEL_COLORS).map(([k, c]) => [k, heelRecipe(c)]));
 
 const ITEM_OF = {
-  L: [null, 'lipstick', 'durian', 'bestie',  'ringbox'],
+  L: [null, 'lipstick', 'durian', 'bestie',  'truth'],
   R: [null, 'banana',  'sockball', 'buddy',  'photo'],
 };
 
@@ -1154,6 +1154,10 @@ const GIFT = {
      占屏宽的 24% 与 25%。飞行体积负责预告"这一下很重"，兑现在命中那一刻的
      绽放里 —— 所以本体不必再大，大的是绽开的东西。 */
   ringbox: { name: '戒指盒', from: +1, style: 'heavy',  item: 'ringbox', r: 64,       spin: 6.7, power: 4, recipe: 'bloom',   push: 600 },
+  /* 真相女神（2026-09-27 替换戒指盒，戒指盒那行留着当备选）：扛巨型「真相喷雾」从天上冲下来悬在女主左上方，
+     朝男生的脸喷 2.8 秒（crew.js TRUTH）。第一下档 4、之后每 0.25 秒轻补。档 4 原来靠 exec 的全场预警 + 1.8 倍体积
+     读出"贵"，她换成出场 1.4 秒全场压暗 + 名字条（truthIntro）。 */
+  truth:   { name: '真相女神', from: +1, style: 'crew',  crew: 'truth',  power: 4, recipe: 'truth', push: 600 },
   // 灭迹党（男方，在右，from=-1）
   /* 香蕉（2026-09-26 替换瓜子）：一次礼物三根、隔 0.5 秒一根（gap），瞄女生的脸（aim），碰撞点也是脸
      （穿过手臂、头发边，贴到脸上才爆）；砸中是白色爆点，脸上留下白点（stain，见 stainAt）。飞行 0.55s，spin = π/0.55。 */
@@ -1848,7 +1852,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     onHit: (x, y, first) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE.pepper, x),
   });
 
-  /* 真相喷雾（闺蜜第三个形象，crew.js TRUTH）→ 同样瞄男生的脸，落点同平衡车闺蜜。
+  /* 真相女神（档 4 左，crew.js TRUTH）→ 同样瞄男生的脸，落点同平衡车闺蜜。
      perch：她悬停时脚底在屏幕哪（没转之前；她整个人绕扛罐的肩膀转，肩膀在脚底正上方 388×s）。
      定这两个数的依据是肩膀的位置：肩膀在 (200, GROUND−541)，到男生脸的连线往下斜 ~0.3 rad ——
      罐子从女主头顶上方压过去（罐底离她头顶还有 ~100），腿往左后方甩，靴子扫过女主长发的外沿、碰不到她的脸。
@@ -1866,7 +1870,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     front: () => null,
     onArrive: (x, y, s) => RECIPE.truth.arrive(x, y, s),
     onSplash: (x, y) => RECIPE.truth.drip(x, y, -1),
-    onHit: (x, y, first) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE.truth, x),
+    onHit: (x, y, first) => impact(-1, y, first ? GIFT.truth.power : 1, RECIPE.truth, x),
   });
 
   /* 长卷背景与姿势贴图，都由 v14/build.py 生成。world.json 是它们的说明书：
@@ -1986,6 +1990,40 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     drawWorld(bctx, rooms);
   }
 
+  /* 档 4 真相女神的出场（GIFT.truth）：档 4 要一眼读出"比闺蜜贵一档"，光靠她比闺蜜大一点读不出来。
+     ① 全场压暗 INTRO.dim：画在两个主角之后、她之前 —— 整个画面暗下去，只有她亮着，读成聚光灯打在她身上；
+     ② 名字条：屏幕上方一条暗色横幅，名字从左边滑进来。
+     时间全按她自己的时钟 b.t（冲下来 0.55 秒 + 开火前 0.18 秒 = 0.73，正好压暗到开火那一刻），
+     不另开计时器：续时间、离场召回都不会重播，只有新冲进来的那一次演。 */
+  const INTRO = { dim: 0.45, rise: 0.15, hold: 0.75, fade: 0.5,        // 压暗：多深、几秒压到底、压到几秒、几秒亮回来
+                  slide: 0.25, stay: 1.1, out: 0.3, y: 330, h: 112 };  // 名字条：滑进来几秒、停到几秒、几秒淡掉、中线 y、条高
+  const introT = () => { const b = Truth.peek()[0]; return b ? b.t : 1e9; };
+  function drawIntroDim(c) {
+    const t = introT(), I = INTRO;
+    const k = t < I.rise ? t / I.rise : t < I.hold ? 1 : Math.max(0, 1 - (t - I.hold) / I.fade);
+    if (k <= 0) return;
+    c.fillStyle = `rgba(8,14,10,${(I.dim * k).toFixed(3)})`;
+    c.fillRect(-60, -60, W + 120, H + 120);                             // 多铺一圈：震屏时边上不漏亮
+  }
+  function drawIntroName(c) {
+    const t = introT(), I = INTRO;
+    if (t >= I.stay + I.out) return;
+    const a = t < I.stay ? 1 : 1 - (t - I.stay) / I.out;
+    const u = Math.min(1, t / I.slide), e = 1 - Math.pow(1 - u, 3);
+    const x = W / 2 - (1 - e) * W;                                      // 从左边滑进来（她也是从左上冲进来的）
+    c.save();
+    c.globalAlpha = a;
+    c.fillStyle = 'rgba(8,20,10,0.62)';
+    c.fillRect(0, I.y - I.h / 2, W * e, I.h);                           // 横幅跟着字一起从左边拉出来
+    c.fillStyle = 'rgb(156,238,96)';
+    c.fillRect(0, I.y - I.h / 2, W * e, 4); c.fillRect(0, I.y + I.h / 2 - 4, W * e, 4);
+    c.font = '900 76px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
+    c.lineWidth = 12; c.strokeStyle = 'rgb(20,70,30)'; c.strokeText(GIFT.truth.name, x, I.y);
+    c.fillStyle = 'rgb(214,255,150)'; c.fillText(GIFT.truth.name, x, I.y);
+    c.restore();
+  }
+
   function renderActors() {
     const ox = Particles.off.x, oy = Particles.off.y;
     cctx.clearRect(0, 0, W, H);
@@ -1996,6 +2034,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     for (const it of crew) if (!it.front) it.draw(cctx);
     actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(cctx);
+    drawIntroDim(cctx);                  // 档 4 出场压暗：主角都暗下去，画在后面的她是亮的
     for (const it of crew) if (it.front) it.draw(cctx);
     cctx.restore();
   }
@@ -2015,7 +2054,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* 结算全屏接管：演出图铺满整幅，距离条不再画。结果已经写在画面里
        （谁在抡枕头、谁跪着哭），再摆一遍是重复。 */
     if (S.phase === 'over') Result.draw(fctx);
-    else drawHUD(fctx);
+    else { drawIntroName(fctx); drawHUD(fctx); }
     Particles.drawFlash(fctx, W, H);
   }
 
@@ -2107,8 +2146,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     o.fillStyle = '#0c0e12'; o.fillRect(0, 0, out.width, out.height);
 
     // ?ammoy=aim：不钉高度，让瞄部位的礼物（香蕉瞄脸、口红瞄腰腿）按实际逻辑瞄
-    /* ?buddyn=3 一次叫几个；?bestie=0|1 闺蜜强制出哪个成员（0 平衡车、1 真相喷雾），不给就随机 */
-    if (g.style === 'crew') for (let k = +(Q.get('buddyn') || 1); k > 0; k--) CREW[g.crew].summon(Q.has('bestie') ? +Q.get('bestie') : undefined);
+    /* ?buddyn=3 一次叫几个；?skin=0|1|2 强制出哪个形象（cfg.skins 下标），不给就挑空着的 */
+    if (g.style === 'crew') for (let k = +(Q.get('buddyn') || 1); k > 0; k--) CREW[g.crew].summon(Q.has('skin') ? +Q.get('skin') : undefined);
     else if (g.style === 'rain') RAIN[g.rain].summon();
     else Ammo.launch(g, Q.get('ammoy') === 'aim' ? null : clamp(+(Q.get('ammoy') || 560), 300, 960), { gift: true });
     let el = 0;
