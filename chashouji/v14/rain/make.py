@@ -1,4 +1,6 @@
 """榴莲 + 高跟鞋雨（女生档 2，替换抱枕）的两张掉落物贴图：品红底原图 → 抠像、裁边、缩放。
+原图用 Q 版（durian_q.png / heel_q.png：圆滚滚、圆钝的刺、矮胖的鞋 + 蝴蝶结、粗描边贴纸风，用户要"再 Q 版一点"）；
+写实版 durian_src.png / heel_src.png 留着当备选。heel_q.png 生图直接出了透明底，load_cut 直接用它的 alpha。
 用法：python3 v14/rain/make.py
 
 输出 web/assets/items/：
@@ -13,7 +15,7 @@ from build import load_cut, edge_extend
 
 HERE = os.path.dirname(__file__)
 OUT = os.path.join(HERE, '../../web/assets/items/rain_%s.webp')
-DURIAN_PX, HEEL_PX = 240, 220           # 输出贴图宽
+DURIAN_PX, HEEL_PX = 220, 220           # 输出贴图宽
 
 
 def cut(name, width):
@@ -34,8 +36,8 @@ def recolor(im, fn):
     return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA')
 
 
-cut('durian_src.png', DURIAN_PX).save(OUT % 'durian', 'WEBP', quality=90, method=6)
-heel = cut('heel_src.png', HEEL_PX)
+cut('durian_q.png', DURIAN_PX).save(OUT % 'durian', 'WEBP', quality=90, method=6)
+heel = cut('heel_q.png', HEEL_PX)
 heel.save(OUT % 'heel_red', 'WEBP', quality=90, method=6)
 # 粉：红 → 亮玫粉（红通道保留明暗，蓝拉起来、绿稍抬）
 recolor(heel, lambda r, g, b: np.stack([r, g * 0.6 + r * 0.35, r * 0.75], -1)).save(OUT % 'heel_pink', 'WEBP', quality=90, method=6)

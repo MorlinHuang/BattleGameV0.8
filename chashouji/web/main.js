@@ -744,51 +744,24 @@ const RECIPE = {
     },
   },
 
-  /* 榴莲砸头（档 2 左，榴莲鞋雨里最重的那一下）：黄绿色的刺崩一地 + 一团往上飘的黄绿臭气 + 头上转几颗眩晕星。
-     环用深橄榄托底、亮黄绿在上（明亮底图上单独一圈亮色看不见）；刺是 chip 矢量三角碎片，墨线描边。 */
+  /* 榴莲砸头（档 2 左，榴莲鞋雨里重的那几下）：**白色**爆点（用户定的）—— 白闪 + 深灰蓝托底的白环 + 一圈白色碎块，
+     碎块墨线描边（白色在米色地板、浅绿墙上不描边就化掉，见 chashouji-fx）。东西本身砸中就消失，这一下要够大。 */
   durian: {
-    tint: [236, 240, 170],
+    tint: [255, 255, 255],
     burst(x, y, side, s) {
-      // 闪光压小压淡（a 0.9、r1 80 时整团亮黄盖住榴莲本身，读成炸了个灯泡）
-      Particles.spawn({ kind: 'dot', x, y, r: 12 * s, r1: 56 * s, life: 0.12, rgb: [240, 250, 150], a: 0.55 });
-      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 120 * s, life: 0.3, rgb: [92, 104, 20], lw: 8 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.3, rgb: [214, 226, 70], lw: 4 * s });
-      for (let i = 0; i < Math.round(14 * s); i++) {                 // 崩飞的刺
-        const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.8, sp = (260 + Math.random() * 420) * s, d = (8 + Math.random() * 8) * s;
-        Particles.spawn({ kind: 'chip', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-                          g: 1400, drag: 0.98, life: 0.45 + Math.random() * 0.35, w: d, h: d * 1.6,
-                          rot: Math.random() * 6.28, vrot: (Math.random() - 0.5) * 20,
-                          rgb: i % 3 ? [196, 206, 60] : [120, 140, 30], edge: INK, lw: 1.6, a: 1 });
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 90 * s, life: 0.16, rgb: [255, 255, 255], a: 0.9 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 130 * s, life: 0.3, rgb: [84, 92, 112], lw: 8 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 126 * s, life: 0.3, rgb: [255, 255, 255], lw: 4.5 * s });
+      for (let i = 0; i < Math.round(16 * s); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 3.4, sp = (260 + Math.random() * 440) * s, d = (7 + Math.random() * 8) * s;
+        Particles.spawn({ kind: 'chip', shape: 'pearl', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                          g: 1300, drag: 0.98, life: 0.4 + Math.random() * 0.35, w: d, h: d, rot: 0, vrot: 0,
+                          rgb: i % 3 ? [255, 255, 255] : [226, 232, 240], edge: INK, lw: 1.6, a: 1 });
       }
-      for (let i = 0; i < Math.round(6 * s); i++) {                  // 臭气：慢慢往上飘、胀开、淡掉
-        Particles.spawn({ kind: 'soft', x: x + (Math.random() - 0.5) * 50 * s, y: y - 10, vx: (Math.random() - 0.5) * 60,
-                          vy: -60 - Math.random() * 80, drag: 0.6, g: 0, r: 14 * s, r1: (46 + Math.random() * 24) * s,
-                          life: 0.9 + Math.random() * 0.5, rgb: i % 2 ? [190, 210, 70] : [150, 170, 50], a: 0.35 });
-      }
-      RECIPE.star.burst(x, y - 20, side, 0.5 * s);                   // 眩晕星
-    },
-  },
-
-  /* 高跟鞋砸头（档 1 左，榴莲鞋雨里的七只鞋）：鞋跟"咔"一下 —— 小而硬：一个白点、深红托底的红环、几道火星。
-     dust：落空的鞋砸在地板上，扬一小撮米灰的灰。 */
-  heel: {
-    tint: [255, 200, 200],
-    burst(x, y, side, s) {
-      const k = 0.5 + s;
-      Particles.spawn({ kind: 'dot', x, y, r: 12 * k, r1: 54 * k, life: 0.14, rgb: [255, 220, 220], a: 0.95 });
-      Particles.spawn({ kind: 'ring', x, y, r: 6 * k, r1: 76 * k, life: 0.24, rgb: [130, 20, 36], lw: 7 * k });
-      Particles.spawn({ kind: 'ring', x, y, r: 6 * k, r1: 74 * k, life: 0.24, rgb: [255, 90, 100], lw: 3.5 * k });
-      for (let i = 0; i < Math.round(8 * k); i++) {
-        const a = -Math.PI / 2 + (Math.random() - 0.5) * 3, sp = (260 + Math.random() * 380) * k;
+      for (let i = 0; i < Math.round(8 * s); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 3.2, sp = (320 + Math.random() * 420) * s;
         Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-                          g: 900, drag: 0.985, life: 0.14 + Math.random() * 0.16, rgb: [255, 150, 120], lw: 1.8 + Math.random() * 1.6 });
-      }
-    },
-    dust(x, y) {
-      for (let i = 0; i < 5; i++) {
-        Particles.spawn({ kind: 'soft', x: x + (Math.random() - 0.5) * 30, y: y - 4, vx: (Math.random() - 0.5) * 160,
-                          vy: -30 - Math.random() * 60, drag: 0.85, g: 0, r: 6, r1: 22 + Math.random() * 10,
-                          life: 0.4 + Math.random() * 0.2, rgb: [196, 178, 150], a: 0.45 });
+                          g: 900, drag: 0.985, life: 0.16 + Math.random() * 0.18, rgb: [255, 255, 255], lw: 2 + Math.random() * 2 * s });
       }
     },
   },
@@ -1005,6 +978,38 @@ const SHOP = {
 // 档 3 的两个帮手角色（crew.js），GIFT[..].crew 指到这里
 const CREW = { buddy: Buddy, bestie: Bestie };
 
+/* 高跟鞋砸头（档 1 左，榴莲鞋雨里的四只鞋）：爆点颜色跟鞋走（用户定的）—— 鞋跟"咔"一下，小而硬：
+   亮色闪 + 深色托底的环 + 几颗描边碎块 + 火星。三种颜色同一个形，只换 [亮色, 深色托底]；
+   黑鞋的"亮色"给中灰（黑的闪在明亮底图上是个洞），深色托底用近黑。 */
+const HEEL_COLORS = {
+  red:   [[255, 86, 96], [130, 20, 36]],
+  pink:  [[255, 120, 196], [140, 30, 96]],
+  black: [[150, 140, 156], [30, 26, 34]],
+};
+function heelRecipe([hi, lo]) {
+  return {
+    tint: hi,
+    burst(x, y, side, s) {
+      const k = 0.5 + s;
+      Particles.spawn({ kind: 'dot', x, y, r: 12 * k, r1: 60 * k, life: 0.14, rgb: hi, a: 0.85 });
+      Particles.spawn({ kind: 'ring', x, y, r: 6 * k, r1: 86 * k, life: 0.26, rgb: lo, lw: 7 * k });
+      Particles.spawn({ kind: 'ring', x, y, r: 6 * k, r1: 84 * k, life: 0.26, rgb: hi, lw: 3.5 * k });
+      for (let i = 0; i < Math.round(10 * k); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 3.2, sp = (220 + Math.random() * 400) * k, d = (5 + Math.random() * 6) * k;
+        Particles.spawn({ kind: 'chip', shape: 'pearl', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                          g: 1100, drag: 0.98, life: 0.35 + Math.random() * 0.3, w: d, h: d, rot: 0, vrot: 0,
+                          rgb: i % 3 ? hi : lo, edge: INK, lw: 1.4, a: 1 });
+      }
+      for (let i = 0; i < Math.round(6 * k); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 3, sp = (260 + Math.random() * 380) * k;
+        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                          g: 900, drag: 0.985, life: 0.14 + Math.random() * 0.16, rgb: hi, lw: 1.8 + Math.random() * 1.6 });
+      }
+    },
+  };
+}
+const HEEL_RECIPE = Object.fromEntries(Object.entries(HEEL_COLORS).map(([k, c]) => [k, heelRecipe(c)]));
+
 const ITEM_OF = {
   L: [null, 'lipstick', 'durian', 'bestie',  'ringbox'],
   R: [null, 'banana',  'gamepad', 'buddy',   'photo'],
@@ -1041,8 +1046,8 @@ const GIFT = {
      r 34→28（用户：口红体积过大）；香蕉 34→40（用户：稍微变大）。贴图按新 r 重渲（screen_r），描边仍是 2.8px。 */
   lipstick:{ name: '口红',   from: +1, style: 'single', item: 'lipstick', r: 28, n: 3, gap: 0.5, aim: 'hip', stain: true,
              spin: 5.7, power: 1, recipe: 'rouge',   push: 1 },
-  /* 榴莲鞋雨（2026-09-27 替换抱枕）：男生头顶上方画外掉下一个榴莲、七只高跟鞋（rain.js），砸头的每一下爆一次：
-     榴莲档 2（重，带顿帧）、鞋档 1。抱枕那行留着当备选。 */
+  /* 榴莲鞋雨（2026-09-27 替换抱枕）：男生头顶上方画外掉下 2~3 个榴莲、4 只高跟鞋（rain.js），砸头的每一下爆一次
+     就消失：榴莲档 2（重，带顿帧，白色爆点）、鞋档 1（爆点跟鞋的颜色）。抱枕那行留着当备选。 */
   durian:  { name: '榴莲鞋雨', from: +1, style: 'rain', power: 2, recipe: 'durian', push: 20 },
   pillow:  { name: '抱枕',   from: +1, style: 'single', item: 'pillow',  r: 56,       spin: 5.7, power: 2, recipe: 'feather', push: 20 },
   bouquet: { name: '花束',   from: +1, style: 'heavy',  item: 'bouquet', r: 76,       spin: 6.7, power: 3, recipe: 'petal',   push: 230 },
@@ -1700,12 +1705,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     onHit: (x, y, first) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE.water, x),
   });
   /* 榴莲鞋雨（查岗党档 2）→ 男生的头。head = 他的脸 [x, y, 半径]（跪下、被拖倒都跟着走）；
-     砸中按礼物分量 power 爆（榴莲档 2、鞋档 1），落空的鞋在地板上溅一小撮灰。 */
+     砸中按礼物分量 power 爆（榴莲档 2、鞋档 1），爆点颜色跟着东西走：榴莲白、鞋红 / 粉 / 黑。 */
   Rain.init({
-    W, H, ground: () => GROUND + FX.bob,
     head: () => faceOf('b'),
-    onHit: (kind, x, y, power) => impact(-1, y, power, RECIPE[kind === 'durian' ? 'durian' : 'heel'], x),
-    onLand: (kind, x, y) => RECIPE.heel.dust(x, y),
+    onHit: (kind, col, x, y, power) => impact(-1, y, power, kind === 'durian' ? RECIPE.durian : HEEL_RECIPE[col], x),
   });
   /* 闺蜜（查岗党）→ 男生的脸。落点在脸的**中上部**（眼睛那一带）：x 往女生那边 0.3 个半径，y 从脸心往上 0.55
      到往下 0.05 个半径乱晃；他跪下、趴下，脸跟着走。
