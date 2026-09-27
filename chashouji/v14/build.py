@@ -102,6 +102,18 @@ def cutout(path, lo=60, hi=150):
     return np.clip(rgb, 0, 255), alpha
 
 
+def load_cut(path):
+    """原图 → (rgb, alpha)。自带透明通道的（生图有时直接出透明底）直接用它；否则按品红幕布抠。
+    不能把透明底铺回品红再抠：keyed / 去溢色把偏品红的颜色（粉色水枪、粉 / 淡紫平衡车、紫衬衫）当成幕布，
+    抠成半透明、洗成土褐色（哥们 3 号第一版）。"""
+    im = Image.open(path)
+    if im.mode == 'RGBA':
+        a = np.array(im).astype(np.float32)
+        if a[..., 3].min() < 255:
+            return a[..., :3], a[..., 3] / 255
+    return cutout(path)
+
+
 def edge_extend(rgb, al, iters=10):
     rgb = rgb.copy()
     mask = al > 0.03

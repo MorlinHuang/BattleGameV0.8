@@ -1,7 +1,10 @@
 """闺蜜立绘：品红底原图 → 抠像、裁边、缩放 → 切成三层，打印 foot / muzzle / 两个转轴（输出贴图像素）。
-用法：python3 v14/bestie/make.py [原图，默认 src2.png]
+用法：python3 v14/bestie/make.py [原图 编号]，默认 src2.png 1；三个形象：src2/3/4.png → bestie1/2/3_arm|up|lo.webp
 
 src2.png = src1.png 改图把喷雾罐放大到小灭火器那么大（用户要"更大更夸张"），人和平衡车没动。
+src3（黑短发、条纹比基尼、粉平衡车）、src4（金发双马尾、黑比基尼、紫平衡车）是 src2 改图换人，姿势和罐子没动 ——
+实测喷口、肩、手臂在原位 ±2 像素，三个共用下面这套常数和同一个裁边框 CROP（三张图外框的并集：src4 的双马尾
+往左、往上多出一截）。**裁边不能按每张图自己的外框**：外框一变，输出贴图里所有点都跟着挪。
 
 输出（同一张画布，叠起来就是原图），画的顺序 arm → up → lo：
   web/assets/world/bestie_arm.webp  伸直的右臂 + 手 + 喷雾罐 —— 绕肩关节 PIVOT 转，喷口对准男生的脸
@@ -18,11 +21,12 @@ import os, sys
 import numpy as np
 from PIL import Image
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from build import cutout, edge_extend
+from build import load_cut, edge_extend
 
 HERE = os.path.dirname(__file__)
 SRC = os.path.join(HERE, sys.argv[1] if len(sys.argv) > 1 else 'src2.png')
-OUT = os.path.join(HERE, '../../web/assets/world/bestie_%s.webp')
+OUT = os.path.join(HERE, '../../web/assets/world/bestie%s_%%s.webp' % (sys.argv[2] if len(sys.argv) > 2 else '1'))
+CROP = (332, 5, 1065, 1221)             # 原图裁边框 x0, y0, x1, y1（三个形象共用）
 K = 0.4
 ARM_X0, ARM_X1, ARM_Y = 630, 660, 300   # 手臂层从 x0 起、身体层到 x1 为止（原图像素），都只管 y ≤ ARM_Y
 ARM_TOP, HAND_X = 222, 700              # 肩膀附近只取 y ≥ ARM_TOP 的几行（再往上是脸边那缕头发）；
@@ -36,10 +40,9 @@ WAIST = (505, 672)                      # 这一行身体的左右端：肚皮�
 BELLY = 26                              # 肚皮往下补多少行（原图像素；上身前倾 ±0.25 rad，腰两端上下错开 ~20）
 WAIST_PIVOT = (590, 505)                # 上身的转轴：腰正中
 
-rgb, al = cutout(SRC)
+rgb, al = load_cut(SRC)
 rgb = edge_extend(rgb, al)
-ys, xs = np.nonzero(al > 0.5)
-x0, x1, y0, y1 = xs.min() - 4, xs.max() + 5, ys.min() - 4, ys.max() + 5
+x0, y0, x1, y1 = CROP
 px = np.dstack([rgb, al * 255]).astype(np.uint8)
 H, W = al.shape
 yy, xx = np.mgrid[:H, :W]

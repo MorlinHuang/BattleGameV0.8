@@ -1,5 +1,10 @@
 """哥们立绘：品红底原图 → 抠像、裁边、缩放 → 在腰上切成两层，打印 foot / muzzle / pivot。
-用法：python3 v14/buddy/make.py [原图，默认 skate1.png]
+用法：python3 v14/buddy/make.py [原图 编号]，默认 skate1.png 1；三个形象：skate1/2/3.png → buddy1/2/3_up|lo.webp
+
+skate2、skate3 是 skate1 改图换人（发型、脸、肤色、衣服、滑板配色），姿势和枪没动 —— 实测枪口、腰、轮子都在
+原位 ±2 像素，所以三个共用同一套 CUT / WAIST / PIVOT 和同一个裁边框 CROP（按 skate1 裁；skate3 的金发
+高出 6 像素，被切掉的不到 1 个输出像素）。**裁边不能按每张图自己的外框**：头发高低不同，外框一变，
+输出贴图里所有点都跟着挪，三个人的 foot / muzzle / pivot 就不一样了。
 
 输出（同一张画布大小，叠起来就是原图）：
   web/assets/world/buddy_up.webp  上半身：头、躯干、双臂、水枪 —— 绕 pivot 转，让枪管对准水流
@@ -12,21 +17,21 @@ import os, sys
 import numpy as np
 from PIL import Image
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from build import cutout, edge_extend
+from build import load_cut, edge_extend
 
 HERE = os.path.dirname(__file__)
 SRC = os.path.join(HERE, sys.argv[1] if len(sys.argv) > 1 else 'skate1.png')
-OUT = os.path.join(HERE, '../../web/assets/world/buddy_%s.webp')
+OUT = os.path.join(HERE, '../../web/assets/world/buddy%s_%%s.webp' % (sys.argv[2] if len(sys.argv) > 2 else '1'))
+CROP = (33, 26, 1218, 1211)   # 原图裁边框 x0, y0, x1, y1（三个形象共用）
 K = 0.37          # 缩放：按沙滩裤宽度对齐旧立绘（旧 src1 ×0.34），人一样大
 CUT = 186         # 上下两层的分界 y：略低于裤腰上沿，两层在裤腰那几行重叠
 WAIST = (226, 309)  # 肚皮往下补的横向范围（裤腰的左右端）
 BELLY = 18        # 肚皮往下补多少行
 PIVOT = (266, 190)  # 上半身的转轴：裤腰正中
 
-rgb, al = cutout(SRC)
+rgb, al = load_cut(SRC)
 rgb = edge_extend(rgb, al)
-ys, xs = np.nonzero(al > 0.5)
-x0, x1, y0, y1 = xs.min() - 4, xs.max() + 5, ys.min() - 4, ys.max() + 5
+x0, y0, x1, y1 = CROP
 im = Image.fromarray(np.dstack([rgb, al * 255]).astype(np.uint8)[y0:y1, x0:x1], 'RGBA')
 im = im.resize((round(im.width * K), round(im.height * K)), Image.LANCZOS)
 px = np.array(im)

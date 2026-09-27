@@ -366,6 +366,7 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 ## 哥们（2026-09-26 替换奶茶，灭迹党档 3）
 - **档 3 两个帮手角色都在 crew.js**（2026-09-26 buddy.js 改写成工厂 `Crew(cfg)`）：`Buddy`（灭迹党哥们，face −1，水柱）、`Bestie`（查岗党闺蜜，face +1，防狼喷雾）。GIFT 里 `style:'crew', crew:'buddy'|'bestie'`，giveGift / ammostrip 走 `CREW[g.crew].summon()`；`?ammogift=bestie&buddyn=3`。
 - 每个帮手两层立绘：`rot` 绕 `pivot` 转（哥们腰以上 / 闺蜜伸直的手臂+喷雾罐），`fix` 不动、画在上面盖住接缝。闺蜜 `v14/bestie/make.py`：手臂层 = y≤300 且（x≥630 且 y≥222，或 x≥700），身体层切线处渐隐 12 像素；K=0.4 让头半径 = 女主 30。
+- **形象 skins**（2026-09-27）：哥们、闺蜜各 3 个（`buddy1~3_up|lo.webp` ← skate1~3.png；`bestie1~3_arm|up|lo.webp` ← src2~4.png），同姿势改图换人、make.py 用**固定裁边框 CROP**（不按各自外框，否则头发高低一变全部坐标挪）→ 共用 foot/muzzle/转轴。`spr.src` 模板 `%n`/`%k`；summon 挑场上没人用的形象。生图出透明底时 make.py 走 build.py `load_cut` 直接用 alpha —— 铺回品红再抠会把粉/紫色（水枪、平衡车、衬衫）抠坏。
 - **帮手分层**（2026-09-26）：`spr.body{src,pivot,k}`（绕腰转总仰角 k 份）、可选 `spr.arm{src,pivot}`（挂在 body 上绕肩转剩下的）、`spr.lo`（不动，画最上）；顺序 arm → body → lo。哥们 body k 1 无 arm；闺蜜 `src2.png`（罐子放大到小灭火器）三层 arm/up/lo，k 0.3。`cfg.anim`：pulse [0.42 按, 0.14 松]、kick [手臂上甩 0.12, 上身后仰 0.05, 衰减 10]、lean 0.08 喷时前探、bob [3, 2.6] 平衡车浮 —— 只转一条胳膊读成静帧。
 - 闺蜜落点取脸中上部（x f0−0.3r、y f1−0.55r~+0.05r），`front: () => null` 没中的雾直接散：男生被拖倒时胳膊横在下半张脸前，爆点全在胳膊上。
 - 闺蜜喷雾命中点 `fluid.snap 12`：收到脸上下 12 像素内（雾团判定宽 miss 60，按飞到的高度记会在头顶叠成烟柱）；手臂 `aim.lo -0.7`（-0.35 够不到男生被拖倒后的脸，雾从头顶飘过）。

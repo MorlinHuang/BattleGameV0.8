@@ -9,6 +9,8 @@
  * anim（可无）是闺蜜那种"呲—呲—"一段段按的喷法：按一下（pulse.on 秒）松一下（pulse.off 秒），
  * 每次按下手臂后坐往上一震（kick），上身喷的时候往前探（lean）；平衡车上人轻轻浮（bob）。
  * 只转一条胳膊、其余一动不动（闺蜜第一版）读成静帧。
+ * 形象 skins：每人三个（同一姿势改图换人，make.py 用同一个裁边框出图，所以 foot / muzzle / 转轴全都一样，
+ * 只换贴图）。贴图路径 spr.src 里 %n 换成形象编号、%k 换成层名。召唤时挑场上没人用的那个。
  *
  * **由落点反推枪口**：每帧看该打对方身上哪一点（o.target(u)），按喷出物的出口速度 V 和重力 G 反解要的
  * 仰角，转轴按转速上限 aim.rate 转过去、夹在 aim.lo~hi；喷出物**永远沿喷口此刻的方向、以 V 射出**。
@@ -27,9 +29,8 @@
 function Crew(cfg) {
   const { face, spr, aim: AIM, T } = cfg;       // face：-1 朝左（站右边），+1 朝右（站左边）
   const F = cfg.fluid;
-  const L = { arm: spr.arm && spr.arm.src, body: spr.body.src, lo: spr.lo };   // 要加载的几层
   const A = cfg.anim || null;
-  let img = null, o = {};                        // img：{ arm, body, lo } 三张图（arm 可无）
+  let img = null, o = {};                        // img[形象]：{ arm, body, lo }（arm 可无）
   const bs = [], ps = [];                        // 在场的人、喷出去的东西（水滴 / 雾团）
 
   function init(opt) { o = opt; }
@@ -42,9 +43,10 @@ function Crew(cfg) {
       i.onerror = () => ok(null);
       i.src = src + (v ? '?v=' + encodeURIComponent(v) : '');
     });
-    const ks = Object.keys(L).filter(k => L[k]);
-    return Promise.all(ks.map(k => one(L[k]))).then((ims) => {
-      if (ims.every(Boolean)) { img = {}; ks.forEach((k, i) => { img[k] = ims[i]; }); }
+    const ks = ['arm', 'body', 'lo'].filter(k => spr[k]), src = (k, n) => spr.src.replace('%n', n).replace('%k', spr[k].src);
+    return Promise.all(cfg.skins.map(n => Promise.all(ks.map(k => one(src(k, n)))))).then((sets) => {
+      if (sets.every(ims => ims.every(Boolean)))
+        img = sets.map(ims => { const s = {}; ks.forEach((k, i) => { s[k] = ims[i]; }); return s; });
       return !!img;
     });
   }
@@ -75,9 +77,12 @@ function Crew(cfg) {
     /* 远近：每人占一排（rows 里挑没人的），远排小、脚底高 —— 喷口上下错开，几股不会从同一点分叉 */
     const free = cfg.rows.filter(R => !bs.some(b => b.s >= R[0] && b.s <= R[1]));
     const pool = free.length ? free : cfg.rows, R = pool[Math.floor(Math.random() * pool.length)];
+    /* 形象：挑一个场上没人用的（三个形象、最多三个人，同时在场的一定各不相同） */
+    const skins = cfg.skins.map((_, i) => i), unused = skins.filter(i => !bs.some(b => b.skin === i));
+    const sk = (unused.length ? unused : skins)[Math.floor(Math.random() * (unused.length || skins.length))];
     bs.push({ t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
               r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
-              pt: 0, kick: 0, lean: 0 });
+              pt: 0, kick: 0, lean: 0, skin: sk });
     bs.sort((a, b) => a.s - b.s);          // 远的先画
   }
 
@@ -87,7 +92,7 @@ function Crew(cfg) {
      横向按**喷口**排：o.zone() = [喷口最多伸到哪（靠对方那边）, 人的外沿最多到哪（可以出画一点）]，
      r=0 喷口顶到第一个数，r=1 外沿顶到第二个数。 */
   function pose(b) {
-    const s = b.s, [near, edge] = o.zone(), wid = img ? img.lo.width : 400;
+    const s = b.s, [near, edge] = o.zone(), wid = img ? img[0].lo.width : 400;
     let far = face < 0 ? edge - (wid - spr.muzzle[0]) * s : edge + spr.muzzle[0] * s;
     far = face < 0 ? Math.max(near, far) : Math.min(near, far);
     const x1 = near + (far - near) * b.r + (spr.foot[0] - spr.muzzle[0]) * s;
@@ -244,14 +249,14 @@ function Crew(cfg) {
   function drawOne(ctx, b) {
     const p = pose(b), [x, y, s] = p, [bt, at_] = angles(b, b.aim);
     const X = x - spr.foot[0] * s, Y = y - spr.foot[1] * s;
-    const put = (im) => ctx.drawImage(im, X, Y, im.width * s, im.height * s);
+    const I = img[b.skin], put = (im) => ctx.drawImage(im, X, Y, im.width * s, im.height * s);
     const spin = (q, th) => { const [cx, cy] = at(p, q); ctx.translate(cx, cy); ctx.rotate(-face * th); ctx.translate(-cx, -cy); };
     ctx.save();
     spin(spr.body.pivot, bt);
-    if (img.arm) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(img.arm); ctx.restore(); }
-    put(img.body);
+    if (I.arm) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
+    put(I.body);
     ctx.restore();
-    put(img.lo);
+    put(I.lo);
   }
 
   const active = () => bs.length > 0;
@@ -343,7 +348,7 @@ function drawMist(ctx, ps) {
 
 /* ---- 两个帮手的配置 ---- */
 
-/* 哥们：v14/buddy/skate1.png 踩滑板端水枪。rot = 腰以上（绕裤腰正中转），fix = 裤子、腿、滑板。
+/* 哥们：v14/buddy/skate1~3.png 踩滑板端水枪。rot = 腰以上（绕裤腰正中转），fix = 裤子、腿、滑板。
    aim：最低 lo（再往下弯就不是端枪是鞠躬了）、最高 hi，rate 每秒最多转多少（瞄点跳过手机那行是跳变，
    枪不能瞬移），follow 瞄点平滑跟随的快慢。
    sweep：瞄点在对方身上 u=0.5 附近两个不公约的正弦叠起来乱扫；w 要跟水在空中的时间（~0.35s）比，
@@ -352,8 +357,9 @@ function drawMist(ctx, ps) {
    fluid：出口速度 V、重力 G，每人每秒 rate 滴；miss、snap 见 hitTest；hitEvery 每人多久补一下命中反馈。 */
 const Buddy = Crew({
   face: -1,
-  spr: { body: { src: 'assets/world/buddy_up.webp', pivot: [266, 190], k: 1 }, lo: 'assets/world/buddy_lo.webp',
+  spr: { src: 'assets/world/buddy%n_%k.webp', body: { src: 'up', pivot: [266, 190], k: 1 }, lo: { src: 'lo' },
          foot: [260, 436], muzzle: [2, 78] },
+  skins: [1, 2, 3],                 // skate1 棕发护目镜花短裤红滑板 / skate2 反戴红帽黑短裤蓝滑板 / skate3 金发花衬衫迷彩裤黄滑板
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
   max: 3, gap: 0.3,
   rows: [[0.74, 0.80], [0.66, 0.71], [0.58, 0.63]],
@@ -364,7 +370,7 @@ const Buddy = Crew({
            draw: drawStream },
 });
 
-/* 闺蜜：v14/bestie/src2.png 比基尼、踩平衡车、单手伸直举一罐小灭火器那么大的防狼喷雾。
+/* 闺蜜：v14/bestie/src2~4.png 比基尼、踩平衡车、单手伸直举一罐小灭火器那么大的防狼喷雾。
    arm = 伸直的右臂 + 喷雾罐（绕肩），body = 腰以上（绕腰，转总仰角的 k 份：跟着往下瞄时上身一起前倾），lo = 腰以下 + 平衡车。
    只瞄男生的脸（喷雾就是冲眼睛去的），所以 sweep 幅度小、不分倒地部位（zone: null）。
    aim.lo -0.7：男生被拖倒后脸贴着地，-0.35 压不下去，雾从他头顶上飘过去。
@@ -374,9 +380,10 @@ const Buddy = Crew({
    太浓（不透明度 0.5）三个人一起喷成一条橙色烟带，读成喷火器；太稀（rate 45、半径小）是一串分开的橙点。 */
 const MIST = {
   face: +1,
-  spr: { arm: { src: 'assets/world/bestie_arm.webp', pivot: [122, 100] },
-         body: { src: 'assets/world/bestie_up.webp', pivot: [98, 197], k: 0.3 }, lo: 'assets/world/bestie_lo.webp',
-         foot: [108, 481], muzzle: [285, 15] },
+  spr: { src: 'assets/world/bestie%n_%k.webp', arm: { src: 'arm', pivot: [127, 103] },
+         body: { src: 'up', pivot: [103, 200], k: 0.3 }, lo: { src: 'lo' },
+         foot: [113, 483], muzzle: [290, 18] },
+  skins: [1, 2, 3],                 // src2 棕色高马尾红比基尼白平衡车 / src3 黑短发条纹比基尼粉平衡车 / src4 金发双马尾黑比基尼紫平衡车
   anim: { pulse: [0.42, 0.14], kick: [0.12, 0.05, 10], lean: 0.08, bob: [3, 2.6] },
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
   max: 3, gap: 0.3,
