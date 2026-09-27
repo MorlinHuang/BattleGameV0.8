@@ -1995,9 +1995,12 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      ② 名字条：屏幕上方一条暗色横幅，名字从左边滑进来。
      时间全按她自己的时钟 b.t（冲下来 0.55 秒 + 开火前 0.18 秒 = 0.73，正好压暗到开火那一刻），
      不另开计时器：续时间、离场召回都不会重播，只有新冲进来的那一次演。 */
-  const INTRO = { dim: 0.45, rise: 0.15, hold: 0.75, fade: 0.5,        // 压暗：多深、几秒压到底、压到几秒、几秒亮回来
-                  slide: 0.25, stay: 1.1, out: 0.3, y: 330, h: 112 };  // 名字条：滑进来几秒、停到几秒、几秒淡掉、中线 y、条高
+  const INTRO = { dim: 0.45, rise: 0.15, hold: 1.1, fade: 0.35,        // 压暗：多深、几秒压到底、压到几秒（首击在 1.03~1.27s，压到首击后）、几秒亮回来
+                  delay: 0.25, slide: 0.25, stay: 1.1, out: 0.3,        // 名字条：她俯冲的 0.25s 先不出（免得盖住头和罐子）、滑进来几秒、停到几秒、几秒淡掉
+                  y: 330, h: 112 };                                     // 名字条中线 y、条高
   const introT = () => { const b = Truth.peek()[0]; return b ? b.t : 1e9; };
+  /* 名字条的计时：出场从 delay 起算；她在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */
+  const nameT = () => { const b = Truth.peek()[0]; return !b ? 1e9 : b.renew ? b.t - b.renewT : b.t - INTRO.delay; };
   function drawIntroDim(c) {
     const t = introT(), I = INTRO;
     const k = t < I.rise ? t / I.rise : t < I.hold ? 1 : Math.max(0, 1 - (t - I.hold) / I.fade);
@@ -2006,8 +2009,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     c.fillRect(-60, -60, W + 120, H + 120);                             // 多铺一圈：震屏时边上不漏亮
   }
   function drawIntroName(c) {
-    const t = introT(), I = INTRO;
-    if (t >= I.stay + I.out) return;
+    const t = nameT(), I = INTRO, b = Truth.peek()[0];
+    if (t < 0 || t >= I.stay + I.out) return;
+    const name = GIFT.truth.name + (b.renew ? ' ×' + (b.renew + 1) : '');
     const a = t < I.stay ? 1 : 1 - (t - I.stay) / I.out;
     const u = Math.min(1, t / I.slide), e = 1 - Math.pow(1 - u, 3);
     const x = W / 2 - (1 - e) * W;                                      // 从左边滑进来（她也是从左上冲进来的）
@@ -2019,8 +2023,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     c.fillRect(0, I.y - I.h / 2, W * e, 4); c.fillRect(0, I.y + I.h / 2 - 4, W * e, 4);
     c.font = '900 76px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
-    c.lineWidth = 12; c.strokeStyle = 'rgb(20,70,30)'; c.strokeText(GIFT.truth.name, x, I.y);
-    c.fillStyle = 'rgb(214,255,150)'; c.fillText(GIFT.truth.name, x, I.y);
+    c.lineWidth = 12; c.strokeStyle = 'rgb(20,70,30)'; c.strokeText(name, x, I.y);
+    c.fillStyle = 'rgb(214,255,150)'; c.fillText(name, x, I.y);
     c.restore();
   }
 

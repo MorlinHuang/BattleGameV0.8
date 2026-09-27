@@ -64,6 +64,9 @@ function Crew(cfg) {
     return best;
   }
 
+  /* 续上的这一份也是一次完整送礼：下一发按礼物力度打（first），并记下第几份、在她的第几秒续上（名字条据此重播「×N」） */
+  function renew(b) { b.first = true; b.renew = (b.renew || 0) + 1; b.renewT = b.t; }
+
   /* sk（可无）：指定形象编号（cfg.skins 的下标，越界夹到两头）；不给就挑场上没人用的。诊断参数 ?skin= 用它。 */
   function summon(sk) {
     if (sk != null) sk = Math.max(0, Math.min(cfg.skins.length - 1, sk | 0));
@@ -71,7 +74,7 @@ function Crew(cfg) {
     if (bs.length >= cfg.max) {
       if (staying.length) {               // 满了：剩余时间最短的续一段
         const b = staying.reduce((a, c) => (sprayEnd(a) - a.t <= sprayEnd(c) - c.t ? a : c));
-        b.spray += T.spray;
+        b.spray += T.spray; renew(b);
         return;
       }
       const far = bs.reduce((a, c) => (a.t >= c.t ? a : c));
@@ -79,7 +82,7 @@ function Crew(cfg) {
         const y = hoverPose(far)[1], vy = (hoverPose({ ...far, t: far.t + 1e-3 })[1] - y) / 1e-3;   // 被叫住时的高度、竖直速度
         far.spray = far.t - T.enter + T.spray;
         far.back = 0; far.back = y - hoverPose(far)[1]; far.backV = vy; far.backT = far.t;   // 先清掉上一次召回的余量再量
-        return;
+        renew(far); return;
       }
       bs.splice(bs.indexOf(far), 1);      // 全在离场：顶掉走得最远的（站地的往画外溜，被顶掉看不出来）
     }
