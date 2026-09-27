@@ -219,7 +219,9 @@ def enlarge_phone(rgb, al, ph):
 # 长度单位都是原图像素（贴图最后 ×SCALE≈0.44 上屏）。界面是固定图案、不随机，53 张帧一模一样，连播不闪。
 SCREEN = {'w': 0.86, 'h': 0.8,                               # 屏幕占机身长 / 宽的比例（四周剩下的是黑边框）
           'mid': (250, 255, 255), 'edge': (150, 215, 255),   # 冷色渐变：中心发白 → 边缘淡蓝
-          'bar': (20, 200, 110), 'bar_h': 0.2,               # 顶栏：偏蓝的绿（跟真相喷雾的青柠 156,238,96 区分开）、占屏高
+          'bar': (20, 200, 110), 'bar_h': 0.12,              # 顶栏：偏蓝的绿（跟真相喷雾的青柠 156,238,96 区分开）、占竖屏高（转过来在女生那头，大半压在她拳头下）
+          'input_h': 0.1,                                    # 底部输入栏占竖屏高
+          'rows': [('them', 0.55), ('me', 0.45), ('them', 0.7), ('me', 0.5), ('them', 0.4), ('me', 0.6)],   # 气泡：哪边、占屏宽几成
           'me': (58, 190, 120), 'them': (255, 255, 255),     # 右边自己发的绿气泡 / 左边对方的白气泡，都不写字
           'input': (205, 212, 220)}                          # 底部输入栏
 GLOW = {'rgb': (80, 200, 255), 'grow': 9, 'blur': 20, 'a': 0.75}   # 光晕：机身轮廓外扩、高斯模糊、透明度，画在机身后面
@@ -227,7 +229,9 @@ HAND_LIT = {'range': 10, 'a': 0.3, 'rgb': (190, 235, 255)}                      
 
 
 def screen_tex(w, h):
-    """w×h 的聊天界面（横拿：上边是顶栏）。没有字、没有真实 App 的 logo，远看读出"在聊天"就够。"""
+    """w×h（宽 < 高）的竖屏聊天界面：顶栏在上、气泡上下排、输入栏在下。没有字、没有真实 App 的 logo，
+    远看读出"在聊天"就够。手机是被横着拽的，调用方把它整张转 90° 贴上去 —— 用户原话「聊天软件的方向在屏幕里
+    应该是竖的，现在是横的」：按横屏画（顶栏在长边、气泡横排）真实手机不会这样显示。"""
     S = SCREEN
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
     d = np.clip(np.hypot((xx - w / 2) / (w / 2), (yy - h / 2) / (h / 2)) / 1.2, 0, 1)[..., None]
@@ -235,17 +239,18 @@ def screen_tex(w, h):
     g = ImageDraw.Draw(im)
     bh = round(h * S['bar_h'])
     g.rectangle((0, 0, w, bh), fill=S['bar'])
-    r = bh * 0.32
-    g.ellipse((w * 0.2 - r, bh / 2 - r, w * 0.2 + r, bh / 2 + r), fill=(255, 255, 255))          # 头像
-    g.rounded_rectangle((w * 0.2 + r * 1.8, bh / 2 - r * 0.45, w * 0.55, bh / 2 + r * 0.45), r * 0.45, fill=(255, 255, 255))  # 名字条
-    ih = round(h * 0.14)
+    r = min(bh, w) * 0.28
+    g.ellipse((w * 0.18 - r, bh / 2 - r, w * 0.18 + r, bh / 2 + r), fill=(255, 255, 255))          # 头像
+    g.rounded_rectangle((w * 0.18 + r * 1.6, bh / 2 - r * 0.4, w * 0.62, bh / 2 + r * 0.4), r * 0.4, fill=(255, 255, 255))  # 名字条
+    ih = round(h * S['input_h'])
     g.rectangle((0, h - ih, w, h), fill=S['input'])
-    g.rounded_rectangle((w * 0.22, h - ih * 0.78, w * 0.78, h - ih * 0.22), ih * 0.28, fill=(250, 252, 255))
-    lh = (h - bh - ih) / 4                                    # 三条气泡：对方 / 自己 / 对方，中段两头会被拳头盖住，留在正中
-    for k, (side, ln) in enumerate([('them', 0.34), ('me', 0.3), ('them', 0.26)]):
-        y = bh + lh * (k + 0.55)
-        x0 = w * 0.2 if side == 'them' else w * (0.8 - ln)
-        g.rounded_rectangle((x0, y, x0 + w * ln, y + lh * 0.62), lh * 0.3, fill=S[side])
+    g.rounded_rectangle((w * 0.1, h - ih * 0.75, w * 0.9, h - ih * 0.25), ih * 0.25, fill=(250, 252, 255))
+    rows = S['rows']                                          # 气泡左白（对方）右绿（自己）上下排，占满中段：两头被拳头盖住
+    lh = (h - bh - ih) / len(rows)
+    for k, (side, ln) in enumerate(rows):
+        y = bh + lh * (k + 0.2)
+        x0 = w * 0.08 if side == 'them' else w * (0.92 - ln)
+        g.rounded_rectangle((x0, y, x0 + w * ln, y + lh * 0.6), min(lh, w) * 0.3, fill=S[side])
     return im
 
 
@@ -265,8 +270,9 @@ def light_phone(full, core, hand, rgba):
     base = Image.fromarray(glow, 'RGBA'); base.alpha_composite(full)
     # 亮屏：沿机身长轴贴，斜拿的跟着斜
     SS = 4                                                   # 4 倍大画、4 倍大转，再缩回来：原尺寸直接转，斜拿的边和气泡锯齿成一排点
-    tex = screen_tex(round(L * SCREEN['w']) * SS, round(Wd * SCREEN['h']) * SS).convert('RGBA')
-    tex = tex.rotate(-np.degrees(np.arctan2(u[1], u[0])), resample=Image.BICUBIC, expand=True)
+    tex = screen_tex(round(Wd * SCREEN['h']) * SS, round(L * SCREEN['w']) * SS).convert('RGBA')
+    # 竖屏界面转成横拿：逆时针 90°，顶栏落到左边女生那头；再跟着机身斜
+    tex = tex.rotate(90 - np.degrees(np.arctan2(u[1], u[0])), resample=Image.BICUBIC, expand=True)
     tex = tex.resize((round(tex.width / SS), round(tex.height / SS)), Image.LANCZOS)
     base.alpha_composite(tex, (round(c[0] - tex.width / 2), round(c[1] - tex.height / 2)))
     return np.array(base).astype(np.float32)
@@ -437,6 +443,34 @@ def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE):
     return meta, im, (cx / scale, foot / scale)
 
 
+# 房间接缝的过渡段（2026-09-27 用户：「卧室与两个房间连接之处，过度的特别不自然」）。
+# 三间房是分开生成的三张图，只"找门切开"硬拼：一条竖线从天花板切到画面最底、地板光影在同一列突变、
+# 门只剩半扇、门洞里透出的家具跟门外紧挨着的那套重复。每处接缝以接缝为中心取 960 宽（9:16）一段，
+# 中间一条竖带局部重绘成：有厚度的隔墙墙垛 + 左右门框都在的整扇门（门洞里只有暗的远景）+ 地板上一条
+# 门槛压条，两边地板各自的光影在压条处收住（bg/seam/：seam*_src 拼好的原样、seam*_mask 蒙版、seam*_gen 生成图）。
+# 只取竖带 [lo, hi]、两头 SEAM_FEATHER 渐变回原图，竖带外一个像素不动；房间宽度不变，world.json 的
+# rooms / center、距离条、判胜都不受影响。
+# seam0 右沿放宽到 770：生成图把梳妆台往右挪让出门的位置，在 680 就收会叠出两个半透明的梳妆台和门框；
+# 从 740 起生成图和原图逐列一致（平均差 < 5）。
+SEAM_W = 960
+SEAM_BAND = [(280, 770), (280, 680)]     # 每处接缝取生成图的哪一段（过渡段内的 x）
+SEAM_FEATHER = 25
+
+
+def seam_bridge(imgs):
+    """imgs：缩放到 H 高的三间房（原地改）。每处接缝把过渡段的竖带混进左右两张的边上。"""
+    half = SEAM_W // 2
+    for k, (lo, hi) in enumerate(SEAM_BAND):
+        a, b = imgs[k], imgs[k + 1]
+        cv = Image.new('RGB', (SEAM_W, H))
+        cv.paste(a.crop((a.width - half, 0, a.width, H)), (0, 0)); cv.paste(b.crop((0, 0, half, H)), (half, 0))
+        gen = Image.open(os.path.join(HERE, 'bg', 'seam', f'seam{k}_gen.png')).convert('RGB').resize((SEAM_W, H), Image.LANCZOS)
+        x = np.arange(SEAM_W)
+        w = np.clip(np.minimum(x - lo, hi - x) / SEAM_FEATHER, 0, 1)[None, :, None]
+        out = Image.fromarray((np.array(cv, np.float32) * (1 - w) + np.array(gen, np.float32) * w).clip(0, 255).astype(np.uint8))
+        a.paste(out.crop((0, 0, half, H)), (a.width - half, 0)); b.paste(out.crop((half, 0, SEAM_W, H)), (0, 0))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     bg = os.path.join(HERE, 'bg')
@@ -449,9 +483,10 @@ def main():
     # 加了墙角线（两间房的墙色在那儿交界）。宽度没变，所以 CUT_* 仍按原图量
     s = H / G.height
     parts = [G, L.crop((CUT_LIVING_L, 0, L.width, L.height)), B.crop((CUT_BOY_L, 0, B.width, B.height))]
+    imgs = [p.resize((round(p.width * s), H), Image.LANCZOS) for p in parts]
+    seam_bridge(imgs)
     rooms = []
-    for i, p in enumerate(parts):
-        r = p.resize((round(p.width * s), H), Image.LANCZOS)
+    for i, r in enumerate(imgs):
         r.save(os.path.join(OUT, f'room{i}.webp'), quality=86, method=6)
         rooms.append(r.width)
     # 客厅中点 = 沙发正中 = 0 米。按原图客厅中线换算到拼接后的世界坐标
