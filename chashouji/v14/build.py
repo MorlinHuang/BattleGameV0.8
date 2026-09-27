@@ -32,6 +32,7 @@ import os
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
+from scipy.spatial import ConvexHull
 from scipy.signal import fftconvolve
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -158,6 +159,54 @@ def find_phone(rgb, al):
         if s > score:
             score, best = s, (xs.start + px.mean(), ys.start + py.mean(), long_, short)
     return best
+
+
+# 手机放大倍数（2026-09-27 用户定：样式不变、稍微放大；×1.5 机身两头会从拳头后面伸出一截，
+# 斜拿的趴地姿势尤其像抓着一块板的中段，×1.3 两头刚好藏在拳头后面）
+PHONE_K = 1.3
+PHONE_PAD = 2     # 机身连通块外扩几像素：把它的描边和抗锯齿边一起带上
+HAND_MIN = 400   # 肤色连通块至少多少像素才算手（原图分辨率，一只拳头上万）
+HAND_PAD = 3      # 肤色外扩几像素：手指的黑描边算手，要盖在放大的机身前面
+
+
+def enlarge_phone(rgb, al, ph):
+    """原图分辨率下把手机放大 PHONE_K 倍贴回原位（中心不动，meta.phone 不变），再把机身附近的手盖回最上面。
+    机身 = find_phone 找到的那块近黑连通块；手 = 机身附近的肤色像素外扩 HAND_PAD（带上手指描边）。"""
+    cx, cy, long_, _ = ph
+    dark = (rgb.max(-1) < 70) & (al > 0.9)
+    lab, _ = ndimage.label(dark)
+    i = lab[int(round(cy)), int(round(cx))]
+    if i == 0:                            # 中心恰好落在高光上：取离中心最近的暗像素所在的块
+        ys, xs = np.nonzero(dark)
+        j = np.argmin((xs - cx) ** 2 + (ys - cy) ** 2)
+        i = lab[ys[j], xs[j]]
+    ys, xs = np.nonzero(lab == i)                 # 机身是凸的长方形：取暗块的凸包。偏亮的边框、屏幕反光不算"近黑"，
+    hull = ConvexHull(np.stack([xs, ys], 1))       # 只拿暗块本身放大，边上会缺一排口子
+    m = Image.new('L', (al.shape[1], al.shape[0])); ImageDraw.Draw(m).polygon([(xs[v], ys[v]) for v in hull.vertices], fill=1)
+    core = np.array(m).astype(bool)
+    body = ndimage.binary_dilation(core, iterations=PHONE_PAD) & (al > 0.03)
+    r = int(long_ * PHONE_K)              # 只在机身周围这一块里动
+    y0, y1 = max(0, int(cy) - r), min(al.shape[0], int(cy) + r)
+    x0, x1 = max(0, int(cx) - r), min(al.shape[1], int(cx) + r)
+    R, G, B = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    skin = (R > 150) & (R > G + 10) & (G > B - 5) & (al > 0.5)
+    near = np.zeros_like(skin); near[y0:y1, x0:x1] = True
+    sl, _ = ndimage.label(skin & near)          # 只认成片的肤色：机身边框的暖色高光零星几个像素，也满足肤色判定
+    sz = np.bincount(sl.ravel()); sz[0] = 0
+    hand = ndimage.binary_dilation(np.isin(sl, np.nonzero(sz >= HAND_MIN)[0]), iterations=HAND_PAD)
+    hand &= near & ~core & (al > 0.5)           # 只把手本身盖回去；外扩到的透明底不盖，不然放大的机身上会被抠出洞
+
+    rgba = np.concatenate([rgb, al[..., None] * 255], -1).astype(np.float32)
+    lay = np.where(body[..., None], rgba, 0)[y0:y1, x0:x1].astype(np.uint8)
+    im = Image.fromarray(lay, 'RGBA')
+    big = im.resize((round(im.width * PHONE_K), round(im.height * PHONE_K)), Image.BICUBIC)
+    ox, oy = round(x0 + (cx - x0) * (1 - PHONE_K)), round(y0 + (cy - y0) * (1 - PHONE_K))   # 以机身中心为原点放大
+    full = Image.fromarray(rgba.clip(0, 255).astype(np.uint8), 'RGBA')
+    over = Image.new('RGBA', full.size); over.paste(big, (ox, oy))
+    full.alpha_composite(over)
+    out = np.array(full).astype(np.float32)
+    out[hand] = rgba[hand]                # 手盖回最上面
+    return out[..., :3], out[..., 3] / 255
 
 
 # 量人有多大的尺子：赢的那一方的头，框是对着 pose_n0.webp 量的（换 n0 必须重量）。
@@ -299,6 +348,8 @@ def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE):
     按各自外框算的话腿一抬外框就变，整个人会跟着横跳。"""
     rgb, al = cutout(path)
     ph = find_phone(rgb, al)
+    if ph:
+        rgb, al = enlarge_phone(rgb, al, ph)
     rgb = edge_extend(rgb, al)
     im = Image.fromarray(np.concatenate([rgb, al[..., None] * 255], -1).astype(np.uint8), 'RGBA')
     im = im.resize((round(im.width * scale), round(im.height * scale)), Image.LANCZOS)
