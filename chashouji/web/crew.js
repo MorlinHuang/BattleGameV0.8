@@ -30,6 +30,7 @@ function Crew(cfg) {
   const { face, spr, aim: AIM, T } = cfg;       // face：-1 朝左（站右边），+1 朝右（站左边）
   const F = cfg.fluid;
   const A = cfg.anim || null;
+  const REST = spr.rest || 0;                    // 贴图里喷口本来的指向（仰角，朝下为负）：真相女神第二版罐子本身就斜朝右下
   let img = null, o = {};                        // img[形象]：{ arm, body, lo }（arm 可无）
   const bs = [], ps = [];                        // 在场的人、喷出去的东西（水滴 / 雾团）
 
@@ -256,11 +257,18 @@ function Crew(cfg) {
       const tg = raw && b.tg;
       let want = 0;
       if (tg && cfg.whole) {
-        /* 整个人绕罐子轴线上的一点转（whole.pivot）：喷口永远在"转轴→落点"那条线上，直接按转轴反解，一步就准。
-           不能用下面那套"按喷口反解再迭代"：喷口离落点只有一两百像素、转动半径却有三百多，
-           每转一点喷口挪得比角度变得还多，迭代来回振荡（实测一次停在 −0.45、一次顶到上限 +0.1，要的是 −0.35）。 */
-        const c = at(p, cfg.whole.pivot);
-        want = Math.min(AIM.hi, Math.max(AIM.lo, elevation(tg[0] - c[0], tg[1] - c[1])));
+        /* 整个人绕 whole.pivot 倾：喷口跟着挪，不能用下面那套"按喷口反解再迭代"—— 转动半径比喷口到落点的距离还大时，
+           每转一点喷口挪得比角度变得还多，迭代来回振荡（第一版立绘实测一次停在 −0.45、一次顶到上限 +0.1，要的是 −0.35）。
+           改成二分：err(θ) = 从此刻喷口打中落点要的仰角 − 喷口此刻的指向。θ 往上，指向涨 1:1、要的仰角只跟着喷口的挪动慢慢变，
+           err 单调减 —— 在 [lo, hi] 里二分 16 次（精度 1e-5 rad）；两头同号就贴那一头。 */
+        const err = (th) => { const m = muzzle(p, th, b); return elevation(tg[0] - m[0], tg[1] - m[1]) - (angles(b, th)[1] + REST); };
+        if (err(AIM.lo) <= 0) want = AIM.lo;
+        else if (err(AIM.hi) >= 0) want = AIM.hi;
+        else {
+          let lo = AIM.lo, hi = AIM.hi;
+          for (let k = 0; k < 16; k++) { const mid = (lo + hi) / 2; if (err(mid) > 0) lo = mid; else hi = mid; }
+          want = (lo + hi) / 2;
+        }
       } else if (tg) {
         want = b.aim;
         for (let k = 0; k < 6; k++) {
@@ -300,7 +308,7 @@ function Crew(cfg) {
         b.ex = n0 - n; b.exP = r;
         /* 方向：悬着时朝罐子反方向；冲下来刹车、往上冲走时朝正下方（她往上顶全靠它）。进场从全朝下渐变到罐尾方向。 */
         const dn = b.t < T.enter ? 1 - b.t / T.enter : b.t > se ? Math.min(1, (b.t - se) / 0.2) : 0;
-        const dir = angles(b, th)[1] * (1 - dn) + (Math.PI / 2) * dn;
+        const dir = (angles(b, th)[1] + REST) * (1 - dn) + (Math.PI / 2) * dn;
         for (let i = 0; i < n; i++) {
           const f = (i + 1) / n, age = (1 - f) * dt;
           const a = dir + (Math.random() - 0.5) * 2 * X.spread, v = X.V * (0.7 + Math.random() * 0.6);
@@ -314,7 +322,7 @@ function Crew(cfg) {
       /* 喷：从转过之后的喷口，沿喷口方向，速度 V（雾再加一点散角和快慢）。一帧攒够几个就出几个，
          每个按它**实际该出口的时刻**补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩。 */
       b.emit += dt * F.rate;
-      const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm || cfg.whole ? 1 : 0];   // 沿喷口此刻真的指向（含后坐）
+      const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm || cfg.whole ? 1 : 0] + REST;   // 沿喷口此刻真的指向（含后坐）
       while (b.emit >= 1) {
         b.emit -= 1;
         const age = b.emit / F.rate, a = dir + (Math.random() - 0.5) * 2 * F.spread;
@@ -343,7 +351,8 @@ function Crew(cfg) {
     return out;
   }
 
-  /* 一个人：上身系里先画手臂（再绕肩转）、再画上身，最后画不动的下身 */
+  /* 一个人：上身系里先画手臂（再绕肩转）、再画上身，最后画不动的下身（lo 可无：单层立绘整个人就是 body）。
+     cfg.aura（可无）：画在本人身后、跟着她一起倾的东西（真相女神的光芒、光环），给它贴图点 → 屏幕的换算。 */
   function drawOne(ctx, b) {
     const p = pose(b), [x, y, s] = p, [bt, at_] = cfg.whole ? [angles(b, b.aim)[0], 0] : angles(b, b.aim);
     const X = x - spr.foot[0] * s, Y = y - spr.foot[1] * s;
@@ -351,12 +360,13 @@ function Crew(cfg) {
     const spin = (q, th) => { const [cx, cy] = at(p, q); ctx.translate(cx, cy); ctx.rotate(-face * th); ctx.translate(-cx, -cy); };
     ctx.save();
     if (cfg.whole) spin(cfg.whole.pivot, b.aim);  // 悬空：整个人先绕重心转，上身再在这个基础上吃后坐
+    if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q));
     ctx.save();
     spin(spr.body.pivot, bt);
     if (I.arm) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
     put(I.body);
     ctx.restore();
-    put(I.lo);
+    if (I.lo) put(I.lo);
     ctx.restore();
   }
 
@@ -504,20 +514,49 @@ const Bestie = Crew(MIST);
    雾团按出生时的随机数 j 分三种：j < TRUTH_FX.chat 是聊天气泡、再往上到 star 是星星、其余是雾。
    同一团每帧同一种，不闪。喷口上还有一朵按喷射节奏闪的喷口焰（b.m 只在按住喷的时候有）。 */
 const TRUTH_FX = {
-  r0: 20, r1: 56,                         // 雾团出口半径 → 飞完的半径（像素）。出口就是大团 = 读成高压喷出来的（10 时喷口前只有两三团小点）
+  r0: 30, r1: 110,                        // 雾团出口半径 → 飞完的半径（像素）。出口就是大团 = 读成高压喷出来的（10 时喷口前只有两三团小点）；
+                                          // 2026-09-27 用户要"范围更大、更夸张，符合最高级礼物"：20/56 → 30/110，雾锥盖住男生整个上半身
   rim: [28, 120, 46], body: [156, 238, 96], core: [236, 255, 200],   // 深绿托底 / 雾身 / 喷口附近的亮芯
   a: [0.13, 0.2],                         // 托底、雾身每团的不透明度（雾团多、互相叠，单团要淡，见 MIST 的教训）
   chat: 0.035, star: 0.1,                 // 夹带气泡、星星的比例
   icon: [15, 30],                         // 气泡 / 星星 出口半宽 → 飞完的半宽
-  flare: [20, 32],                        // 喷口焰半径 [小, 大]，随喷射节奏在两者间跳。只当"点火"：喷口离脸 ~110px，34~52 会把喷流盖掉一半
+  flare: [40, 64],                        // 喷口焰半径 [小, 大]，随喷射节奏在两者间跳。第一版喷口离脸 ~110px 时只能 20~32（再大盖掉半股喷流）；
+                                          // 第二版立绘人抬高了、喷口离脸 ~400px，放大到 40~64 读成"大炮开火"
+  exK: 0.32,                              // 尾焰雾团按喷雾的几成大：罐尾在她脑后，雾团放大后 0.6 成的尾焰整团糊在她脸上
+  aura: { rays: 16, ray: 0.07, R: 360, spin: 0.35, a: 0.42, rgb: [255, 225, 120],   // 身后光芒：几道、每道半角、多长、转速 rad/s、中心不透明度
+          halo: [58, 15], haloY: 34, haloW: [11, 4], halo1: [255, 170, 40], halo2: [255, 246, 200] },   // 光环：半轴、悬在头顶上方多高、外圈 / 内圈线宽、颜色
 };
+/* 女神的光：身后一圈放射光芒（慢慢转、往外渐隐）+ 头顶一个光环。画在她本人之前、跟着她一起倾（crew.js drawOne 的 cfg.aura）。
+   剪影的三层金色外发光是烘在贴图里的（v14/truth/make2.py），这两样要动，所以运行时画。
+   配色：明亮底图上 lighter 加不上去，发光靠色相 —— 金色光芒在浅绿墙 / 粉墙上靠饱和度跳出来，光环外圈橙金托底、内圈近白。 */
+function drawAura(ctx, b, s, at) {
+  const A = TRUTH_FX.aura, [cx, cy] = at(TRUTH.spr.chest), [hx, hy] = at(TRUTH.spr.head);
+  const k = Math.min(1, b.t / 0.3), R = A.R * s;                 // 冲进来的头 0.3 秒里长出来
+  ctx.save();
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  g.addColorStop(0, `rgba(${A.rgb},${(A.a * k).toFixed(3)})`); g.addColorStop(0.45, `rgba(${A.rgb},${(A.a * 0.45 * k).toFixed(3)})`);
+  g.addColorStop(1, `rgba(${A.rgb},0)`);
+  ctx.fillStyle = g; ctx.beginPath();
+  for (let i = 0; i < A.rays; i++) {
+    const a = i / A.rays * 6.283 + b.t * A.spin, w = A.ray * (i % 2 ? 0.6 : 1);   // 一长一短交替，不像齿轮
+    ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a - w) * R, cy + Math.sin(a - w) * R); ctx.lineTo(cx + Math.cos(a + w) * R, cy + Math.sin(a + w) * R);
+  }
+  ctx.fill();
+  const y = hy - A.haloY * s + Math.sin(b.t * 2.4) * 3 * s, rx = A.halo[0] * s, ry = A.halo[1] * s;
+  ctx.globalAlpha = k;
+  ctx.lineWidth = A.haloW[0] * s; ctx.strokeStyle = `rgba(${A.halo1},0.85)`;
+  ctx.beginPath(); ctx.ellipse(hx, y, rx, ry, 0, 0, 6.283); ctx.stroke();
+  ctx.lineWidth = A.haloW[1] * s; ctx.strokeStyle = `rgb(${A.halo2})`;
+  ctx.beginPath(); ctx.ellipse(hx, y, rx, ry, 0, 0, 6.283); ctx.stroke();
+  ctx.restore();
+}
 function drawTruth(ctx, ps, b) {
   const F = TRUTH_FX, rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
   const us = (d) => Math.min(1, d.t / (d.ex ? TRUTH.exhaust.life : TRUTH.fluid.life));   // 尾焰按自己的寿命走
   for (const [pad, col, a] of [[5, F.rim, F.a[0]], [0, F.body, F.a[1]]]) {
     for (const d of ps) {
       if (d.j < F.star) continue;
-      const u = us(d), r = (F.r0 + (F.r1 - F.r0) * Math.sqrt(u)) * (d.ex ? 0.6 : 1) + pad;   // 尾焰小一号
+      const u = us(d), r = (F.r0 + (F.r1 - F.r0) * Math.sqrt(u)) * (d.ex ? F.exK : 1) + pad;   // 尾焰小几号
       ctx.fillStyle = rgba(col, (1 - u * u) * a);
       ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, 6.283); ctx.fill();
     }
@@ -559,8 +598,8 @@ function drawTruth(ctx, ps, b) {
   }
 }
 
-/* 真相喷雾：v14/truth/src1.png。用户认可的概念图（concept/gift-spray/）改出来的游戏立绘：
-   金发绿挑染、青柠色赛车服短裙白色过膝靴，右肩扛一罐比她人还长的「真相喷雾」。
+/* 真相喷雾：v14/truth/src2.png（第一版 src1.png 横扛在右肩，已换掉）。用户认可的概念图（concept/gift-spray/）改出来的游戏立绘：
+   金发绿挑染、青柠色赛车服短裙白色过膝靴，腰侧夹一罐比她人还长的「真相喷雾」、罐口斜朝右下，身外一圈金光（女神）。
    女生第五档礼物「真相女神」（档 4 左，GIFT.truth，2026-09-27 替掉戒指盒；之前短暂当过闺蜜的第三个形象）。
    档 4 的"贵"靠出场：她冲下来的那 1.4 秒全场压暗、只有她亮着，再打一条名字条（main.js truthIntro）。
 
@@ -569,35 +608,38 @@ function drawTruth(ctx, ps, b) {
      · 站女主身后（s 0.9）：身子和脸被女主的长发挡掉一大半，只剩腿和罐子，而这个角色要看的恰恰是被挡的那部分；
      · 站女主左前方、画在主角前面（s 1.08）：罐子横着把女主的脸整个盖住，她自己一半出画。
    整个画面唯一大块的空地是上半屏的墙，所以让她悬在左上方：全身都露着、谁也不挡，罐子斜着往下对准男生的脸。
-   · 整个人绕扛罐的肩膀转着瞄（whole.pivot，转总仰角的全部）：人在空中，罐子往下压、腿往后甩，读成俯冲；
-     站地时只能转上身（±0.3 rad 以内）。
-     上身在此基础上只吃后坐（anim.kick[1]）和前探（lean）。
+   · 整个人绕腰胯小幅前后倾着瞄（whole.pivot）：罐子本来就朝右下，人始终是竖着的（第二版立绘，见下面 whole 的注释）。
+     在此基础上只吃后坐（anim.kick[1]）和前探（lean）。
    · 尾焰（exhaust）：罐子尾巴一直往反方向喷青柠色的气，喷的时候加倍 —— 这是"为什么她能悬着"的全部解释。
    · 来：从画外顶上冲下来刹停（T.enter），刹停那一刻 main.js onArrive 出一圈冲击环；走：原地往上加速冲出去（T.exit）。
    · 喷法：anim.pulse 一长段"呲——"（0.7 秒）松一下（0.16），每次按下上身往上一震；bob 是悬着的上下浮。
-     雾量比平衡车闺蜜大：雾团多（rate 120）、胀得大（TRUTH_FX.r1 56）、飞得远（life 0.95）。
+     雾量比平衡车闺蜜大得多：雾团多（rate 220）、胀得大（TRUTH_FX.r1 110）、飞得远（life 1.15）。
      出口慢（fluid.V 650，平衡车 1100）：喷口离男生脸只有 ~110 像素，V 1250 时 0.09 秒就到脸上，路上只剩两三团，
      看不到"一股雾冲出去"；减半后路上的雾团翻倍、连成一个锥。
    · front：画在两个主角之前（她在半空、离镜头近，雾从她身前喷出去）。 */
 const TRUTH = {
   face: +1,
   move: 'hover', front: true,
-  /* 整个人的转轴放在**罐子轴线上**（扛罐的肩膀，贴图像素）：绕它转多少，喷口都还在"转轴→落点"那条线上，瞄一次就准。
-     第一版放在腰胯（[150, 250]）：罐子比腰高 190 像素，一前倾喷口就往前下方挪一大截，
-     反解仰角的迭代追着一个会动的喷口来回振荡，停在 −0.45（要 −1.3），雾从男生头顶上飞过去。 */
-  whole: { pivot: [161, 71] },
-  exhaust: { at: [71, 57], rate: 40, V: 420, spread: 0.18, life: 0.4, gap: 14 },   // 罐尾（贴图像素）、每秒几团、出口速度、散角、寿命、人动时两团最多隔几像素
-  spr: { src: 'assets/world/truth%n_%k.webp', body: { src: 'up', pivot: [136, 184], k: 1 }, lo: { src: 'lo' },
-         foot: [156, 459], muzzle: [522, 63] },
-  skins: [1],
+  /* 第二版立绘（2026-09-27，v14/truth/make2.py）：竖直悬浮、罐子夹在腰侧本来就斜朝右下（rest −0.505 rad ≈ 29°），
+     单层（没有 lo）、三层金色外发光烘在贴图里。整个人绕腰胯（whole.pivot，重心附近）小幅前后倾着瞄：
+     倾的时候头和脚一左一右摆、人留在画内；瞄准用二分反解（update）。量点都是贴图像素，由 make2.py 打印。
+     第一版（truth1_*，横扛罐子）要前倾 0.7~1 rad 才对得准，人一抬高放大就甩出画面，见 make2.py 文件头。 */
+  whole: { pivot: [168, 281] },
+  exhaust: { at: [119, 195], rate: 40, V: 420, spread: 0.18, life: 0.4, gap: 14 },   // 罐尾（贴图像素）、每秒几团、出口速度、散角、寿命、人动时两团最多隔几像素
+  spr: { src: 'assets/world/truth%n_%k.webp', body: { src: 'up', pivot: [168, 281], k: 1 },
+         foot: [160, 608], muzzle: [370, 334], rest: -0.505, head: [211, 78], chest: [194, 185] },
+  skins: [2],
+  aura: (ctx, b, s, at) => drawAura(ctx, b, s, at),
   anim: { pulse: [0.7, 0.16], kick: [0, 0.06, 9], lean: 0.03, bob: [5, 2.2] },
   T: { enter: 0.55, spray: 2.8, exit: 0.45, fire: 0.18 },   // fire：刹停后隔多久开喷（先"嘭"地停住，再"呲——"）
   max: 1, gap: 0.3,
-  rows: [[0.86, 0.9]],
-  aim: { lo: -0.85, hi: 0.1, rate: 1.6, follow: 8, stiff: 40 },   // lo：男生被拖倒（p=95）时要 −0.95 才正对脸，但那样她倒栽葱、身子全出画，−0.85 靠 miss 窗口蹭着打中；stiff 见 update 临界阻尼
+  rows: [[0.94, 0.96]],                   // 贴图里人高 566 → 画面里 ~535，占女生这半边的左上（用户："整体再大一些，占女生这半边一半区域"）
+  aim: { lo: -0.6, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },    // 前后倾的范围：罐子本来就朝下，站着的男生只要小倾；stiff 见 update 临界阻尼
   sweep: { a: [0.25, 0.12], w: [1.2, 2.9] },
   zone: null,
-  fluid: { V: 650, G: 40, drag: 0.85, rate: 120, spread: 0.13, vJit: 0.18, life: 0.95, miss: 70, snap: 14, hitEvery: 0.25, floor: false,
+  /* 2026-09-27 放大（审查在引擎里实测过，雾锥盖住男生整个上半身，p5 / p95 都打得中）：rate 120 → 220、spread 0.13 → 0.28、
+     life 0.95 → 1.15（喷口离脸从 ~110 变成 ~400 像素，要飞得到）、miss 70 → 150（雾锥宽了，判定跟着宽） */
+  fluid: { V: 650, G: 40, drag: 0.85, rate: 220, spread: 0.28, vJit: 0.18, life: 1.15, miss: 150, snap: 14, hitEvery: 0.25, floor: false,
            draw: drawTruth },
 };
 const Truth = Crew(TRUTH);

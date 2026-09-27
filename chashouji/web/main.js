@@ -835,6 +835,9 @@ const RECIPE = {
       Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 80 * s, life: 0.16, rgb: [196, 255, 120], a: 0.8 });
       Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 120 * s, life: 0.32, rgb: [28, 120, 46], lw: 7 * s });
       Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.32, rgb: [156, 238, 96], lw: 3.5 * s });
+      /* 外面再套一圈金环：跟她身上的金色外发光同一个颜色，读成"女神打的" */
+      Particles.spawn({ kind: 'ring', x, y, r: 20 * s, r1: 170 * s, life: 0.4, rgb: [255, 170, 40], lw: 6 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 20 * s, r1: 166 * s, life: 0.4, rgb: [255, 236, 150], lw: 2.5 * s });
       for (let i = 0; i < Math.round(3 * s); i++) {
         const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.8, sp = 180 + Math.random() * 160;
         Particles.spawn({ kind: 'chat', x, y, vx: Math.cos(a) * sp - side * 60, vy: Math.sin(a) * sp, g: -40, drag: 0.93,
@@ -862,10 +865,10 @@ const RECIPE = {
                                            drag: 0.96, life: 0.45, r: 6, r1: 10, rot: Math.random() * 6, vrot: 6,
                                            rgb: [255, 251, 210], edge: [28, 120, 46], lw: 2 });
     },
-    arrive(x, y, s) {                  // (x, y) = 她的腰（crew.js 按转过之后的位置给）
-      /* 冲击环炸在脚底下（腰往下 180·s）：ring 是压扁的地面环，套在腰上读成呼啦圈，
+    arrive(x, y, s) {                  // (x, y) = 她的腰胯（crew.js 按转过之后的位置给）
+      /* 冲击环炸在脚底下（腰胯往下 320·s，第二版立绘腿长）：ring 是压扁的地面环，套在腰上读成呼啦圈，
          0.36 秒横切过她的身子和裙子；放脚下读成"刹车的气浪往下拍"。 */
-      const cy = y + 180 * s;
+      const cy = y + 320 * s;
       Particles.spawn({ kind: 'dot', x, y: cy, r: 30 * s, r1: 150 * s, life: 0.2, rgb: [196, 255, 120], a: 0.7 });
       Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 260 * s, life: 0.36, rgb: [28, 120, 46], lw: 9 * s });
       Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 254 * s, life: 0.36, rgb: [156, 238, 96], lw: 4.5 * s });
@@ -1376,6 +1379,96 @@ function drawWorld(ctx, rooms) {
   }
 }
 
+/* ── 终点线（2026-09-27）──
+   用户："男女生赢的地方太不明显了，需要在双方赢的地方，地上拉一条明显的线。"
+   判胜是两人（手机）被拖到离客厅正中 ±NUM.END 米：查岗党的终点在卧室那头（S.pos = +END，世界 x = center − END·pxPerM），
+   灭迹党的在电竞房那头。线就立在那个世界 x 上、跟背景一起卷，pos = ±END 时手机正好压在线上 —— 读成"拽过线就赢"。
+   三样东西：
+     · 地上一条方格带（队色与黑相间）：从墙根铺到评论区上沿，按视平线透视收窄、往灭点斜 —— 画在背景层（drawGoalFloor）；
+     · 终点处一道竖直光幕，下实上虚、中间白芯，顶上写「终点·X党胜」—— 画在人物层、人之后，半透明，不挡人（drawGoalWall）；
+     · 线还没进画面（离镜头 > 半屏，≈ 8.8 米）时，屏幕那一侧边缘贴地给一个「终点 ← 12m」—— 不然大半局都看不到线。
+   快到了（离终点 < END 的 1 − GOAL.hot）跟距离条的"终点透红呼吸"同一个节奏一起加亮。 */
+const GOAL = {
+  y0: 1150, y1: 1334,        // 方格带：墙根 → 评论区上沿（屏幕 y）
+  vy: 640,                   // 灭点高度（地板透视往这收）：带子远端窄、往画面中线斜
+  w: 58, rows: 7,            // 方格带在 GROUND 处的宽、竖着分几格（横着两格）
+  wallH: 560, wallW: 46,     // 光幕：从地面往上多高、多宽
+  wallA: 0.34,               // 光幕底部不透明度（往上渐隐到 0）；盖在人身上也看得见人
+  hot: 0.75,                 // 离终点只剩 END 的 1 − hot（7.5 米）起开始呼吸加亮，同距离条
+  font: '900 44px system-ui,"PingFang SC","Microsoft YaHei",sans-serif',
+  tagFont: '900 34px system-ui,"PingFang SC","Microsoft YaHei",sans-serif',
+  tagY: 1250,                // 画外提示贴在哪个高度（地面偏下，不跟人抢）
+};
+/* 两条终点线：队色、这条线在屏幕上的 x、这一方离它还剩几米、呼吸亮度 0~1 */
+function goals() {
+  if (!WORLD) return [];
+  return [[+1, GREEN, '查岗党'], [-1, RED, '灭迹党']].map(([d, col, team]) => {
+    const x = MID + (WORLD.center - d * NUM.END * P.pxPerM - FX.camX);
+    const left = NUM.END - S.pos * d;
+    const u = (S.pos * d) / NUM.END;
+    const hot = u > GOAL.hot ? (0.5 + 0.5 * Math.sin(HUD.t * 5.5)) * (u - GOAL.hot) / (1 - GOAL.hot) : 0;
+    return { d, col, team, x, left, hot };
+  });
+}
+const rgbA = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
+function drawGoalFloor(ctx) {
+  const G = GOAL;
+  for (const g of goals()) {
+    /* 地板上一点 (x@GROUND, y) 按透视：离灭点越近越往画面中线收、越窄 */
+    const k = (y) => (y - G.vy) / (GROUND - G.vy);
+    const px = (y, off) => MID + (g.x + off - MID) * k(y);
+    if (px(G.y1, G.w) < -G.w * 2 || px(G.y1, -G.w) > W + G.w * 2) {
+      /* 画外：屏幕那一侧边缘贴地给个距离 */
+      const lft = g.x < MID, txt = lft ? `终点 ← ${Math.round(g.left)}m` : `${Math.round(g.left)}m → 终点`;
+      ctx.save();
+      ctx.font = G.tagFont; ctx.textBaseline = 'middle'; ctx.textAlign = lft ? 'left' : 'right'; ctx.lineJoin = 'round';
+      const tx = lft ? 16 : W - 16;
+      ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(10,12,16,.8)'; ctx.strokeText(txt, tx, G.tagY);
+      ctx.fillStyle = rgbA(g.col, 1); ctx.fillText(txt, tx, G.tagY);
+      ctx.restore();
+      continue;
+    }
+    ctx.save();
+    const n = G.rows, ys = Array.from({ length: n + 1 }, (_, i) => G.y0 + (G.y1 - G.y0) * i / n);
+    /* 底下先垫一圈亮边（队色发光），呼吸时加亮 */
+    ctx.shadowColor = rgbA(g.col, 0.7 + 0.3 * g.hot); ctx.shadowBlur = 14 + 22 * g.hot;
+    ctx.beginPath();
+    ctx.moveTo(px(G.y0, -G.w / 2), G.y0); ctx.lineTo(px(G.y0, G.w / 2), G.y0);
+    ctx.lineTo(px(G.y1, G.w / 2), G.y1); ctx.lineTo(px(G.y1, -G.w / 2), G.y1); ctx.closePath();
+    ctx.fillStyle = rgbA(g.col, 1); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = 'rgb(16,18,20)';
+    for (let i = 0; i < n; i++) {
+      const a = ys[i], b = ys[i + 1], o0 = i % 2 ? 0 : -G.w / 2, o1 = o0 + G.w / 2;   // 棋盘：隔行换边
+      ctx.beginPath();
+      ctx.moveTo(px(a, o0), a); ctx.lineTo(px(a, o1), a); ctx.lineTo(px(b, o1), b); ctx.lineTo(px(b, o0), b);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+function drawGoalWall(ctx) {
+  const G = GOAL;
+  for (const g of goals()) {
+    if (g.x < -G.wallW * 3 || g.x > W + G.wallW * 3) continue;
+    const top = GROUND - G.wallH, a = G.wallA * (1 + 0.8 * g.hot);
+    ctx.save();
+    const gr = ctx.createLinearGradient(0, GROUND, 0, top);
+    gr.addColorStop(0, rgbA(g.col, a)); gr.addColorStop(0.6, rgbA(g.col, a * 0.45)); gr.addColorStop(1, rgbA(g.col, 0));
+    ctx.fillStyle = gr; ctx.fillRect(g.x - G.wallW / 2, top, G.wallW, G.wallH);
+    const gc = ctx.createLinearGradient(0, GROUND, 0, top);
+    gc.addColorStop(0, `rgba(255,255,255,${Math.min(1, 0.55 + 0.4 * g.hot).toFixed(3)})`); gc.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gc; ctx.fillRect(g.x - 3, top, 6, G.wallH);
+    /* 顶上的字：队色、深色描边，字比光幕宽得多，往场内那边挪，别出画 */
+    const txt = `终点·${g.team}胜`;
+    ctx.font = G.font; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.lineJoin = 'round';
+    const tw = ctx.measureText(txt).width, tx = Math.max(tw / 2 + 12, Math.min(W - tw / 2 - 12, g.x));
+    ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(10,12,16,.85)'; ctx.strokeText(txt, tx, top - 6);
+    ctx.fillStyle = rgbA(g.col, 1); ctx.fillText(txt, tx, top - 6);
+    ctx.restore();
+  }
+}
+
 /* ── HUD ──
    顶上三行，从上到下：
      名字行   头像 · 队名 · 这一方已经把对面拽过来多少米（左右镜像）
@@ -1853,16 +1946,14 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   });
 
   /* 真相女神（档 4 左，crew.js TRUTH）→ 同样瞄男生的脸，落点同平衡车闺蜜。
-     perch：她悬停时脚底在屏幕哪（没转之前；她整个人绕扛罐的肩膀转，肩膀在脚底正上方 388×s）。
-     定这两个数的依据是肩膀的位置：肩膀在 (200, GROUND−541)，到男生脸的连线往下斜 ~0.3 rad ——
-     罐子从女主头顶上方压过去（罐底离她头顶还有 ~100），腿往左后方甩，靴子扫过女主长发的外沿、碰不到她的脸。
-     横向 125 那版她一半出画、脸贴着屏幕左沿；再往右罐子就盖到女主头上。
-     再高（肩膀往上）连线变陡，要前倾 0.9 rad 以上，人几乎倒栽葱。
-     onArrive：冲下来刹停那一刻，身边炸一圈青柠冲击环 + 星星 + 小震屏（不给反馈读成飘下来的）。 */
-  const HOVER = 153;
+     perch：她悬停时脚底（靴底）在屏幕哪（没倾之前）。2026-09-27 用户要她"往上、不跟闺蜜在一起、整体再大、占女生这半边"：
+     靴底抬到 TRUTH_PERCH（女主头顶以上），整个人 ~535 高占左上 x 30~440、y 210~750；
+     闺蜜站地（脚底 ≈ GROUND）、头在 y≈800 往下，两人上下错开。再高发顶就顶到拉力那一行（y≈200）。
+     onArrive：冲下来刹停那一刻，脚下炸一圈青柠冲击环 + 星星 + 小震屏（不给反馈读成飘下来的）。 */
+  const TRUTH_PERCH = [170, 755];
   Truth.init({
     W, ground: () => GROUND + FX.bob, horizon,
-    perch: () => [180, GROUND - HOVER - 45],
+    perch: () => TRUTH_PERCH,
     target(u) {
       const f = faceOf('b');
       return f && [f[0] - 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]];
@@ -1988,6 +2079,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   function renderBg() {
     bctx.clearRect(0, 0, W, H);
     drawWorld(bctx, rooms);
+    drawGoalFloor(bctx);
   }
 
   /* 档 4 真相女神的出场（GIFT.truth）：档 4 要一眼读出"比闺蜜贵一档"，光靠她比闺蜜大一点读不出来。
@@ -1997,7 +2089,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      不另开计时器：续时间、离场召回都不会重播，只有新冲进来的那一次演。 */
   const INTRO = { dim: 0.45, rise: 0.15, hold: 1.1, fade: 0.35,        // 压暗：多深、几秒压到底、压到几秒（首击在 1.03~1.27s，压到首击后）、几秒亮回来
                   delay: 0.25, slide: 0.25, stay: 1.1, out: 0.3,        // 名字条：她俯冲的 0.25s 先不出（免得盖住头和罐子）、滑进来几秒、停到几秒、几秒淡掉
-                  y: 330, h: 112 };                                     // 名字条中线 y、条高
+                  y: 800, h: 112 };                                     // 名字条中线 y、条高：她脚下、两人头顶之上（330 时压在她身上）
   const introT = () => { const b = Truth.peek()[0]; return b ? b.t : 1e9; };
   /* 名字条的计时：出场从 delay 起算；她在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */
   const nameT = () => { const b = Truth.peek()[0]; return !b ? 1e9 : b.renew ? b.t - b.renewT : b.t - INTRO.delay; };
@@ -2038,6 +2130,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     for (const it of crew) if (!it.front) it.draw(cctx);
     actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(cctx);
+    drawGoalWall(cctx);                  // 终点光幕：半透明，盖在人上也看得见人
     drawIntroDim(cctx);                  // 档 4 出场压暗：主角都暗下去，画在后面的她是亮的
     for (const it of crew) if (it.front) it.draw(cctx);
     cctx.restore();
