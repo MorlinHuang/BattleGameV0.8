@@ -1131,6 +1131,26 @@ function girlTop(x) {
   return t[j] >= 0 ? poseY(m, t[j]) : null;
 }
 
+/* 男生在屏幕横坐标 x 那一列的上沿（build.py 的 edge.topB），这一列没有他返回 null。 */
+function boyTop(x) {
+  const m = WORLD && WORLD.poses[FX.frame], t = m && m.edge && m.edge.topB;
+  if (!t) return null;
+  const j = Math.round((x - FX.pairX - FX.hitX + m.ax) / m.edge.step);
+  return t[j] >= 0 ? poseY(m, t[j]) : null;
+}
+/* 男生身上第 u（0~1，从左到右）那一列的上沿 [x, y]：把有他的列排成一排按 u 取，手机左右 BOY_PHONE_GAP
+   以内的列不算（那几列最高的是他的手和手机，砸在那读成砸手机）。站着 = 头、肩、胳膊；倒地 = 背、屁股、腿。 */
+const BOY_PHONE_GAP = 70;
+function boyAt(u) {
+  const m = WORLD && WORLD.poses[FX.frame], t = m && m.edge && m.edge.topB;
+  if (!t) return null;
+  const cols = [];
+  for (let j = 0; j < t.length; j++) if (t[j] >= 0 && Math.abs(poseX(m, j * m.edge.step) - FX.phoneX) > BOY_PHONE_GAP) cols.push(j);
+  if (!cols.length) return null;
+  const j = cols[Math.min(cols.length - 1, Math.floor(u * cols.length))];
+  return [poseX(m, j * m.edge.step), poseY(m, t[j])];
+}
+
 /* 男生的腰和大腿（他的藏青短裤）此刻在屏幕上的外框 [x0, y0, x1, y1] 与落点行。
    build.py 每张贴图都量了（步态格腿在动，短裤跟着变）：pts 是短裤上均匀取的几行，
    每行 [左沿, y, 右沿] —— 口红从左边飞来，碰的是左沿。 */
@@ -1704,10 +1724,11 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
     onHit: (x, y, first) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE.water, x),
   });
-  /* 榴莲鞋雨（查岗党档 2）→ 男生的头。head = 他的脸 [x, y, 半径]（跪下、被拖倒都跟着走）；
-     砸中按礼物分量 power 爆（榴莲档 2、鞋档 1），爆点颜色跟着东西走：榴莲白、鞋红 / 粉 / 黑。 */
+  /* 榴莲鞋雨（查岗党档 2）→ 男生身上随机一处：target(u) = 他身上第 u 那一列的上沿（boyAt，跪下、被拖倒都跟着走），
+     top(x) = 这一列的上沿（落到这里就算砸中）。砸中按礼物分量 power 爆（榴莲档 2、鞋档 1），
+     爆点颜色跟着东西走：榴莲白、鞋红 / 粉 / 黑。 */
   Rain.init({
-    head: () => faceOf('b'),
+    target: boyAt, top: boyTop,
     onHit: (kind, col, x, y, power) => impact(-1, y, power, kind === 'durian' ? RECIPE.durian : HEEL_RECIPE[col], x),
   });
   /* 闺蜜（查岗党）→ 男生的脸。落点在脸的**中上部**（眼睛那一带）：x 往女生那边 0.3 个半径，y 从脸心往上 0.55

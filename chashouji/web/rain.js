@@ -2,8 +2,10 @@
  * 2~3 个榴莲、4 只高跟鞋（红 / 粉 / 黑，Q 版），前后 ~1 秒掉完。
  *
  * 不是弹幕（ammo.js 的东西是从一侧平飞过去的），是**天上掉下来的**：竖直方向是真重力（G），
- * 横向每帧按落下的进度把 x 拉到落点 —— 男生在动（步态、被拖倒脸贴地），落点每帧重取，东西追着他的头掉。
- * 落点在他脸上 ±JIT 个半径，碰到脸那一圈就爆（o.onHit，带颜色：榴莲白、鞋按自己的颜色）并**当场消失**。
+ * 横向每帧按落下的进度把 x 拉到落点 —— 男生在动（步态、被拖倒脸贴地），落点每帧重取，东西追着他掉。
+ * 落点是他身上随机一处（出手时抽 u，o.target(u) = 他身上第 u 那一列的上沿）：站着砸头、肩、胳膊，
+ * 倒地砸背、屁股、腿（第二版只砸脸，他倒地后一串东西全往一个点上落 —— 用户：随机一点，砸到男生就行）。
+ * 落到所在那一列他的上沿（o.top）就爆（o.onHit，带颜色：榴莲白、鞋按自己的颜色）并**当场消失**。
  * （第一版砸中后弹飞、三成鞋落空掉在地板上弹一下 —— 用户：砸到身上直接爆掉消失，不用落地。）
  * 画在特效层（人物之前）：东西从镜头这一侧掉在他头上，挡住他是对的。
  * 数值不在这里（送礼的战力走 SHOP.push），这里只负责演出。
@@ -26,7 +28,6 @@ const Rain = (() => {
   const V0 = 250;          // 出手时往下的初速
   const TOP = -160;        // 从画面上沿以上多高出手
   const DRIFT = 70;        // 出手点离落点横向最多偏多少（斜着掉，不是一根竖线）
-  const JIT = 0.55;        // 落点：脸心左右 ±JIT 个脸半径
 
   let img = {}, o = {};
   const ps = [];           // 在掉的
@@ -53,16 +54,16 @@ const Rain = (() => {
   }
 
   function drop(kind) {
-    const f = o.head();
+    const u = Math.random(), f = o.target(u);
     if (!f) return;
-    const off = (Math.random() - 0.5) * 2 * JIT * f[2], x0 = f[0] + off + (Math.random() - 0.5) * 2 * DRIFT;
+    const x0 = f[0] + (Math.random() - 0.5) * 2 * DRIFT;
     const K = KINDS[kind], j = Math.floor(Math.random() * img[kind].length);
-    ps.push({ kind, im: img[kind][j], col: K.col[j], w: K.w * (0.9 + Math.random() * 0.2), off, x0, x: x0, y: TOP, y0: TOP, vy: V0,
+    ps.push({ kind, im: img[kind][j], col: K.col[j], w: K.w * (0.9 + Math.random() * 0.2), u, x0, x: x0, y: TOP, y0: TOP, vy: V0,
               rot: Math.random() * 6.28, vrot: (Math.random() < 0.5 ? -1 : 1) * K.spin * (0.7 + Math.random() * 0.6) });
   }
 
-  /* 碰撞半径：贴图宽的 0.35（高跟鞋细长、榴莲带刺，按外框算会隔空爆） */
-  const rad = (p) => p.w * 0.35;
+  /* 碰撞：东西的下沿（中心往下 LOW × 贴图宽）落到这一列的上沿。按外框下沿算会隔空爆（鞋是斜着转的） */
+  const LOW = 0.2;
 
   function update(dt) {
     clock += dt;
@@ -71,13 +72,15 @@ const Rain = (() => {
       const p = ps[i];
       p.rot += p.vrot * dt;
       p.vy += G * dt; p.y += p.vy * dt;
-      const f = o.head();
+      const f = o.target(p.u);
       if (!f) continue;
-      /* 落点是脸心（+off）那一点；横向按落下的进度从出手点拉过去 */
-      const gx = f[0] + p.off, k = Math.min(1, Math.max(0, (p.y - p.y0) / Math.max(1, f[1] - p.y0)));
-      p.x = p.x0 + (gx - p.x0) * k;
-      if (Math.hypot(p.x - f[0], p.y - f[1]) < f[2] + rad(p) || p.y >= f[1]) {
-        o.onHit(p.kind, p.col, p.x, Math.min(p.y, f[1]), KINDS[p.kind].power);
+      /* 横向按落下的进度从出手点拉到落点；落到落点那一列的上沿就爆。o.top 取不到（这一帧他换了姿势，
+         那一列正好空了）就按落点的高度算 —— 不能让它穿过人掉下去。 */
+      const k = Math.min(1, Math.max(0, (p.y - p.y0) / Math.max(1, f[1] - p.y0)));
+      p.x = p.x0 + (f[0] - p.x0) * k;
+      const top = o.top(p.x) ?? f[1];
+      if (p.y + LOW * p.w >= top) {
+        o.onHit(p.kind, p.col, p.x, top, KINDS[p.kind].power);
         ps.splice(i, 1);                             // 砸中就没了，爆点接替它
       }
     }
