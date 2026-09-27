@@ -36,7 +36,7 @@ const Bubble = (function () {
   const FADE = 0.9;         // 末尾这段时间淡出
 
   const act = [];
-  let phoneAt = null, gap = 1.2;
+  let phoneAt = null, W = 960, gap = 1.2;
 
   /* 文字宽度得测，不能估。中文和数字宽度差很多，估出来的气泡不是撑爆就是
      留一大块空白。离屏 ctx 测一次就够，结果缓存在消息上。 */
@@ -86,7 +86,7 @@ const Bubble = (function () {
     voice: { bg: '#fbfbfd', line: 'rgba(46,40,52,.88)', fg: '#2c2830', lw: 3.0 },
   };
 
-  function init(o) { phoneAt = o.phoneAt; }
+  function init(o) { phoneAt = o.phoneAt; if (o.W) W = o.W; }
 
   /* 推一条新消息。旧的整体往上让一格 —— 读起来就是聊天记录在往上滚，而不是
      几个气泡各飘各的。 */
@@ -106,7 +106,8 @@ const Bubble = (function () {
     if (act.length >= MAX) act.shift();
 
     const [px, py] = phoneAt();
-    act.push({ m, w, h, st: 0, x: px, y: py - 44, rise: 0, age: 0, life: LIFE });
+    const x = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, px));   // 长消息别被屏幕左右沿切掉
+    act.push({ m, w, h, st: 0, x, y: py - 44, rise: 0, age: 0, life: LIFE });
   }
 
   function update(dt, struggle) {

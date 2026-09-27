@@ -73,19 +73,26 @@ function Crew(cfg) {
         b.spray += T.spray;
         return;
       }
-      bs.splice(bs.findIndex(b => b.t === Math.max(...bs.map(c => c.t))), 1);   // 全在离场：顶掉走得最远的
+      const far = bs.reduce((a, c) => (a.t >= c.t ? a : c));
+      if (cfg.move === 'hover') {         // 悬停的人离场时还在画面正中，顶掉会凭空消失：把她叫回来，从当前高度落回悬停点
+        const y = hoverPose(far)[1], vy = (hoverPose({ ...far, t: far.t + 1e-3 })[1] - y) / 1e-3;   // 被叫住时的高度、竖直速度
+        far.spray = far.t - T.enter + T.spray;
+        far.back = 0; far.back = y - hoverPose(far)[1]; far.backV = vy; far.backT = far.t;   // 先清掉上一次召回的余量再量
+        return;
+      }
+      bs.splice(bs.indexOf(far), 1);      // 全在离场：顶掉走得最远的（站地的往画外溜，被顶掉看不出来）
     }
     /* 远近：每人占一排（rows 里挑没人的），远排小、脚底高 —— 喷口上下错开，几股不会从同一点分叉 */
     const free = cfg.rows.filter(R => !bs.some(b => b.s >= R[0] && b.s <= R[1]));
     const pool = free.length ? free : cfg.rows, R = pool[Math.floor(Math.random() * pool.length)];
-    /* 形象：挑一个场上没人用的（三个形象、最多三个人，同时在场的一定各不相同） */
+    /* 形象：挑一个场上没人用的（max 不超过形象数，同时在场的一定各不相同） */
     if (sk == null) {
       const skins = cfg.skins.map((_, i) => i), unused = freeSkins();
       sk = (unused.length ? unused : skins)[Math.floor(Math.random() * (unused.length || skins.length))];
     }
     bs.push({ t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
               r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
-              pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0 });
+              pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0 });
     bs.sort((a, b) => a.s - b.s);          // 远的先画
   }
 
@@ -104,7 +111,15 @@ function Crew(cfg) {
     const bob = A ? Math.sin(t * A.bob[1] + b.ph) * A.bob[0] * s : 0;
     if (t < T.enter) return [hx, top + (hy - top) * easeOut(t / T.enter), s];
     const k = Math.min(1, (t - T.enter) / 0.3);                        // 刹停后 0.3 秒里晃动从 0 长满，不跳
-    const x = hx + sx * k, y = hy + (sy + bob) * k;
+    /* back：离场途中又被召唤（summon），从被叫住那一刻的高度落回悬停点，用三次 Hermite：
+       起点带着当时往上冲的速度（backV），先减速到顶再落回来、到位速度 0 —— 位置、速度都不跳。
+       只用 easeOut 的话，速度一帧里从向上 1800 翻成向下 660 px/s。 */
+    let bk = 0;
+    if (b.back) {
+      const D = T.enter, u = Math.min(1, (t - b.backT) / D);
+      bk = b.back * (2 * u ** 3 - 3 * u * u + 1) + b.backV * D * (u ** 3 - 2 * u * u + u);
+    }
+    const x = hx + sx * k, y = hy + (sy + bob) * k + bk;
     if (t > se) { const u = Math.min(1, (t - se) / T.exit); return [x, y + (top - y) * u * u, s]; }
     return [x, y, s];
   }
@@ -249,10 +264,17 @@ function Crew(cfg) {
           want = Math.min(AIM.hi, Math.max(AIM.lo, elevation(tg[0] - m0[0], tg[1] - m0[1])));
         }
       }
-      b.aim += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.aim));
+      if (cfg.whole) {
+        /* 整个人转：带角速度的临界阻尼（AIM.stiff），角速度限在 ±rate。直接限速跟随的话，want 一变向
+           角速度一帧里从 −1.6 翻到 +1.2 rad/s，甩着的腿"咔"地换方向（离场 want 一帧跳到 0 也是）。 */
+        const K = AIM.stiff;
+        b.av += ((want - b.aim) * K - b.av * 2 * Math.sqrt(K)) * dt;
+        b.av = Math.max(-AIM.rate, Math.min(AIM.rate, b.av));
+        b.aim += b.av * dt;
+      } else b.aim += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.aim));
       b.want = want;
       b.m = null;
-      const spraying = b.t >= T.enter && b.t <= se && tg;
+      const spraying = b.t >= T.enter + (T.fire || 0) && b.t <= se && tg;   // T.fire：刹停之后隔一拍再开火
       if (A) {                                   // 一段段按：每次按下后坐一震；喷的时候上身往前探
         b.kick *= Math.exp(-A.kick[2] * dt);
         b.lean += ((spraying ? 1 : 0) - b.lean) * (1 - Math.exp(-dt * 6));
@@ -266,12 +288,21 @@ function Crew(cfg) {
          人在场就一直喷（进场刹车、悬着、离场都靠它），按住喷的时候加倍。尾焰不算命中（hitTest 跳过 ex）。 */
       if (cfg.exhaust && b.t <= se + T.exit) {
         const X = cfg.exhaust;
-        b.ex += dt * X.rate * (spraying ? 2 : 1);
-        const th = b.aim, r = carried(p, X.at, th, b), dir = angles(b, th)[1];
-        while (b.ex >= 1) {
-          b.ex -= 1;
+        const th = b.aim, r = carried(p, X.at, th, b), r0 = b.exP || r;
+        /* 人一动（进场 3000~8000 px/s），按时间匀速出的尾焰两团之间差出几十上百像素，断成一串珠子：
+           按罐尾这一帧挪了多远补发（每 X.gap 像素至少一团），出生点沿上一帧→这一帧的罐尾摆开、按出生时刻补飞。 */
+        const n0 = b.ex + dt * X.rate * (spraying ? 2 : 1) + Math.hypot(r[0] - r0[0], r[1] - r0[1]) / X.gap;
+        const n = Math.floor(n0);
+        b.ex = n0 - n; b.exP = r;
+        /* 方向：悬着时朝罐子反方向；冲下来刹车、往上冲走时朝正下方（她往上顶全靠它）。进场从全朝下渐变到罐尾方向。 */
+        const dn = b.t < T.enter ? 1 - b.t / T.enter : b.t > se ? Math.min(1, (b.t - se) / 0.2) : 0;
+        const dir = angles(b, th)[1] * (1 - dn) + (Math.PI / 2) * dn;
+        for (let i = 0; i < n; i++) {
+          const f = (i + 1) / n, age = (1 - f) * dt;
           const a = dir + (Math.random() - 0.5) * 2 * X.spread, v = X.V * (0.7 + Math.random() * 0.6);
-          ps.push({ x: r[0], y: r[1], vx: -face * v * Math.cos(a), vy: v * Math.sin(a), t: 0, u: 0, b, seq: -1, j: 1, ex: true });
+          const vx = -face * v * Math.cos(a), vy = v * Math.sin(a);
+          ps.push({ x: r0[0] + (r[0] - r0[0]) * f + vx * age, y: r0[1] + (r[1] - r0[1]) * f + vy * age,
+                    vx, vy, t: age, u: 0, b, seq: -1, j: 1, ex: true });
         }
       }
       if (!spraying) continue;
@@ -338,7 +369,7 @@ function Crew(cfg) {
 function CrewGroup(members) {
   return {
     summon(pick) {
-      if (pick != null) return members[pick].summon();                    // ?bestie=<成员下标> 强制
+      if (pick != null) return members[Math.max(0, Math.min(members.length - 1, pick | 0))].summon();   // ?bestie=<成员下标> 强制（越界夹到两头）
       const opts = [];
       members.forEach((m, mi) => m.freeSkins().forEach(sk => opts.push([mi, sk])));
       if (opts.length) { const [mi, sk] = opts[Math.floor(Math.random() * opts.length)]; return members[mi].summon(sk); }
@@ -470,7 +501,7 @@ const MIST = {
                                     // （第三个形象 src4 金发双马尾 2026-09-27 换成了下面的真相喷雾，贴图 bestie3_* 留着备选）
   anim: { pulse: [0.42, 0.14], kick: [0.12, 0.05, 10], lean: 0.08, bob: [3, 2.6] },
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
-  max: 3, gap: 0.3,
+  max: 2, gap: 0.3,                 // = 形象数：满员时续时间而不是再加一个重复形象（三个形象的第三个是 Truth，组合封顶 3 人）
   rows: [[0.74, 0.80], [0.66, 0.71], [0.58, 0.63]],
   aim: { lo: -0.7, hi: 0.35, rate: 2.4, follow: 10 },
   sweep: { a: [0.3, 0.15], w: [1.3, 3.1] },
@@ -485,12 +516,12 @@ const Bestie = Crew(MIST);
    雾团按出生时的随机数 j 分三种：j < TRUTH_FX.chat 是聊天气泡、再往上到 star 是星星、其余是雾。
    同一团每帧同一种，不闪。喷口上还有一朵按喷射节奏闪的喷口焰（b.m 只在按住喷的时候有）。 */
 const TRUTH_FX = {
-  r0: 10, r1: 56,                         // 雾团出口半径 → 飞完的半径（像素）
+  r0: 20, r1: 56,                         // 雾团出口半径 → 飞完的半径（像素）。出口就是大团 = 读成高压喷出来的（10 时喷口前只有两三团小点）
   rim: [28, 120, 46], body: [156, 238, 96], core: [236, 255, 200],   // 深绿托底 / 雾身 / 喷口附近的亮芯
   a: [0.13, 0.2],                         // 托底、雾身每团的不透明度（雾团多、互相叠，单团要淡，见 MIST 的教训）
   chat: 0.035, star: 0.1,                 // 夹带气泡、星星的比例
   icon: [15, 30],                         // 气泡 / 星星 出口半宽 → 飞完的半宽
-  flare: [34, 52],                        // 喷口焰半径 [小, 大]，随喷射节奏在两者间跳
+  flare: [20, 32],                        // 喷口焰半径 [小, 大]，随喷射节奏在两者间跳。只当"点火"：喷口离脸 ~110px，34~52 会把喷流盖掉一半
 };
 function drawTruth(ctx, ps, b) {
   const F = TRUTH_FX, rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
@@ -556,6 +587,8 @@ function drawTruth(ctx, ps, b) {
    · 来：从画外顶上冲下来刹停（T.enter），刹停那一刻 main.js onArrive 出一圈冲击环；走：原地往上加速冲出去（T.exit）。
    · 喷法：anim.pulse 一长段"呲——"（0.7 秒）松一下（0.16），每次按下上身往上一震；bob 是悬着的上下浮。
      雾量比平衡车闺蜜大：雾团多（rate 120）、胀得大（TRUTH_FX.r1 56）、飞得远（life 0.95）。
+     出口慢（fluid.V 650，平衡车 1100）：喷口离男生脸只有 ~110 像素，V 1250 时 0.09 秒就到脸上，路上只剩两三团，
+     看不到"一股雾冲出去"；减半后路上的雾团翻倍、连成一个锥。
    · front：画在两个主角之前（她在半空、离镜头近，雾从她身前喷出去）。 */
 const TRUTH = {
   face: +1,
@@ -564,18 +597,18 @@ const TRUTH = {
      第一版放在腰胯（[150, 250]）：罐子比腰高 190 像素，一前倾喷口就往前下方挪一大截，
      反解仰角的迭代追着一个会动的喷口来回振荡，停在 −0.45（要 −1.3），雾从男生头顶上飞过去。 */
   whole: { pivot: [161, 71] },
-  exhaust: { at: [71, 57], rate: 40, V: 420, spread: 0.18, life: 0.4 },   // 罐尾（贴图像素）、每秒几团、出口速度、散角、寿命
+  exhaust: { at: [71, 57], rate: 40, V: 420, spread: 0.18, life: 0.4, gap: 14 },   // 罐尾（贴图像素）、每秒几团、出口速度、散角、寿命、人动时两团最多隔几像素
   spr: { src: 'assets/world/truth%n_%k.webp', body: { src: 'up', pivot: [136, 184], k: 1 }, lo: { src: 'lo' },
          foot: [156, 459], muzzle: [522, 63] },
   skins: [1],
   anim: { pulse: [0.7, 0.16], kick: [0, 0.06, 9], lean: 0.03, bob: [5, 2.2] },
-  T: { enter: 0.55, spray: 2.8, exit: 0.45 },
+  T: { enter: 0.55, spray: 2.8, exit: 0.45, fire: 0.18 },   // fire：刹停后隔多久开喷（先"嘭"地停住，再"呲——"）
   max: 1, gap: 0.3,
-  rows: [[0.98, 1.02]],
-  aim: { lo: -0.8, hi: 0.1, rate: 1.6, follow: 8 },
+  rows: [[0.86, 0.9]],
+  aim: { lo: -0.85, hi: 0.1, rate: 1.6, follow: 8, stiff: 40 },   // lo：男生被拖倒（p=95）时要 −0.95 才正对脸，但那样她倒栽葱、身子全出画，−0.85 靠 miss 窗口蹭着打中；stiff 见 update 临界阻尼
   sweep: { a: [0.25, 0.12], w: [1.2, 2.9] },
   zone: null,
-  fluid: { V: 1250, G: 40, drag: 0.85, rate: 120, spread: 0.13, vJit: 0.18, life: 0.95, miss: 70, snap: 14, hitEvery: 0.25, floor: false,
+  fluid: { V: 650, G: 40, drag: 0.85, rate: 120, spread: 0.13, vJit: 0.18, life: 0.95, miss: 70, snap: 14, hitEvery: 0.25, floor: false,
            draw: drawTruth },
 };
 const Truth = Crew(TRUTH);

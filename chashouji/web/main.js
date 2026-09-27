@@ -862,8 +862,10 @@ const RECIPE = {
                                            drag: 0.96, life: 0.45, r: 6, r1: 10, rot: Math.random() * 6, vrot: 6,
                                            rgb: [255, 251, 210], edge: [28, 120, 46], lw: 2 });
     },
-    arrive(x, y, s) {                  // (x, y) = 她的腰（crew.js 按转过之后的位置给）；冲击环套在身子上
-      const cy = y;
+    arrive(x, y, s) {                  // (x, y) = 她的腰（crew.js 按转过之后的位置给）
+      /* 冲击环炸在脚底下（腰往下 180·s）：ring 是压扁的地面环，套在腰上读成呼啦圈，
+         0.36 秒横切过她的身子和裙子；放脚下读成"刹车的气浪往下拍"。 */
+      const cy = y + 180 * s;
       Particles.spawn({ kind: 'dot', x, y: cy, r: 30 * s, r1: 150 * s, life: 0.2, rgb: [196, 255, 120], a: 0.7 });
       Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 260 * s, life: 0.36, rgb: [28, 120, 46], lw: 9 * s });
       Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 254 * s, life: 0.36, rgb: [156, 238, 96], lw: 4.5 * s });
@@ -1776,7 +1778,11 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 
   /* 气泡挂在手机上 —— phonePos 取自当前贴图里标好的手机点，所以消息永远是
      从正在被抢的那部手机里冒出来的。 */
-  Bubble.init({ phoneAt: phonePos });
+  /* 真相喷雾（Truth）悬在女主左上方时，罐子和喷口正好在气泡往上飘的那条走廊里（x≈400~600），
+     10 帧里 10 帧被气泡压住 —— 她在场期间新出的气泡**抬高** BUBBLE_TRUTH_DY 出生，从罐子上方飘，已经在飘的不动。
+     不往右挪：右移 260 那版气泡正好从男生脸（命中爆点）上冒出来，还被屏幕右沿切掉。 */
+  const BUBBLE_TRUTH_DY = 200;
+  Bubble.init({ W, phoneAt: () => { const [x, y] = phonePos(); return Truth.active() ? [x, y - BUBBLE_TRUTH_DY] : [x, y]; } });
 
   /* 两个档 3 帮手（crew.js）。zone = [喷口最多伸到哪（靠对方那边）, 人的外沿最多到哪（可以出画 90 像素）]：
      喷口不越过手机 100 像素（再近水就是竖着往下落），但手机很偏时（一方被拖着趴地）喷口那一头最多到
@@ -1852,7 +1858,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   const HOVER = 153;
   Truth.init({
     W, ground: () => GROUND + FX.bob, horizon,
-    perch: () => [195, GROUND - HOVER],
+    perch: () => [180, GROUND - HOVER - 45],
     target(u) {
       const f = faceOf('b');
       return f && [f[0] - 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]];
@@ -1932,6 +1938,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       /* hudTick 也要跟着快进：它管两种闪光的余量。不调的话预热结束那一帧的
          HUD 永远是"刚开局、什么都没闪过"的样子，?livet 微调也扫不到闪光。 */
       battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30;
+      /* 帮手和礼物雨也要跟着快进：不推进的话预热里送的档 3 礼物全卡在 t=0 叠着（闺蜜被叫满、Truth 被连续续时间） */
+      Buddy.update(1 / 30); Bestie.update(1 / 30); Truth.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30);
       derive(1 / 30); hudTick(1 / 30);
     }
     // 预热完冻住**进度**：战况定在这一刻，而火力、弹幕、粒子照跑 —— 截图要的
