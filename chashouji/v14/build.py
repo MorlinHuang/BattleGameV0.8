@@ -165,13 +165,13 @@ def find_phone(rgb, al):
 # 斜拿的趴地姿势尤其像抓着一块板的中段，×1.3 两头刚好藏在拳头后面）
 PHONE_K = 1.3
 PHONE_PAD = 2     # 机身连通块外扩几像素：把它的描边和抗锯齿边一起带上
-HAND_MIN = 400   # 肤色连通块至少多少像素才算手（原图分辨率，一只拳头上万）
-HAND_PAD = 3      # 肤色外扩几像素：手指的黑描边算手，要盖在放大的机身前面
+OLD_PAD = 9       # 旧机身凸包外扩几像素算旧机身（偏亮的边框、抗锯齿边、下沿阴影），这一圈里只盖回拳头
 
 
 def enlarge_phone(rgb, al, ph):
-    """原图分辨率下把手机放大 PHONE_K 倍贴回原位（中心不动，meta.phone 不变），再把机身附近的手盖回最上面。
-    机身 = find_phone 找到的那块近黑连通块；手 = 机身附近的肤色像素外扩 HAND_PAD（带上手指描边）。"""
+    """原图分辨率下把手机放大 PHONE_K 倍贴回原位（中心不动，meta.phone 不变），点亮屏幕（light_phone），再把机身附近的手盖回最上面。
+    必须在原图上先 find_phone 再调这里：屏幕亮了以后就不是"近黑长条"，找不到了。
+    机身 = find_phone 找到的那块近黑连通块的凸包；手 = 机身附近、旧机身以外的不透明像素。"""
     cx, cy, long_, _ = ph
     dark = (rgb.max(-1) < 70) & (al > 0.9)
     lab, _ = ndimage.label(dark)
@@ -188,14 +188,15 @@ def enlarge_phone(rgb, al, ph):
     r = int(long_ * PHONE_K)              # 只在机身周围这一块里动
     y0, y1 = max(0, int(cy) - r), min(al.shape[0], int(cy) + r)
     x0, x1 = max(0, int(cx) - r), min(al.shape[1], int(cx) + r)
+    near = np.zeros(al.shape, bool); near[y0:y1, x0:x1] = True
+    # 手机在两人的手后面：原图里旧机身以外的不透明像素（拳头、指缝阴影、手臂）全盖回最上面 ——
+    # 只按肤色挑"手"会漏掉偏暗的指缝阴影，亮屏从那里透出来，整只拳头发灰。
+    # 旧机身所在的那一圈（凸包外扩 OLD_PAD）里只盖回拳头：肤色外扩 3px（带上手指描边）。
+    # 那一圈里的旧边框、反光、下沿阴影颜色五花八门（斜拿的还带色偏），按"灰 / 暗"去认总有漏的，漏一个就是屏上一个点；
+    # 凸包本身又会把压在机身两头的指节包进去，整圈不盖的话亮屏会画在指节上
     R, G, B = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-    skin = (R > 150) & (R > G + 10) & (G > B - 5) & (al > 0.5)
-    near = np.zeros_like(skin); near[y0:y1, x0:x1] = True
-    sl, _ = ndimage.label(skin & near)          # 只认成片的肤色：机身边框的暖色高光零星几个像素，也满足肤色判定
-    sz = np.bincount(sl.ravel()); sz[0] = 0
-    hand = ndimage.binary_dilation(np.isin(sl, np.nonzero(sz >= HAND_MIN)[0]), iterations=HAND_PAD)
-    hand &= near & ~core & (al > 0.5)           # 只把手本身盖回去；外扩到的透明底不盖，不然放大的机身上会被抠出洞
-
+    skin = ndimage.binary_dilation((R > 150) & (R > G + 10) & (G > B - 5) & (al > 0.5), iterations=3)
+    hand = near & ~(ndimage.binary_dilation(core, iterations=OLD_PAD) & ~skin) & (al > 0.5)
     rgba = np.concatenate([rgb, al[..., None] * 255], -1).astype(np.float32)
     lay = np.where(body[..., None], rgba, 0)[y0:y1, x0:x1].astype(np.uint8)
     im = Image.fromarray(lay, 'RGBA')
@@ -204,9 +205,71 @@ def enlarge_phone(rgb, al, ph):
     full = Image.fromarray(rgba.clip(0, 255).astype(np.uint8), 'RGBA')
     over = Image.new('RGBA', full.size); over.paste(big, (ox, oy))
     full.alpha_composite(over)
-    out = np.array(full).astype(np.float32)
+    big_core = np.array(over)[..., 3] > 127
+    out = light_phone(full, big_core, hand, rgba)
     out[hand] = rgba[hand]                # 手盖回最上面
+    d = ndimage.distance_transform_edt(~(big_core & ~hand))   # 屏幕照到手：按离**露出来的**屏幕多远算，压在机身上的整只拳头不算"贴着屏幕"
+    k = np.where(hand, np.clip(1 - d / HAND_LIT['range'], 0, 1) * HAND_LIT['a'], 0)[..., None]
+    out[..., :3] = out[..., :3] * (1 - k) + np.array(HAND_LIT['rgb'], np.float32) * k
     return out[..., :3], out[..., 3] / 255
+
+
+# 亮屏（2026-09-27 用户：「手机屏幕可以亮着 然后软件是某聊天软件，但屏幕太小 不用具体显示聊天记录」）。
+# 只涂浅色在明亮底图上读成"一块白东西"（用户："屏幕并没有发亮"）：读出亮着靠冷色 + 机身外一圈光晕 + 照到手。
+# 长度单位都是原图像素（贴图最后 ×SCALE≈0.44 上屏）。界面是固定图案、不随机，53 张帧一模一样，连播不闪。
+SCREEN = {'w': 0.86, 'h': 0.8,                               # 屏幕占机身长 / 宽的比例（四周剩下的是黑边框）
+          'mid': (250, 255, 255), 'edge': (150, 215, 255),   # 冷色渐变：中心发白 → 边缘淡蓝
+          'bar': (20, 200, 110), 'bar_h': 0.2,               # 顶栏：偏蓝的绿（跟真相喷雾的青柠 156,238,96 区分开）、占屏高
+          'me': (58, 190, 120), 'them': (255, 255, 255),     # 右边自己发的绿气泡 / 左边对方的白气泡，都不写字
+          'input': (205, 212, 220)}                          # 底部输入栏
+GLOW = {'rgb': (80, 200, 255), 'grow': 9, 'blur': 20, 'a': 0.75}   # 光晕：机身轮廓外扩、高斯模糊、透明度，画在机身后面
+HAND_LIT = {'range': 10, 'a': 0.3, 'rgb': (190, 235, 255)}                        # 屏幕照到手：离机身多近的手染冷光、最多染几成（0.45 整只拳头发蓝像戴手套）
+
+
+def screen_tex(w, h):
+    """w×h 的聊天界面（横拿：上边是顶栏）。没有字、没有真实 App 的 logo，远看读出"在聊天"就够。"""
+    S = SCREEN
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    d = np.clip(np.hypot((xx - w / 2) / (w / 2), (yy - h / 2) / (h / 2)) / 1.2, 0, 1)[..., None]
+    im = Image.fromarray((np.array(S['mid']) * (1 - d) + np.array(S['edge']) * d).astype(np.uint8), 'RGB')
+    g = ImageDraw.Draw(im)
+    bh = round(h * S['bar_h'])
+    g.rectangle((0, 0, w, bh), fill=S['bar'])
+    r = bh * 0.32
+    g.ellipse((w * 0.2 - r, bh / 2 - r, w * 0.2 + r, bh / 2 + r), fill=(255, 255, 255))          # 头像
+    g.rounded_rectangle((w * 0.2 + r * 1.8, bh / 2 - r * 0.45, w * 0.55, bh / 2 + r * 0.45), r * 0.45, fill=(255, 255, 255))  # 名字条
+    ih = round(h * 0.14)
+    g.rectangle((0, h - ih, w, h), fill=S['input'])
+    g.rounded_rectangle((w * 0.22, h - ih * 0.78, w * 0.78, h - ih * 0.22), ih * 0.28, fill=(250, 252, 255))
+    lh = (h - bh - ih) / 4                                    # 三条气泡：对方 / 自己 / 对方，中段两头会被拳头盖住，留在正中
+    for k, (side, ln) in enumerate([('them', 0.34), ('me', 0.3), ('them', 0.26)]):
+        y = bh + lh * (k + 0.55)
+        x0 = w * 0.2 if side == 'them' else w * (0.8 - ln)
+        g.rounded_rectangle((x0, y, x0 + w * ln, y + lh * 0.62), lh * 0.3, fill=S[side])
+    return im
+
+
+def light_phone(full, core, hand, rgba):
+    """full：已经贴上放大机身的整张 RGBA（PIL）；core：放大后的机身（bool）。
+    机身后垫光晕、机身上贴亮屏，返回 float 数组；手由调用方再盖回去、再染冷光。"""
+    ys, xs = np.nonzero(core)
+    pts = np.stack([xs, ys], 1).astype(np.float32); c = pts.mean(0)
+    _, vec = np.linalg.eigh(np.cov((pts - c).T))
+    u = vec[:, 1] * (1 if vec[0, 1] >= 0 else -1)            # 长轴，朝右
+    proj = (pts - c) @ np.stack([u, [-u[1], u[0]]], 1)
+    L, Wd = proj[:, 0].max() - proj[:, 0].min(), proj[:, 1].max() - proj[:, 1].min()
+    # 光晕：垫在机身后面（先画光晕、再把人和机身整张叠上去）
+    g = ndimage.gaussian_filter(ndimage.binary_dilation(core, iterations=GLOW['grow']).astype(np.float32), GLOW['blur'] / 2)
+    glow = np.zeros(core.shape + (4,), np.uint8)
+    glow[..., :3] = GLOW['rgb']; glow[..., 3] = np.clip(g * GLOW['a'] * 255, 0, 255)
+    base = Image.fromarray(glow, 'RGBA'); base.alpha_composite(full)
+    # 亮屏：沿机身长轴贴，斜拿的跟着斜
+    SS = 4                                                   # 4 倍大画、4 倍大转，再缩回来：原尺寸直接转，斜拿的边和气泡锯齿成一排点
+    tex = screen_tex(round(L * SCREEN['w']) * SS, round(Wd * SCREEN['h']) * SS).convert('RGBA')
+    tex = tex.rotate(-np.degrees(np.arctan2(u[1], u[0])), resample=Image.BICUBIC, expand=True)
+    tex = tex.resize((round(tex.width / SS), round(tex.height / SS)), Image.LANCZOS)
+    base.alpha_composite(tex, (round(c[0] - tex.width / 2), round(c[1] - tex.height / 2)))
+    return np.array(base).astype(np.float32)
 
 
 # 量人有多大的尺子：赢的那一方的头，框是对着 pose_n0.webp 量的（换 n0 必须重量）。
