@@ -315,7 +315,7 @@ function startMatch() {
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
-  Buddy.reset(); Bestie.reset(); DurianRain.reset(); SockRain.reset();
+  Buddy.reset(); Bestie.reset(); Truth.reset(); DurianRain.reset(); SockRain.reset();
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
@@ -823,6 +823,60 @@ const RECIPE = {
     },
   },
 
+  /* 真相喷雾（档 3 左，闺蜜第三个形象）：青柠色雾在男生脸上炸开，**蹦出聊天气泡** —— 喷的是"真相"，
+     被喷出来的是他藏着的聊天记录（查岗党要的就是这个）。配色同 fx-bright-background 那条规矩：
+     发光靠色相（青柠在浅绿墙上靠饱和度跳出来）、实体靠轮廓（气泡、星星一律深绿描边）。
+     burst：深绿托底环 + 青柠环 + 一团亮芯 + 4~5 个气泡往上蹦 + 星星 + 雾团。
+     drip：雾每 0.25 秒一下的补刀，小：一两团雾，偶尔一颗星或一个气泡。
+     arrive：她冲下来刹停那一下（crew.js onArrive），身边一圈大冲击环 + 星星四溅 + 小震屏。 */
+  truth: {
+    tint: [196, 255, 150],
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 80 * s, life: 0.16, rgb: [196, 255, 120], a: 0.8 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 120 * s, life: 0.32, rgb: [28, 120, 46], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.32, rgb: [156, 238, 96], lw: 3.5 * s });
+      for (let i = 0; i < Math.round(3 * s); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.8, sp = 180 + Math.random() * 160;
+        Particles.spawn({ kind: 'chat', x, y, vx: Math.cos(a) * sp - side * 60, vy: Math.sin(a) * sp, g: -40, drag: 0.93,
+                          life: 0.9 + Math.random() * 0.4, r: 8, r1: 22 + Math.random() * 8,
+                          rgb: [255, 255, 255], edge: [28, 120, 46], lw: 3 });
+      }
+      for (let i = 0; i < Math.round(4 * s); i++) {
+        const a = Math.random() * 6.283, sp = 160 + Math.random() * 260;
+        Particles.spawn({ kind: 'star', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 120, g: 500, drag: 0.96,
+                          life: 0.5 + Math.random() * 0.3, r: 7, r1: 12, rot: Math.random() * 6, vrot: 6,
+                          rgb: [255, 251, 210], edge: [28, 120, 46], lw: 2.5 });
+      }
+      for (let i = 0; i < Math.round(6 * s); i++) this.drip(x, y, side, true);
+    },
+    drip(x, y, side, only) {
+      const a = (Math.random() - 0.5) * 2.6, sp = 70 + Math.random() * 130;
+      Particles.spawn({ kind: 'soft', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 20,
+                        drag: 0.9, g: 0, r: 10 + Math.random() * 6, r1: 30 + Math.random() * 18, life: 0.5 + Math.random() * 0.3,
+                        rgb: Math.random() < 0.5 ? [156, 238, 96] : [60, 170, 70], a: 0.5 });
+      if (only) return;
+      const k = Math.random();
+      if (k < 0.12) Particles.spawn({ kind: 'chat', x, y, vx: -side * 60 + (Math.random() - 0.5) * 120, vy: -150 - Math.random() * 90,
+                                       g: -30, drag: 0.93, life: 0.8, r: 8, r1: 18, rgb: [255, 255, 255], edge: [28, 120, 46], lw: 2.5 });
+      else if (k < 0.3) Particles.spawn({ kind: 'star', x, y, vx: (Math.random() - 0.5) * 300, vy: -120 - Math.random() * 160, g: 500,
+                                           drag: 0.96, life: 0.45, r: 6, r1: 10, rot: Math.random() * 6, vrot: 6,
+                                           rgb: [255, 251, 210], edge: [28, 120, 46], lw: 2 });
+    },
+    arrive(x, y, s) {                  // (x, y) = 她的腰（crew.js 按转过之后的位置给）；冲击环套在身子上
+      const cy = y;
+      Particles.spawn({ kind: 'dot', x, y: cy, r: 30 * s, r1: 150 * s, life: 0.2, rgb: [196, 255, 120], a: 0.7 });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 260 * s, life: 0.36, rgb: [28, 120, 46], lw: 9 * s });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 254 * s, life: 0.36, rgb: [156, 238, 96], lw: 4.5 * s });
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * 6.283, sp = 260 + Math.random() * 300;
+        Particles.spawn({ kind: 'star', x, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 400, drag: 0.96,
+                          life: 0.5 + Math.random() * 0.25, r: 8, r1: 13, rot: Math.random() * 6, vrot: 7,
+                          rgb: [255, 251, 210], edge: [28, 120, 46], lw: 2.5 });
+      }
+      Particles.addShake(6);
+    },
+  },
+
   /* 奶茶泼一身（档 3 右）。和花瓣正好相反：液体是**重**的，落地就停，
      所以走 debris 的物理参数而不是 feather 的 —— 一杯奶茶泼出去要是像羽毛
      那样飘半秒，读起来就成了雾。 */
@@ -1015,7 +1069,7 @@ const SHOP = {
    是不够特别；档 3~4 一局只有几次，要的是"我没见过"—— 而这个题材里观众最没
    见过的，就是吵到最后砸过来的是一束花。 */
 // 档 3 的两个帮手角色（crew.js），GIFT[..].crew 指到这里
-const CREW = { buddy: Buddy, bestie: Bestie };
+const CREW = { buddy: Buddy, bestie: BestieGroup };   // 闺蜜 = 平衡车两个形象 + 真相喷雾（crew.js CrewGroup）
 const RAIN = { durian: DurianRain, sockball: SockRain };
 
 /* 高跟鞋砸头（档 1 左，榴莲鞋雨里的四只鞋）：爆点颜色跟鞋走（用户定的）—— 鞋跟"咔"一下，小而硬：
@@ -1788,6 +1842,27 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     onHit: (x, y, first) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE.pepper, x),
   });
 
+  /* 真相喷雾（闺蜜第三个形象，crew.js TRUTH）→ 同样瞄男生的脸，落点同平衡车闺蜜。
+     perch：她悬停时脚底在屏幕哪（没转之前；她整个人绕扛罐的肩膀转，肩膀在脚底正上方 388×s）。
+     定这两个数的依据是肩膀的位置：肩膀在 (200, GROUND−541)，到男生脸的连线往下斜 ~0.3 rad ——
+     罐子从女主头顶上方压过去（罐底离她头顶还有 ~100），腿往左后方甩，靴子扫过女主长发的外沿、碰不到她的脸。
+     横向 125 那版她一半出画、脸贴着屏幕左沿；再往右罐子就盖到女主头上。
+     再高（肩膀往上）连线变陡，要前倾 0.9 rad 以上，人几乎倒栽葱。
+     onArrive：冲下来刹停那一刻，身边炸一圈青柠冲击环 + 星星 + 小震屏（不给反馈读成飘下来的）。 */
+  const HOVER = 153;
+  Truth.init({
+    W, ground: () => GROUND + FX.bob, horizon,
+    perch: () => [195, GROUND - HOVER],
+    target(u) {
+      const f = faceOf('b');
+      return f && [f[0] - 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]];
+    },
+    front: () => null,
+    onArrive: (x, y, s) => RECIPE.truth.arrive(x, y, s),
+    onSplash: (x, y) => RECIPE.truth.drip(x, y, -1),
+    onHit: (x, y, first) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE.truth, x),
+  });
+
   /* 长卷背景与姿势贴图，都由 v14/build.py 生成。world.json 是它们的说明书：
      每间房多宽、客厅正中在哪、每张贴图的锚点和手机位置。 */
   const vq = Q0.get('v') ? '?v=' + encodeURIComponent(Q0.get('v')) : '';
@@ -1812,6 +1887,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Particles.loadShapes(Q0.get('v'), noSpr),
     Buddy.load(Q0.get('v'), noSpr),
     Bestie.load(Q0.get('v'), noSpr),
+    Truth.load(Q0.get('v'), noSpr),
     DurianRain.load(Q0.get('v'), noSpr),
     SockRain.load(Q0.get('v'), noSpr),
   ]);
@@ -1907,9 +1983,12 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     cctx.clearRect(0, 0, W, H);
     cctx.save(); cctx.translate(ox, oy);
     /* 哥们在男生斜后方、闺蜜在女生斜后方：连同各自喷的水 / 雾按远近排好，全在主角之前画，被主角挡住（crew.js items） */
-    for (const it of [...Buddy.items(), ...Bestie.items()].sort((a, b) => a.s - b.s)) it.draw(cctx);
+    /* 站在主角前面的帮手（真相喷雾，front）画在主角和污渍之后 */
+    const crew = [...Buddy.items(), ...Bestie.items(), ...Truth.items()].sort((a, b) => a.s - b.s);
+    for (const it of crew) if (!it.front) it.draw(cctx);
     actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(cctx);
+    for (const it of crew) if (it.front) it.draw(cctx);
     cctx.restore();
   }
 
@@ -2020,7 +2099,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     o.fillStyle = '#0c0e12'; o.fillRect(0, 0, out.width, out.height);
 
     // ?ammoy=aim：不钉高度，让瞄部位的礼物（香蕉瞄脸、口红瞄腰腿）按实际逻辑瞄
-    if (g.style === 'crew') for (let k = +(Q.get('buddyn') || 1); k > 0; k--) CREW[g.crew].summon();   // ?buddyn=3 一次叫几个
+    /* ?buddyn=3 一次叫几个；?bestie=0|1 闺蜜强制出哪个成员（0 平衡车、1 真相喷雾），不给就随机 */
+    if (g.style === 'crew') for (let k = +(Q.get('buddyn') || 1); k > 0; k--) CREW[g.crew].summon(Q.has('bestie') ? +Q.get('bestie') : undefined);
     else if (g.style === 'rain') RAIN[g.rain].summon();
     else Ammo.launch(g, Q.get('ammoy') === 'aim' ? null : clamp(+(Q.get('ammoy') || 560), 300, 960), { gift: true });
     let el = 0;
@@ -2030,11 +2110,13 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         const d = Particles.tick(1 / 60);
         Particles.update(1 / 60);
         Ammo.update(d);
-        Buddy.update(d); Bestie.update(d); DurianRain.update(d); SockRain.update(d);
+        Buddy.update(d); Bestie.update(d); Truth.update(d); DurianRain.update(d); SockRain.update(d);
         Bubble.update(d, FX.struggle);
         derive(d); hudTick(d);
       }
       el += step;
+      if (Q.get('crewlog') === '1') for (const b of Truth.peek())
+        console.log(`crewlog t=${b.t.toFixed(2)} aim=${b.aim.toFixed(3)} want=${(b.want ?? NaN).toFixed(3)} tg=${b.tg && b.tg.map(v => v.toFixed(0))} m=${b.m && b.m.map(v => v.toFixed(0))}`);
       render();
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
@@ -2124,6 +2206,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         derive(d); hudTick(d);
       }
       el += step;
+      if (Q.get('crewlog') === '1') for (const b of Truth.peek())
+        console.log(`crewlog t=${b.t.toFixed(2)} aim=${b.aim.toFixed(3)} want=${(b.want ?? NaN).toFixed(3)} tg=${b.tg && b.tg.map(v => v.toFixed(0))} m=${b.m && b.m.map(v => v.toFixed(0))}`);
       render();
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
@@ -2264,7 +2348,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        这一下"的可视化，冻住它就迟到了；而正在飞的弹幕是**下一下**的前奏，
        顿帧的意思就是全世界停下来看这一击，此刻别的东西还在飞就散掉了。 */
     Ammo.update(dt);
-    Buddy.update(dt); Bestie.update(dt); DurianRain.update(dt); SockRain.update(dt);
+    Buddy.update(dt); Bestie.update(dt); Truth.update(dt); DurianRain.update(dt); SockRain.update(dt);
     // 气泡跟着逻辑时钟：顿帧时它也该停，那半秒全世界都在看刚才那一击
     Bubble.update(dt, FX.struggle);
     S.t += dt;

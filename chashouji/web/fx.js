@@ -15,6 +15,24 @@
  */
 'use strict';
 
+/* 聊天气泡图标（真相喷雾：雾里飘的、命中时从男生脸上蹦出来的"被翻出来的聊天记录"）。
+   以 (0,0) 为中心、半宽 r：圆角框 + 左下一个小尾巴 + 三个点。粒子（kind 'chat'）和 crew.js 的雾共用这一个画法。
+   描边是实体靠轮廓那条规矩：白框在浅绿墙上不描边就化掉。 */
+function drawChatIcon(ctx, r, fill, line, lw, dot) {
+  const w = r * 2, h = r * 1.4, x = -r, y = -h / 2, c = h * 0.42;
+  ctx.beginPath();
+  ctx.moveTo(x + c, y); ctx.lineTo(x + w - c, y); ctx.quadraticCurveTo(x + w, y, x + w, y + c);
+  ctx.lineTo(x + w, y + h - c); ctx.quadraticCurveTo(x + w, y + h, x + w - c, y + h);
+  ctx.lineTo(x + r * 0.62, y + h); ctx.lineTo(x + r * 0.18, y + h + r * 0.5); ctx.lineTo(x + r * 0.34, y + h);   // 尾巴
+  ctx.lineTo(x + c, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - c);
+  ctx.lineTo(x, y + c); ctx.quadraticCurveTo(x, y, x + c, y);
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  if (line) { ctx.lineWidth = lw; ctx.strokeStyle = line; ctx.stroke(); }
+  ctx.fillStyle = dot;
+  for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(i * r * 0.5, 0, r * 0.16, 0, 6.283); ctx.fill(); }
+}
+
 const Particles = (function () {
   const MAX = 1200;
   const act = [];            // 活跃粒子
@@ -257,7 +275,7 @@ const Particles = (function () {
     ctx.lineJoin = 'round';
     for (let i = 0; i < act.length; i++) {
       const p = act[i];
-      if (p.kind !== 'soft' && p.kind !== 'chip' && p.kind !== 'star' && p.kind !== 'heart' && p.kind !== 'card') continue;
+      if (p.kind !== 'soft' && p.kind !== 'chip' && p.kind !== 'star' && p.kind !== 'heart' && p.kind !== 'card' && p.kind !== 'chat') continue;
       const k = p.life / p.maxLife;
       const alpha = p.a * fade(p);
       if (alpha <= 0.01) continue;
@@ -299,6 +317,15 @@ const Particles = (function () {
         ctx.fillStyle = p.fill;
         ctx.fill();
         if (p.line) { ctx.lineWidth = p.lw; ctx.strokeStyle = p.line; ctx.stroke(); }
+        ctx.restore();
+      } else if (p.kind === 'chat') {
+        /* 聊天气泡：从脸上蹦出来的"翻出来的聊天记录"。r → r1 胀开，轻轻摆（rot 来回，不打转 —— 转起来就不像消息了）。
+           edge 当描边，rgb 当框色，三个点用描边色。 */
+        const r = p.r + (p.r1 - p.r) * (1 - k);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(Math.sin(p.seed + (1 - k) * 6) * 0.22);
+        drawChatIcon(ctx, r, p.fill, p.line, p.lw, p.line || '#3a8a30');
         ctx.restore();
       } else if (p.kind === 'card') {
         /* 卡片：一张照片。它跟 chip 的区别不是参数而是**语义** —— chip 是
@@ -352,7 +379,7 @@ const Particles = (function () {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < act.length; i++) {
       const p = act[i];
-      if (p.kind === 'soft' || p.kind === 'chip' || p.kind === 'star' || p.kind === 'heart' || p.kind === 'card') continue;
+      if (p.kind === 'soft' || p.kind === 'chip' || p.kind === 'star' || p.kind === 'heart' || p.kind === 'card' || p.kind === 'chat') continue;
       const k = p.life / p.maxLife;
       const alpha = p.a * fade(p);
       if (alpha <= 0.01) continue;

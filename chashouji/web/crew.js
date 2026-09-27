@@ -64,7 +64,8 @@ function Crew(cfg) {
     return best;
   }
 
-  function summon() {
+  /* sk（可无）：指定形象编号（cfg.skins 的下标）；不给就挑场上没人用的。组调度（CrewGroup）用它指定。 */
+  function summon(sk) {
     const staying = bs.filter(b => b.t <= sprayEnd(b));
     if (bs.length >= cfg.max) {
       if (staying.length) {               // 满了：剩余时间最短的续一段
@@ -78,20 +79,41 @@ function Crew(cfg) {
     const free = cfg.rows.filter(R => !bs.some(b => b.s >= R[0] && b.s <= R[1]));
     const pool = free.length ? free : cfg.rows, R = pool[Math.floor(Math.random() * pool.length)];
     /* 形象：挑一个场上没人用的（三个形象、最多三个人，同时在场的一定各不相同） */
-    const skins = cfg.skins.map((_, i) => i), unused = skins.filter(i => !bs.some(b => b.skin === i));
-    const sk = (unused.length ? unused : skins)[Math.floor(Math.random() * (unused.length || skins.length))];
+    if (sk == null) {
+      const skins = cfg.skins.map((_, i) => i), unused = freeSkins();
+      sk = (unused.length ? unused : skins)[Math.floor(Math.random() * (unused.length || skins.length))];
+    }
     bs.push({ t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
               r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
-              pt: 0, kick: 0, lean: 0, skin: sk });
+              pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0 });
     bs.sort((a, b) => a.s - b.s);          // 远的先画
   }
 
+  /* 场上没人用的形象（下标） */
+  function freeSkins() { return cfg.skins.map((_, i) => i).filter(i => !bs.some(b => b.skin === i)); }
+
   const easeOut = (u) => 1 - Math.pow(1 - u, 3);
+
+  /* 悬停（真相喷雾）：不站地，被罐子的后坐力顶在半空。o.perch() 给脚底该停在屏幕哪一点。
+     来：从画外顶上冲下来，按 easeOut 减速刹停（火箭点火刹车，不是自由落体）；
+     走：原地往上加速冲出画面（u²）。悬着的时候慢慢晃一个横 8 字 + 上下浮（anim.bob）。 */
+  function hoverPose(b) {
+    const s = b.s, [hx, hy] = o.perch(), t = b.t, se = sprayEnd(b);
+    const top = -(spr.foot[1] - spr.muzzle[1] + 120) * s;             // 脚底在这，整个人（含翘起的罐子）都在画外
+    const sx = Math.sin(t * 0.9 + b.ph) * 8 * s, sy = Math.sin(t * 1.8 + b.ph) * 4 * s;
+    const bob = A ? Math.sin(t * A.bob[1] + b.ph) * A.bob[0] * s : 0;
+    if (t < T.enter) return [hx, top + (hy - top) * easeOut(t / T.enter), s];
+    const k = Math.min(1, (t - T.enter) / 0.3);                        // 刹停后 0.3 秒里晃动从 0 长满，不跳
+    const x = hx + sx * k, y = hy + (sy + bob) * k;
+    if (t > se) { const u = Math.min(1, (t - se) / T.exit); return [x, y + (top - y) * u * u, s]; }
+    return [x, y, s];
+  }
 
   /* 此刻人站在哪（脚下滑板/平衡车底边中点的屏幕坐标）和缩放。
      横向按**喷口**排：o.zone() = [喷口最多伸到哪（靠对方那边）, 人的外沿最多到哪（可以出画一点）]，
      r=0 喷口顶到第一个数，r=1 外沿顶到第二个数。 */
   function pose(b) {
+    if (cfg.move === 'hover') return hoverPose(b);
     const s = b.s, [near, edge] = o.zone(), wid = img ? img[0].lo.width : 400;
     let far = face < 0 ? edge - (wid - spr.muzzle[0]) * s : edge + spr.muzzle[0] * s;
     far = face < 0 ? Math.max(near, far) : Math.min(near, far);
@@ -117,11 +139,24 @@ function Crew(cfg) {
   /* 喷口指向 th 时两层各转多少：[上身, 手臂（绝对，含上身）]。后坐 kick 把手臂往上甩、上身往后仰；
      喷的时候上身往前探 lean。没 arm 的（哥们）上身就是全部，= th。 */
   function angles(b, th) {
-    if (!spr.arm) return [th, th];
+    if (cfg.whole) {                             // 悬空（真相喷雾）：整个人转 th，上身只额外吃后坐 / 前探；[上身额外, 喷口总指向]
+      const bt = A ? A.kick[1] * b.kick - A.lean * b.lean : 0;
+      return [bt, th + bt];
+    }
+    if (!spr.arm) {                              // 整个上身端着东西转（哥们）：后坐、前探都加在上身上
+      const bt = th + (A ? A.kick[1] * b.kick - A.lean * b.lean : 0);
+      return [bt, bt];
+    }
     const k = A ? b.kick : 0, ln = A ? b.lean : 0;
     return [spr.body.k * th - (A ? A.lean : 0) * ln + (A ? A.kick[1] : 0) * k, th + (A ? A.kick[0] : 0) * k];
   }
+  /* 贴图上的点 q 跟着人转到哪：whole 先上身绕腰转 bt，再整个人绕 whole.pivot 转 th */
+  function carried(p, q, th, b) {
+    const bt = angles(b, th)[0], m1 = turn(at(p, q), at(p, spr.body.pivot), bt);
+    return turn(m1, at(p, cfg.whole.pivot), th);
+  }
   function muzzle(p, th, b) {
+    if (cfg.whole) return carried(p, spr.muzzle, th, b);
     const [bt, at_] = angles(b, th), c = at(p, spr.body.pivot), m = at(p, spr.muzzle);
     if (!spr.arm) return turn(m, c, bt);
     const sh = at(p, spr.arm.pivot), sh1 = turn(sh, c, bt);
@@ -160,6 +195,7 @@ function Crew(cfg) {
       const d = ps[i];
       if (F.drag) { const k = Math.exp(-F.drag * dt); d.vx *= k; d.vy *= k; }
       d.vy += F.G * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.t += dt;
+      if (d.ex) { if (d.t > cfg.exhaust.life) ps.splice(i, 1); continue; }
       const b = d.b, h = hitTest(d, o.target(d.u));
       if (h) {
         ps.splice(i, 1);
@@ -172,6 +208,13 @@ function Crew(cfg) {
       const b = bs[i];
       b.t += dt; b.hitCd -= dt;
       const se = sprayEnd(b);
+      if (!b.landed && b.t >= T.enter) {        // 到位（刹停 / 滑停）那一刻通知 main.js（真相喷雾：刹停的冲击环）
+        b.landed = true;
+        if (o.onArrive) {                        // 悬空的给腰（转过之后的位置），站地的给脚底
+          const p = pose(b), c = cfg.whole ? carried(p, spr.body.pivot, b.aim, b) : p;
+          o.onArrive(c[0], c[1], p[2]);
+        }
+      }
       if (b.t >= se + T.exit) { bs.splice(i, 1); continue; }
       /* 瞄：该打的落点 → 要的仰角 → 转轴按转速上限转过去。滑进来时就开始瞄，溜走时放平。
          对方倒地（o.down）不再整条扫，每 zone.every 秒随机挑一个部位、在它前后小幅扫。 */
@@ -193,7 +236,13 @@ function Crew(cfg) {
       }
       const tg = raw && b.tg;
       let want = 0;
-      if (tg) {
+      if (tg && cfg.whole) {
+        /* 整个人绕罐子轴线上的一点转（whole.pivot）：喷口永远在"转轴→落点"那条线上，直接按转轴反解，一步就准。
+           不能用下面那套"按喷口反解再迭代"：喷口离落点只有一两百像素、转动半径却有三百多，
+           每转一点喷口挪得比角度变得还多，迭代来回振荡（实测一次停在 −0.45、一次顶到上限 +0.1，要的是 −0.35）。 */
+        const c = at(p, cfg.whole.pivot);
+        want = Math.min(AIM.hi, Math.max(AIM.lo, elevation(tg[0] - c[0], tg[1] - c[1])));
+      } else if (tg) {
         want = b.aim;
         for (let k = 0; k < 6; k++) {
           const m0 = muzzle(p, want, b);
@@ -201,6 +250,7 @@ function Crew(cfg) {
         }
       }
       b.aim += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.aim));
+      b.want = want;
       b.m = null;
       const spraying = b.t >= T.enter && b.t <= se && tg;
       if (A) {                                   // 一段段按：每次按下后坐一震；喷的时候上身往前探
@@ -212,12 +262,24 @@ function Crew(cfg) {
           b.pt += dt;
         }
       }
+      /* 尾焰（cfg.exhaust，真相喷雾）：罐子尾巴朝喷口反方向喷，读成"是后坐力把她顶在半空"。
+         人在场就一直喷（进场刹车、悬着、离场都靠它），按住喷的时候加倍。尾焰不算命中（hitTest 跳过 ex）。 */
+      if (cfg.exhaust && b.t <= se + T.exit) {
+        const X = cfg.exhaust;
+        b.ex += dt * X.rate * (spraying ? 2 : 1);
+        const th = b.aim, r = carried(p, X.at, th, b), dir = angles(b, th)[1];
+        while (b.ex >= 1) {
+          b.ex -= 1;
+          const a = dir + (Math.random() - 0.5) * 2 * X.spread, v = X.V * (0.7 + Math.random() * 0.6);
+          ps.push({ x: r[0], y: r[1], vx: -face * v * Math.cos(a), vy: v * Math.sin(a), t: 0, u: 0, b, seq: -1, j: 1, ex: true });
+        }
+      }
       if (!spraying) continue;
       if (A && (b.pt % (A.pulse[0] + A.pulse[1])) > A.pulse[0]) { b.emit = 0; continue; }   // 松开那一下
       /* 喷：从转过之后的喷口，沿喷口方向，速度 V（雾再加一点散角和快慢）。一帧攒够几个就出几个，
          每个按它**实际该出口的时刻**补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩。 */
       b.emit += dt * F.rate;
-      const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm ? 1 : 0];   // 沿喷口此刻真的指向（含后坐）
+      const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm || cfg.whole ? 1 : 0];   // 沿喷口此刻真的指向（含后坐）
       while (b.emit >= 1) {
         b.emit -= 1;
         const age = b.emit / F.rate, a = dir + (Math.random() - 0.5) * 2 * F.spread;
@@ -239,30 +301,51 @@ function Crew(cfg) {
     if (!img) return [];
     const out = [], groups = new Map();
     for (const d of ps) { const g = groups.get(d.b); g ? g.push(d) : groups.set(d.b, [d]); }
-    for (const b of bs) out.push({ s: b.s, draw: (ctx) => drawOne(ctx, b) });
+    const front = !!cfg.front;                   // 站在主角前面（真相喷雾）：main.js 把它们挪到主角之后画
+    for (const b of bs) out.push({ s: b.s, front, draw: (ctx) => drawOne(ctx, b) });
     /* 人已离场、水还在飞的，按原来那个人的远近画 */
-    for (const [b, g] of groups) out.push({ s: b.s + 1e-6, draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
+    for (const [b, g] of groups) out.push({ s: b.s + 1e-6, front, draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
     return out;
   }
 
   /* 一个人：上身系里先画手臂（再绕肩转）、再画上身，最后画不动的下身 */
   function drawOne(ctx, b) {
-    const p = pose(b), [x, y, s] = p, [bt, at_] = angles(b, b.aim);
+    const p = pose(b), [x, y, s] = p, [bt, at_] = cfg.whole ? [angles(b, b.aim)[0], 0] : angles(b, b.aim);
     const X = x - spr.foot[0] * s, Y = y - spr.foot[1] * s;
     const I = img[b.skin], put = (im) => ctx.drawImage(im, X, Y, im.width * s, im.height * s);
     const spin = (q, th) => { const [cx, cy] = at(p, q); ctx.translate(cx, cy); ctx.rotate(-face * th); ctx.translate(-cx, -cy); };
+    ctx.save();
+    if (cfg.whole) spin(cfg.whole.pivot, b.aim);  // 悬空：整个人先绕重心转，上身再在这个基础上吃后坐
     ctx.save();
     spin(spr.body.pivot, bt);
     if (I.arm) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
     put(I.body);
     ctx.restore();
     put(I.lo);
+    ctx.restore();
   }
 
   const active = () => bs.length > 0;
   function reset() { bs.length = 0; ps.length = 0; }
 
-  return { init, load, summon, update, items, active, reset };
+  /* 诊断用：在场的人（只读），?crewlog=1 时 main.js 打印瞄准角 */
+  const peek = () => bs;
+  return { init, load, summon, freeSkins, update, items, active, reset, peek };
+}
+
+/* 同一件礼物、几个 Crew 共用"三个形象"：召唤时在所有成员的空闲形象里随机挑一个（同时在场的一定各不相同）；
+   全满了就随便挑一个在场的成员续一段（Crew.summon 满员时自己会续）。只管召唤，其余接口 main.js 逐个调。 */
+function CrewGroup(members) {
+  return {
+    summon(pick) {
+      if (pick != null) return members[pick].summon();                    // ?bestie=<成员下标> 强制
+      const opts = [];
+      members.forEach((m, mi) => m.freeSkins().forEach(sk => opts.push([mi, sk])));
+      if (opts.length) { const [mi, sk] = opts[Math.floor(Math.random() * opts.length)]; return members[mi].summon(sk); }
+      const on = members.filter(m => m.active());
+      (on.length ? on : members)[Math.floor(Math.random() * (on.length || members.length))].summon();
+    },
+  };
 }
 
 /* 水柱（哥们）。ps 是同一个人喷出去的水滴（按出口顺序），b 是这个人（已离场为 null）。
@@ -383,7 +466,8 @@ const MIST = {
   spr: { src: 'assets/world/bestie%n_%k.webp', arm: { src: 'arm', pivot: [127, 103] },
          body: { src: 'up', pivot: [103, 200], k: 0.3 }, lo: { src: 'lo' },
          foot: [113, 483], muzzle: [290, 18] },
-  skins: [1, 2, 3],                 // src2 棕色高马尾红比基尼白平衡车 / src3 黑短发条纹比基尼粉平衡车 / src4 金发双马尾黑比基尼紫平衡车
+  skins: [1, 2],                    // src2 棕色高马尾红比基尼白平衡车 / src3 黑短发条纹比基尼粉平衡车
+                                    // （第三个形象 src4 金发双马尾 2026-09-27 换成了下面的真相喷雾，贴图 bestie3_* 留着备选）
   anim: { pulse: [0.42, 0.14], kick: [0.12, 0.05, 10], lean: 0.08, bob: [3, 2.6] },
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
   max: 3, gap: 0.3,
@@ -395,3 +479,105 @@ const MIST = {
            draw: drawMist },
 };
 const Bestie = Crew(MIST);
+
+/* 真相雾（闺蜜第三个形象：真相喷雾）。每个雾团出口时小、越飞越胀越淡；三遍画：
+     深绿托底（明亮底图上发光靠不住，实体靠轮廓）→ 亮青柠雾身 → 雾里夹带的星星和聊天气泡。
+   雾团按出生时的随机数 j 分三种：j < TRUTH_FX.chat 是聊天气泡、再往上到 star 是星星、其余是雾。
+   同一团每帧同一种，不闪。喷口上还有一朵按喷射节奏闪的喷口焰（b.m 只在按住喷的时候有）。 */
+const TRUTH_FX = {
+  r0: 10, r1: 56,                         // 雾团出口半径 → 飞完的半径（像素）
+  rim: [28, 120, 46], body: [156, 238, 96], core: [236, 255, 200],   // 深绿托底 / 雾身 / 喷口附近的亮芯
+  a: [0.13, 0.2],                         // 托底、雾身每团的不透明度（雾团多、互相叠，单团要淡，见 MIST 的教训）
+  chat: 0.035, star: 0.1,                 // 夹带气泡、星星的比例
+  icon: [15, 30],                         // 气泡 / 星星 出口半宽 → 飞完的半宽
+  flare: [34, 52],                        // 喷口焰半径 [小, 大]，随喷射节奏在两者间跳
+};
+function drawTruth(ctx, ps, b) {
+  const F = TRUTH_FX, rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
+  const us = (d) => Math.min(1, d.t / (d.ex ? TRUTH.exhaust.life : TRUTH.fluid.life));   // 尾焰按自己的寿命走
+  for (const [pad, col, a] of [[5, F.rim, F.a[0]], [0, F.body, F.a[1]]]) {
+    for (const d of ps) {
+      if (d.j < F.star) continue;
+      const u = us(d), r = (F.r0 + (F.r1 - F.r0) * Math.sqrt(u)) * (d.ex ? 0.6 : 1) + pad;   // 尾焰小一号
+      ctx.fillStyle = rgba(col, (1 - u * u) * a);
+      ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, 6.283); ctx.fill();
+    }
+  }
+  /* 亮芯：刚出口的一小段（u < 0.25）叠一层近白，读成"高压喷出来的"而不是飘出来的 */
+  for (const d of ps) {
+    const u = us(d);
+    if (d.j < F.star || u > 0.25) continue;
+    ctx.fillStyle = rgba(F.core, (1 - u / 0.25) * 0.35);
+    ctx.beginPath(); ctx.arc(d.x, d.y, F.r0 * 0.8 + 20 * u, 0, 6.283); ctx.fill();
+  }
+  /* 喷口焰：八角尖星 + 深绿描边，大小随后坐（b.kick）跳 */
+  if (b && b.m) {
+    const r = F.flare[0] + (F.flare[1] - F.flare[0]) * b.kick, [mx, my] = b.m;
+    ctx.save(); ctx.translate(mx, my); ctx.rotate(b.t * 3);
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) { const a = i * 0.3927, rr = i % 2 ? r * 0.38 : r; i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(rr, 0); }
+    ctx.closePath();
+    ctx.fillStyle = rgba(F.body, 0.9); ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = rgba(F.rim, 0.9); ctx.stroke();
+    ctx.fillStyle = rgba(F.core, 0.95); ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, 6.283); ctx.fill();
+    ctx.restore();
+  }
+  /* 星星、气泡：实体、描边，盖在雾上；越飞越大、最后 30% 淡掉 */
+  for (const d of ps) {
+    if (d.j >= F.star) continue;
+    const u = us(d), r = F.icon[0] + (F.icon[1] - F.icon[0]) * Math.sqrt(u), a = u > 0.7 ? (1 - u) / 0.3 : 1;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(d.x, d.y);
+    if (d.j < F.chat) {
+      ctx.rotate(Math.sin(d.t * 5 + d.j * 90) * 0.2);
+      drawChatIcon(ctx, r, '#ffffff', rgba(F.rim, 1), 3, rgba(F.rim, 1));
+    } else {
+      ctx.rotate(d.t * 4 + d.j * 40);
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) { const an = i * 0.7854, rr = i % 2 ? r * 0.3 : r * 0.9; i ? ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : ctx.moveTo(rr, 0); }
+      ctx.closePath();
+      ctx.fillStyle = '#fffbd2'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = rgba(F.rim, 1); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/* 真相喷雾：v14/truth/src1.png。用户认可的概念图（concept/gift-spray/）改出来的游戏立绘：
+   金发绿挑染、青柠色赛车服短裙白色过膝靴，右肩扛一罐比她人还长的「真相喷雾」。
+   跟平衡车闺蜜同一件礼物（档 3 左，GIFT.bestie），是它三个形象里的一个（CrewGroup 调度）；站位、出场都不一样，单独一份配置。
+
+   **她不站地，被罐子的后坐力顶在半空**（move 'hover'，悬停点 main.js perch）。为什么：竖屏里两个主角占着下半屏中间，
+   女主左边只剩 ~100 像素宽，大号全身角色塞不进去 —— 试过两版站地的：
+     · 站女主身后（s 0.9）：身子和脸被女主的长发挡掉一大半，只剩腿和罐子，而这个角色要看的恰恰是被挡的那部分；
+     · 站女主左前方、画在主角前面（s 1.08）：罐子横着把女主的脸整个盖住，她自己一半出画。
+   整个画面唯一大块的空地是上半屏的墙，所以让她悬在左上方：全身都露着、谁也不挡，罐子斜着往下对准男生的脸。
+   · 整个人绕扛罐的肩膀转着瞄（whole.pivot，转总仰角的全部）：人在空中，罐子往下压、腿往后甩，读成俯冲；
+     站地时只能转上身（±0.3 rad 以内）。
+     上身在此基础上只吃后坐（anim.kick[1]）和前探（lean）。
+   · 尾焰（exhaust）：罐子尾巴一直往反方向喷青柠色的气，喷的时候加倍 —— 这是"为什么她能悬着"的全部解释。
+   · 来：从画外顶上冲下来刹停（T.enter），刹停那一刻 main.js onArrive 出一圈冲击环；走：原地往上加速冲出去（T.exit）。
+   · 喷法：anim.pulse 一长段"呲——"（0.7 秒）松一下（0.16），每次按下上身往上一震；bob 是悬着的上下浮。
+     雾量比平衡车闺蜜大：雾团多（rate 120）、胀得大（TRUTH_FX.r1 56）、飞得远（life 0.95）。
+   · front：画在两个主角之前（她在半空、离镜头近，雾从她身前喷出去）。 */
+const TRUTH = {
+  face: +1,
+  move: 'hover', front: true,
+  /* 整个人的转轴放在**罐子轴线上**（扛罐的肩膀，贴图像素）：绕它转多少，喷口都还在"转轴→落点"那条线上，瞄一次就准。
+     第一版放在腰胯（[150, 250]）：罐子比腰高 190 像素，一前倾喷口就往前下方挪一大截，
+     反解仰角的迭代追着一个会动的喷口来回振荡，停在 −0.45（要 −1.3），雾从男生头顶上飞过去。 */
+  whole: { pivot: [161, 71] },
+  exhaust: { at: [71, 57], rate: 40, V: 420, spread: 0.18, life: 0.4 },   // 罐尾（贴图像素）、每秒几团、出口速度、散角、寿命
+  spr: { src: 'assets/world/truth%n_%k.webp', body: { src: 'up', pivot: [136, 184], k: 1 }, lo: { src: 'lo' },
+         foot: [156, 459], muzzle: [522, 63] },
+  skins: [1],
+  anim: { pulse: [0.7, 0.16], kick: [0, 0.06, 9], lean: 0.03, bob: [5, 2.2] },
+  T: { enter: 0.55, spray: 2.8, exit: 0.45 },
+  max: 1, gap: 0.3,
+  rows: [[0.98, 1.02]],
+  aim: { lo: -0.8, hi: 0.1, rate: 1.6, follow: 8 },
+  sweep: { a: [0.25, 0.12], w: [1.2, 2.9] },
+  zone: null,
+  fluid: { V: 1250, G: 40, drag: 0.85, rate: 120, spread: 0.13, vJit: 0.18, life: 0.95, miss: 70, snap: 14, hitEvery: 0.25, floor: false,
+           draw: drawTruth },
+};
+const Truth = Crew(TRUTH);
+/* 闺蜜这件礼物的三个形象：平衡车两个 + 真相喷雾一个，召唤时随机挑空着的（main.js CREW.bestie） */
+const BestieGroup = CrewGroup([Bestie, Truth]);
