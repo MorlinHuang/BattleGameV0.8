@@ -206,26 +206,25 @@ def enlarge_phone(rgb, al, ph):
     over = Image.new('RGBA', full.size); over.paste(big, (ox, oy))
     full.alpha_composite(over)
     big_core = np.array(over)[..., 3] > 127
-    out = light_phone(full, big_core, hand, rgba)
+    out = light_phone(full, big_core)
     out[hand] = rgba[hand]                # 手盖回最上面
-    d = ndimage.distance_transform_edt(~(big_core & ~hand))   # 屏幕照到手：按离**露出来的**屏幕多远算，压在机身上的整只拳头不算"贴着屏幕"
-    k = np.where(hand, np.clip(1 - d / HAND_LIT['range'], 0, 1) * HAND_LIT['a'], 0)[..., None]
-    out[..., :3] = out[..., :3] * (1 - k) + np.array(HAND_LIT['rgb'], np.float32) * k
     return out[..., :3], out[..., 3] / 255
 
 
 # 亮屏（2026-09-27 用户：「手机屏幕可以亮着 然后软件是某聊天软件，但屏幕太小 不用具体显示聊天记录」）。
-# 只涂浅色在明亮底图上读成"一块白东西"（用户："屏幕并没有发亮"）：读出亮着靠冷色 + 机身外一圈光晕 + 照到手。
+# 第一版读出"亮着"靠冷色渐变 + 机身外一圈蓝光晕 + 拳头染冷光，屏幕占满机身、黑边只剩 2px ——
+# 用户：「手机现在发光，一眼看上去反而不像手机」：读成一块发光的浅蓝方块。手机之所以认得出是手机，靠的是
+# **近白的屏 + 一圈明显的黑边框**这对反差、外加玻璃反光和前摄小圆点，不靠发光。所以光晕、染手都去掉了。
 # 长度单位都是原图像素（贴图最后 ×SCALE≈0.44 上屏）。界面是固定图案、不随机，53 张帧一模一样，连播不闪。
-SCREEN = {'w': 0.86, 'h': 0.8,                               # 屏幕占机身长 / 宽的比例（四周剩下的是黑边框）
-          'mid': (250, 255, 255), 'edge': (150, 215, 255),   # 冷色渐变：中心发白 → 边缘淡蓝
+SCREEN = {'w': 0.8, 'h': 0.68,                               # 屏幕占机身长 / 宽的比例（四周剩下的是黑边框：短边两头更宽）
+          'bg': (245, 247, 250), 'round': 0.08,              # 近白屏底；屏幕圆角半径占屏宽几成
           'bar': (20, 200, 110), 'bar_h': 0.12,              # 顶栏：偏蓝的绿（跟真相喷雾的青柠 156,238,96 区分开）、占竖屏高（转过来在女生那头，大半压在她拳头下）
           'input_h': 0.1,                                    # 底部输入栏占竖屏高
           'rows': [('them', 0.55), ('me', 0.45), ('them', 0.7), ('me', 0.5), ('them', 0.4), ('me', 0.6)],   # 气泡：哪边、占屏宽几成
           'me': (58, 190, 120), 'them': (255, 255, 255),     # 右边自己发的绿气泡 / 左边对方的白气泡，都不写字
-          'input': (205, 212, 220)}                          # 底部输入栏
-GLOW = {'rgb': (80, 200, 255), 'grow': 9, 'blur': 20, 'a': 0.75}   # 光晕：机身轮廓外扩、高斯模糊、透明度，画在机身后面
-HAND_LIT = {'range': 10, 'a': 0.3, 'rgb': (190, 235, 255)}                        # 屏幕照到手：离机身多近的手染冷光、最多染几成（0.45 整只拳头发蓝像戴手套）
+          'input': (205, 212, 220),                          # 底部输入栏
+          'glass': 0.28, 'glass_w': 0.22,                    # 玻璃反光：一道斜白条的不透明度、宽占屏高几成
+          'cam': 0.1}                                        # 前摄小圆点半径占机身宽几成（在顶栏那头的黑边上）
 
 
 def screen_tex(w, h):
@@ -233,9 +232,7 @@ def screen_tex(w, h):
     远看读出"在聊天"就够。手机是被横着拽的，调用方把它整张转 90° 贴上去 —— 用户原话「聊天软件的方向在屏幕里
     应该是竖的，现在是横的」：按横屏画（顶栏在长边、气泡横排）真实手机不会这样显示。"""
     S = SCREEN
-    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
-    d = np.clip(np.hypot((xx - w / 2) / (w / 2), (yy - h / 2) / (h / 2)) / 1.2, 0, 1)[..., None]
-    im = Image.fromarray((np.array(S['mid']) * (1 - d) + np.array(S['edge']) * d).astype(np.uint8), 'RGB')
+    im = Image.new('RGB', (w, h), S['bg'])
     g = ImageDraw.Draw(im)
     bh = round(h * S['bar_h'])
     g.rectangle((0, 0, w, bh), fill=S['bar'])
@@ -251,30 +248,36 @@ def screen_tex(w, h):
         y = bh + lh * (k + 0.2)
         x0 = w * 0.08 if side == 'them' else w * (0.92 - ln)
         g.rounded_rectangle((x0, y, x0 + w * ln, y + lh * 0.6), min(lh, w) * 0.3, fill=S[side])
+    im = im.convert('RGBA')
+    gl = Image.new('RGBA', (w, h)); a = round(255 * S['glass'])   # 玻璃反光：从左上往右下斜的一道白条（屏上叠一层，不改界面）
+    t = h * S['glass_w']
+    ImageDraw.Draw(gl).polygon([(0, h * 0.18), (0, h * 0.18 + t), (w, h * 0.18 + t - w * 0.9), (w, h * 0.18 - w * 0.9)], fill=(255, 255, 255, a))
+    im.alpha_composite(gl)
+    m = Image.new('L', (w, h)); ImageDraw.Draw(m).rounded_rectangle((0, 0, w - 1, h - 1), w * S['round'], fill=255)
+    im.putalpha(m)                                            # 屏幕圆角：四角露出机身的黑边
     return im
 
 
-def light_phone(full, core, hand, rgba):
+def light_phone(full, core):
     """full：已经贴上放大机身的整张 RGBA（PIL）；core：放大后的机身（bool）。
-    机身后垫光晕、机身上贴亮屏，返回 float 数组；手由调用方再盖回去、再染冷光。"""
+    机身上贴亮屏、黑边框上点前摄，返回 float 数组；手由调用方再盖回去。"""
     ys, xs = np.nonzero(core)
     pts = np.stack([xs, ys], 1).astype(np.float32); c = pts.mean(0)
     _, vec = np.linalg.eigh(np.cov((pts - c).T))
     u = vec[:, 1] * (1 if vec[0, 1] >= 0 else -1)            # 长轴，朝右
     proj = (pts - c) @ np.stack([u, [-u[1], u[0]]], 1)
     L, Wd = proj[:, 0].max() - proj[:, 0].min(), proj[:, 1].max() - proj[:, 1].min()
-    # 光晕：垫在机身后面（先画光晕、再把人和机身整张叠上去）
-    g = ndimage.gaussian_filter(ndimage.binary_dilation(core, iterations=GLOW['grow']).astype(np.float32), GLOW['blur'] / 2)
-    glow = np.zeros(core.shape + (4,), np.uint8)
-    glow[..., :3] = GLOW['rgb']; glow[..., 3] = np.clip(g * GLOW['a'] * 255, 0, 255)
-    base = Image.fromarray(glow, 'RGBA'); base.alpha_composite(full)
+    base = full.copy()
     # 亮屏：沿机身长轴贴，斜拿的跟着斜
     SS = 4                                                   # 4 倍大画、4 倍大转，再缩回来：原尺寸直接转，斜拿的边和气泡锯齿成一排点
-    tex = screen_tex(round(Wd * SCREEN['h']) * SS, round(L * SCREEN['w']) * SS).convert('RGBA')
+    tex = screen_tex(round(Wd * SCREEN['h']) * SS, round(L * SCREEN['w']) * SS)
     # 竖屏界面转成横拿：逆时针 90°，顶栏落到左边女生那头；再跟着机身斜
     tex = tex.rotate(90 - np.degrees(np.arctan2(u[1], u[0])), resample=Image.BICUBIC, expand=True)
     tex = tex.resize((round(tex.width / SS), round(tex.height / SS)), Image.LANCZOS)
     base.alpha_composite(tex, (round(c[0] - tex.width / 2), round(c[1] - tex.height / 2)))
+    # 前摄：顶栏那头（竖屏的上方 = 转过来的左边，−u）黑边框正中一个深灰小圆点
+    k = c - u * L * (0.5 - (1 - SCREEN['w']) / 4); r = Wd * SCREEN['cam'] / 2
+    ImageDraw.Draw(base).ellipse((k[0] - r, k[1] - r, k[0] + r, k[1] + r), fill=(70, 78, 92, 255))
     return np.array(base).astype(np.float32)
 
 
@@ -471,8 +474,38 @@ def seam_bridge(imgs):
         a.paste(out.crop((0, 0, half, H)), (a.width - half, 0)); b.paste(out.crop((half, 0, SEAM_W, H)), (0, 0))
 
 
-def main():
-    os.makedirs(OUT, exist_ok=True)
+# 终点（2026-09-27 用户：「终点的概念是对的，但物件不符合整个美术画风，可以换个更搭场景的」）：
+# 判胜是被拖到离客厅正中 ±GOAL_M 米（main.js NUM.END），世界 x = center ∓ GOAL_M × PX_PER_M（main.js P.pxPerM）。
+# 第一版是引擎叠的方格带 + 光幕 + 字，跟手绘房间两层皮；改成把房间里本来就会有的东西**画进背景**：
+#   卧室（女生终点）一条粉色长毛地毯、两边缠星星串灯（跟墙上的串灯一套）；电竞房（男生终点）一条青→品紫的 RGB 发光地垫。
+# bg/goal/goal{k}_src.png 是从房间图上以终点为中心裁的 GOAL_W 宽，goal{k}_mask.png 透明的梯形（墙根 → 画面下沿，带透视）
+# 交给局部重绘，goal{k}_gen.png 是挑中的生成图。只把梯形里（外沿羽化 GOAL_FEATHER）混回房间，梯形外一个像素不动。
+GOAL_M = 30
+PX_PER_M = 82 * 2 / 3
+GOAL_W = 960
+GOAL_TRAP = [(110, 860), (190, H)]        # 梯形：墙根处半宽、y；画面下沿处半宽、y（跟蒙版一致）
+GOAL_FEATHER = 10
+
+
+def goal_paint(imgs, center):
+    """imgs：缩放到 H 高的三间房（原地改）。两处终点把生成图的梯形混进所在的房间。"""
+    starts = np.cumsum([0] + [im.width for im in imgs])
+    for k, d in enumerate((-1, +1)):
+        gx = center + d * GOAL_M * PX_PER_M
+        ri = int(np.searchsorted(starts, gx, side='right') - 1)
+        im, x0 = imgs[ri], round(gx - starts[ri] - GOAL_W / 2)
+        gen = Image.open(os.path.join(HERE, 'bg', 'goal', f'goal{k}_gen.png')).convert('RGB').resize((GOAL_W, H), Image.LANCZOS)
+        (w0, y0), (w1, y1) = GOAL_TRAP
+        m = Image.new('L', (GOAL_W, H)); c = GOAL_W / 2
+        ImageDraw.Draw(m).polygon([(c - w0, y0), (c + w0, y0), (c + w1, y1), (c - w1, y1)], fill=255)
+        w = ndimage.gaussian_filter(np.array(m, np.float32) / 255, GOAL_FEATHER / 2)[..., None]
+        cv = im.crop((x0, 0, x0 + GOAL_W, H))
+        out = (np.array(cv, np.float32) * (1 - w) + np.array(gen, np.float32) * w).clip(0, 255).astype(np.uint8)
+        im.paste(Image.fromarray(out), (x0, 0))
+
+
+def build_rooms():
+    """三间房 → room{i}.webp（含接缝过渡段、终点地毯 / 地垫），返回 (每间宽, 客厅正中的世界 x)。"""
     bg = os.path.join(HERE, 'bg')
     G = Image.open(f'{bg}/girlroom_ext.png').convert('RGB')
     L = Image.open(f'{bg}/living_ext.png').convert('RGB')
@@ -485,12 +518,19 @@ def main():
     parts = [G, L.crop((CUT_LIVING_L, 0, L.width, L.height)), B.crop((CUT_BOY_L, 0, B.width, B.height))]
     imgs = [p.resize((round(p.width * s), H), Image.LANCZOS) for p in parts]
     seam_bridge(imgs)
+    # 客厅中点 = 沙发正中 = 0 米。按原图客厅中线换算到拼接后的世界坐标
+    center = imgs[0].width + round((L.width / 2 - CUT_LIVING_L) * s)
+    goal_paint(imgs, center)
     rooms = []
     for i, r in enumerate(imgs):
         r.save(os.path.join(OUT, f'room{i}.webp'), quality=86, method=6)
         rooms.append(r.width)
-    # 客厅中点 = 沙发正中 = 0 米。按原图客厅中线换算到拼接后的世界坐标
-    center = rooms[0] + round((L.width / 2 - CUT_LIVING_L) * s)
+    return rooms, center
+
+
+def main():
+    os.makedirs(OUT, exist_ok=True)
+    rooms, center = build_rooms()
 
     poses = {}
     anchors = {}      # 每张关键姿势的锚点（原图坐标），步态帧沿用

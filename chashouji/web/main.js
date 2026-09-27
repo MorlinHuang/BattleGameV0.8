@@ -315,7 +315,7 @@ function startMatch() {
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
-  Buddy.reset(); Bestie.reset(); Truth.reset(); DurianRain.reset(); SockRain.reset();
+  Buddy.reset(); Bestie.reset(); Truth.reset(); Demon.reset(); DurianRain.reset(); SockRain.reset();
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
@@ -882,6 +882,61 @@ const RECIPE = {
     },
   },
 
+  /* 灭迹恶魔（档 4 右）：暗紫"撤回烟雾"在女生脸上炸开，蹦「已撤回」「记录已清空」这类灰色系统提示 ——
+     跟真相女神蹦聊天气泡正好相反：她翻出来，他删干净。配色同 fx-bright-background：发光靠色相（品紫在粉墙 / 浅绿墙上靠饱和度），
+     实体靠轮廓（标签深紫描边）。外面一圈品红环，跟他身上的外发光同色。 */
+  demon: {
+    tint: [220, 170, 255],
+    tags: ['已撤回', '记录已清空', '已删除'],             // 要短：直播画面缩到手机屏三分之一宽，长句糊成一条灰杠
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 80 * s, life: 0.16, rgb: [200, 140, 255], a: 0.8 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 120 * s, life: 0.32, rgb: [40, 10, 60], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.32, rgb: [150, 80, 220], lw: 3.5 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 20 * s, r1: 170 * s, life: 0.4, rgb: [160, 20, 60], lw: 6 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 20 * s, r1: 166 * s, life: 0.4, rgb: [255, 120, 220], lw: 2.5 * s });
+      for (let i = 0; i < Math.max(1, Math.round(2 * s)); i++) this.tag(x, y, side);
+      for (let i = 0; i < Math.round(4 * s); i++) {
+        const a = Math.random() * 6.283, sp = 160 + Math.random() * 260;
+        Particles.spawn({ kind: 'star', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 120, g: 500, drag: 0.96,
+                          life: 0.5 + Math.random() * 0.3, r: 7, r1: 12, rot: Math.random() * 6, vrot: 6,
+                          rgb: [255, 150, 225], edge: [40, 10, 60], lw: 2.5 });
+      }
+      for (let i = 0; i < Math.round(6 * s); i++) this.drip(x, y, side, true);
+    },
+    /* 一条系统提示：从脸上往上、往场内飘，淡掉 */
+    tag(x, y, side) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
+      Particles.spawn({ kind: 'tag', x, y, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: 0.94,
+                        life: 1.0 + Math.random() * 0.3, r: 20, r1: 32, rgb: [118, 118, 128], edge: [40, 10, 60], lw: 3,
+                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
+    },
+    drip(x, y, side, only) {
+      const a = (Math.random() - 0.5) * 2.6, sp = 70 + Math.random() * 130;
+      Particles.spawn({ kind: 'soft', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 20,
+                        drag: 0.9, g: 0, r: 10 + Math.random() * 6, r1: 30 + Math.random() * 18, life: 0.5 + Math.random() * 0.3,
+                        rgb: Math.random() < 0.5 ? [150, 80, 220] : [70, 25, 100], a: 0.5 });
+      if (only) return;
+      const k = Math.random();
+      if (k < 0.1) this.tag(x, y, side);
+      else if (k < 0.28) Particles.spawn({ kind: 'star', x, y, vx: (Math.random() - 0.5) * 300, vy: -120 - Math.random() * 160, g: 500,
+                                            drag: 0.96, life: 0.45, r: 6, r1: 10, rot: Math.random() * 6, vrot: 6,
+                                            rgb: [255, 150, 225], edge: [40, 10, 60], lw: 2 });
+    },
+    arrive(x, y, s) {                  // (x, y) = 他的腰胯；冲击环炸在脚底下（同女神）
+      const cy = y + 300 * s;
+      Particles.spawn({ kind: 'dot', x, y: cy, r: 30 * s, r1: 150 * s, life: 0.2, rgb: [200, 140, 255], a: 0.7 });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 260 * s, life: 0.36, rgb: [40, 10, 60], lw: 9 * s });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 254 * s, life: 0.36, rgb: [255, 120, 220], lw: 4.5 * s });
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * 6.283, sp = 260 + Math.random() * 300;
+        Particles.spawn({ kind: 'star', x, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 400, drag: 0.96,
+                          life: 0.5 + Math.random() * 0.25, r: 8, r1: 13, rot: Math.random() * 6, vrot: 7,
+                          rgb: [255, 150, 225], edge: [40, 10, 60], lw: 2.5 });
+      }
+      Particles.addShake(6);
+    },
+  },
+
   /* 奶茶泼一身（档 3 右）。和花瓣正好相反：液体是**重**的，落地就停，
      所以走 debris 的物理参数而不是 feather 的 —— 一杯奶茶泼出去要是像羽毛
      那样飘半秒，读起来就成了雾。 */
@@ -1074,7 +1129,7 @@ const SHOP = {
    是不够特别；档 3~4 一局只有几次，要的是"我没见过"—— 而这个题材里观众最没
    见过的，就是吵到最后砸过来的是一束花。 */
 // 档 3 的两个帮手角色 + 档 4 左的真相女神（crew.js），GIFT[..].crew 指到这里
-const CREW = { buddy: Buddy, bestie: Bestie, truth: Truth };
+const CREW = { buddy: Buddy, bestie: Bestie, truth: Truth, demon: Demon };
 const RAIN = { durian: DurianRain, sockball: SockRain };
 
 /* 高跟鞋砸头（档 1 左，榴莲鞋雨里的四只鞋）：爆点颜色跟鞋走（用户定的）—— 鞋跟"咔"一下，小而硬：
@@ -1111,7 +1166,7 @@ const HEEL_RECIPE = Object.fromEntries(Object.entries(HEEL_COLORS).map(([k, c]) 
 
 const ITEM_OF = {
   L: [null, 'lipstick', 'durian', 'bestie',  'truth'],
-  R: [null, 'banana',  'sockball', 'buddy',  'photo'],
+  R: [null, 'banana',  'sockball', 'buddy',  'demon'],
 };
 
 /* 三种样式的差别是节奏与体量，不是物品：
@@ -1175,6 +1230,9 @@ const GIFT = {
      （crew.js）。style 'crew' 让 giveGift 走 CREW[crew].summon 而不是 Ammo.launch。
      第一股水打上去按档 3 的分量来一下（顿帧、震屏），之后每 0.3 秒按档 1 轻轻补一下。奶茶那行留着当备选。 */
   buddy:   { name: '哥们',   from: -1, style: 'crew',   crew: 'buddy',  power: 3, recipe: 'water',  push: 230 },
+  /* 灭迹恶魔（2026-09-27 替换相框）：对应女生的真相女神 —— 悬在右上朝女生的脸喷"撤回烟雾"（crew.js DEMON），
+     打中蹦「已撤回」「记录已清空」。出场同女神：全场压暗 + 名字条（从右边滑进来）。相框那行留着当备选。 */
+  demon:   { name: '灭迹恶魔', from: -1, style: 'crew',  crew: 'demon',  power: 4, recipe: 'demon', push: 600 },
   photo:   { name: '相框',   from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
 };
 
@@ -1379,46 +1437,43 @@ function drawWorld(ctx, rooms) {
   }
 }
 
-/* ── 终点线（2026-09-27）──
+/* ── 终点（2026-09-27）──
    用户："男女生赢的地方太不明显了，需要在双方赢的地方，地上拉一条明显的线。"
    判胜是两人（手机）被拖到离客厅正中 ±NUM.END 米：查岗党的终点在卧室那头（S.pos = +END，世界 x = center − END·pxPerM），
-   灭迹党的在电竞房那头。线就立在那个世界 x 上、跟背景一起卷，pos = ±END 时手机正好压在线上 —— 读成"拽过线就赢"。
-   三样东西：
-     · 地上一条方格带（队色与黑相间）：从墙根铺到评论区上沿，按视平线透视收窄、往灭点斜 —— 画在背景层（drawGoalFloor）；
-     · 终点处一道竖直光幕，下实上虚、中间白芯，顶上写「终点·X党胜」—— 画在人物层、人之后，半透明，不挡人（drawGoalWall）；
-     · 线还没进画面（离镜头 > 半屏，≈ 8.8 米）时，屏幕那一侧边缘贴地给一个「终点 ← 12m」—— 不然大半局都看不到线。
-   快到了（离终点 < END 的 1 − GOAL.hot）跟距离条的"终点透红呼吸"同一个节奏一起加亮。 */
+   灭迹党的在电竞房那头。终点本身是**画进房间背景里的东西**（v14/build.py goal_paint）：卧室一条粉色长毛地毯缠星星串灯、
+   电竞房一条 RGB 发光地垫，跟背景一起卷，pos = ±END 时手机正好压在它上面。
+   （第一版是引擎叠的方格带 + 光幕 + 「终点·X党胜」，用户："物件不符合整个美术画风"。）
+   引擎只做两件事：
+     · 快到了（离终点 < END 的 1 − GOAL.hot）那块地毯 / 地垫跟距离条的"终点透红呼吸"同一个节奏亮起来（drawGoalFloor）；
+     · 终点还没进画面、又不远了（< GOAL.near 米）时，屏幕那一侧边缘贴地给一个「终点 ← 12m」。
+       远的那头不给：两头同时挂着「56m → 终点」「终点 ← 4m」，56 米那个是噪音。 */
 const GOAL = {
-  y0: 1150, y1: 1334,        // 方格带：墙根 → 评论区上沿（屏幕 y）
-  vy: 640,                   // 灭点高度（地板透视往这收）：带子远端窄、往画面中线斜
-  w: 58, rows: 7,            // 方格带在 GROUND 处的宽、竖着分几格（横着两格）
-  wallH: 560, wallW: 46,     // 光幕：从地面往上多高、多宽
-  wallA: 0.34,               // 光幕底部不透明度（往上渐隐到 0）；盖在人身上也看得见人
-  hot: 0.75,                 // 离终点只剩 END 的 1 − hot（7.5 米）起开始呼吸加亮，同距离条
-  font: '900 44px system-ui,"PingFang SC","Microsoft YaHei",sans-serif',
+  y0: 860, y1: 1707, w0: 110, w1: 190,   // 地毯 / 地垫的梯形：墙根 y、画面下沿 y、两处半宽（同 build.py GOAL_TRAP）
+  glow: [[255, 200, 225], [150, 90, 255]],   // 呼吸时罩在上面的光：卧室粉白（串灯）、电竞房品紫（灯带）
+  hot: 0.75,                 // 离终点只剩 END 的 1 − hot（7.5 米）起开始呼吸，同距离条
+  near: 15,                  // 画外提示只在离终点 < near 米时给
+  seenY: 1334,               // 算"进没进画面"看这一行（评论区上沿）：再往下的地毯被评论区盖着，露出来也看不见
   tagFont: '900 34px system-ui,"PingFang SC","Microsoft YaHei",sans-serif',
   tagY: 1250,                // 画外提示贴在哪个高度（地面偏下，不跟人抢）
 };
-/* 两条终点线：队色、这条线在屏幕上的 x、这一方离它还剩几米、呼吸亮度 0~1 */
+/* 两处终点：队色、在屏幕上的 x、这一方离它还剩几米、呼吸亮度 0~1 */
 function goals() {
   if (!WORLD) return [];
-  return [[+1, GREEN, '查岗党'], [-1, RED, '灭迹党']].map(([d, col, team]) => {
+  return [[+1, GREEN, 0], [-1, RED, 1]].map(([d, col, k]) => {
     const x = MID + (WORLD.center - d * NUM.END * P.pxPerM - FX.camX);
     const left = NUM.END - S.pos * d;
     const u = (S.pos * d) / NUM.END;
     const hot = u > GOAL.hot ? (0.5 + 0.5 * Math.sin(HUD.t * 5.5)) * (u - GOAL.hot) / (1 - GOAL.hot) : 0;
-    return { d, col, team, x, left, hot };
+    return { d, col, x, left, hot, glow: GOAL.glow[k] };
   });
 }
 const rgbA = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
 function drawGoalFloor(ctx) {
   const G = GOAL;
   for (const g of goals()) {
-    /* 地板上一点 (x@GROUND, y) 按透视：离灭点越近越往画面中线收、越窄 */
-    const k = (y) => (y - G.vy) / (GROUND - G.vy);
-    const px = (y, off) => MID + (g.x + off - MID) * k(y);
-    if (px(G.y1, G.w) < -G.w * 2 || px(G.y1, -G.w) > W + G.w * 2) {
-      /* 画外：屏幕那一侧边缘贴地给个距离 */
+    const hw = G.w0 + (G.w1 - G.w0) * (G.seenY - G.y0) / (G.y1 - G.y0);   // 那一行上地毯的半宽
+    if (g.x + hw < 0 || g.x - hw > W) {
+      if (g.left >= G.near) continue;
       const lft = g.x < MID, txt = lft ? `终点 ← ${Math.round(g.left)}m` : `${Math.round(g.left)}m → 终点`;
       ctx.save();
       ctx.font = G.tagFont; ctx.textBaseline = 'middle'; ctx.textAlign = lft ? 'left' : 'right'; ctx.lineJoin = 'round';
@@ -1428,43 +1483,14 @@ function drawGoalFloor(ctx) {
       ctx.restore();
       continue;
     }
+    if (!g.hot) continue;
+    /* 呼吸：梯形罩一层该房间灯光颜色的光，外沿模糊；明亮底图上靠色相，不靠 lighter */
     ctx.save();
-    const n = G.rows, ys = Array.from({ length: n + 1 }, (_, i) => G.y0 + (G.y1 - G.y0) * i / n);
-    /* 底下先垫一圈亮边（队色发光），呼吸时加亮 */
-    ctx.shadowColor = rgbA(g.col, 0.7 + 0.3 * g.hot); ctx.shadowBlur = 14 + 22 * g.hot;
+    ctx.shadowColor = rgbA(g.glow, 0.9 * g.hot); ctx.shadowBlur = 40;
+    ctx.fillStyle = rgbA(g.glow, 0.32 * g.hot);
     ctx.beginPath();
-    ctx.moveTo(px(G.y0, -G.w / 2), G.y0); ctx.lineTo(px(G.y0, G.w / 2), G.y0);
-    ctx.lineTo(px(G.y1, G.w / 2), G.y1); ctx.lineTo(px(G.y1, -G.w / 2), G.y1); ctx.closePath();
-    ctx.fillStyle = rgbA(g.col, 1); ctx.fill();
-    ctx.shadowColor = 'transparent';
-    ctx.fillStyle = 'rgb(16,18,20)';
-    for (let i = 0; i < n; i++) {
-      const a = ys[i], b = ys[i + 1], o0 = i % 2 ? 0 : -G.w / 2, o1 = o0 + G.w / 2;   // 棋盘：隔行换边
-      ctx.beginPath();
-      ctx.moveTo(px(a, o0), a); ctx.lineTo(px(a, o1), a); ctx.lineTo(px(b, o1), b); ctx.lineTo(px(b, o0), b);
-      ctx.closePath(); ctx.fill();
-    }
-    ctx.restore();
-  }
-}
-function drawGoalWall(ctx) {
-  const G = GOAL;
-  for (const g of goals()) {
-    if (g.x < -G.wallW * 3 || g.x > W + G.wallW * 3) continue;
-    const top = GROUND - G.wallH, a = G.wallA * (1 + 0.8 * g.hot);
-    ctx.save();
-    const gr = ctx.createLinearGradient(0, GROUND, 0, top);
-    gr.addColorStop(0, rgbA(g.col, a)); gr.addColorStop(0.6, rgbA(g.col, a * 0.45)); gr.addColorStop(1, rgbA(g.col, 0));
-    ctx.fillStyle = gr; ctx.fillRect(g.x - G.wallW / 2, top, G.wallW, G.wallH);
-    const gc = ctx.createLinearGradient(0, GROUND, 0, top);
-    gc.addColorStop(0, `rgba(255,255,255,${Math.min(1, 0.55 + 0.4 * g.hot).toFixed(3)})`); gc.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = gc; ctx.fillRect(g.x - 3, top, 6, G.wallH);
-    /* 顶上的字：队色、深色描边，字比光幕宽得多，往场内那边挪，别出画 */
-    const txt = `终点·${g.team}胜`;
-    ctx.font = G.font; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.lineJoin = 'round';
-    const tw = ctx.measureText(txt).width, tx = Math.max(tw / 2 + 12, Math.min(W - tw / 2 - 12, g.x));
-    ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(10,12,16,.85)'; ctx.strokeText(txt, tx, top - 6);
-    ctx.fillStyle = rgbA(g.col, 1); ctx.fillText(txt, tx, top - 6);
+    ctx.moveTo(g.x - G.w0, G.y0); ctx.lineTo(g.x + G.w0, G.y0); ctx.lineTo(g.x + G.w1, G.y1); ctx.lineTo(g.x - G.w1, G.y1);
+    ctx.closePath(); ctx.fill();
     ctx.restore();
   }
 }
@@ -1878,8 +1904,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* 真相喷雾（Truth）悬在女主左上方时，罐子和喷口正好在气泡往上飘的那条走廊里（x≈400~600），
      10 帧里 10 帧被气泡压住 —— 她在场期间新出的气泡**抬高** BUBBLE_TRUTH_DY 出生，从罐子上方飘，已经在飘的不动。
      不往右挪：右移 260 那版气泡正好从男生脸（命中爆点）上冒出来，还被屏幕右沿切掉。 */
-  const BUBBLE_TRUTH_DY = 200;
-  Bubble.init({ W, phoneAt: () => { const [x, y] = phonePos(); return Truth.active() ? [x, y - BUBBLE_TRUTH_DY] : [x, y]; } });
+  const BUBBLE_TRUTH_DY = 200;   // 灭迹恶魔（右上）在场时同样抬：他的罐口在 x≈560、气泡走廊的另一侧
+  Bubble.init({ W, phoneAt: () => { const [x, y] = phonePos(); return Truth.active() || Demon.active() ? [x, y - BUBBLE_TRUTH_DY] : [x, y]; } });
 
   /* 两个档 3 帮手（crew.js）。zone = [喷口最多伸到哪（靠对方那边）, 人的外沿最多到哪（可以出画 90 像素）]：
      喷口不越过手机 100 像素（再近水就是竖着往下落），但手机很偏时（一方被拖着趴地）喷口那一头最多到
@@ -1965,6 +1991,23 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     onHit: (x, y, first) => impact(-1, y, first ? GIFT.truth.power : 1, RECIPE.truth, x),
   });
 
+  /* 灭迹恶魔（档 4 右，crew.js DEMON）：女神的镜像，瞄女生的脸。
+     硬约束：男生站着时头顶最高到 y 781（bK），他连靴子带外发光的最低点要在 y 750 以上（靴底 715 + 晃 ~9 + 光 ~25）；
+     横向占右上 x 560~960，喷口在 x≈610，跟左上的女神（到 x≈440）在中线附近不重叠。 */
+  const DEMON_PERCH = [790, 715];
+  Demon.init({
+    W, ground: () => GROUND + FX.bob, horizon,
+    perch: () => DEMON_PERCH,
+    target(u) {
+      const f = faceOf('a');
+      return f && [f[0] + 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]];
+    },
+    front: () => null,
+    onArrive: (x, y, s) => RECIPE.demon.arrive(x, y, s),
+    onSplash: (x, y) => RECIPE.demon.drip(x, y, +1),
+    onHit: (x, y, first) => impact(+1, y, first ? GIFT.demon.power : 1, RECIPE.demon, x),
+  });
+
   /* 长卷背景与姿势贴图，都由 v14/build.py 生成。world.json 是它们的说明书：
      每间房多宽、客厅正中在哪、每张贴图的锚点和手机位置。 */
   const vq = Q0.get('v') ? '?v=' + encodeURIComponent(Q0.get('v')) : '';
@@ -1990,6 +2033,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Buddy.load(Q0.get('v'), noSpr),
     Bestie.load(Q0.get('v'), noSpr),
     Truth.load(Q0.get('v'), noSpr),
+    Demon.load(Q0.get('v'), noSpr),
     DurianRain.load(Q0.get('v'), noSpr),
     SockRain.load(Q0.get('v'), noSpr),
   ]);
@@ -2035,7 +2079,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
          HUD 永远是"刚开局、什么都没闪过"的样子，?livet 微调也扫不到闪光。 */
       battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30;
       /* 帮手和礼物雨也要跟着快进：不推进的话预热里送的档 3 礼物全卡在 t=0 叠着（闺蜜被叫满、Truth 被连续续时间） */
-      Buddy.update(1 / 30); Bestie.update(1 / 30); Truth.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30);
+      Buddy.update(1 / 30); Bestie.update(1 / 30); Truth.update(1 / 30); Demon.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30);
       derive(1 / 30); hudTick(1 / 30);
     }
     // 预热完冻住**进度**：战况定在这一刻，而火力、弹幕、粒子照跑 —— 截图要的
@@ -2091,33 +2135,43 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   const INTRO = { dim: 0.45, rise: 0.15, hold: 1.1, fade: 0.35,        // 压暗：多深、几秒压到底、压到几秒（首击在 1.03~1.27s，压到首击后）、几秒亮回来
                   delay: 0.25, slide: 0.25, stay: 1.1, out: 0.3,        // 名字条：她俯冲的 0.25s 先不出（免得盖住头和罐子）、滑进来几秒、停到几秒、几秒淡掉
                   y: 800, h: 112 };                                     // 名字条中线 y、条高：她脚下、两人头顶之上（330 时压在她身上）
-  const introT = () => { const b = Truth.peek()[0]; return b ? b.t : 1e9; };
-  /* 名字条的计时：出场从 delay 起算；她在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */
-  const nameT = () => { const b = Truth.peek()[0]; return !b ? 1e9 : b.renew ? b.t - b.renewT : b.t - INTRO.delay; };
+  /* 档 4 两边各一个：真相女神（左，名字条从左滑进、青柠）、灭迹恶魔（右，从右滑进、品紫）。两人同时在场各演各的，压暗取深的那个 */
+  const STARS = [
+    { crew: Truth, gift: 'truth', from: +1, fill: 'rgba(8,20,10,0.62)', bar: 'rgb(156,238,96)', edge: 'rgb(20,70,30)', text: 'rgb(214,255,150)' },
+    { crew: Demon, gift: 'demon', from: -1, fill: 'rgba(20,6,28,0.66)', bar: 'rgb(200,90,240)', edge: 'rgb(60,10,70)', text: 'rgb(246,200,255)' },
+  ];
+  const introT = (st) => { const b = st.crew.peek()[0]; return b ? b.t : 1e9; };
+  /* 名字条的计时：出场从 delay 起算；在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */
+  const nameT = (st) => { const b = st.crew.peek()[0]; return !b ? 1e9 : b.renew ? b.t - b.renewT : b.t - INTRO.delay; };
   function drawIntroDim(c) {
-    const t = introT(), I = INTRO;
-    const k = t < I.rise ? t / I.rise : t < I.hold ? 1 : Math.max(0, 1 - (t - I.hold) / I.fade);
+    const I = INTRO;
+    const k = Math.max(...STARS.map((st) => {
+      const t = introT(st);
+      return t < I.rise ? t / I.rise : t < I.hold ? 1 : Math.max(0, 1 - (t - I.hold) / I.fade);
+    }));
     if (k <= 0) return;
     c.fillStyle = `rgba(8,14,10,${(I.dim * k).toFixed(3)})`;
     c.fillRect(-60, -60, W + 120, H + 120);                             // 多铺一圈：震屏时边上不漏亮
   }
-  function drawIntroName(c) {
-    const t = nameT(), I = INTRO, b = Truth.peek()[0];
+  function drawIntroName(c) { for (const st of STARS) drawIntroName1(c, st); }
+  function drawIntroName1(c, st) {
+    const t = nameT(st), I = INTRO, b = st.crew.peek()[0];
     if (t < 0 || t >= I.stay + I.out) return;
-    const name = GIFT.truth.name + (b.renew ? ' ×' + (b.renew + 1) : '');
+    const name = GIFT[st.gift].name + (b.renew ? ' ×' + (b.renew + 1) : '');
     const a = t < I.stay ? 1 : 1 - (t - I.stay) / I.out;
     const u = Math.min(1, t / I.slide), e = 1 - Math.pow(1 - u, 3);
-    const x = W / 2 - (1 - e) * W;                                      // 从左边滑进来（她也是从左上冲进来的）
+    const x = W / 2 - st.from * (1 - e) * W;                            // 从自己那一侧滑进来（女神从左上、恶魔从右上冲进来）
+    const x0 = st.from > 0 ? 0 : W * (1 - e);                           // 横幅跟着字一起从那一侧拉出来
     c.save();
     c.globalAlpha = a;
-    c.fillStyle = 'rgba(8,20,10,0.62)';
-    c.fillRect(0, I.y - I.h / 2, W * e, I.h);                           // 横幅跟着字一起从左边拉出来
-    c.fillStyle = 'rgb(156,238,96)';
-    c.fillRect(0, I.y - I.h / 2, W * e, 4); c.fillRect(0, I.y + I.h / 2 - 4, W * e, 4);
+    c.fillStyle = st.fill;
+    c.fillRect(x0, I.y - I.h / 2, W * e, I.h);
+    c.fillStyle = st.bar;
+    c.fillRect(x0, I.y - I.h / 2, W * e, 4); c.fillRect(x0, I.y + I.h / 2 - 4, W * e, 4);
     c.font = '900 76px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
-    c.lineWidth = 12; c.strokeStyle = 'rgb(20,70,30)'; c.strokeText(name, x, I.y);
-    c.fillStyle = 'rgb(214,255,150)'; c.fillText(name, x, I.y);
+    c.lineWidth = 12; c.strokeStyle = st.edge; c.strokeText(name, x, I.y);
+    c.fillStyle = st.text; c.fillText(name, x, I.y);
     c.restore();
   }
 
@@ -2127,11 +2181,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     cctx.save(); cctx.translate(ox, oy);
     /* 哥们在男生斜后方、闺蜜在女生斜后方：连同各自喷的水 / 雾按远近排好，全在主角之前画，被主角挡住（crew.js items） */
     /* 站在主角前面的帮手（真相喷雾，front）画在主角和污渍之后 */
-    const crew = [...Buddy.items(), ...Bestie.items(), ...Truth.items()].sort((a, b) => a.s - b.s);
+    const crew = [...Buddy.items(), ...Bestie.items(), ...Truth.items(), ...Demon.items()].sort((a, b) => a.s - b.s);
     for (const it of crew) if (!it.front) it.draw(cctx);
     actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(cctx);
-    drawGoalWall(cctx);                  // 终点光幕：半透明，盖在人上也看得见人
     drawIntroDim(cctx);                  // 档 4 出场压暗：主角都暗下去，画在后面的她是亮的
     for (const it of crew) if (it.front) it.draw(cctx);
     cctx.restore();
@@ -2255,7 +2308,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         const d = Particles.tick(1 / 60);
         Particles.update(1 / 60);
         Ammo.update(d);
-        Buddy.update(d); Bestie.update(d); Truth.update(d); DurianRain.update(d); SockRain.update(d);
+        Buddy.update(d); Bestie.update(d); Truth.update(d); Demon.update(d); DurianRain.update(d); SockRain.update(d);
         Bubble.update(d, FX.struggle);
         derive(d); hudTick(d);
       }
@@ -2493,7 +2546,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        这一下"的可视化，冻住它就迟到了；而正在飞的弹幕是**下一下**的前奏，
        顿帧的意思就是全世界停下来看这一击，此刻别的东西还在飞就散掉了。 */
     Ammo.update(dt);
-    Buddy.update(dt); Bestie.update(dt); Truth.update(dt); DurianRain.update(dt); SockRain.update(dt);
+    Buddy.update(dt); Bestie.update(dt); Truth.update(dt); Demon.update(dt); DurianRain.update(dt); SockRain.update(dt);
     // 气泡跟着逻辑时钟：顿帧时它也该停，那半秒全世界都在看刚才那一击
     Bubble.update(dt, FX.struggle);
     S.t += dt;

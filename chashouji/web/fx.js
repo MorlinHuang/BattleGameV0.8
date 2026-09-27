@@ -193,6 +193,7 @@ const Particles = (function () {
     p.edge = o.edge || null;   // 实体描边色，明亮底图上靠它把碎片从背景里拔出来
     p.spin = o.spin || 0;      // 绕出生点公转的半径，星星绕头转用
     p.sway = o.sway || 0;      // 横向摆幅，羽毛飘落用
+    p.text = o.text || '';     // tag 上写的字
     p.seed = Math.random() * 6.283;
     /* 颜色串和贴图在出生时就定下来。它们整个生命周期都不变，而写在 draw 里
        就是每帧、每颗粒子都重新拼一次字符串、让浏览器重新解析一次颜色 ——
@@ -275,7 +276,7 @@ const Particles = (function () {
     ctx.lineJoin = 'round';
     for (let i = 0; i < act.length; i++) {
       const p = act[i];
-      if (p.kind !== 'soft' && p.kind !== 'chip' && p.kind !== 'star' && p.kind !== 'heart' && p.kind !== 'card' && p.kind !== 'chat') continue;
+      if (p.kind !== 'soft' && p.kind !== 'chip' && p.kind !== 'star' && p.kind !== 'heart' && p.kind !== 'card' && p.kind !== 'chat' && p.kind !== 'tag') continue;
       const k = p.life / p.maxLife;
       const alpha = p.a * fade(p);
       if (alpha <= 0.01) continue;
@@ -326,6 +327,20 @@ const Particles = (function () {
         ctx.translate(p.x, p.y);
         ctx.rotate(Math.sin(p.seed + (1 - k) * 6) * 0.22);
         drawChatIcon(ctx, r, p.fill, p.line, p.lw, p.line || '#3a8a30');
+        ctx.restore();
+      } else if (p.kind === 'tag') {
+        /* 系统提示小标签（灭迹恶魔打中女生脸：「已撤回」「记录已清空」）：灰色圆角条 + 白字 + 深色描边，
+           跟聊天软件里那条灰色的"对方撤回了一条消息"一个样子。r → r1 是字号，一出来先弹大一点再回落。 */
+        const u = 1 - k, sz = p.r1 * (u < 0.12 ? 0.6 + 0.4 * u / 0.12 * 1.25 : 1);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.font = `800 ${sz.toFixed(1)}px system-ui,"PingFang SC","Microsoft YaHei",sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const tw = ctx.measureText(p.text).width, hw = tw / 2 + sz * 0.6, hh = sz * 0.8;
+        ctx.beginPath(); ctx.roundRect(-hw, -hh, hw * 2, hh * 2, hh);
+        ctx.fillStyle = p.fill; ctx.fill();
+        if (p.line) { ctx.lineWidth = p.lw; ctx.strokeStyle = p.line; ctx.stroke(); }
+        ctx.fillStyle = '#ffffff'; ctx.fillText(p.text, 0, 1);
         ctx.restore();
       } else if (p.kind === 'card') {
         /* 卡片：一张照片。它跟 chip 的区别不是参数而是**语义** —— chip 是
@@ -379,7 +394,7 @@ const Particles = (function () {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < act.length; i++) {
       const p = act[i];
-      if (p.kind === 'soft' || p.kind === 'chip' || p.kind === 'star' || p.kind === 'heart' || p.kind === 'card' || p.kind === 'chat') continue;
+      if (p.kind === 'soft' || p.kind === 'chip' || p.kind === 'star' || p.kind === 'heart' || p.kind === 'card' || p.kind === 'chat' || p.kind === 'tag') continue;
       const k = p.life / p.maxLife;
       const alpha = p.a * fade(p);
       if (alpha <= 0.01) continue;

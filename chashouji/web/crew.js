@@ -519,6 +519,7 @@ const TRUTH_FX = {
   rim: [28, 120, 46], body: [156, 238, 96], core: [236, 255, 200],   // 深绿托底 / 雾身 / 喷口附近的亮芯
   a: [0.13, 0.2],                         // 托底、雾身每团的不透明度（雾团多、互相叠，单团要淡，见 MIST 的教训）
   chat: 0.035, star: 0.1,                 // 夹带气泡、星星的比例
+  chatFill: [255, 255, 255], starFill: [255, 251, 210],   // 气泡、星星的填色（描边用 rim）
   icon: [15, 30],                         // 气泡 / 星星 出口半宽 → 飞完的半宽
   flare: [40, 64],                        // 喷口焰半径 [小, 大]，随喷射节奏在两者间跳。第一版喷口离脸 ~110px 时只能 20~32（再大盖掉半股喷流）；
                                           // 第二版立绘人抬高了、喷口离脸 ~400px，放大到 40~64 读成"大炮开火"
@@ -550,9 +551,10 @@ function drawAura(ctx, b, s, at) {
   ctx.beginPath(); ctx.ellipse(hx, y, rx, ry, 0, 0, 6.283); ctx.stroke();
   ctx.restore();
 }
-function drawTruth(ctx, ps, b) {
-  const F = TRUTH_FX, rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
-  const us = (d) => Math.min(1, d.t / (d.ex ? TRUTH.exhaust.life : TRUTH.fluid.life));   // 尾焰按自己的寿命走
+/* F：配色尺寸表（TRUTH_FX / DEMON_FX），C：角色配置（寿命在 C.fluid / C.exhaust）。真相女神、灭迹恶魔共用这一套画法，只换颜色。 */
+function drawSpray(F, C, ctx, ps, b) {
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
+  const us = (d) => Math.min(1, d.t / (d.ex ? C.exhaust.life : C.fluid.life));   // 尾焰按自己的寿命走
   for (const [pad, col, a] of [[5, F.rim, F.a[0]], [0, F.body, F.a[1]]]) {
     for (const d of ps) {
       if (d.j < F.star) continue;
@@ -586,13 +588,13 @@ function drawTruth(ctx, ps, b) {
     ctx.save(); ctx.globalAlpha = a; ctx.translate(d.x, d.y);
     if (d.j < F.chat) {
       ctx.rotate(Math.sin(d.t * 5 + d.j * 90) * 0.2);
-      drawChatIcon(ctx, r, '#ffffff', rgba(F.rim, 1), 3, rgba(F.rim, 1));
+      drawChatIcon(ctx, r, rgba(F.chatFill, 1), rgba(F.rim, 1), 3, rgba(F.rim, 1));
     } else {
       ctx.rotate(d.t * 4 + d.j * 40);
       ctx.beginPath();
       for (let i = 0; i < 8; i++) { const an = i * 0.7854, rr = i % 2 ? r * 0.3 : r * 0.9; i ? ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : ctx.moveTo(rr, 0); }
       ctx.closePath();
-      ctx.fillStyle = '#fffbd2'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = rgba(F.rim, 1); ctx.stroke();
+      ctx.fillStyle = rgba(F.starFill, 1); ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = rgba(F.rim, 1); ctx.stroke();
     }
     ctx.restore();
   }
@@ -640,6 +642,65 @@ const TRUTH = {
   /* 2026-09-27 放大（审查在引擎里实测过，雾锥盖住男生整个上半身，p5 / p95 都打得中）：rate 120 → 220、spread 0.13 → 0.28、
      life 0.95 → 1.15（喷口离脸从 ~110 变成 ~400 像素，要飞得到）、miss 70 → 150（雾锥宽了，判定跟着宽） */
   fluid: { V: 650, G: 40, drag: 0.85, rate: 220, spread: 0.28, vJit: 0.18, life: 1.15, miss: 150, snap: 14, hitEvery: 0.25, floor: false,
-           draw: drawTruth },
+           draw: (ctx, ps, b) => drawSpray(TRUTH_FX, TRUTH, ctx, ps, b) },
 };
 const Truth = Crew(TRUTH);
+
+/* 灭迹恶魔（男生档 4，GIFT.demon，2026-09-27 替掉相框）。用户：「男生这边可以召唤一个男恶魔，对应对方的女神」。
+   跟真相女神左右对称：悬在右上、面朝左，腰侧夹一罐「一键清空」、罐口本来就斜朝左下（spr.rest），整个人绕腰胯小幅前后倾着瞄
+   女生的脸；喷出暗紫色的"撤回烟雾"，打中了从她脸上蹦「已撤回」「记录已清空」（main.js RECIPE.demon）——
+   灭迹党要的就是把聊天记录删干净。立绘 v14/demon/make.py：单层、暗红 → 紫 → 品红三层外发光烘在贴图里，量点由它打印。
+   运行时画的：身后一团慢慢转的黑紫烟雾 + 几道暗红裂光（女神是金色光芒），两只角发光（女神是光环）。
+   喷法、节奏、雾量跟女神一样（档 4 对档 4），只换颜色。 */
+const DEMON_FX = {
+  ...TRUTH_FX,
+  rim: [40, 10, 60], body: [150, 80, 220], core: [236, 214, 255],    // 深紫托底 / 紫雾身 / 喷口亮芯
+  chatFill: [150, 152, 162], starFill: [255, 150, 225],             // 雾里夹带的灰色气泡（被撤回的消息）、品红星
+  aura: { R: 330, spin: 0.25, smoke: [[40, 12, 60], [95, 30, 130]], puffs: 9, a: 0.4,   // 身后烟雾：多大、转速、两种烟色、几团、不透明度
+          crack: [200, 30, 70], cracks: 7, crackA: 0.75,                               // 暗红裂光：颜色、几道、不透明度
+          horn: [255, 120, 220], horns: [[208, 54], [191, 67]], hornR: 26 },           // 角的光：颜色、两只角尖（贴图像素）、光团半径
+};
+function drawDemonAura(ctx, b, s, at) {
+  const A = DEMON_FX.aura, [cx, cy] = at(DEMON.spr.chest);
+  const k = Math.min(1, b.t / 0.3), R = A.R * s;
+  ctx.save();
+  /* 烟雾：几团大软球绕胸口慢慢转，各自一呼一吸 —— 不是一个圆盘 */
+  for (let i = 0; i < A.puffs; i++) {
+    const a = i / A.puffs * 6.283 + b.t * A.spin, rr = R * (0.35 + 0.25 * Math.sin(i * 2.1 + b.t * 0.8));
+    const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.8, r = R * (0.38 + 0.08 * Math.sin(i * 1.7 + b.t * 1.3));
+    const c = A.smoke[i % 2], g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${c},${(A.a * k).toFixed(3)})`); g.addColorStop(1, `rgba(${c},0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  }
+  /* 裂光：从胸口往外几道折线，一闪一闪 */
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let i = 0; i < A.cracks; i++) {
+    const a0 = i / A.cracks * 6.283 + 0.4 + b.t * A.spin * 0.5, fl = 0.55 + 0.45 * Math.sin(b.t * 7 + i * 2.3);
+    ctx.strokeStyle = `rgba(${A.crack},${(A.crackA * fl * k).toFixed(3)})`; ctx.lineWidth = 5 * s;
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a0) * R * 0.25, cy + Math.sin(a0) * R * 0.25);
+    for (let j = 1; j <= 3; j++) {
+      const a = a0 + (j % 2 ? 0.12 : -0.1), d = R * (0.25 + j * 0.22);
+      ctx.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+    }
+    ctx.stroke();
+  }
+  /* 角：两团品红光垫在角尖后面 */
+  for (const q of A.horns) {
+    const [x, y] = at(q), r = A.hornR * s * (0.85 + 0.15 * Math.sin(b.t * 4)), g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${A.horn},${(0.9 * k).toFixed(3)})`); g.addColorStop(1, `rgba(${A.horn},0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  }
+  ctx.restore();
+}
+const DEMON = {
+  ...TRUTH,
+  face: -1,
+  whole: { pivot: [216, 258] },
+  exhaust: { ...TRUTH.exhaust, at: [287, 179] },
+  spr: { src: 'assets/world/demon%n_%k.webp', body: { src: 'up', pivot: [216, 258], k: 1 },
+         foot: [244, 555], muzzle: [53, 305], rest: -0.497, head: [204, 59], chest: [202, 152] },
+  skins: [1],
+  aura: (ctx, b, s, at) => drawDemonAura(ctx, b, s, at),
+  fluid: { ...TRUTH.fluid, draw: (ctx, ps, b) => drawSpray(DEMON_FX, DEMON, ctx, ps, b) },
+};
+const Demon = Crew(DEMON);
