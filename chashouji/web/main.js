@@ -294,7 +294,7 @@ function giveGift(side, key) {
   if (it.tier >= 1) {
     const g = GIFT[ITEM_OF[side > 0 ? 'L' : 'R'][it.tier]];
     if (g.style === 'crew') CREW[g.crew].summon();
-    else if (g.style === 'rain') Rain.summon();
+    else if (g.style === 'rain') RAIN[g.rain].summon();
     else Ammo.launch(g, null, { gift: true, exec: it.tier === 4 });
   } else {
     // 免费档不飞实体，只在自己那侧冒一小串火花 —— 它买的是参与感，不是战力
@@ -315,7 +315,7 @@ function startMatch() {
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
-  Buddy.reset(); Bestie.reset(); Rain.reset();
+  Buddy.reset(); Bestie.reset(); DurianRain.reset(); SockRain.reset();
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
@@ -766,6 +766,45 @@ const RECIPE = {
     },
   },
 
+  /* 足球砸人（档 2 右，臭袜子足球里重的那几下）：黑白碎块 —— 白闪 + 深灰托底的白环 + 黑白两色碎块（球皮崩开）。 */
+  ball: {
+    tint: [255, 255, 255],
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 86 * s, life: 0.16, rgb: [255, 255, 255], a: 0.85 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 126 * s, life: 0.3, rgb: [46, 46, 54], lw: 8 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 122 * s, life: 0.3, rgb: [255, 255, 255], lw: 4.5 * s });
+      for (let i = 0; i < Math.round(16 * s); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 3.4, sp = (260 + Math.random() * 440) * s, d = (7 + Math.random() * 7) * s;
+        Particles.spawn({ kind: 'chip', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                          g: 1300, drag: 0.98, life: 0.4 + Math.random() * 0.35, w: d, h: d * 0.9,
+                          rot: Math.random() * 6.28, vrot: (Math.random() - 0.5) * 16,
+                          rgb: i % 2 ? [250, 250, 246] : [46, 46, 54], edge: INK, lw: 1.6, a: 1 });
+      }
+    },
+  },
+
+  /* 臭袜子砸人（档 1 右）：一团往上飘的灰绿臭气（soft，普通混合 —— 发光的 dot 叠起来发白像着火）
+     + 深橄榄托底的灰绿环 + 几颗脏灰褐的碎屑。 */
+  stink: {
+    tint: [214, 222, 176],
+    burst(x, y, side, s) {
+      const k = 0.5 + s;
+      Particles.spawn({ kind: 'ring', x, y, r: 6 * k, r1: 84 * k, life: 0.28, rgb: [84, 92, 40], lw: 7 * k });
+      Particles.spawn({ kind: 'ring', x, y, r: 6 * k, r1: 82 * k, life: 0.28, rgb: [190, 204, 120], lw: 3.5 * k });
+      for (let i = 0; i < Math.round(7 * k); i++) {
+        Particles.spawn({ kind: 'soft', x: x + (Math.random() - 0.5) * 40 * k, y: y - 6, vx: (Math.random() - 0.5) * 90,
+                          vy: -70 - Math.random() * 90, drag: 0.7, g: 0, r: 10 * k, r1: (34 + Math.random() * 20) * k,
+                          life: 0.7 + Math.random() * 0.4, rgb: i % 2 ? [170, 186, 96] : [128, 140, 70], a: 0.45 });
+      }
+      for (let i = 0; i < Math.round(8 * k); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 3.2, sp = (200 + Math.random() * 320) * k, d = (4 + Math.random() * 5) * k;
+        Particles.spawn({ kind: 'chip', shape: 'pearl', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+                          g: 1100, drag: 0.98, life: 0.35 + Math.random() * 0.3, w: d, h: d, rot: 0, vrot: 0,
+                          rgb: i % 2 ? [143, 132, 104] : [196, 204, 150], edge: INK, lw: 1.4, a: 1 });
+      }
+    },
+  },
+
   /* 防狼喷雾（档 3 左，闺蜜）：橙红的一团雾在男生脸上散开 —— 雾是**软**的，不像水花那样甩出水珠，
      是一圈胀开的环 + 几小团往四周飘散慢慢淡掉。深橙红环托底：明亮底图上亮橙色单独放着看不见。
      飘散的雾团用 soft（普通混合），不用 dot：dot 是发光贴图，几团叠在脸上中心发白，读成着火（第一版就是）。 */
@@ -977,6 +1016,7 @@ const SHOP = {
    见过的，就是吵到最后砸过来的是一束花。 */
 // 档 3 的两个帮手角色（crew.js），GIFT[..].crew 指到这里
 const CREW = { buddy: Buddy, bestie: Bestie };
+const RAIN = { durian: DurianRain, sockball: SockRain };
 
 /* 高跟鞋砸头（档 1 左，榴莲鞋雨里的四只鞋）：爆点颜色跟鞋走（用户定的）—— 鞋跟"咔"一下，小而硬：
    亮色闪 + 深色托底的环 + 几颗描边碎块 + 火星。三种颜色同一个形，只换 [亮色, 深色托底]；
@@ -1012,7 +1052,7 @@ const HEEL_RECIPE = Object.fromEntries(Object.entries(HEEL_COLORS).map(([k, c]) 
 
 const ITEM_OF = {
   L: [null, 'lipstick', 'durian', 'bestie',  'ringbox'],
-  R: [null, 'banana',  'gamepad', 'buddy',   'photo'],
+  R: [null, 'banana',  'sockball', 'buddy',  'photo'],
 };
 
 /* 三种样式的差别是节奏与体量，不是物品：
@@ -1048,7 +1088,7 @@ const GIFT = {
              spin: 5.7, power: 1, recipe: 'rouge',   push: 1 },
   /* 榴莲鞋雨（2026-09-27 替换抱枕）：男生头顶上方画外掉下 2~3 个榴莲、4 只高跟鞋（rain.js），砸头的每一下爆一次
      就消失：榴莲档 2（重，带顿帧，白色爆点）、鞋档 1（爆点跟鞋的颜色）。抱枕那行留着当备选。 */
-  durian:  { name: '榴莲鞋雨', from: +1, style: 'rain', power: 2, recipe: 'durian', push: 20 },
+  durian:  { name: '榴莲鞋雨', from: +1, style: 'rain', rain: 'durian', power: 2, recipe: 'durian', push: 20 },
   pillow:  { name: '抱枕',   from: +1, style: 'single', item: 'pillow',  r: 56,       spin: 5.7, power: 2, recipe: 'feather', push: 20 },
   bouquet: { name: '花束',   from: +1, style: 'heavy',  item: 'bouquet', r: 76,       spin: 6.7, power: 3, recipe: 'petal',   push: 230 },
   /* 闺蜜（2026-09-26 替换花束）：女生的闺蜜穿比基尼、踩平衡车滑到她斜后方，举防狼喷雾朝男生的脸喷 2.5 秒
@@ -1063,6 +1103,9 @@ const GIFT = {
      （穿过手臂、头发边，贴到脸上才爆）；砸中是白色爆点，脸上留下白点（stain，见 stainAt）。飞行 0.55s，spin = π/0.55。 */
   banana:  { name: '香蕉',   from: -1, style: 'single', item: 'banana',  r: 40, n: 3, gap: 0.5, aim: 'face', stain: true,
              spin: 5.7, power: 1, recipe: 'cream',   push: 1 },
+  /* 臭袜子足球（2026-09-27 替换手柄）：跟榴莲鞋雨对称 —— 女生头顶上方掉下 2~3 个足球、4 只臭袜子（rain.js），
+     砸她身上随机一处就爆掉消失：足球档 2（黑白碎块）、袜子档 1（一团灰绿臭气）。手柄那行留着当备选。 */
+  sockball:{ name: '臭袜子足球', from: -1, style: 'rain', rain: 'sockball', power: 2, recipe: 'ball', push: 20 },
   gamepad: { name: '手柄',   from: -1, style: 'single', item: 'gamepad', r: 52,       spin: 5.7, power: 2, recipe: 'debris',  push: 20 },
   milktea: { name: '奶茶',   from: -1, style: 'heavy',  item: 'milktea', r: 72,       spin: 6.7, power: 3, recipe: 'splash',  push: 230 },
   /* 哥们（2026-09-26 替换奶茶）：不飞东西，男生的肌肉哥们踩滑板滑到他斜后方、端水枪朝女生乱滋 2.5 秒
@@ -1123,29 +1166,23 @@ function faceOf(who) {
 
 /* 女生倒下了没有（男生赢的跌倒、趴地两档，含它们的步态格）。倒下以后哥们的水改浇她的背和腿。 */
 const girlDown = () => /^b[FL]/.test(FX.frame);
-/* 女生在屏幕横坐标 x 那一列的上沿（build.py 每 EDGE_STEP 列量的 edge.top），这一列没有她返回 null */
-function girlTop(x) {
-  const m = WORLD && WORLD.poses[FX.frame], t = m && m.edge && m.edge.top;
+/* 某个人在屏幕横坐标 x 那一列的上沿（build.py 每 EDGE_STEP 列量的 edge.top / edge.topB），这一列没有他返回 null。
+   who = 'top' 女生 / 'topB' 男生。哥们的水浇倒地的女生、天上掉的东西砸人，碰的都是上沿不是前沿。 */
+function topAt(who, x) {
+  const m = WORLD && WORLD.poses[FX.frame], t = m && m.edge && m.edge[who];
   if (!t) return null;
   const j = Math.round((x - FX.pairX - FX.hitX + m.ax) / m.edge.step);
   return t[j] >= 0 ? poseY(m, t[j]) : null;
 }
-
-/* 男生在屏幕横坐标 x 那一列的上沿（build.py 的 edge.topB），这一列没有他返回 null。 */
-function boyTop(x) {
-  const m = WORLD && WORLD.poses[FX.frame], t = m && m.edge && m.edge.topB;
-  if (!t) return null;
-  const j = Math.round((x - FX.pairX - FX.hitX + m.ax) / m.edge.step);
-  return t[j] >= 0 ? poseY(m, t[j]) : null;
-}
-/* 男生身上第 u（0~1，从左到右）那一列的上沿 [x, y]：把有他的列排成一排按 u 取，手机左右 BOY_PHONE_GAP
-   以内的列不算（那几列最高的是他的手和手机，砸在那读成砸手机）。站着 = 头、肩、胳膊；倒地 = 背、屁股、腿。 */
-const BOY_PHONE_GAP = 70;
-function boyAt(u) {
-  const m = WORLD && WORLD.poses[FX.frame], t = m && m.edge && m.edge.topB;
+const girlTop = (x) => topAt('top', x);
+/* 这个人身上第 u（0~1，从左到右）那一列的上沿 [x, y]：把有他的列排成一排按 u 取，手机左右 PHONE_GAP
+   以内的列不算（那几列最高的是两个人的手和手机，砸在那读成砸手机）。站着 = 头、肩、胳膊；倒地 = 背、屁股、腿。 */
+const PHONE_GAP = 70;
+function bodyAt(who, u) {
+  const m = WORLD && WORLD.poses[FX.frame], t = m && m.edge && m.edge[who];
   if (!t) return null;
   const cols = [];
-  for (let j = 0; j < t.length; j++) if (t[j] >= 0 && Math.abs(poseX(m, j * m.edge.step) - FX.phoneX) > BOY_PHONE_GAP) cols.push(j);
+  for (let j = 0; j < t.length; j++) if (t[j] >= 0 && Math.abs(poseX(m, j * m.edge.step) - FX.phoneX) > PHONE_GAP) cols.push(j);
   if (!cols.length) return null;
   const j = cols[Math.min(cols.length - 1, Math.floor(u * cols.length))];
   return [poseX(m, j * m.edge.step), poseY(m, t[j])];
@@ -1724,12 +1761,16 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
     onHit: (x, y, first) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE.water, x),
   });
-  /* 榴莲鞋雨（查岗党档 2）→ 男生身上随机一处：target(u) = 他身上第 u 那一列的上沿（boyAt，跪下、被拖倒都跟着走），
-     top(x) = 这一列的上沿（落到这里就算砸中）。砸中按礼物分量 power 爆（榴莲档 2、鞋档 1），
-     爆点颜色跟着东西走：榴莲白、鞋红 / 粉 / 黑。 */
-  Rain.init({
-    target: boyAt, top: boyTop,
+  /* 天上掉东西（rain.js）：target(u) = 挨砸那个人身上第 u 那一列的上沿（bodyAt，跪下、被拖倒都跟着走），
+     top(x) = 这一列的上沿（落到这里就算砸中）。砸中按礼物分量 power 爆（重的档 2、轻的档 1），爆点颜色跟着东西走。
+     榴莲鞋雨（查岗党档 2）砸男生：榴莲白、鞋红 / 粉 / 黑。臭袜子足球（灭迹党档 2）砸女生：足球黑白、袜子灰绿臭气。 */
+  DurianRain.init({
+    target: (u) => bodyAt('topB', u), top: (x) => topAt('topB', x),
     onHit: (kind, col, x, y, power) => impact(-1, y, power, kind === 'durian' ? RECIPE.durian : HEEL_RECIPE[col], x),
+  });
+  SockRain.init({
+    target: (u) => bodyAt('top', u), top: girlTop,
+    onHit: (kind, col, x, y, power) => impact(+1, y, power, kind === 'football' ? RECIPE.ball : RECIPE.stink, x),
   });
   /* 闺蜜（查岗党）→ 男生的脸。落点在脸的**中上部**（眼睛那一带）：x 往女生那边 0.3 个半径，y 从脸心往上 0.55
      到往下 0.05 个半径乱晃；他跪下、趴下，脸跟着走。
@@ -1771,7 +1812,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Particles.loadShapes(Q0.get('v'), noSpr),
     Buddy.load(Q0.get('v'), noSpr),
     Bestie.load(Q0.get('v'), noSpr),
-    Rain.load(Q0.get('v'), noSpr),
+    DurianRain.load(Q0.get('v'), noSpr),
+    SockRain.load(Q0.get('v'), noSpr),
   ]);
   document.getElementById('msg').textContent =
     `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` +
@@ -1880,7 +1922,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* 弹幕在角色之上、粒子之下：它飞向两个人中间，画在角色底下的话命中前
        最后那段就被身体挡掉了；而粒子是命中的爆炸，该盖在弹幕上面。 */
     Ammo.draw(fctx);
-    Rain.draw(fctx);                  // 榴莲鞋雨从镜头这一侧掉在男生头上，盖在人物之上、爆点之下
+    DurianRain.draw(fctx); SockRain.draw(fctx);   // 天上掉的东西从镜头这一侧砸在人身上，盖在人物之上、爆点之下
     Particles.draw(fctx);
     fctx.restore();
     /* 结算全屏接管：演出图铺满整幅，距离条不再画。结果已经写在画面里
@@ -1979,7 +2021,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 
     // ?ammoy=aim：不钉高度，让瞄部位的礼物（香蕉瞄脸、口红瞄腰腿）按实际逻辑瞄
     if (g.style === 'crew') for (let k = +(Q.get('buddyn') || 1); k > 0; k--) CREW[g.crew].summon();   // ?buddyn=3 一次叫几个
-    else if (g.style === 'rain') Rain.summon();
+    else if (g.style === 'rain') RAIN[g.rain].summon();
     else Ammo.launch(g, Q.get('ammoy') === 'aim' ? null : clamp(+(Q.get('ammoy') || 560), 300, 960), { gift: true });
     let el = 0;
     for (let i = 0; i < n; i++) {
@@ -1988,7 +2030,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         const d = Particles.tick(1 / 60);
         Particles.update(1 / 60);
         Ammo.update(d);
-        Buddy.update(d); Bestie.update(d); Rain.update(d);
+        Buddy.update(d); Bestie.update(d); DurianRain.update(d); SockRain.update(d);
         Bubble.update(d, FX.struggle);
         derive(d); hudTick(d);
       }
@@ -2222,7 +2264,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        这一下"的可视化，冻住它就迟到了；而正在飞的弹幕是**下一下**的前奏，
        顿帧的意思就是全世界停下来看这一击，此刻别的东西还在飞就散掉了。 */
     Ammo.update(dt);
-    Buddy.update(dt); Bestie.update(dt); Rain.update(dt);
+    Buddy.update(dt); Bestie.update(dt); DurianRain.update(dt); SockRain.update(dt);
     // 气泡跟着逻辑时钟：顿帧时它也该停，那半秒全世界都在看刚才那一击
     Bubble.update(dt, FX.struggle);
     S.t += dt;
