@@ -272,7 +272,7 @@ function drift(dt) {
   S.pos = clamp(S.pos + S.vel * dt, -NUM.END, NUM.END);
 }
 
-function finish(who) { S.phase = 'over'; S.winner = who; S.vel = 0; S.overT = 0; }
+function finish(who) { S.phase = 'over'; S.winner = who; S.vel = 0; S.overT = 0; IntroVideo.stop(); }
 
 /* 送一件礼物。数值走火力，表现走弹幕 —— 两件事同一个入口，但不是同一层。 */
 function giveGift(side, key) {
@@ -293,7 +293,11 @@ function giveGift(side, key) {
   }
   if (it.tier >= 1) {
     const g = GIFT[ITEM_OF[side > 0 ? 'L' : 'R'][it.tier]];
-    if (g.style === 'crew') summonCrew(g.crew);
+    if (g.style === 'crew') {
+      /* 新来的人有出场视频（intro.js，目前只有真相女神）：先放视频、她候场，放完从视频里走出来；续时间不放 */
+      const [m, b] = summonCrew(g.crew);
+      if (b && INTRO_OF.has(m)) IntroVideo.begin(INTRO_OF.get(m), m, b);
+    }
     else if (g.style === 'rain') RAIN[g.rain].summon();
     else Ammo.launch(g, null, { gift: true, exec: it.tier === 4 });
   } else {
@@ -316,6 +320,7 @@ function startMatch() {
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
   for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset();
+  IntroVideo.stop();
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
@@ -1312,12 +1317,15 @@ const G4R = CrewGroup([Demon, Briefs, Erlang]);  // 灭迹党：灭迹恶魔 / �
 const CREW = { buddy: Buddy, bestie: Bestie, g4L: G4L, g4R: G4R };
 const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
 /* 召唤：组（档 4）按 URL ?g4L= / ?g4R= 强制召某一个人（诊断：胶片一个一个单独拍）；单个 Crew 可指定形象 sk（?skin=） */
+/* 返回 [召到的那一份 Crew, 新来的人 b]（续时间 / 叫回时 b 为 undefined） */
 function summonCrew(name, sk) {
   const c = CREW[name];
-  if (!c.members) return c.summon(sk);
+  if (!c.members) return [c, c.summon(sk)];
   const q = new URLSearchParams(location.search).get(name);
-  c.summon(q == null || q === '' ? undefined : +q);
+  return c.summon(q == null || q === '' ? undefined : +q);
 }
+/* 有出场视频的人 → intro.js CLIPS 的键 */
+const INTRO_OF = new Map([[Truth, 'truth']]);
 const RAIN = { durian: DurianRain, sockball: SockRain };
 /* ?crewlog=1（胶片每格一行）：档 4 在场的人瞄准角 / 目标 / 喷口，和 crew.js measure 的两个外框
    solid（最高点、中线余量按它）/ glow（含外发光，最低点按它），屏幕像素 x0,y0,x1,y1 */
@@ -2049,6 +2057,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 
 (async function boot() {
   const cvBg = document.getElementById('bg'), cvCh = document.getElementById('ch'), cvFx = document.getElementById('fx');
+  IntroVideo.init({ stage: document.getElementById('stage'), W, H });
   const bctx = cvBg.getContext('2d'), cctx = cvCh.getContext('2d'), fctx = cvFx.getContext('2d');
 
   /* ?sim=1 纯数值快进：不渲染、不发弹幕，只跑 battle，用来核对局长和手感。
@@ -2362,9 +2371,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     { crew: Briefs, name: '内裤外穿侠',   from: -1, fill: 'rgba(10,16,48,0.66)', bar: 'rgb(220,40,40)',  edge: 'rgb(20,30,110)',  text: 'rgb(255,255,255)' },
     { crew: Erlang, name: '二郎·打码神', from: -1, fill: 'rgba(12,18,40,0.66)', bar: 'rgb(230,180,60)', edge: 'rgb(255,236,170)', text: 'rgb(20,34,90)' },
   ];
-  const introT = (st) => { const b = st.crew.peek()[0]; return b ? b.t : 1e9; };
+  const introT = (st) => { const b = st.crew.peek()[0]; return b && !b.hold ? b.t : 1e9; };   // 候场（出场视频放着）不算出场
   /* 名字条的计时：出场从 delay 起算；在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */
-  const nameT = (st) => { const b = st.crew.peek()[0]; return !b ? 1e9 : b.renew ? b.t - b.renewT : b.t - INTRO.delay; };
+  const nameT = (st) => { const b = st.crew.peek()[0]; return !b || b.hold ? 1e9 : b.renew ? b.t - b.renewT : b.t - INTRO.delay; };
   function drawIntroDim(c) {
     const I = INTRO;
     const k = Math.max(...STARS.map((st) => {
@@ -2873,6 +2882,14 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       if (S.phase === 'idle') startMatch();
       giveGift(+b.dataset.side, b.dataset.shop);
     };
+  }
+  /* ?autogift=drop:1:1.5 —— 页面起来 1.5 秒后替 side=1（查岗党）送一件 drop，跟点按钮走同一条路。
+     诊断用：录屏看出场视频、视频接回游戏，不用在录屏时去点按钮。 */
+  /* ?titleclock=1：每 0.5 秒把游戏时钟 / 位置写进标题，录屏时用 xdotool 读，分得清"JS 停了"还是"画面没刷新" */
+  if (Q.has('titleclock')) setInterval(() => { document.title = `T${S.t.toFixed(1)} P${S.pos.toFixed(2)} ${S.phase}`; }, 500);
+  if (Q.has('autogift')) {
+    const [shop, side, sec] = Q.get('autogift').split(':');
+    setTimeout(() => { if (S.phase === 'idle') startMatch(); giveGift(+side || 1, shop); }, (+sec || 1) * 1000);
   }
   document.getElementById('start').onclick = () => {
     if (S.phase === 'idle') { startMatch(); document.getElementById('start').textContent = '回到调试台'; }

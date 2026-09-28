@@ -73,7 +73,9 @@ function Crew(cfg) {
   /* 续上的这一份也是一次完整送礼：下一发按礼物力度打（first），并记下第几份、在她的第几秒续上（名字条据此重播「×N」） */
   function renew(b) { b.first = true; b.renew = (b.renew || 0) + 1; b.renewT = b.t; }
 
-  /* sk（可无）：指定形象编号（cfg.skins 的下标，越界夹到两头）；不给就挑场上没人用的。诊断参数 ?skin= 用它。 */
+  /* 候场（b.hold，intro.js）：出场视频放着的时候她已经占了名额（再送走续时间、组里不轮到下一个），但不走时钟、不画、不喷。
+     视频放完 intro.js 清掉 hold、把 t 归零、给 b.from = 视频尾帧里她的 [脚底 x, 脚底 y, 缩放]，hoverPose 从那里滑进悬停位。
+     sk（可无）：指定形象编号（cfg.skins 的下标，越界夹到两头）；不给就挑场上没人用的。诊断参数 ?skin= 用它。 */
   function summon(sk) {
     if (sk != null) sk = Math.max(0, Math.min(cfg.skins.length - 1, sk | 0));
     const staying = bs.filter(b => b.t <= sprayEnd(b));
@@ -100,10 +102,13 @@ function Crew(cfg) {
       const skins = cfg.skins.map((_, i) => i), unused = freeSkins();
       sk = (unused.length ? unused : skins)[Math.floor(Math.random() * (unused.length || skins.length))];
     }
-    bs.push({ t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
-              r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
-              pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0 });
+    const b = { t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
+                r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
+                pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0,
+                hold: false, from: null };
+    bs.push(b);
     bs.sort((a, b) => a.s - b.s);          // 远的先画
+    return b;                              // 新来的人（续时间 / 叫回的返回 undefined）：main.js 据此决定要不要先放出场视频
   }
 
   /* 场上没人用的形象（下标） */
@@ -122,7 +127,9 @@ function Crew(cfg) {
     const sx = Math.sin(t * 0.9 + b.ph) * 8 * s, sy = Math.sin(t * 1.8 + b.ph) * 4 * s;
     const bob = A ? Math.sin(t * A.bob[1] + b.ph) * A.bob[0] * s : 0;
     if (t < T.enter) {
-      const [fx, fy] = PATH.from ? PATH.from(s, hx, hy) : [hx, top], e = easeOut(t / T.enter);
+      const e = easeOut(t / T.enter);
+      if (b.from) { const [fx, fy, fs] = b.from; return [fx + (hx - fx) * e, fy + (hy - fy) * e, fs + (s - fs) * e]; }   // 从出场视频里走出来
+      const [fx, fy] = PATH.from ? PATH.from(s, hx, hy) : [hx, top];
       return [fx + (hx - fx) * e, fy + (hy - fy) * e, s];
     }
     const k = Math.min(1, (t - T.enter) / 0.3);                        // 刹停后 0.3 秒里晃动从 0 长满，不跳
@@ -249,6 +256,7 @@ function Crew(cfg) {
     }
     for (let i = bs.length - 1; i >= 0; i--) {
       const b = bs[i];
+      if (b.hold) continue;                      // 候场：出场视频还在放
       b.t += dt; b.hitCd -= dt;
       const se = sprayEnd(b);
       if (!b.landed && b.t >= T.enter) {        // 到位（刹停 / 滑停）那一刻通知 main.js（真相喷雾：刹停的冲击环）
@@ -371,7 +379,7 @@ function Crew(cfg) {
     const front = !!cfg.front;                   // 站在主角前面（真相喷雾）：main.js 把它们挪到主角之后画
     /* 悬停的人按此刻 pose 的缩放排（缩放由 o.perch 给，main.js G4STAND，不是召唤时抽的 b.s），站地的按召唤时定的远近 */
     const sOf = (b) => cfg.move === 'hover' && bs.includes(b) ? pose(b)[2] : b.s;
-    for (const b of bs) out.push({ s: sOf(b), front, draw: (ctx) => drawOne(ctx, b) });
+    for (const b of bs) if (!b.hold) out.push({ s: sOf(b), front, draw: (ctx) => drawOne(ctx, b) });
     /* 人已离场、水还在飞的，按原来那个人的远近画 */
     for (const [b, g] of groups) out.push({ s: sOf(b) + 1e-6, front, draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
     return out;
@@ -448,12 +456,14 @@ function CrewGroup(members) {
   let next = 0;
   return {
     members,
+    /* 返回 [召到的成员, 新来的人 b]（续时间 / 叫回时 b 为 undefined） */
     summon(pick) {
       const on = members.find(m => m.active());
-      if (on) return on.summon();
-      if (pick != null && !Number.isNaN(pick)) return members[Math.max(0, Math.min(members.length - 1, pick | 0))].summon();
-      members[next].summon();
+      if (on) return [on, on.summon()];
+      if (pick != null && !Number.isNaN(pick)) { const m = members[Math.max(0, Math.min(members.length - 1, pick | 0))]; return [m, m.summon()]; }
+      const m = members[next];
       next = (next + 1) % members.length;
+      return [m, m.summon()];
     },
     active: () => members.some(m => m.active()),
     reset() { members.forEach(m => m.reset()); next = 0; },
