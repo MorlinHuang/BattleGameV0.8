@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>方案对比 · 视频 vs 帧动画</title>
+<style>
+ body{margin:0;background:#1b1b1f;color:#ddd;font:14px/1.5 system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+ header{padding:10px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#26262c}
+ button,select{font:inherit;padding:6px 14px;border-radius:6px;border:1px solid #555;background:#333;color:#eee;cursor:pointer}
+ button.main{background:#e0a020;color:#111;border-color:#e0a020;font-weight:bold}
+ .wrap{display:flex;gap:18px;padding:14px 16px;flex-wrap:wrap}
+ .pane{display:flex;flex-direction:column;gap:6px}
+ .pane h3{margin:0;font-size:15px}
+ .screen{position:relative;overflow:hidden;background:#000;border-radius:10px}
+ .screen .bg{position:absolute;inset:0;width:100%;height:100%}
+ .screen .bg.game{background:url(game_bg.jpg) center/100% 100%}
+ .screen .bg.checker{background:repeating-conic-gradient(#bbb 0 25%,#eee 0 50%) 0 0/24px 24px}
+ .screen .bg.yellow{background:#ffe23a}
+ .screen .bg.black{background:#000}
+ .region{position:absolute;outline:1px dashed rgba(255,215,90,.6)}
+ .region video,.region canvas{position:absolute;left:0;top:0;width:100%;height:100%}
+ table{border-collapse:collapse;font-size:13px}
+ td{padding:2px 10px 2px 0;vertical-align:top}
+ td:first-child{color:#999;white-space:nowrap}
+ .note{color:#aaa;font-size:12px;max-width:420px}
+ input[type=range]{width:260px}
+</style></head><body>
+<header>
+ <button class="main" id="play">▶ 同步播放</button>
+ <button id="stop">■ 停</button>
+ <label><input type="checkbox" id="loop" checked> 循环</label>
+ <label>背景 <select id="bg"><option value="game">游戏画面</option><option value="checker">棋盘格（看透明）</option>
+   <option value="yellow">亮黄（看色边）</option><option value="black">黑</option></select></label>
+ <label>帧动画逐帧 <input type="range" id="scrub" min="0" value="0"> <span id="fno"></span></label>
+ <span id="msg" class="note"></span>
+</header>
+<div class="wrap">
+ <div class="pane"><h3>方案一：直接放视频 <span id="s1kind" class="note"></span></h3>
+  <div class="screen" id="scr1"><div class="bg game"></div><div class="region" id="reg1"><video id="vid" playsinline muted preload="auto"></video></div></div></div>
+ <div class="pane"><h3>方案二：帧动画（图集）</h3>
+  <div class="screen" id="scr2"><div class="bg game"></div><div class="region" id="reg2"><canvas id="cv"></canvas></div></div></div>
+ <div class="pane"><h3>数据</h3><table id="stats"></table>
+  <p class="note">声音只从一个地方出（下面的音轨），两边画面都跟它对时，所以左右是严格同步的。<br>
+   方案一的透明视频（webm）只有 Chrome / Edge / OBS 浏览器源能显示透明；Safari 会退回不透明的 mp4。<br>
+   「解码后内存」是帧动画整套图集放进显存/内存的大小，手机端建议控制在 200 MB 以内。</p></div>
+</div>
+<audio id="aud" preload="auto"></audio>
+<script>
+const M = /*MANIFEST*/null;
+const $ = id => document.getElementById(id);
+const D = M.display, K = Math.min(1, (innerHeight - 110) / D.screen[1], (innerWidth / 2 - 40) / D.screen[0]);
+for (const s of [$('scr1'), $('scr2')]) { s.style.width = D.screen[0] * K + 'px'; s.style.height = D.screen[1] * K + 'px'; }
+// 视频区按 display 摆；视频画面宽高比如果跟视频区不同，按宽度铺满、竖向居中（跟游戏里的做法一致）
+const cw = M.canvas[0], ch = M.canvas[1], rw = D.w * K, rh = rw * ch / cw, ry = (D.y + (D.h - D.w * ch / cw) / 2) * K;
+for (const r of [$('reg1'), $('reg2')]) Object.assign(r.style, { left: D.x * K + 'px', top: ry + 'px', width: rw + 'px', height: rh + 'px' });
+
+const vid = $('vid'), aud = $('aud'), cv = $('cv'), ctx = cv.getContext('2d');
+const alphaOK = !!M.scheme1.webm_alpha && document.createElement('video').canPlayType('video/webm; codecs="vp9"') !== '';
+vid.src = alphaOK ? M.scheme1.webm_alpha : M.scheme1.mp4;
+$('s1kind').textContent = alphaOK ? '（透明 webm）' : (M.scheme1.webm_alpha ? '（本浏览器不支持透明 webm，退回 mp4）' : '（mp4）');
+if (M.audio) aud.src = M.audio;
+
+const dpr = devicePixelRatio || 1;
+cv.width = Math.round(rw * dpr); cv.height = Math.round(rh * dpr);
+const sheets = M.sheets.map(s => { const im = new Image(); im.src = s.file; return im; });
+let loaded = 0; // ?t=秒 定格到某一时刻（截图对比用），?bg=checker|yellow|black 换背景
+const Q = new URLSearchParams(location.search), T0 = +(Q.get('t') || 0);
+sheets.forEach(im => im.onload = () => { loaded++; if (loaded === sheets.length) { $('msg').textContent = ''; draw(Math.floor(T0 * M.fps)); } });
+vid.addEventListener('loadedmetadata', () => { vid.currentTime = T0; }, { once: true });
+$('msg').textContent = '图集加载中…';
+
+function draw(i) {
+  i = Math.max(0, Math.min(M.count - 1, i));
+  const fr = M.frames[i], f = cv.width / M.canvas[0];   // 每帧只存了人物外框那一块，按 ox, oy 摆回整幅画面
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (fr.w) ctx.drawImage(sheets[fr.sheet], fr.x, fr.y, fr.w, fr.h, fr.ox * f, fr.oy * f, fr.w * f, fr.h * f);
+  $('scrub').value = i; $('fno').textContent = `${i + 1}/${M.count}`;
+}
+$('scrub').max = M.count - 1;
+$('scrub').oninput = e => { stop(); draw(+e.target.value); vid.currentTime = +e.target.value / M.fps; };
+
+// 时钟：音轨在放就跟音轨走，同时把墙钟对齐到音轨；没有音轨、或音轨比画面短已经放完，就接着走墙钟
+let t0 = 0, running = false;
+function now() {
+  if (M.audio && !aud.paused && !aud.ended) { t0 = performance.now() - aud.currentTime * 1000; return aud.currentTime; }
+  return (performance.now() - t0) / 1000;
+}
+function tick() {
+  if (!running) return;
+  let t = now();
+  if (t >= M.duration) {
+    if ($('loop').checked) { start(); return; }
+    stop(); return;
+  }
+  draw(Math.floor(t * M.fps));
+  if (Math.abs(vid.currentTime - t) > 0.12) vid.currentTime = t;
+  requestAnimationFrame(tick);
+}
+function start() {
+  vid.currentTime = 0; vid.play();
+  t0 = performance.now();
+  if (M.audio) { aud.currentTime = 0; aud.play(); }
+  running = true; requestAnimationFrame(tick);
+}
+function stop() { running = false; vid.pause(); aud.pause(); }
+$('play').onclick = start; $('stop').onclick = stop;
+const setBg = v => document.querySelectorAll('.bg').forEach(b => b.className = 'bg ' + v);
+$('bg').onchange = e => setBg(e.target.value);
+if (Q.get('bg')) { $('bg').value = Q.get('bg'); setBg(Q.get('bg')); }
+
+const esc = t => String(t).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const mb = b => (b / 1e6).toFixed(1) + ' MB', S = M.stats, src = M.source;
+const big = M.frames.reduce((a, f) => f.w * f.h > a.w * a.h ? f : a);
+const rows = [
+  ['原片', `${esc(src.file)}<br>${src.width}×${src.height} · ${src.fps}fps · ${src.duration}s · ${src.audio ? '有音轨' : '无音轨'}`],
+  ['抠像', M.key === 'ai' ? 'AI 抠人物 + 图层合成（场景背景：人物不透明、环境 22%、光效 90%、最后一秒只剩人物）' : M.key ? `${{ green: '绿幕', magenta: '品红幕', blue: '蓝幕' }[M.key]}（边框色 rgb(${M.key_detect.color})，一致度 ${M.key_detect.uniform}）` : `不抠（边框色 rgb(${M.key_detect.color})，一致度 ${M.key_detect.uniform}，不像幕布）`],
+  ['预设', M.preset],
+  ['帧动画', `${M.count} 帧 @ ${M.fps}fps，画面 ${M.canvas[0]}×${M.canvas[1]}，每帧只存人物外框（最大 ${big.w}×${big.h}）`],
+  ['图集', `${M.sheets.length} 张，文件 ${mb(S.atlas_bytes)}`],
+  ['图集解码后内存', mb(S.atlas_decoded_bytes)],
+  ...Object.entries(S.scheme1_bytes).map(([k, v]) => ['方案一 ' + (k === 'mp4' ? 'mp4' : '透明 webm'), mb(v)]),
+  ['处理耗时', S.seconds + ' 秒'],
+];
+if (M.intro) rows.push(['尾帧对齐', `立绘缩放 ${M.intro.end.s}、左上角在视频像素 (${M.intro.end.x}, ${M.intro.end.y})，视频宽 ${M.intro.vw}，平均色差 ${M.intro.residual}`]);
+for (const w of M.warnings || []) rows.push(['<b style="color:#ff9b3b">⚠ 注意</b>', `<span style="color:#ffb86b">${esc(w)}</span>`]);
+$('stats').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+</script></body></html>

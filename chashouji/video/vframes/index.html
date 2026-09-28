@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>视频抽帧工具</title>
+<style>
+ body{margin:0;background:#1b1b1f;color:#ddd;font:15px/1.6 system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+ main{max-width:860px;margin:0 auto;padding:24px 16px}
+ h1{font-size:22px;margin:0 0 4px}
+ .sub{color:#999;margin:0 0 18px;font-size:13px}
+ #drop{border:2px dashed #666;border-radius:14px;padding:44px 16px;text-align:center;cursor:pointer;transition:.15s}
+ #drop.over{border-color:#e0a020;background:#2c2618}
+ #drop b{font-size:18px;color:#fff}
+ .opts{display:flex;gap:18px;flex-wrap:wrap;margin:14px 0}
+ select{font:inherit;padding:5px 10px;border-radius:6px;background:#333;color:#eee;border:1px solid #555}
+ .hint{color:#999;font-size:12px}
+ .job{background:#26262c;border-radius:10px;padding:12px 14px;margin:10px 0}
+ .job .top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+ .bar{height:8px;background:#3a3a42;border-radius:4px;overflow:hidden;margin:8px 0}
+ .bar i{display:block;height:100%;background:#e0a020;transition:width .4s}
+ .err{color:#ff7b7b;white-space:pre-wrap}
+ .warn{color:#ffb86b;margin-top:4px}
+ a.btn{display:inline-block;padding:6px 14px;border-radius:6px;background:#e0a020;color:#111;text-decoration:none;font-weight:bold;margin-right:8px}
+ a.btn.ghost{background:#333;color:#eee;border:1px solid #555}
+</style></head><body><main>
+<h1>视频抽帧工具</h1>
+<p class="sub">把即梦生成的出场视频拖进来，自动出两套素材：<b>方案一</b>透明图层视频（场景背景用 AI 抠出人物、环境淡淡透出、光效保留、最后一秒只剩人物；纯色幕布按颜色抠），<b>方案二</b>帧动画图集。完成后点「对比预览」，两个方案会叠在游戏画面上同步播放。</p>
+<div id="drop"><b>把视频拖到这里</b><br><span class="hint">或点这里选文件 · mp4 / mov / webm，60 秒以内 · 立绘图片也可以一起拖进来</span></div>
+<input type="file" id="file" accept="video/*,image/png,image/webp" hidden multiple>
+<input type="file" id="sfile" accept="image/png,image/webp" hidden>
+<div class="opts">
+ <label>画质 <select id="preset">
+  <option value="均衡" selected>均衡（15 帧/秒，720 宽）</option>
+  <option value="高清">高清（24 帧/秒，1080 宽）</option>
+  <option value="省内存">省内存（12 帧/秒，540 宽）</option></select></label>
+ <label>抠像 <select id="key">
+  <option value="auto" selected>自动判断</option><option value="ai">AI 抠人物（场景背景）</option><option value="none">不抠（保留背景）</option>
+  <option value="magenta">品红幕</option><option value="green">绿幕</option><option value="blue">蓝幕</option></select></label>
+ <label>立绘（可选） <a class="btn ghost" id="spick" href="javascript:">选择…</a><span id="sname" class="hint">未选：不量尾帧对齐</span></label>
+</div>
+<p class="hint">「自动判断」看画面四周：一圈都是同一种鲜艳纯色（品红 / 绿 / 蓝）就按颜色抠；否则是场景背景，用 AI 抠出人物做成透明图层（8 秒视频约 6~10 分钟，看服务器忙不忙）。<br>
+ 立绘：游戏里这个角色的透明底立绘（PNG / WebP）。给了就量出它在视频最后一帧里的位置，结果填进游戏 intro.js，视频放完立绘在同一位置现身，读起来是她从视频里走进游戏。</p>
+<div id="list"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => String(t ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const drop = $('drop'), file = $('file');
+drop.onclick = () => file.click();
+file.onchange = () => { take([...file.files]); file.value = ''; };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); take([...e.dataTransfer.files]); };
+$('spick').onclick = () => $('sfile').click();
+$('sfile').onchange = () => { if ($('sfile').files[0]) setStandee($('sfile').files[0]); $('sfile').value = ''; };
+
+/* 立绘先传上去换一个 token，之后传的视频都带上它（同一张立绘可以配好几条视频）。一起拖进来的：先等立绘传完再传视频 */
+let standee = null;            // Promise<token>
+function setStandee(f) {
+  $('sname').textContent = `${f.name}（上传中…）`;
+  standee = fetch('/api/standee', { method: 'POST', body: f }).then(r => r.json()).then(r => {
+    if (!r.token) throw new Error(r.error || '立绘上传失败');
+    $('sname').textContent = `${f.name} ✓`;
+    return r.token;
+  }).catch(e => { $('sname').textContent = `${f.name}：${e.message}`; standee = null; return ''; });
+}
+function take(files) {
+  const img = files.find(f => f.type.startsWith('image/'));
+  if (img) setStandee(img);
+  files.filter(f => !f.type.startsWith('image/')).forEach(upload);
+}
+
+const uploading = {};   // 前端上传中的临时条目
+async function upload(f) {
+  const tmp = 'up' + Math.random().toString(36).slice(2);
+  uploading[tmp] = { id: tmp, name: f.name, state: 'uploading', pct: 0, step: '上传中' };
+  render();
+  const token = standee ? await standee : '';
+  const x = new XMLHttpRequest();
+  x.open('POST', `/api/upload?name=${encodeURIComponent(f.name)}&preset=${encodeURIComponent($('preset').value)}&key=${$('key').value}&standee=${token}`);
+  x.upload.onprogress = e => { if (e.lengthComputable) { uploading[tmp].pct = e.loaded / e.total; uploading[tmp].step = `上传中 ${Math.round(e.loaded / e.total * 100)}%`; render(); } };
+  x.onload = () => {
+    let r = {}; try { r = JSON.parse(x.responseText); } catch (e) {}
+    if (x.status === 200) delete uploading[tmp];
+    else Object.assign(uploading[tmp], { state: 'error', error: r.error || `上传失败（${x.status}）` });
+    poll();
+  };
+  x.onerror = () => { Object.assign(uploading[tmp], { state: 'error', error: '网络断了，上传失败' }); render(); };
+  x.send(f);
+  render();
+}
+
+let jobs = [];
+function render() {
+  const all = [...Object.values(uploading), ...jobs];
+  $('list').innerHTML = all.map(j => {
+    const s = j.summary, base = `/jobs/${encodeURIComponent(j.id)}/`;
+    const detail = j.state === 'done'
+      ? `<div>${esc(s.key)} · ${s.count} 帧 @ ${s.fps}fps · 每帧最大 ${s.frame[0]}×${s.frame[1]} · 图集 ${s.atlas_mb} MB（解码后 ${s.decoded_mb} MB）· 用时 ${s.seconds} 秒</div>
+         ${s.intro ? `<div>尾帧对齐（填进 intro.js CLIPS）：<code style="color:#ffd76a">${esc(s.intro)}</code></div>` : ''}
+         ${(j.warnings || []).map(w => `<div class="warn">⚠ ${esc(w)}</div>`).join('')}
+         <div style="margin-top:8px"><a class="btn" href="${base}preview.html" target="_blank">对比预览</a><a class="btn ghost" href="${base}${encodeURIComponent(j.zip)}" download>下载 zip</a></div>`
+      : j.state === 'error' ? `<div class="err">${esc(j.error)}</div>`
+      : `<div class="bar"><i style="width:${Math.round((j.pct || 0) * 100)}%"></i></div><div class="hint">${esc(j.step)}</div>`;
+    return `<div class="job"><div class="top"><b>${esc(j.name)}</b><span class="hint">${esc(j.preset || '')} ${j.state === 'queued' ? '· 排队中' : ''}</span></div>${detail}</div>`;
+  }).join('');
+}
+let timer = null;
+async function poll() {
+  clearTimeout(timer);
+  try { jobs = await (await fetch('/api/jobs')).json(); } catch (e) {}
+  render();
+  const busy = jobs.some(j => j.state === 'queued' || j.state === 'running') || Object.values(uploading).some(j => j.state === 'uploading');
+  timer = setTimeout(poll, busy ? 1000 : 5000);
+}
+poll();
+</script></body></html>
