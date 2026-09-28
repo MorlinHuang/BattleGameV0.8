@@ -20,14 +20,17 @@ from scipy import ndimage
 PAD = 44                                   # 输出贴图四周给外发光留的边（输出像素），同 truth2 / demon1
 
 
-def cut(src, screen, key):
-    """原图 → (rgb float32, alpha 0~1)。去溢色只动半透明过渡带（不透明的像素本来的颜色不动）。"""
+def cut(src, screen, key, erase=()):
+    """原图 → (rgb float32, alpha 0~1)。去溢色只动半透明过渡带（不透明的像素本来的颜色不动）。
+    erase：[(x0, y0, x1, y1), ...] 原图像素，这些框里一律抠掉（画进原图、但运行时另外画的东西，如黑蛛女特工手上往上的丝）。"""
     a = np.array(Image.open(src).convert('RGB')).astype(np.int16)
     if screen == 'green':
         k = a[..., 1] - np.maximum(a[..., 0], a[..., 2])
     else:
         k = np.minimum(a[..., 0], a[..., 2]) - a[..., 1]
     al = np.clip(1 - (k - key[0]) / (key[1] - key[0]), 0, 1).astype(np.float32)
+    for x0, y0, x1, y1 in erase:
+        al[y0:y1, x0:x1] = 0
     # 小于 60 像素的孤立碎块（幕布上的噪点、抠剩的溢色斑）清掉
     lab, n = ndimage.label(al > 0.05)
     if n:
@@ -62,9 +65,9 @@ def edge_extend(rgb, al, it=12):
     return rgb
 
 
-def make(src, out, screen, key, K, glow, pts, margin=6):
+def make(src, out, screen, key, K, glow, pts, margin=6, erase=()):
     """pts：{名: (x, y)} 原图像素；返回输出贴图像素的量点。裁边框按剪影外框 + margin 自动取（量点按原图像素，不受影响）。"""
-    rgb, al = cut(src, screen, key)
+    rgb, al = cut(src, screen, key, erase)
     rgb = edge_extend(rgb, al)
     ys, xs = np.nonzero(al > 0.05)
     x0, y0 = max(0, xs.min() - margin), max(0, ys.min() - margin)

@@ -315,7 +315,7 @@ function startMatch() {
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
-  for (const c of CREWS) c.reset(); DurianRain.reset(); SockRain.reset();
+  for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset();
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
@@ -465,10 +465,10 @@ const INK = [58, 44, 38];        // 描边色，取角色线稿那个暖黑
 const EMBER = [255, 156, 38];    // 发光基色，高饱和暖橙
 
 /* 档 4 命中时蹦几条字（灭迹恶魔和新四人）：首击 / 续送（s 2.8）两条，之后每 0.25 秒一下的轻补（s 0.55）只有两成概率蹦一条。
-   轻补每下都蹦的话，同边三个人一起打是每秒十来条，全叠在对方脸上，脸就看不见了（满员截图实测，F2）。 */
+   轻补每下都蹦的话一个人就是每秒四条、每条活一秒多，脸前总压着四五条（三人同屏时实测每秒十来条，脸整个看不见）。 */
 const tagsOf = (s) => (s >= 2 ? 2 : Math.random() < 0.2 ? 1 : 0);
 /* 字从脸的上方一点（rise）冒出来、往上飘走（drag 每帧 0.965）。原来贴着命中点出生、drag 0.94 飘五六十像素就停住，
-   一秒多的寿命全停在脸前 —— 三个人一起打，脸被一摞字盖死（满员截图实测）。灭迹恶魔的「已撤回」同一条规矩。 */
+   一秒多的寿命全停在脸前，脸被一摞字盖住（三人同屏截图实测）。灭迹恶魔的「已撤回」同一条规矩。 */
 const TAG = { rise: 46, drag: 0.965 };
 
 const RECIPE = {
@@ -1304,12 +1304,13 @@ const SHOP = {
    是不够特别；档 3~4 一局只有几次，要的是"我没见过"—— 而这个题材里观众最没
    见过的，就是吵到最后砸过来的是一束花。 */
 // 档 3 的两个帮手角色 + 档 4 两边各一组三人（crew.js），GIFT[..].crew 指到这里
-/* 档 4 每边最多 3 人（2026-09-28 用户定，跟闺蜜 / 哥们一样）：每送一次召一个没在场的，满 3 人再送 = 给剩余时间最短的续一段、
-   名字条重播「×N」（CrewGroup）。成员顺序就是 ?g4L= / ?g4R= 的下标。 */
+/* 档 4 每边一组三人、**同一时间只一个在场**（2026-09-28 用户："三个女神太多了，每个都显得特别小，还是改一个，放大一些"）：
+   场上没人时送 = 按下面的顺序轮到下一个（第一次是女神 / 恶魔）；有人在场再送 = 给他 / 她续一段、名字条重播「×N」，不换人
+   （crew.js CrewGroup）。成员顺序也是 ?g4L= / ?g4R= 的下标。 */
 const G4L = CrewGroup([Truth, Moon, Widow]);     // 查岗党：真相女神 / 月亮查岗使 / 黑蛛女特工
 const G4R = CrewGroup([Demon, Briefs, Erlang]);  // 灭迹党：灭迹恶魔 / 内裤外穿侠 / 二郎·打码神
 const CREW = { buddy: Buddy, bestie: Bestie, g4L: G4L, g4R: G4R };
-const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 重置 / 画的全部帮手
+const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
 /* 召唤：组（档 4）按 URL ?g4L= / ?g4R= 强制召某一个人（诊断：胶片一个一个单独拍）；单个 Crew 可指定形象 sk（?skin=） */
 function summonCrew(name, sk) {
   const c = CREW[name];
@@ -1318,6 +1319,15 @@ function summonCrew(name, sk) {
   c.summon(q == null || q === '' ? undefined : +q);
 }
 const RAIN = { durian: DurianRain, sockball: SockRain };
+/* ?crewlog=1（胶片每格一行）：档 4 在场的人瞄准角 / 目标 / 喷口，和 crew.js measure 的两个外框
+   solid（最高点、中线余量按它）/ glow（含外发光，最低点按它），屏幕像素 x0,y0,x1,y1 */
+function crewLog() {
+  const f = (r) => r ? r.join(',') : '-';
+  for (const c of [...G4L.members, ...G4R.members]) for (const b of c.peek()) {
+    const m = c.measure(b) || {};
+    console.log(`crewlog ${c.cfg.spr.src.split('/').pop().split('%')[0]} t=${b.t.toFixed(2)} aim=${b.aim.toFixed(3)} want=${(b.want ?? NaN).toFixed(3)} tg=${b.tg && b.tg.map(v => v.toFixed(0))} m=${b.m && b.m.map(v => v.toFixed(0))} solid=${f(m.solid)} glow=${f(m.glow)} part=${Particles.count()}`);
+  }
+}
 
 /* 高跟鞋砸头（档 1 左，榴莲鞋雨里的四只鞋）：爆点颜色跟鞋走（用户定的）—— 鞋跟"咔"一下，小而硬：
    亮色闪 + 深色托底的环 + 几颗描边碎块 + 火星。三种颜色同一个形，只换 [亮色, 深色托底]；
@@ -1402,8 +1412,8 @@ const GIFT = {
   /* 真相女神（2026-09-27 替换戒指盒，戒指盒那行留着当备选）：扛巨型「真相喷雾」从天上冲下来悬在女主左上方，
      朝男生的脸喷 2.8 秒（crew.js TRUTH）。第一下档 4、之后每 0.25 秒轻补。档 4 原来靠 exec 的全场预警 + 1.8 倍体积
      读出"贵"，她换成出场 1.4 秒全场压暗 + 名字条（truthIntro）。 */
-  /* 2026-09-28 扩成一组三人（crew 'g4L'）：真相女神 / 月亮查岗使 / 黑蛛女特工，名字条按成员各自取（main.js G4NAME）。
-     这里的 name 只是礼物按钮上的名字。 */
+  /* 2026-09-28 扩成一组三人（crew 'g4L'）：真相女神 / 月亮查岗使 / 黑蛛女特工，同时只一个在场、轮换（CrewGroup）；
+     名字条按成员各自取（STARS）。这里的 name 只是礼物按钮上的名字。 */
   truth:   { name: '真相女神', from: +1, style: 'crew',  crew: 'g4L',  power: 4, recipe: 'truth', push: 600 },
   // 灭迹党（男方，在右，from=-1）
   /* 香蕉（2026-09-26 替换瓜子）：一次礼物三根、隔 0.5 秒一根（gap），瞄女生的脸（aim），碰撞点也是脸
@@ -1421,7 +1431,7 @@ const GIFT = {
   buddy:   { name: '哥们',   from: -1, style: 'crew',   crew: 'buddy',  power: 3, recipe: 'water',  push: 230 },
   /* 灭迹恶魔（2026-09-27 替换相框）：对应女生的真相女神 —— 悬在右上朝女生的脸喷"撤回烟雾"（crew.js DEMON），
      打中蹦「已撤回」「记录已清空」。出场同女神：全场压暗 + 名字条（从右边滑进来）。相框那行留着当备选。 */
-  /* 2026-09-28 扩成一组三人（crew 'g4R'）：灭迹恶魔 / 内裤外穿侠 / 二郎·打码神 */
+  /* 2026-09-28 扩成一组三人（crew 'g4R'）：灭迹恶魔 / 内裤外穿侠 / 二郎·打码神，同 g4L 轮换 */
   demon:   { name: '灭迹恶魔', from: -1, style: 'crew',  crew: 'g4R',  power: 4, recipe: 'demon', push: 600 },
   photo:   { name: '相框',   from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
 };
@@ -2161,69 +2171,25 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     onHit: (x, y, first) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE.pepper, x),
   });
 
-  /* 真相女神（档 4 左，crew.js TRUTH）→ 同样瞄男生的脸，落点同平衡车闺蜜。
-     perch：她悬停时脚底（靴底）在屏幕哪（没倾之前）。2026-09-27 用户要她"往上、不跟闺蜜在一起、整体再大、占女生这半边"：
-     靴底抬到 TRUTH_PERCH：女主站着时头顶最高到 y 810，她连靴子带外发光的最低点要在 y 780 以上
-     （靴底 740 + 悬浮上下晃 ~9 + 靴底下的金光 ~25 ≈ 775）；上沿不能压住拉力那一行（y 190，光环在 ~192）。
-     整个人 ~535 高占左上 x 30~440；闺蜜站地、头在 y≈800 往下，两人上下错开。
-     onArrive：冲下来刹停那一刻，脚下炸一圈青柠冲击环 + 星星 + 小震屏（不给反馈读成飘下来的）。 */
-  const TRUTH_PERCH = [170, 740];
-  const DEMON_PERCH = [790, 715];
-  /* 灭迹恶魔（档 4 右，crew.js DEMON）：女神的镜像，瞄女生的脸。
-     硬约束：男生站着时头顶最高到 y 781（bK），他连靴子带外发光的最低点要在 y 750 以上（靴底 715 + 晃 ~9 + 光 ~25）；
-     横向占右上 x 560~960，喷口在 x≈610，跟左上的女神（到 x≈440）在中线附近不重叠。 */
-
-  /* ---- 档 4 每边三人的站位（2026-09-28，规格 shots/review/trio/trio_spec.md 第三节） ----
-     每边一个人时用上面的大站位（s ≈ 0.95，已经占满自己那半边的上半屏）；2~3 人时全体滑到一条斜线上的三个槽位：
-     1 前（左下，最大）→ 3 后（右上，最小），三人沿"喷射方向的垂直线"排开 —— 每股都往右下喷，不穿过自己这边另外两个人；
-     每个槽位的脸都在前一个槽位的上沿之上（六张脸都露着），喷口在身体右侧、槽位往右上错开，喷口也不会被挡。
-     新来的人占 1 号前排（最显眼，也跟名字条对得上），在场的依次往后挪；降回 1 人时剩下那个滑回大站位。
-     槽位按 truth2 贴图量的，存成**外框中线 cx + 靴底 y + 缩放 s**：三个人贴图宽窄不一样，按外框中线排才都占同一块地方
-     （新立绘出图时人高 + 武器的包围盒都做得跟 truth2 差不多，最低点就是靴底）。男生侧镜像：cx → W − cx，靴底再上移 R_DY
-     （男生站着时头顶更高，最低点要 ≤ y750）。大站位由 TRUTH_PERCH / DEMON_PERCH 换算成外框中线，所以女神、恶魔单人时位置不变。
-     换槽位时位置和缩放一起按 GLIDE 秒的三次 Hermite 平滑过去（起点带着当时的速度、到位速度 0），位置、速度都不跳 ——
-     跟 crew.js hoverPose 离场召回那段同一个做法。 */
-  const G4SLOT = {
-    L: [{ cx: 135, y: 740, s: 0.66 }, { cx: 247, y: 626, s: 0.60 }, { cx: 359, y: 517, s: 0.55 }],   // 靴底 (100,740)/(215,626)/(330,517) 换算成外框中线
-    R_DY: 25,
-    GLIDE: 0.4,
+  /* ---- 档 4 的站位（2026-09-28 改成每边同时一人：用户看完三人同屏"三个女神太多了，每个都显得特别小，还是改一个，放大一些"） ----
+     每边同一时间只有一个人（crew.js CrewGroup 轮换），六个人各有一个大站位：她 / 他悬停时靴底（没倾之前）停在 G4STAND[配方名]，
+     缩放 = 这一边的身高 H ÷ 贴图里的身高 spr.tall —— 同一边三个人一样高（用户："六人的视觉大小要一致，以身高为准"）。
+     硬约束（crew.js measure 实测，含悬停上下晃、瞄准前后倾，p = 5 / 50 / 95 都量）：
+       最低点（含外发光）：女生侧 < y780（女主站着时头顶最高到 y810），男生侧 ≤ y750（男主站着时头顶更高，到 y781）；
+       最高点（光环、角、发丝、武器尖）≥ y190（拉力条下沿）；两边同时在场时女生侧最右 < 男生侧最左（中线不重叠）。
+     两边的 H 不一样：上下能用的高度女生侧 590、男生侧 560（男主头顶高 30），各自取"最紧的那个人正好顶到上下沿"。
+     女生侧 534：女神原来 538（s 0.95），那时晃到最高、p5 前倾时光环顶到 y187，压了拉力条 3 像素 —— 缩 0.7% 才进 190，没有余地再大；
+     男生侧 488（恶魔原来 486）：二郎顶着（p95 时三尖刀尖 ~192、靴尖外发光 ~748，上下各留 2 像素）。男生侧也放到 538 会压住男主的头 / 拉力条；
+     女生侧降到 488 就得把女神再缩小 9%（用户要的是放大）。
+     黑蛛女特工、二郎的立绘为此各重出了一版（src2：手放到肩前、祥云压扁），见 v14/widow、v14/erlang 的 make.py。
+     横向：每个人按原来女神 / 恶魔大站位的外框中线（女生侧 x≈220、男生侧 x≈766）摆，靴底 x 由各自贴图的外框中线换算。
+     onArrive：冲下来刹停那一刻，脚下炸一圈冲击环 + 星星 + 小震屏（不给反馈读成飘下来的）。 */
+  const G4STAND = {
+    H: { L: 534, R: 488 },                       // 两边各自的身高（屏幕像素，发顶 → 靴底）
+    truth:  [170, 741],  moon:   [180, 740],  widow:  [172, 739],
+    demon:  [791, 712],  briefs: [783, 707],  erlang: [788, 701],
   };
-  const g4Big = { L: [TRUTH_PERCH[0] + (426 / 2 - 160) * 0.95, TRUTH_PERCH[1]],      // truth2 贴图宽 426、靴底 x 160，s 0.95
-                  R: [DEMON_PERCH[0] + (437 / 2 - 244) * 0.95, DEMON_PERCH[1]] };     // demon1 贴图宽 437、靴底 x 244
-  /* 某一边此刻每个在场的人该在哪：[靴底 x, 靴底 y, s]（离场途中的也算在场，飞走以后才让位） */
-  function g4Targets(side) {
-    const on = (side === 'L' ? G4L : G4R).members.flatMap(c => c.peek().map(b => [c, b])).sort((a, b) => b[1].born - a[1].born);
-    return on.map(([c, b], i) => {
-      let cx, y, s;
-      if (on.length === 1) { [cx, y] = g4Big[side]; s = b.s; }
-      else { const q = G4SLOT.L[Math.min(i, 2)]; cx = side === 'L' ? q.cx : W - q.cx; y = q.y - (side === 'L' ? 0 : G4SLOT.R_DY); s = q.s; }
-      const w = c.width(), fx = c.cfg.spr.foot[0];
-      return [b, [cx - (w / 2 - fx) * s, y, s]];
-    });
-  }
-  const herm = (u) => [2 * u ** 3 - 3 * u * u + 1, u ** 3 - 2 * u * u + u, -2 * u ** 3 + 3 * u * u];
-  const hermD = (u) => [6 * u * u - 6 * u, 3 * u * u - 4 * u + 1, -6 * u * u + 6 * u];
-  /* b.sl = { p0, v0, to, t0 }：按这个人自己的时钟 b.t 求值（不另开计时器；胶片 / 预热快进都跟着走） */
-  function slotAt(b, t) {
-    const L = b.sl, D = G4SLOT.GLIDE, u = Math.min(1, Math.max(0, (t - L.t0) / D));
-    if (u >= 1) return [L.to, [0, 0, 0]];
-    const h = herm(u), d = hermD(u);
-    return [L.to.map((p1, k) => h[0] * L.p0[k] + h[1] * D * L.v0[k] + h[2] * p1),
-            L.to.map((p1, k) => (d[0] * L.p0[k] + d[1] * D * L.v0[k] + d[2] * p1) / D)];
-  }
-  /* 每帧（crew.js update 开头 o.tick）：目标变了就从此刻的位置、速度起一段新的 Hermite。只在这里写状态，perch 只读 */
-  function g4Tick(side) {
-    for (const [b, to] of g4Targets(side)) {
-      if (!b.sl) { b.sl = { p0: to, v0: [0, 0, 0], to, t0: -1e9 }; continue; }
-      if (to.every((v, k) => Math.abs(v - b.sl.to[k]) < 1e-3)) continue;
-      const [p, v] = slotAt(b, b.t);
-      b.sl = { p0: p, v0: v, to, t0: b.t };
-    }
-  }
-  function g4Perch(side, b) {
-    if (!b.sl) g4Tick(side);                     // 刚召唤、还没 update 过（胶片第一格）
-    return b.sl ? slotAt(b, b.t)[0] : (side === 'L' ? [...TRUTH_PERCH, b.s] : [...DEMON_PERCH, b.s]);
-  }
+  const g4Perch = (rcp, side, crew) => (b) => [...G4STAND[rcp], G4STAND.H[side] / crew.cfg.spr.tall];
 
   /* 六个人的公共接线：女生侧瞄男生的脸、男生侧瞄女生的脸，落点同平衡车闺蜜（脸的中上部，u 在上下乱晃）；
      front null：没打中脸的就散掉，不在身体轮廓上爆。onArrive / onSplash / onHit 走各自的配方（RECIPE.truth / moon / widow /
@@ -2231,11 +2197,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   const faceTarget = (who, dir) => (u) => { const f = faceOf(who); return f && [f[0] + dir * 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]]; };
   const g4Init = (crew, side, rcp, gift, extraHit) => crew.init({
     W, ground: () => GROUND + FX.bob, horizon,
-    perch: (b) => g4Perch(side, b),
-    tick: () => g4Tick(side),
-    /* F2：同边 n 个人一起喷时，每人喷的量乘 1/√n —— 三股全开时雾 / 爱心 / 射线加起来是一个人的 √3 ≈ 1.7 倍，不是 3 倍，
-       男女主的脸还露得出来（规格第五节 F2）。只动出量，不动单颗大小和命中节奏（hitEvery）。 */
-    rateK: () => 1 / Math.sqrt(Math.max(1, (side === 'L' ? G4L : G4R).members.filter(c => c.active()).length)),
+    perch: g4Perch(rcp, side, crew),
     target: side === 'L' ? faceTarget('b', -1) : faceTarget('a', +1),
     front: () => null,
     onArrive: (x, y, s) => RECIPE[rcp].arrive(x, y, s),
@@ -2315,7 +2277,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        是什么样"（含结算那格礼物数），只能走这条路。 */
     const every = Math.max(0, +(Q.get('liveEvery') || 0));
     const gA = Q.get('liveGA'), gB = Q.get('liveGB');
-    const liveN = Q.has('liveN') ? +Q.get('liveN') : Infinity;   // ?liveN=<次数>：liveEvery 每边最多送几次（档 4 连刷：3 次满员、第 4 次续时间）
+    const liveN = Q.has('liveN') ? +Q.get('liveN') : Infinity;   // ?liveN=<次数>：liveEvery 每边最多送几次（档 4 连刷：第 1 次召一个人，之后在场就续时间、×N）
     for (let k = 0; k < warm * 30; k++) {
       /* 分出胜负之后不再注入。这一局已经打完了，照注的话结算面板上"最终拉力"
          和"礼物"会一路涨下去，跟旁边那格"本局时长"对不上 —— 截出来的图自相
@@ -2389,8 +2351,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
                   delay: 0.25, slide: 0.25, stay: 1.1, out: 0.3,        // 名字条：她俯冲的 0.25s 先不出（免得盖住头和罐子）、滑进来几秒、停到几秒、几秒淡掉
                   y: 800, h: 112,                                       // 名字条中线 y、条高：她脚下、两人头顶之上（330 时压在她身上）
                   stack: 122 };                                         // 两边同时各一条时，后出来的往上挪多少（条高 + 10）
-  /* 档 4 每边三人，**按成员**各演各的：名字、条色、字色都跟人走（左边的从左滑进、右边的从右滑进）。
-     几个人同时在场，压暗取最深的那个（仍是"全场暗下去、只有她 / 他亮着"）。
+  /* 档 4 每边一组三人（同时只一个在场），**按成员**各演各的：名字、条色、字色都跟人走（左边的从左滑进、右边的从右滑进）。
+     两边同时在场，压暗取最深的那个（仍是"全场暗下去、只有她 / 他亮着"）。
      fill 横幅底色、bar 上下两道色条、edge 字的描边、text 字色。名字都不出现原角色名（规格第一节）。 */
   const STARS = [
     { crew: Truth,  name: '真相女神',     from: +1, fill: 'rgba(8,20,10,0.62)',  bar: 'rgb(156,238,96)', edge: 'rgb(20,70,30)',   text: 'rgb(214,255,150)' },
@@ -2413,14 +2375,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     c.fillStyle = `rgba(8,14,10,${(I.dim * k).toFixed(3)})`;
     c.fillRect(-60, -60, W + 120, H + 120);                             // 多铺一圈：震屏时边上不漏亮
   }
-  /* 同一边同时只演一条：新的一条（刚出场 / 刚续上）一出来，旧的那条立刻让位 —— 两条叠在同一个 y 上，字会印成一团（三人时实测）。
-     两边同时各有一条时，后出来的那条往上挪一个条高（INTRO.stack）：不挪的话后画的整条盖住先画的，先送礼那一边什么都看不到
-     （每边一人时也会撞，只是三人连刷时撞得勤）。只有一条时位置不变。 */
+  /* 每边同时只一个人，也就最多一条。两边同时各有一条时，后出来的那条往上挪一个条高（INTRO.stack）：
+     不挪的话后画的整条盖住先画的，先送礼那一边什么都看不到。只有一条时位置不变。 */
   function drawIntroName(c) {
-    const cur = [+1, -1].map((from) => {
-      const live = STARS.filter(st => st.from === from && st.crew.peek()[0] && nameT(st) >= 0 && nameT(st) < INTRO.stay + INTRO.out);
-      return live.length ? live.reduce((a, b) => (nameT(a) <= nameT(b) ? a : b)) : null;
-    }).filter(Boolean);
+    const cur = STARS.filter(st => st.crew.peek()[0] && nameT(st) >= 0 && nameT(st) < INTRO.stay + INTRO.out);
     if (cur.length === 2 && nameT(cur[0]) < nameT(cur[1])) cur.reverse();    // 先出来的（nameT 大）排前面，画在原位
     cur.forEach((st, i) => drawIntroName1(c, st, i * INTRO.stack));
   }
@@ -2568,9 +2526,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 
     // ?ammoy=aim：不钉高度，让瞄部位的礼物（香蕉瞄脸、口红瞄腰腿）按实际逻辑瞄
     /* ?buddyn=3 一次叫几个；?skin=0|1|2 强制出哪个形象（cfg.skins 下标），不给就挑空着的 */
-    /* ?ammogift2=<礼物名>：同一条胶片里再叫另一边的帮手（档 4 满员 6 人：ammogift=truth&ammogift2=demon&buddyn=3）。
-       ?buddygap=<秒>：buddyn 个人不一起叫，第 k 个在 k×gap 秒时叫（看第 2、3 人进场时换槽位）；
-       ?ammoskip=<秒>：第一格之前先快进这么久（看离场时降回大站位，不用拍一长条）。 */
+    /* ?ammogift2=<礼物名>：同一条胶片里再叫另一边的帮手（档 4 两边各一人：ammogift=truth&ammogift2=demon）。
+       ?buddygap=<秒>：buddyn 次不一起送，第 k 次在 k×gap 秒时送（档 4：看在场时续时间、名字条 ×N）；
+       ?ammoskip=<秒>：第一格之前先快进这么久（看离场、离场途中被叫回，不用拍一长条）。 */
     const g2 = GIFT[Q.get('ammogift2')], gap = Math.max(0, +(Q.get('buddygap') || 0));
     const due = [];                                  // [第几秒, 叫谁]
     const sk = Q.has('skin') ? +Q.get('skin') : undefined;
@@ -2594,9 +2552,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       const step = i === 0 ? 1 / 60 : MS;
       for (let k = 0; k < Math.max(1, Math.round(step * 60)); k++) {
         simT += 1 / 60; callDue();
-        /* ?crewlog=2：每一小步都记档 4 每个人的靴底 x、y、缩放（换槽位连不连续，按小步看，L2） */
-        if (Q.get('crewlog') === '2') for (const c of [...G4L.members, ...G4R.members]) for (const b of c.peek())
-          console.log(`crewlog ${c.cfg.spr.src.split('/').pop().split('%')[0]} sim=${simT.toFixed(3)} t=${b.t.toFixed(3)} n=${(c.cfg.face > 0 ? G4L : G4R).members.filter(m => m.active()).length} at=${c.where(b).map(v => v.toFixed(3))}`);
         const d = Particles.tick(1 / 60);
         Particles.update(1 / 60);
         Ammo.update(d);
@@ -2605,8 +2560,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         derive(d); hudTick(d);
       }
       el += step;
-      if (Q.get('crewlog') === '1') for (const c of [...G4L.members, ...G4R.members]) for (const b of c.peek())
-        console.log(`crewlog ${c.cfg.spr.src.split('/').pop().split('%')[0]} t=${b.t.toFixed(2)} aim=${b.aim.toFixed(3)} want=${(b.want ?? NaN).toFixed(3)} tg=${b.tg && b.tg.map(v => v.toFixed(0))} m=${b.m && b.m.map(v => v.toFixed(0))} box=${c.measure(b)} part=${Particles.count()}`);
+      if (Q.get('crewlog') === '1') crewLog();
       render();
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
@@ -2696,8 +2650,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         derive(d); hudTick(d);
       }
       el += step;
-      if (Q.get('crewlog') === '1') for (const c of [...G4L.members, ...G4R.members]) for (const b of c.peek())
-        console.log(`crewlog ${c.cfg.spr.src.split('/').pop().split('%')[0]} t=${b.t.toFixed(2)} aim=${b.aim.toFixed(3)} want=${(b.want ?? NaN).toFixed(3)} tg=${b.tg && b.tg.map(v => v.toFixed(0))} m=${b.m && b.m.map(v => v.toFixed(0))} box=${c.measure(b)} part=${Particles.count()}`);
+      if (Q.get('crewlog') === '1') crewLog();
       render();
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);

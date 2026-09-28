@@ -100,14 +100,11 @@ function Crew(cfg) {
       const skins = cfg.skins.map((_, i) => i), unused = freeSkins();
       sk = (unused.length ? unused : skins)[Math.floor(Math.random() * (unused.length || skins.length))];
     }
-    bs.push({ born: ++Crew.born, t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
+    bs.push({ t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
               r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
               pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0 });
     bs.sort((a, b) => a.s - b.s);          // 远的先画
   }
-
-  /* 在场这个人还剩几秒（离场途中为负），没人为 null。CrewGroup 满员时挑最短的续 */
-  function left() { return bs.length ? Math.min(...bs.map(b => sprayEnd(b) - b.t)) : null; }
 
   /* 场上没人用的形象（下标） */
   function freeSkins() { return cfg.skins.map((_, i) => i).filter(i => !bs.some(b => b.skin === i)); }
@@ -115,13 +112,12 @@ function Crew(cfg) {
   const easeOut = (u) => 1 - Math.pow(1 - u, 3);
 
   /* 悬停（档 4 六个人）：不站地，悬在半空。o.perch(b) 给脚底该停在屏幕哪一点、缩放多大 [x, y, s]
-     （main.js 的槽位管理：同边 1 人是大站位，2~3 人滑到斜线三槽，换槽时位置和缩放一起按 0.4 秒 Hermite 平滑过去，
-     所以 s 不再是召唤那一刻定死的 b.s）。
+     （main.js G4STAND：每边同时一人，六个人各有一个大站位，缩放按身高统一，不用召唤时抽的 b.s）。
      来：从 PATH.from(s, hx, hy) 给的画外那一点冲过来，按 easeOut 减速刹停（不给就从正上方画外冲下来 —— 女神 / 恶魔）；
      走：朝 PATH.to(s, x, y) 加速离开（u²，不给就原地往上冲出画面）。悬着的时候慢慢晃一个横 8 字 + 上下浮（anim.bob）。
      进出场时整个人另外转多少（roll：内裤侠横着飞进来、月亮查岗使转着圈落下）见 rollOf。 */
   function hoverPose(b) {
-    const pc = o.perch(b), hx = pc[0], hy = pc[1], s = pc[2] != null ? pc[2] : b.s, t = b.t, se = sprayEnd(b);
+    const [hx, hy, s] = o.perch(b), t = b.t, se = sprayEnd(b);
     const top = -(spr.foot[1] - spr.muzzle[1] + 120) * s;             // 脚底在这，整个人（含翘起的罐子）都在画外
     const sx = Math.sin(t * 0.9 + b.ph) * 8 * s, sy = Math.sin(t * 1.8 + b.ph) * 4 * s;
     const bob = A ? Math.sin(t * A.bob[1] + b.ph) * A.bob[0] * s : 0;
@@ -238,7 +234,6 @@ function Crew(cfg) {
   }
 
   function update(dt) {
-    if (o.tick) o.tick();                        // 槽位管理（main.js）：人数变了就开始往新槽位滑
     for (let i = ps.length - 1; i >= 0; i--) {
       const d = ps[i];
       if (F.drag) { const k = Math.exp(-F.drag * dt); d.vx *= k; d.vy *= k; }
@@ -349,7 +344,7 @@ function Crew(cfg) {
       if (A && (b.pt % (A.pulse[0] + A.pulse[1])) > A.pulse[0]) { b.emit = 0; continue; }   // 松开那一下
       /* 喷：从转过之后的喷口，沿喷口方向，速度 V（雾再加一点散角和快慢）。一帧攒够几个就出几个，
          每个按它**实际该出口的时刻**补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩。 */
-      b.emit += dt * F.rate * (o.rateK ? o.rateK() : 1);   // rateK：同边几个人一起喷时各自减量（main.js，F2）
+      b.emit += dt * F.rate;
       const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm || cfg.whole ? 1 : 0] + REST;   // 沿喷口此刻真的指向（含后坐）
       if (spr.eyes) b.eyes = spr.eyes.map(q => carried(p, q, b.aim, b));   // 射线从几只眼睛各出一道（内裤外穿侠两只、二郎一只天眼）
       while (b.emit >= 1) {
@@ -374,7 +369,7 @@ function Crew(cfg) {
     const out = [], groups = new Map();
     for (const d of ps) { const g = groups.get(d.b); g ? g.push(d) : groups.set(d.b, [d]); }
     const front = !!cfg.front;                   // 站在主角前面（真相喷雾）：main.js 把它们挪到主角之后画
-    /* 悬停的人按此刻的缩放排（槽位会变：1 号前排 s 最大、画在最上），站地的按召唤时定的远近 */
+    /* 悬停的人按此刻 pose 的缩放排（缩放由 o.perch 给，main.js G4STAND，不是召唤时抽的 b.s），站地的按召唤时定的远近 */
     const sOf = (b) => cfg.move === 'hover' && bs.includes(b) ? pose(b)[2] : b.s;
     for (const b of bs) out.push({ s: sOf(b), front, draw: (ctx) => drawOne(ctx, b) });
     /* 人已离场、水还在飞的，按原来那个人的远近画 */
@@ -384,20 +379,23 @@ function Crew(cfg) {
 
   /* 一个人：上身系里先画手臂（再绕肩转）、再画上身，最后画不动的下身（lo 可无：单层立绘整个人就是 body）。
      cfg.aura（可无）：画在本人身后、跟着她一起倾的东西（真相女神的光芒、光环），给它贴图点 → 屏幕的换算。 */
-  function drawOne(ctx, b) {
+  function drawOne(ctx, b, probe) {
     const p = pose(b), [x, y, s] = p, [bt, at_] = cfg.whole ? [angles(b, b.aim)[0], 0] : angles(b, b.aim);
     const X = x - spr.foot[0] * s, Y = y - spr.foot[1] * s;
     const I = img[b.skin], put = (im) => ctx.drawImage(im, X, Y, im.width * s, im.height * s);
     const spin = (q, th) => { const [cx, cy] = at(p, q); ctx.translate(cx, cy); ctx.rotate(-face * th); ctx.translate(-cx, -cy); };
     const rl = cfg.move === 'hover' ? rollOf(b) : 0;
     /* cfg.extra（可无）：画在屏幕坐标里、不跟着人倾的东西（黑蛛女特工的丝、哮天犬）。carry(q) 给贴图点转过之后的屏幕位置
-       （不含进出场的 roll —— 丝绕抓丝的手摆，手本身不动）。先画 'back' 层，人画完再画 'fore' 层。 */
+       （不含进出场的 roll —— 丝绕抓丝的手摆，手本身不动）。先画 'back' 层，人画完再画 'fore' 层。
+       probe：measure 量范围时画的那一遍 —— 只画"人"：贴图 + 光环 / 角光 / 天眼 / 狗，不画身后的放射特效
+       （女神的光芒、恶魔的烟雾和裂光）和黑蛛女特工的丝。那几样跟喷雾一样是特效层，可以伸进 HUD 底下（HUD 画在它们之上，
+       恶魔的裂光 18c00c6 起就伸到 y≈110）；丝本来就从画面顶挂下来。 */
     const carry = (q) => cfg.whole ? carried(p, q, b.aim, b) : at(p, q);
-    if (cfg.extra) cfg.extra(ctx, b, s, carry, 'back', xi);
+    if (cfg.extra) cfg.extra(ctx, b, s, carry, 'back', xi, probe);
     ctx.save();
     if (rl) { const [cx, cy] = at(p, PATH.pivot || cfg.whole.pivot); ctx.translate(cx, cy); ctx.rotate(rl); ctx.translate(-cx, -cy); }
     if (cfg.whole) spin(cfg.whole.pivot, b.aim);  // 悬空：整个人先绕重心转，上身再在这个基础上吃后坐
-    if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q));
+    if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q), probe);
     ctx.save();
     spin(spr.body.pivot, bt);
     if (I.arm) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
@@ -405,7 +403,7 @@ function Crew(cfg) {
     ctx.restore();
     if (I.lo) put(I.lo);
     ctx.restore();
-    if (cfg.extra) cfg.extra(ctx, b, s, carry, 'fore', xi);
+    if (cfg.extra) cfg.extra(ctx, b, s, carry, 'fore', xi, probe);
   }
 
   const active = () => bs.length > 0;
@@ -413,42 +411,52 @@ function Crew(cfg) {
 
   /* 诊断用：在场的人（只读），?crewlog=1 时 main.js 打印瞄准角 */
   const peek = () => bs;
-  const width = () => (img ? img[0].body.width : 0);   // 贴图宽（main.js 槽位按外框中线排）
-  /* 诊断（?crewlog=1）：这个人此刻画出来的实心范围 [x0, y0, x1, y1]（屏幕像素，alpha > 200：剪影 + 贴着轮廓的那圈亮边，
-     不含外圈柔光）。在离屏画布上真画一遍再扫像素 —— 按贴图外框算的话，斜着的人外框角远大于剪影，量不出中线余量。 */
+  /* 诊断（?crewlog=1）：这个人此刻画出来的范围，两个阈值各一个外框 [x0, y0, x1, y1]（屏幕像素）：
+     solid（alpha > MEASURE.solid）：剪影 + 贴着轮廓的那圈亮边 —— 最高点（光环、角、发丝）、中线余量按它；
+     glow（alpha > MEASURE.glow）：连外发光看得见的那圈 —— 最低点按它（用户定的：最低点含外发光）。
+     在离屏画布上真画一遍再扫像素 —— 按贴图外框算的话，斜着的人外框角远大于剪影。黑蛛女特工的丝不画（probe）。 */
   let mc = null;
   function measure(b) {
     if (!img) return null;
     if (!mc) { mc = document.createElement('canvas'); mc.width = o.W; mc.height = 1400; }
     const c = mc.getContext('2d', { willReadFrequently: true });
-    c.clearRect(0, 0, mc.width, mc.height); drawOne(c, b);
+    c.clearRect(0, 0, mc.width, mc.height); drawOne(c, b, true);
     const d = c.getImageData(0, 0, mc.width, mc.height).data;
-    let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
-    for (let y = 0; y < mc.height; y++) for (let x = 0; x < mc.width; x++) {
-      if (d[(y * mc.width + x) * 4 + 3] <= 200) continue;
-      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-    }
-    return x1 < 0 ? null : [x0, y0, x1, y1];
+    const box = (thr) => {
+      let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      for (let y = 0; y < mc.height; y++) for (let x = 0; x < mc.width; x++) {
+        if (d[(y * mc.width + x) * 4 + 3] <= thr) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      return x1 < 0 ? null : [x0, y0, x1, y1];
+    };
+    return { solid: box(MEASURE.solid), glow: box(MEASURE.glow) };
   }
-  return { init, load, summon, update, items, active, reset, peek, left, freeSkins, width, measure, where: (b) => pose(b), cfg };
+  return { init, load, summon, update, items, active, reset, peek, measure, cfg };
 }
-Crew.born = 0;                                   // 召唤流水号：同边几个人按到场先后排槽（新来的占 1 号前排）
+/* measure 的两个阈值（alpha 0~255）。glow 32 = 外发光 1/8 不透明：再淡的那圈在明亮客厅底图上已经看不出来
+   （贴图里 alpha 16 那圈比 32 那圈只往外多 ~12 贴图像素，肉眼分不出边）。 */
+const MEASURE = { solid: 200, glow: 32 };
 
-/* 一组帮手合起来调度（档 4 每边三个人，各是一份 Crew、max 1）：送一次召一个**没在场**的成员（随机挑）；
-   三个都在场了（含正在离场的），给剩余时间最短的那个 summon —— max 1 的 Crew 满员时就是续一段 T.spray、
-   名字条重播「×N」；正在离场的剩余时间是负的，最先被挑中，从当前高度被叫回来（hoverPose 的 back）。
-   pick（可无）：强制召第几个成员（诊断参数 ?g4L= / ?g4R=，越界夹到两头）。 */
+/* 一组帮手合起来调度（档 4 每边一组三个人，各是一份 Crew、max 1）。**同一时间只有一个人在场**
+   （2026-09-28 用户看完三人同屏："三个女神太多了，每个都显得特别小，还是改一个，放大一些"）：
+   · 有人在场（含正在离场的）再送 = 给这个人 summon：max 1 的 Crew 满员时续一段 T.spray、名字条重播「×N」，
+     正在离场的从当前高度被叫回来（hoverPose 的 back）—— 不换人；
+   · 场上没人时送 = 按成员顺序轮到下一个。从 0 号起：第一次召唤是女神 / 恶魔，老观众先看到的还是原来那个。
+   pick（可无）：场上没人时强制召第几个成员（诊断参数 ?g4L= / ?g4R=，越界夹到两头），不动轮换顺序；有人在场时照样只续。 */
 function CrewGroup(members) {
+  let next = 0;
   return {
     members,
     summon(pick) {
+      const on = members.find(m => m.active());
+      if (on) return on.summon();
       if (pick != null && !Number.isNaN(pick)) return members[Math.max(0, Math.min(members.length - 1, pick | 0))].summon();
-      const off = members.filter(m => !m.active());
-      if (off.length) return off[Math.floor(Math.random() * off.length)].summon();
-      members.reduce((a, c) => (a.left() <= c.left() ? a : c)).summon();
+      members[next].summon();
+      next = (next + 1) % members.length;
     },
     active: () => members.some(m => m.active()),
-    reset: () => members.forEach(m => m.reset()),
+    reset() { members.forEach(m => m.reset()); next = 0; },
   };
 }
 
@@ -604,19 +612,21 @@ const TRUTH_FX = {
 /* 女神的光：身后一圈放射光芒（慢慢转、往外渐隐）+ 头顶一个光环。画在她本人之前、跟着她一起倾（crew.js drawOne 的 cfg.aura）。
    剪影的三层金色外发光是烘在贴图里的（v14/truth/make2.py），这两样要动，所以运行时画。
    配色：明亮底图上 lighter 加不上去，发光靠色相 —— 金色光芒在浅绿墙 / 粉墙上靠饱和度跳出来，光环外圈橙金托底、内圈近白。 */
-function drawAura(ctx, b, s, at) {
+function drawAura(ctx, b, s, at, probe) {
   const A = TRUTH_FX.aura, [cx, cy] = at(TRUTH.spr.chest), [hx, hy] = at(TRUTH.spr.head);
   const k = Math.min(1, b.t / 0.3), R = A.R * s;                 // 冲进来的头 0.3 秒里长出来
   ctx.save();
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-  g.addColorStop(0, `rgba(${A.rgb},${(A.a * k).toFixed(3)})`); g.addColorStop(0.45, `rgba(${A.rgb},${(A.a * 0.45 * k).toFixed(3)})`);
-  g.addColorStop(1, `rgba(${A.rgb},0)`);
-  ctx.fillStyle = g; ctx.beginPath();
-  for (let i = 0; i < A.rays; i++) {
-    const a = i / A.rays * 6.283 + b.t * A.spin, w = A.ray * (i % 2 ? 0.6 : 1);   // 一长一短交替，不像齿轮
-    ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a - w) * R, cy + Math.sin(a - w) * R); ctx.lineTo(cx + Math.cos(a + w) * R, cy + Math.sin(a + w) * R);
+  if (!probe) {                                                  // measure 不量光芒（见 drawOne 的 probe）
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    g.addColorStop(0, `rgba(${A.rgb},${(A.a * k).toFixed(3)})`); g.addColorStop(0.45, `rgba(${A.rgb},${(A.a * 0.45 * k).toFixed(3)})`);
+    g.addColorStop(1, `rgba(${A.rgb},0)`);
+    ctx.fillStyle = g; ctx.beginPath();
+    for (let i = 0; i < A.rays; i++) {
+      const a = i / A.rays * 6.283 + b.t * A.spin, w = A.ray * (i % 2 ? 0.6 : 1);   // 一长一短交替，不像齿轮
+      ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a - w) * R, cy + Math.sin(a - w) * R); ctx.lineTo(cx + Math.cos(a + w) * R, cy + Math.sin(a + w) * R);
+    }
+    ctx.fill();
   }
-  ctx.fill();
   const y = hy - A.haloY * s + Math.sin(b.t * 2.4) * 3 * s, rx = A.halo[0] * s, ry = A.halo[1] * s;
   ctx.globalAlpha = k;
   ctx.lineWidth = A.haloW[0] * s; ctx.strokeStyle = `rgba(${A.halo1},0.85)`;
@@ -703,13 +713,15 @@ const TRUTH = {
   whole: { pivot: [168, 281] },
   exhaust: { at: [119, 195], rate: 40, V: 420, spread: 0.18, life: 0.4, gap: 14 },   // 罐尾（贴图像素）、每秒几团、出口速度、散角、寿命、人动时两团最多隔几像素
   spr: { src: 'assets/world/truth%n_%k.webp', body: { src: 'up', pivot: [168, 281], k: 1 },
-         foot: [160, 608], muzzle: [370, 334], rest: -0.505, head: [211, 78], chest: [194, 185] },
+         foot: [160, 608], muzzle: [370, 334], rest: -0.505, head: [211, 78], chest: [194, 185], tall: 567 },
   skins: [2],
-  aura: (ctx, b, s, at) => drawAura(ctx, b, s, at),
+  aura: (ctx, b, s, at, probe) => drawAura(ctx, b, s, at, probe),
   anim: { pulse: [0.7, 0.16], kick: [0, 0.06, 9], lean: 0.03, bob: [5, 2.2] },
   T: { enter: 0.55, spray: 2.8, exit: 0.45, fire: 0.18 },   // fire：刹停后隔多久开喷（先"嘭"地停住，再"呲——"）
   max: 1, gap: 0.3,
-  rows: [[0.94, 0.96]],                   // 贴图里人高 566 → 画面里 ~535，占女生这半边的左上（用户："整体再大一些，占女生这半边一半区域"）
+  rows: [[0.94, 0.96]],                   // 悬停的人不用它的缩放（main.js G4STAND 按 spr.tall 定），summon 要一排才留着
+  /* spr.tall：贴图里的身高（发顶 / 角 / 发冠最高点 → 靴底，不含举起的武器、手、祥云），六个人各量各的（v14/<名>/make.py 的量点）。
+     main.js 按它把同一边的三个人放成一样高（用户："六人的视觉大小要一致，以身高为准"）。 */
   aim: { lo: -0.6, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },    // 前后倾的范围：罐子本来就朝下，站着的男生只要小倾；stiff 见 update 临界阻尼
   sweep: { a: [0.25, 0.12], w: [1.2, 2.9] },
   zone: null,
@@ -734,29 +746,31 @@ const DEMON_FX = {
           crack: [200, 30, 70], cracks: 7, crackA: 0.75,                               // 暗红裂光：颜色、几道、不透明度
           horn: [255, 120, 220], horns: [[208, 54], [191, 67]], hornR: 26 },           // 角的光：颜色、两只角尖（贴图像素）、光团半径
 };
-function drawDemonAura(ctx, b, s, at) {
+function drawDemonAura(ctx, b, s, at, probe) {
   const A = DEMON_FX.aura, [cx, cy] = at(DEMON.spr.chest);
   const k = Math.min(1, b.t / 0.3), R = A.R * s;
   ctx.save();
-  /* 烟雾：几团大软球绕胸口慢慢转，各自一呼一吸 —— 不是一个圆盘 */
-  for (let i = 0; i < A.puffs; i++) {
-    const a = i / A.puffs * 6.283 + b.t * A.spin, rr = R * (0.35 + 0.25 * Math.sin(i * 2.1 + b.t * 0.8));
-    const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.8, r = R * (0.38 + 0.08 * Math.sin(i * 1.7 + b.t * 1.3));
-    const c = A.smoke[i % 2], g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(${c},${(A.a * k).toFixed(3)})`); g.addColorStop(1, `rgba(${c},0)`);
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
-  }
-  /* 裂光：从胸口往外几道折线，一闪一闪 */
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (let i = 0; i < A.cracks; i++) {
-    const a0 = i / A.cracks * 6.283 + 0.4 + b.t * A.spin * 0.5, fl = 0.55 + 0.45 * Math.sin(b.t * 7 + i * 2.3);
-    ctx.strokeStyle = `rgba(${A.crack},${(A.crackA * fl * k).toFixed(3)})`; ctx.lineWidth = 5 * s;
-    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a0) * R * 0.25, cy + Math.sin(a0) * R * 0.25);
-    for (let j = 1; j <= 3; j++) {
-      const a = a0 + (j % 2 ? 0.12 : -0.1), d = R * (0.25 + j * 0.22);
-      ctx.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+  if (!probe) {                                                  // measure 不量烟雾、裂光（见 drawOne 的 probe）
+    /* 烟雾：几团大软球绕胸口慢慢转，各自一呼一吸 —— 不是一个圆盘 */
+    for (let i = 0; i < A.puffs; i++) {
+      const a = i / A.puffs * 6.283 + b.t * A.spin, rr = R * (0.35 + 0.25 * Math.sin(i * 2.1 + b.t * 0.8));
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.8, r = R * (0.38 + 0.08 * Math.sin(i * 1.7 + b.t * 1.3));
+      const c = A.smoke[i % 2], g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(${c},${(A.a * k).toFixed(3)})`); g.addColorStop(1, `rgba(${c},0)`);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
     }
-    ctx.stroke();
+    /* 裂光：从胸口往外几道折线，一闪一闪 */
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = 0; i < A.cracks; i++) {
+      const a0 = i / A.cracks * 6.283 + 0.4 + b.t * A.spin * 0.5, fl = 0.55 + 0.45 * Math.sin(b.t * 7 + i * 2.3);
+      ctx.strokeStyle = `rgba(${A.crack},${(A.crackA * fl * k).toFixed(3)})`; ctx.lineWidth = 5 * s;
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a0) * R * 0.25, cy + Math.sin(a0) * R * 0.25);
+      for (let j = 1; j <= 3; j++) {
+        const a = a0 + (j % 2 ? 0.12 : -0.1), d = R * (0.25 + j * 0.22);
+        ctx.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+      }
+      ctx.stroke();
+    }
   }
   /* 角：两团品红光垫在角尖后面 */
   for (const q of A.horns) {
@@ -772,17 +786,17 @@ const DEMON = {
   whole: { pivot: [216, 258] },
   exhaust: { ...TRUTH.exhaust, at: [287, 179] },
   spr: { src: 'assets/world/demon%n_%k.webp', body: { src: 'up', pivot: [216, 258], k: 1 },
-         foot: [244, 555], muzzle: [53, 305], rest: -0.497, head: [204, 59], chest: [202, 152] },
+         foot: [244, 555], muzzle: [53, 305], rest: -0.497, head: [204, 59], chest: [202, 152], tall: 512 },
   skins: [1],
-  aura: (ctx, b, s, at) => drawDemonAura(ctx, b, s, at),
+  aura: (ctx, b, s, at, probe) => drawDemonAura(ctx, b, s, at, probe),
   fluid: { ...TRUTH.fluid, draw: (ctx, ps, b) => drawSpray(DEMON_FX, DEMON, ctx, ps, b) },
 };
 const Demon = Crew(DEMON);
 
-/* ======== 档 4 每边三人（2026-09-28，规格 shots/review/trio/trio_spec.md）========
+/* ======== 档 4 每边一组三人（2026-09-28，规格 shots/review/trio/trio_spec.md；同日改成同时只一个在场、轮换，见 CrewGroup）========
    女生侧：真相女神 + 月亮查岗使 + 黑蛛女特工；男生侧：灭迹恶魔 + 内裤外穿侠 + 二郎·打码神。
    每个人的武器都不一样（雾 / 爱心光流 / 蛛网 / 射线 / 天眼 + 马赛克），不能走 skins 换皮（skins 要同一个裁边框、同一套 foot / muzzle），
-   所以每人一份 Crew 配置，照 TRUTH / DEMON 的写法（悬停、whole 整个人小幅前后倾、二分反解瞄准），每边一个 CrewGroup（main.js）。
+   所以每人一份 Crew 配置，照 TRUTH / DEMON 的写法（悬停、whole 整个人小幅前后倾、二分反解瞄准），每边一个 CrewGroup（main.js），站位 main.js G4STAND。
    立绘 v14/<名>/make.py（共用 v14/crewart.py），量点都是它打印的贴图像素。
    配色按明亮底图的规矩（chashouji-fx）：发光靠色相、实体靠暖黑描边 WARM_INK。 */
 const WARM_INK = [58, 44, 38];
@@ -853,7 +867,7 @@ const MOON = {
   whole: { pivot: [195, 256] },
   exhaust: null,                                // 她不靠后坐力悬着（魔法少女本来就会飞），没有尾焰
   spr: { src: 'assets/world/moon%n_%k.webp', body: { src: 'up', pivot: [195, 256], k: 1 },
-         foot: [180, 612], muzzle: [365, 355], rest: -0.685, head: [209, 50], chest: [224, 191] },
+         foot: [180, 612], muzzle: [365, 355], rest: -0.685, head: [209, 50], chest: [224, 191], tall: 568 },
   skins: [1],
   aura: (ctx, b, s, at) => drawMoonAura(ctx, b, s, at),
   /* 出场：从左上画外转一圈半落下来（spin），刹停时 main.js 出一个爱心冲击环（RECIPE.moon.arrive） */
@@ -893,8 +907,8 @@ function drawWebShots(ctx, ps, b) {
   }
 }
 /* 吊着她的那根丝：从抓丝的手连到画面顶（一直往上出画），跟女神的尾焰是同一个作用 —— "为什么她能悬着" */
-function drawWidowRope(ctx, b, s, carry, layer) {
-  if (layer !== 'back') return;
+function drawWidowRope(ctx, b, s, carry, layer, probe) {
+  if (layer !== 'back' || probe) return;
   const F = WIDOW_FX, [hx, hy] = carry(WIDOW.spr.hand);
   b.wrist = carry(WIDOW.spr.muzzle);             // 网弹的丝从腕口出（drawWebShots 读）
   ctx.save(); ctx.lineCap = 'round';
@@ -906,15 +920,15 @@ function drawWidowRope(ctx, b, s, carry, layer) {
 }
 const WIDOW = {
   ...TRUTH,
-  whole: { pivot: [103, 288] },
+  whole: { pivot: [115, 245] },
   exhaust: null,
-  spr: { src: 'assets/world/widow%n_%k.webp', body: { src: 'up', pivot: [103, 288], k: 1 },
-         foot: [99, 608], muzzle: [241, 269], rest: -0.471, hand: [80, 55], head: [107, 119], chest: [111, 213] },
+  spr: { src: 'assets/world/widow%n_%k.webp', body: { src: 'up', pivot: [115, 245], k: 1 },
+         foot: [111, 612], muzzle: [272, 226], rest: -0.536, hand: [74, 92], head: [111, 47], chest: [124, 160], tall: 569 },   // v14/widow/make.py 打印（src2）
   skins: [1],
   aura: null,
-  extra: (ctx, b, s, carry, layer) => drawWidowRope(ctx, b, s, carry, layer),
+  extra: (ctx, b, s, carry, layer, xi, probe) => drawWidowRope(ctx, b, s, carry, layer, probe),
   /* 出场：从正上方画外顺着丝降下来（身体始终竖直、不倒挂）；离场收丝往上拉走。悬着时绕抓丝的手轻轻摆 */
-  path: { pivot: [80, 55], swing: [0.035, 1.7] },
+  path: { pivot: [74, 92], swing: [0.035, 1.7] },
   anim: { pulse: [0.12, 0.42], kick: [0, 0.07, 10], lean: 0.02, bob: [3, 1.6] },
   T: { enter: 0.7, spray: 2.8, exit: 0.5, fire: 0.18 },
   /* 网弹：每按一下出 1 发（pulse 0.12 秒 × rate 10 ≈ 1.2）；打中了 main.js 在脸上张网。
@@ -972,7 +986,7 @@ const BRIEFS = {
          foot: [256, 603], muzzle: [190, 88], eyes: [[180, 89], [199, 86]], head: [202, 48], chest: [239, 189],
          /* 射线出眼睛，眼睛不是一根有朝向的枪管：rest 直接取"从头顶的站位看女生脸"的典型俯角（~55°），
             人只为了跟着脸上下扫而小幅倾（aim ±0.3）。第一版 rest −0.5（眼神的画法）要整个人前倾 0.6 rad 才够得着，斜成 40°。 */
-         rest: -0.95 },
+         rest: -0.95, tall: 563 },
   aim: { lo: -0.35, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },
   skins: [1],
   aura: (ctx, b, s, at) => drawBriefsAura(ctx, b, s, at),
@@ -999,9 +1013,9 @@ function drawErlangAura(ctx, b, s, at) {
   ctx.restore();
 }
 const DOG = { R: 120, H: 16, w: 1.6, lift: 34, k: 0.9, eatT: 0.35, hop: 60 };   // 绕云半径、上下半轴、角速度、脚离云底多高、缩放（×s）、扑咬多久、扑多高
-/* 狗此刻在哪、朝哪：绕着祥云转圈（椭圆轨道，远半圈画在他身后），b.dogEat 到点时往上扑一下 */
+/* 狗此刻在哪、朝哪：绕着祥云（spr.cloud：扁云底边正中）转圈（椭圆轨道，远半圈画在他身后），b.dogEat 到点时往上扑一下 */
 function dogPose(b, s, carry) {
-  const [fx, fy] = carry(ERLANG.spr.foot), a = b.t * DOG.w + b.ph;
+  const [fx, fy] = carry(ERLANG.spr.cloud), a = b.t * DOG.w + b.ph;
   const x = fx + Math.cos(a) * DOG.R * s, back = Math.sin(a) < 0;
   let y = fy - DOG.lift * s + Math.sin(a) * DOG.H * s;
   const eu = b.dogEat != null ? (b.t - b.dogEat) / DOG.eatT : -1;
@@ -1024,10 +1038,10 @@ function drawDog(ctx, b, s, carry, layer, xi) {
 }
 const ERLANG = {
   ...DEMON,
-  whole: { pivot: [179, 257] },
+  whole: { pivot: [181, 265] },
   exhaust: null,
-  spr: { src: 'assets/world/erlang%n_%k.webp', body: { src: 'up', pivot: [179, 257], k: 1 },
-         foot: [194, 609], muzzle: [156, 111], eye: [156, 111], eyes: [[156, 111]], head: [171, 55], chest: [175, 196],
+  spr: { src: 'assets/world/erlang%n_%k.webp', body: { src: 'up', pivot: [181, 265], k: 1 },   // v14/erlang/make.py 打印（src2）
+         foot: [254, 618], cloud: [205, 608], muzzle: [166, 117], eye: [166, 117], eyes: [[166, 117]], head: [181, 56], chest: [185, 200], tall: 565,
          rest: -0.95 },                         // 天眼同内裤外穿侠：rest 取典型俯角，人只小幅倾
   aim: { lo: -0.35, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },
   dog: { mouth: [55, 104], foot: [120, 184] },  // 哮天犬贴图量点（v14/erlang/make.py 打印）
