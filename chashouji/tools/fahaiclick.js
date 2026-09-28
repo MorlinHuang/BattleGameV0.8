@@ -17,6 +17,7 @@ const { chromium } = require('/home/op/shots/node_modules/playwright-core');
   for (let i = 0; i < 18; i++) {
     seq.push(await who());
     if (i === 3) { await c.screenshot({ path: '/tmp/fh_1.png' }); await click('真相女神'); }
+    if (i === 5) await c.screenshot({ path: '/tmp/fh_in.png' });   // 海正从左边推进来
     if (i === 7) await c.screenshot({ path: '/tmp/fh_2.png' });
     if (i === 10) await c.screenshot({ path: '/tmp/fh_3.png' });
     await p.waitForTimeout(1000);

@@ -1353,12 +1353,22 @@ const RAIN = { durian: DurianRain, sockball: SockRain };
 /* 屏幕底部的法术潮（sea.js）：白娘子的海水、法海的金光经卷，各跟着自己那个人 —— 在场、还没开始飞走（候场放视频时不算）就涨，
    飞走就退。续送多待，潮也多待。 */
 const casting = (c) => c.peek().some(b => !b.hold && b.t <= c.cfg.T.enter + b.spray);
-/* 两片潮同时在场：按两边水位分左右（左海右经，各在自己那一方的脚下），只有一片时它占满全宽；交界处迸水花和金光（Clash） */
-const tideSplit = () => { const a = Sea.level(), b = Scroll.level(); return a + b > 0 ? W * a / (a + b) : W; };
+/* 两片潮各从自己那一边横着推进来（海从左、经卷从右，2026-09-28 用户："分别从左右进场，这样同时播放"）：
+   进度 a、b（0~1）→ 海占 [0, W·a)、经卷占 [W·(1 − b), W)。两片加起来超过一屏（a + b > 1）就顶在一起，
+   分界按两边进度的比例 W·a / (a + b) —— a + b = 1 那一刻正好是两道前沿碰上的地方，之后谁推得多谁占得多，只有一片时它铺满全宽。
+   返回 { sea: [x0, x1], scroll: [x0, x1], meet（顶在一起时的分界 x，否则 null） } */
+function tideSpan() {
+  const a = Sea.level(), b = Scroll.level();
+  if (a + b <= 1) return { sea: [0, W * a], scroll: [W * (1 - b), W], meet: null };
+  const x = W * a / (a + b);
+  return { sea: [0, x], scroll: [x, W], meet: x };
+}
 function tideUpdate(dt) {
-  Sea.update(dt, casting(Baisu)); Scroll.update(dt, casting(Fahai)); Foam.update(dt);
-  const x = tideSplit();
-  Clash.update(dt, x, Math.min(Sea.edgeY(x), Scroll.edgeY(x)), Math.min(Sea.level(), Scroll.level()));
+  /* 前沿（甩浪头飞沫 / 金光点的地方）：没顶在一起、也没推满的那一头 */
+  const sp = tideSpan(), fr = (x) => sp.meet == null && x > 0 && x < W ? x : null;
+  Sea.update(dt, casting(Baisu), fr(sp.sea[1])); Scroll.update(dt, casting(Fahai), fr(sp.scroll[0])); Foam.update(dt);
+  const x = sp.meet ?? W / 2;
+  Clash.update(dt, x, Math.min(Sea.edgeY(x), Scroll.edgeY(x)), sp.meet == null ? 0 : Math.min(Sea.level(), Scroll.level()));
 }
 /* ?crewlog=1（胶片每格一行）：档 4 在场的人瞄准角 / 目标 / 喷口，和 crew.js measure 的两个外框
    solid（最高点、中线余量按它）/ glow（含外发光，最低点按它），屏幕像素 x0,y0,x1,y1 */
@@ -2254,10 +2264,11 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        往左的披帛尾巴（~190 像素）出画 —— 她是从左上飞进来的。 */
     baisu:  [110, 886, 1.3],
     demon:  [791, 712],  briefs: [783, 707],  erlang: [788, 701],
-    /* 法海：跟白娘子对称 —— 同样比这一边的人大 30%，最低点是右脚草鞋（在身子右下）。第一版 x 905：左脚草鞋正踩在男主头上
-       （男主被拽着往右仰，头在 x ≈ 820）；挪到 x 985 贴着右边出画一截（袈裟尾巴出画，同白娘子的披帛），左脚在男主头右上方。
-       伸出去的左掌在 x ≈ 580、y ≈ 310：比白娘子掌心的水球（x ≈ 500、y ≈ 580）高出一大截，两人一上一下对着施法。 */
-    fahai:  [985, 850, 1.3],
+    /* 法海：最低点是右脚草鞋（在身子右下）。大小按脸比（2026-09-28 用户："法海比白娘子小一圈，看他们脸的大小就行"）：
+       两张立绘眉毛 → 下巴一样长（白娘子 42、法海 43 像素），原来同乘 1.3 两人的脸一样大；现在乘 1.1（缩放 0.85），脸比白娘子小一圈。
+       缩小后靴底从 (985, 850) 挪到 (960, 780)：头顶留在 y ≈ 240、掌心在 (611, 314) 附近，跟原来差不多高。
+       他在男女主身后（main.js renderActors BEHIND），脚压到男主头顶也只是被男主挡住。 */
+    fahai:  [960, 780, 1.1],
   };
   const g4Perch = (rcp, side, crew) => (b) => { const [x, y, k = 1] = G4STAND[rcp]; return [x, y, G4STAND.H[side] * k / crew.cfg.spr.tall]; };
 
@@ -2446,15 +2457,21 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   const introT = (st) => { const b = st.crew.peek()[0]; return b && !b.hold ? b.t : 1e9; };   // 候场（出场视频放着）不算出场
   /* 名字条的计时：出场从 delay 起算；在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */
   const nameT = (st) => { const b = st.crew.peek()[0]; return !b || b.hold ? 1e9 : b.renew ? b.t - b.renewT : b.t - INTRO.delay; };
-  function drawIntroDim(c) {
+  /* 压暗的不透明度（没人在出场就是 0） */
+  function introDim() {
     const I = INTRO;
     const k = Math.max(...STARS.map((st) => {
       const t = introT(st);
       return t < I.rise ? t / I.rise : t < I.hold ? 1 : Math.max(0, 1 - (t - I.hold) / I.fade);
     }));
-    if (k <= 0) return;
-    c.fillStyle = `rgba(8,14,10,${(I.dim * k).toFixed(3)})`;
+    return I.dim * Math.max(0, k);
+  }
+  /* comp 'source-atop'：只压已经画上去的东西（主角那张离屏画布，透明处不动） */
+  function drawIntroDim(c, a, comp = 'source-over') {
+    c.save(); c.globalCompositeOperation = comp;
+    c.fillStyle = `rgba(8,14,10,${a.toFixed(3)})`;
     c.fillRect(-60, -60, W + 120, H + 120);                             // 多铺一圈：震屏时边上不漏亮
+    c.restore();
   }
   /* 每边同时只一个人，也就最多一条。两边同时各有一条时，后出来的那条往上挪一个条高（INTRO.stack）：
      不挪的话后画的整条盖住先画的，先送礼那一边什么都看不到。只有一条时位置不变。 */
@@ -2484,19 +2501,39 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     c.restore();
   }
 
+  const BEHIND = new Set([Baisu, Fahai]);
+  let actorBuf = null;
   function renderActors() {
     const ox = Particles.off.x, oy = Particles.off.y;
     cctx.clearRect(0, 0, W, H);
     cctx.save(); cctx.translate(ox, oy);
     /* 哥们在男生斜后方、闺蜜在女生斜后方：连同各自喷的水 / 雾按远近排好，全在主角之前画，被主角挡住（crew.js items） */
     /* 站在主角前面的帮手（真相喷雾，front）画在主角和污渍之后 */
-    const crew = CREWS.flatMap(c => c.items()).sort((a, b) => a.s - b.s);
-    const split = tideSplit();           // 白娘子的海水 / 法海的经卷：地板上最底下一层，顶到两人脚下，不盖人
-    Sea.draw(cctx, 0, split); Scroll.draw(cctx, split, W); Clash.draw(cctx);
-    for (const it of crew) if (!it.front) it.draw(cctx);
-    actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
-    drawStains(cctx);
-    drawIntroDim(cctx);                  // 档 4 出场压暗：主角都暗下去，画在后面的她是亮的
+    /* 白娘子、法海（BEHIND）在男女主身后：两个大仙悬在两人上方，用户："法海和白娘子在男女主的下层"。
+       水柱 / 金字从主角身后穿过去，被身子挡住的那一截读成打中了（同哥们、闺蜜）；爆的泡沫、金字在特效层，照样盖在人身上 */
+    const crew = CREWS.flatMap(c => c.items().map(it => ({ ...it, behind: BEHIND.has(c) }))).sort((a, b) => a.s - b.s);
+    /* 档 4 出场压暗：主角和背景暗下去，出场的她 / 他是亮的。站在主角前面的（真相女神那几个）画在压暗之后；
+       白娘子、法海在主角身后，只能反过来 —— 先压背景和哥们闺蜜，再画他们，主角单独画进离屏画布压暗了再贴上来 */
+    const dim = introDim();
+    for (const it of crew) if (!it.front && !it.behind) it.draw(cctx);
+    if (dim > 0) drawIntroDim(cctx, dim);
+    for (const it of crew) if (it.behind) it.draw(cctx);
+    let ac = cctx;
+    if (dim > 0) {
+      if (!actorBuf) { actorBuf = document.createElement('canvas'); actorBuf.width = cvCh.width; actorBuf.height = cvCh.height; }
+      ac = actorBuf.getContext('2d');
+      ac.setTransform(1, 0, 0, 1, 0, 0); ac.clearRect(0, 0, actorBuf.width, actorBuf.height);
+      ac.setTransform(cctx.getTransform());
+    }
+    actors.draw(ac, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
+    drawStains(ac);
+    if (dim > 0) {
+      drawIntroDim(ac, dim, 'source-atop');
+      cctx.save(); cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.drawImage(actorBuf, 0, 0); cctx.restore();
+    }
+    /* 白娘子的海水 / 法海的经卷：盖在男女主之上（用户："水面和卷轴是在男女主的上层"），漫过两人的脚和小腿 */
+    const sp = tideSpan();
+    Sea.draw(cctx, ...sp.sea); Scroll.draw(cctx, ...sp.scroll); Clash.draw(cctx);
     for (const it of crew) if (it.front) it.draw(cctx);
     cctx.restore();
   }

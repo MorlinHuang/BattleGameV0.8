@@ -896,6 +896,7 @@ const BAISU = {
   ...TRUTH,
   whole: { pivot: [534, 324], k: 0.12 },        // 身子只跟瞄准角的 12%（见上）
   over: true,                                   // 水柱画在所有帮手之上（crew.js items）
+  front: false,                                 // 在男女主身后（TRUTH 是 front）：用户"法海和白娘子在男女主的下层"，main.js renderActors
   exhaust: null,                                // 仙人本来就会飞，没有尾焰
   spr: { src: 'assets/world/baisu%n_%k.webp', body: { src: 'up', pivot: [534, 324], k: 1 },
          foot: [343, 751], muzzle: [732, 447], rest: -0.9, head: [516, 60], chest: [546, 264], tall: 691 },   // v14/baisu/make.py 打印；foot 是裙摆最低那一角
@@ -1173,6 +1174,7 @@ const FAHAI = {
   whole: { pivot: [292, 310], k: 0.12 },        // 身子只跟瞄准角的 12%（同白娘子：大袖子、袈裟往右上飘一大片，整个人倾会甩出画）
   exhaust: null,                                // 仙佛本来就会飞，没有尾焰
   over: true,                                   // 咒语画在所有帮手之上（crew.js items）
+  front: false,                                 // 在男女主身后（同白娘子）
   spr: { src: 'assets/world/fahai%n_%k.webp', body: { src: 'up', pivot: [292, 310], k: 1 },
          foot: [486, 716], muzzle: [77, 170], head: [262, 84], chest: [269, 250], halo: [262, 140], tall: 632,   // v14/fahai/make.py 打印；foot 是右脚草鞋底
          /* rest −1.15：掌心 → 女生身上大约朝左下 55°~75°（他悬在右上、女生在左下）。掌心不是枪管，rest 直接取典型俯角；

@@ -14,11 +14,15 @@
  *   · 浪尖 / 卷轴上沿随机甩出东西（海：白色飞沫往上溅、落回去；经卷：金色光点往上飘）；
  *   · 小兵（虾兵蟹将 / 神兽小佛）夹在层与层之间：跟着它那一层的上沿起伏、按坡度歪，隔几秒蹦起来一次。
  *   上沿是加载时从贴图 alpha 量出来的（每列一个数），再加上当时的平移和起伏。
- * 跟着人走，不自己计时：main.js 每帧告诉 update 这个人在不在施法（on）。在 → 水位 lv 从 0 涨到 1（rise 秒，整片从屏幕下沿涌上来）；
- * 不在（飞走了）→ 退回 0（fall 秒：往下沉、越沉越透）。续送多待一段，潮也就多待一段。
- * 两个人同时在场：屏幕底部按两边的水位分成左右两半（左海右经，main.js tideSplit），交界处水花和金光对撞（Clash）。
+ * 跟着人走，不自己计时：main.js 每帧告诉 update 这个人在不在施法（on）。在 → 进度 lv 从 0 涨到 1（rise 秒），不在（飞走了）→ 退回 0（fall 秒）。
+ * 续送多待一段，潮也就多待一段。
+ * 进场是横着推进来的（2026-09-28 用户："水面和卷轴改成分别从左右进场，这样同时播放"）：海从左边屏幕外推进来、经卷从右边，
+ *   lv 是推进了几成（main.js tideSpan 换成这一片占的 [x0, x1)），前沿一路甩飞沫 / 金光点（update 的 front）；退场原路退回去。
+ *   第一版是整片从屏幕下沿涌上来，两片同时在场只能一起涨、一起落，看不出是两股法力各从一边压过来。
+ * 两个人同时在场：各推到两边进度的分界（左海右经），交界处水花和金光对撞（Clash）。
  *
- * 层级：main.js 画在人物之前（最底下、背景之上）—— 潮顶到男女生脚下，不盖人；档 4 出场压暗照样压它。
+ * 层级（main.js renderActors）：画在男女主之上（用户："水面和卷轴是在男女主的上层"）—— 潮漫过两人的脚和小腿。
+ * 层数不定（C.layers 远 → 近，最后一层最近、最低）：经卷为了铺满到屏幕下沿比海多两条。
  */
 'use strict';
 
@@ -118,8 +122,8 @@ const Foam = (() => {
 })();
 
 /* 一片法术潮。C：
-   top：三层贴图的 y 以这里为 0；rise / fall：涨满、退干各几秒；
-   layers：远 → 近，每层 { src, w, h（贴图尺寸，make.py 打印）, y（贴图上沿在 top 下多少）, v（平移，像素/秒，正 = 往右）,
+   top：各层贴图的 y 以这里为 0；rise / fall：推满、退空各几秒；side：从哪边进场（−1 左 / +1 右）；
+   layers：远 → 近（层数不定，小兵骑在第 1、2 层），每层 { src, w, h（贴图尺寸，make.py 打印）, y（贴图上沿在 top 下多少）, v（平移，像素/秒，正 = 往右）,
            swell [起伏幅度, 涌浪长, 走速]（按列起伏）, bob [幅度, 角频率]（整层上下晃） }；
    haze（可无）：画在三层之下的一片竖向渐变 [颜色, 上沿不透明度, 下沿不透明度]，从 top + haze[3] 到屏幕下沿；
    spray：上沿甩出的东西 { every（多久试一次）, crest（上沿最高那几成才甩）, V, spread, G（正 = 往下掉，负 = 往上飘）, life, r, a, dot（软点三色）, layers（哪几层甩）}；
@@ -130,7 +134,8 @@ function Tide(C) {
   const LIP = 10;            // 量上沿：从上往下第一个"下面连着 LIP 个不透明像素"的点（浪尖上方飞着的水沫不算）
   const S = C.spray;
   let W = 960, H = 1707;
-  let lv = 0, t = 0, imgs = [], mobs = [], hopT = 3, sprays = [], sprayT = 0, dot = null;
+  const N = C.layers.length, LAST = C.layers[N - 1];
+  let lv = 0, t = 0, imgs = [], mobs = [], hopT = 3, sprays = [], sprayT = 0, frontT = 0, dot = null;
 
   function init(w, h) { W = w; H = h; reset(); }
 
@@ -166,18 +171,16 @@ function Tide(C) {
   }
 
   function reset() {
-    lv = 0; t = 0; hopT = 3; sprays = []; sprayT = 0;
+    lv = 0; t = 0; hopT = 3; sprays = []; sprayT = 0; frontT = 0;
     mobs = C.mobs.map(m => ({ ...m, x: m.x * W, ph: Math.random() * 6, hop: -1 }));
   }
 
-  /* 水位：lv 0~1，按缓动映射成整片往下沉多少（没涨满时整片在屏幕下沿以下） */
   const ease = (u) => u * u * (3 - 2 * u);
-  const sinkOf = () => (1 - ease(lv)) * (H - C.top + 40);
   const mod = (a, n) => ((a % n) + n) % n;
   /* 第 k 层贴图上沿在屏幕 x 处的 y（不含浪形，只含整层位置 + 起伏） */
   function baseY(k, x) {
     const L = C.layers[k];
-    return C.top + L.y + sinkOf() + L.bob[0] * Math.sin(t * L.bob[1] + k * 1.7)
+    return C.top + L.y + L.bob[0] * Math.sin(t * L.bob[1] + k * 1.7)
       + L.swell[0] * Math.sin(6.2832 * (x - L.swell[2] * t) / L.swell[1]);
   }
   /* 第 k 层在屏幕 x 处的上沿（屏幕 y） */
@@ -196,8 +199,15 @@ function Tide(C) {
     }
   }
 
-  function update(dt, on) {
+  /* front：前沿此刻在屏幕哪个 x（main.js tideSpan；贴着屏幕边 / 跟另一片顶在一起时给 null）。推进、退回的路上前沿一路甩东西，
+     读成一道浪头 / 一道金光卷过来，而不是一块图淡进来 */
+  function update(dt, on, front) {
+    const lv0 = lv;
     lv = Math.max(0, Math.min(1, lv + (on ? dt / C.rise : -dt / C.fall)));
+    if (front != null && lv !== lv0) for (frontT += dt; frontT >= C.front.every; frontT -= C.front.every) {
+      const k = 1 + Math.floor(Math.random() * (N - 1));
+      spray(k, front + (Math.random() - 0.5) * 40, surfY(k, front) + 6, 1, true);
+    }
     for (let i = sprays.length - 1; i >= 0; i--) {
       const p = sprays[i];
       p.vy += S.G * dt; p.x += p.vx * dt; p.y += p.vy * dt;
@@ -205,7 +215,7 @@ function Tide(C) {
     }
     if (lv <= 0) return;
     t += dt;
-    if (!C.layers[2].top) return;
+    if (!LAST.top) return;
     /* 小兵往 dir 那边冲，出了画从另一边再进来；隔几秒挑一只蹦起来，落回去甩一圈 */
     for (const m of mobs) {
       m.x += C.dir * C.kinds[m.k].v * m.s * dt;
@@ -228,7 +238,7 @@ function Tide(C) {
 
   function drawLayer(ctx, k, x0, x1) {
     const L = C.layers[k];
-    if (!L.ext || baseY(k, 0) - 30 > H) return;
+    if (!L.ext) return;
     const off = mod(-L.v * t, L.w), fx = off - Math.floor(off);   // 屏幕 x 处取贴图第 (x + off) 列；整数列取、小数部分挪到落点上
     for (let x = Math.floor(x0 / SL) * SL; x < x1 + SL; x += SL) {
       const u = Math.floor(mod(x + off, L.w));
@@ -244,6 +254,7 @@ function Tide(C) {
       const r = p.r * (1 + 0.6 * u);                 // 越飞越散
       ctx.drawImage(dot, p.x - r, p.y - r, 2 * r, 2 * r);
     }
+    ctx.globalAlpha = 1;
   }
 
   function drawMob(ctx, m) {
@@ -262,32 +273,31 @@ function Tide(C) {
     ctx.restore();
   }
 
-  /* 只画 [x0, x1) 这一段（两个人同时在场时各占半边，main.js tideSplit）。两头各羽化 FEATHER 像素（贴着屏幕边的那头不羽化）：
+  /* 只画 [x0, x1) 这一段（推进到哪 / 两个人同时在场时各占一边，main.js tideSpan）。两头各羽化 FEATHER 像素（贴着屏幕边的那头不羽化）：
      第一版硬裁一刀，海和经卷之间一条笔直的竖线，像两张图拼起来的。现在先画进自己的离屏画布，再按横向渐变抠掉交界那一段，
-     两边在交界处互相淡进淡出（小兵走过交界也是慢慢淡掉，不是被一刀切掉）。 */
+     两边在交界处互相淡进淡出（小兵走过交界也是慢慢淡掉，不是被一刀切掉）。
+     飞沫 / 光点不裁：前沿甩出来的正好在羽化带上，裁了就只剩一半；它们飞到对面那片上头也是对撞的一部分。 */
   const FEATHER = 70;
   let buf = null;
   function draw(ctx, x0 = 0, x1 = W) {
-    if (!C.layers[2].top || (lv <= 0 && !sprays.length) || x1 <= x0) return;
+    if (!LAST.top || (lv <= 0 && !sprays.length)) return;
     const full = x0 <= 0 && x1 >= W, out = ctx;
     if (!full) {
       if (!buf) { buf = document.createElement('canvas'); buf.width = W; buf.height = H; }
       ctx = buf.getContext('2d');
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
     }
-    const a = Math.min(1, lv * 1.6);                 // 退潮后段整片淡掉（涨潮时很快不透明）
+    const on = lv > 0 && x1 > x0;                    // 退空了只剩飞在半空的飞沫 / 光点
     ctx.save();
-    if (C.haze && lv > 0) {
-      const [c, a0, a1, dy] = C.haze, y0 = C.top + dy + sinkOf(), g = ctx.createLinearGradient(0, y0, 0, H);
-      g.addColorStop(0, `rgba(${c},${a0 * a})`); g.addColorStop(1, `rgba(${c},${a1 * a})`);
+    if (C.haze && on) {
+      const [c, a0, a1, dy] = C.haze, y0 = C.top + dy, g = ctx.createLinearGradient(0, y0, 0, H);
+      g.addColorStop(0, `rgba(${c},${a0})`); g.addColorStop(1, `rgba(${c},${a1})`);
       ctx.fillStyle = g; ctx.fillRect(x0, y0, x1 - x0, H - y0);
     }
-    for (let k = 0; k < 3; k++) {
-      ctx.globalAlpha = a;
-      if (lv > 0) drawLayer(ctx, k, x0, x1);
-      drawSprays(ctx, k);
-      ctx.globalAlpha = a;
-      if (k < 2 && lv > 0) for (const m of mobs) if (m.row === k) drawMob(ctx, m);
+    for (let k = 0; k < N; k++) {
+      if (on) drawLayer(ctx, k, x0, x1);
+      if (full) drawSprays(ctx, k);
+      if (k < 2 && on) for (const m of mobs) if (m.row === k) drawMob(ctx, m);
     }
     ctx.restore();
     if (full) return;
@@ -299,6 +309,7 @@ function Tide(C) {
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over';
     out.drawImage(buf, 0, 0);
+    for (let k = 0; k < N; k++) drawSprays(out, k);
   }
 
   const active = () => lv > 0;
@@ -312,9 +323,10 @@ function Tide(C) {
    三层贴图 v14/sea2/make.py 出（尺寸是它打印的；已按屏幕大小缩好，引擎不再缩放）。
    直播画面下半截压着礼物面板（画布 y ≈ 1373 以下看不见）：三层浪尖都摆在面板之上 —— 远 ≈ 1203~1261、中 ≈ 1242~1328、近 ≈ 1312~1399。
    虾兵蟹将（v14/sea/make.py，都朝右）往右冲（冲男生那边：她的兵）；row 0 泡在中层（缩放 0.75，远）、row 1 泡在近层（1.0）。
-   2026-09-28 用户："往上挪挪，但不要盖住男女生"：兵都画在人物之前的那一趟，蹦起来也只在人身后。 */
+   2026-09-28 用户先说"往上挪挪，但不要盖住男女生"，后来又定"水面和卷轴是在男女主的上层"：整片潮连兵一起画在男女主之后（盖在脚上）。 */
 const Sea = Tide({
-  top: 1190, rise: 1.2, fall: 1.6,
+  top: 1190, rise: 1.4, fall: 1.4, side: -1,
+  front: { every: 0.012 },       // 推进 / 退回时前沿每隔几秒甩一颗（浪头的飞沫）
   layers: [
     { src: 'assets/world/sea2_far.webp',  w: 536, h: 276, y: 0,   v: -14, swell: [4, 520, 30],  bob: [2, 0.9] },
     { src: 'assets/world/sea2_mid.webp',  w: 696, h: 356, y: 52,  v: 26,  swell: [7, 640, -45], bob: [3, 1.1] },
@@ -338,17 +350,23 @@ const Sea = Tide({
 
 /* ---- 法海的金光经卷 ----
    三条卷轴 v14/scroll/make.py 出（程序画的，尺寸是它打印的；贴图上下各有一圈金光留边：远 14、中 20、近 26）。
-   绢面摆位（屏幕 y）：远 ≈ 1204~1269、中 ≈ 1262~1354、近 ≈ 1318~1436 —— 近层露在礼物面板之上的是它的上半截（锦边 + 第一行经文）。
+   绢面摆位（屏幕 y）：远 ≈ 1246~1311、中 ≈ 1311~1403、近 ≈ 1366~1484、deep1 ≈ 1470~1600、deep2 ≈ 1585~1727（出屏）。
+   2026-09-28 用户："卷轴下半部分是空的，应该和水面一样，补齐。卷轴的上边缘略高，应该与水面齐平"：
+   原来三条摆在 1204~1436，近层以下只剩一层金雾；现在远 / 中 / 近三条的绢面上沿各对齐海那一层浪上沿的中位数
+   （海：远 1246、中 1311、近 1366，量贴图 alpha），近层下面再铺 deep1、deep2 两条更大的（v14/scroll/make.py），铺到屏幕下沿。
    比海起伏得大、涌浪短（swell）：卷轴是绸子，要读成"飘"；底下铺一片金色光雾（haze）当"海水"。
    神兽小佛（v14/scroll/beasts.py，都朝左）往左冲（冲女生那边），骑在卷轴上（sink 小：站在绢面上，不是泡在里面）。 */
 const Scroll = Tide({
-  top: 1190, rise: 1.2, fall: 1.6,
+  top: 1190, rise: 1.4, fall: 1.4, side: +1,
+  front: { every: 0.018 },
   layers: [
-    { src: 'assets/world/scroll_far.webp',  w: 800,  h: 93,  y: 0,   v: 18,  swell: [8, 380, -40], bob: [3, 0.9] },
-    { src: 'assets/world/scroll_mid.webp',  w: 952,  h: 132, y: 52,  v: -30, swell: [12, 460, 55], bob: [4, 1.1] },
-    { src: 'assets/world/scroll_near.webp', w: 1080, h: 170, y: 102, v: 46,  swell: [16, 560, -70], bob: [5, 1.3] },
+    { src: 'assets/world/scroll_far.webp',   w: 800,  h: 93,  y: 42,  v: 18,  swell: [8, 380, -40], bob: [3, 0.9] },
+    { src: 'assets/world/scroll_mid.webp',   w: 952,  h: 132, y: 101, v: -30, swell: [12, 460, 55], bob: [4, 1.1] },
+    { src: 'assets/world/scroll_near.webp',  w: 1080, h: 170, y: 150, v: 46,  swell: [16, 560, -70], bob: [5, 1.3] },
+    { src: 'assets/world/scroll_deep1.webp', w: 1120, h: 188, y: 251, v: -38, swell: [16, 620, 60], bob: [5, 1.2] },
+    { src: 'assets/world/scroll_deep2.webp', w: 1118, h: 204, y: 364, v: 52,  swell: [18, 700, -80], bob: [6, 1.4] },
   ],
-  haze: ['255,196,70', 0.18, 0.55, 30],
+  haze: ['255,196,70', 0.18, 0.55, 60],
   /* 卷轴上沿飘起的金色光点：往上飘（G 负）、慢、寿命长 */
   spray: { every: 0.05, crest: 0.5, V: [30, 90], spread: 1.4, G: -60, life: [0.8, 1.4], r: [2.5, 5.5], a: 0.95, layers: [0, 1, 2],
            dot: ['rgba(255,252,220,1)', 'rgba(255,214,90,0.85)', 'rgba(255,170,30,0)'] },
