@@ -9,7 +9,7 @@ const { chromium } = require('/home/op/shots/node_modules/playwright-core');
   p.on('pageerror', e => errs.push(e.stack || e.message));
   await p.goto('http://127.0.0.1:40235/index.html?v=' + Date.now());
   await p.waitForTimeout(4000);
-  const who = () => p.evaluate(() => (Fahai.active() ? 'F' : '') + (Baisu.active() ? 'B' : '') + (Sea.active() ? '~' : '') + (Scroll.active() ? '=' : '') + (S.phase === 'over' ? '!' : ''));
+  const who = () => p.evaluate(() => (Fahai.active() ? 'F' : '') + (Baisu.active() ? 'B' : '') + (Sea.active() ? '~' : '') + (Scroll.active() ? '=' : '') + (S.phase === 'over' ? '!' : '') + (Fahai.peek()[0] ? Fahai.peek()[0].t.toFixed(0) : ''));
   const click = (n) => p.evaluate((n) => [...document.querySelectorAll('[data-shop]')].find(x => x.textContent.startsWith(n)).click(), n);
   const c = await p.$('canvas');
   await click('灭迹恶魔');
