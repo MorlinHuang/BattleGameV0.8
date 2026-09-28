@@ -1300,9 +1300,10 @@ const SHOP = {
    见过的，就是吵到最后砸过来的是一束花。 */
 // 档 3 的两个帮手角色 + 档 4 两边各一组三人（crew.js），GIFT[..].crew 指到这里
 /* 档 4 每边一组三人、**同一时间只一个在场**（2026-09-28 用户："三个女神太多了，每个都显得特别小，还是改一个，放大一些"）：
-   场上没人时送 = 按下面的顺序轮到下一个（第一次是女神 / 恶魔）；有人在场再送 = 给他 / 她续一段、名字条重播「×N」，不换人
-   （crew.js CrewGroup）。成员顺序也是 ?g4L= / ?g4R= 的下标。 */
-const G4L = CrewGroup([Truth, Baisu, Widow]);    // 查岗党：真相女神 / 白娘子（替掉月亮查岗使）/ 黑蛛女特工
+   场上没人时送 = 按下面的顺序轮到下一个（第一次是白娘子 / 恶魔）；有人在场再送 = 给他 / 她续一段、名字条重播「×N」，不换人
+   （crew.js CrewGroup）。成员顺序也是 ?g4L= / ?g4R= 的下标。
+   女生侧白娘子打头（2026-09-28 用户："女神第一个出白娘子"）。 */
+const G4L = CrewGroup([Baisu, Truth, Widow]);    // 查岗党：白娘子（替掉月亮查岗使）/ 真相女神 / 黑蛛女特工
 const G4R = CrewGroup([Demon, Briefs, Erlang]);  // 灭迹党：灭迹恶魔 / 内裤外穿侠 / 二郎·打码神
 const CREW = { buddy: Buddy, bestie: Bestie, g4L: G4L, g4R: G4R };
 const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）

@@ -1,4 +1,4 @@
-/* 档 4 女生侧真页面点击：点两次「真相女神」按钮（场上没人时按顺序轮换：第一次真相女神、放完第二次白娘子），
+/* 档 4 女生侧真页面点击：点两次「真相女神」按钮（场上没人时按顺序轮换：第一次白娘子、放完第二次真相女神），
    每秒记谁在场、海水在不在，抓页面报错，白娘子施法中截一张 /tmp/g4_baisu.png。
    scp tools/g4click.js kf-deployment:/home/op/shots/ && ssh kf-deployment "cd /home/op/shots && node g4click.js" */
 const { chromium } = require('/home/op/shots/node_modules/playwright-core');
@@ -13,11 +13,11 @@ const { chromium } = require('/home/op/shots/node_modules/playwright-core');
   const click = () => p.evaluate(() => [...document.querySelectorAll('[data-shop]')].find(x => x.textContent.startsWith('真相女神')).click());
   await click();
   let seq = [];
-  for (let i = 0; i < 16; i++) { seq.push(await who()); await p.waitForTimeout(1000); }
+  for (let i = 0; i < 19; i++) { seq.push(await who()); if (i === 5) await p.screenshot({ path: '/tmp/g4_baisu.png' }); await p.waitForTimeout(1000); }
   console.log('第一次', seq.join(' '));
   await click();
   seq = [];
-  for (let i = 0; i < 19; i++) { seq.push(await who()); if (i === 5) await p.screenshot({ path: '/tmp/g4_baisu.png' }); await p.waitForTimeout(1000); }
+  for (let i = 0; i < 16; i++) { seq.push(await who()); await p.waitForTimeout(1000); }
   console.log('第二次', seq.join(' '));
   console.log('报错', errs.length ? errs.join(' | ') : '无');
   await b.close();

@@ -1,9 +1,8 @@
-"""把 sea.py / jet.py / splash.py 渲出来的帧打成 WebP 图集（2026-09-28），打印引擎要填的数。
-用法：python3 pack_water.py <渲染根目录（含 sea_out jet_out splash_out）> <web/assets/fx 目录>
+"""把 jet.py / splash.py 渲出来的帧打成 WebP 图集（2026-09-28），打印引擎要填的数。
+用法：python3 pack_water.py <渲染根目录（含 jet_out splash_out）> <web/assets/fx 目录>
+（海面原先也是 3 渲 2（sea.py），同日被用户否掉、换回手绘 2D（v14/sea2/make.py），sea.py 已删，见 git 8cc1ebd。）
 
 每一套按**所有帧的并集外框**裁（逐帧裁的话帧与帧对不齐、播起来抖），再按 SCALE 缩，排成 COLS 列：
-  sea_<far|mid|near>.webp：海面三层。0.6 倍（全尺寸 36 帧 × 三层解码要 ~120MB，手机扛不住；0.6 倍 ~43MB），
-      引擎按 1/0.6 放大画回 960 宽。打印的 top 是这一层裁剪框上沿在渲染图里的 y（引擎：屏幕 y = SEA_TOP + top）。
   jet.webp：水柱 16 帧，原尺寸。打印的 x0 = 掌心（渲染图 x 12 像素处，jet.py X0）在裁剪框里的 x，cy = 中轴在裁剪框里的 y。
   splash.webp：水花 10 帧，原尺寸。打印 ox, oy = 撞击点（splash.py ORIGIN）在裁剪框里的位置。
 """
@@ -22,9 +21,8 @@ def union(files):
     return box
 
 
-def pack(files, out, scale, cols, full_width=False):
+def pack(files, out, scale, cols):
     box = union(files)
-    if full_width: box = (0, box[1], Image.open(files[0]).width, box[3])   # 海面：横向不裁（左右都是满的）
     w, h = box[2] - box[0], box[3] - box[1]
     cw, ch = round(w * scale), round(h * scale)
     rows = (len(files) + cols - 1) // cols
@@ -38,10 +36,6 @@ def pack(files, out, scale, cols, full_width=False):
     return box
 
 
-for band in ('far', 'mid', 'near'):
-    fs = sorted(glob.glob(os.path.join(SRC, 'sea_out', f'{band}_*.png')))
-    b = pack(fs, os.path.join(DST, f'sea_{band}.webp'), 0.6, 6, full_width=True)
-    print(f'  {band} top {b[1]} h {b[3] - b[1]}')
 fs = sorted(glob.glob(os.path.join(SRC, 'jet_out', 'jet_*.png')))
 b = pack(fs, os.path.join(DST, 'jet.webp'), 1, 4)
 print(f'  jet 掌心 x0 {12 - b[0]} 中轴 cy {120 - b[1]}（jet.py：X0 = −2.9 → 渲染 x = (−2.9 + 3) × 120 = 12，出口封口描边往左 ~3 像素）')
