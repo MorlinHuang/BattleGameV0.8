@@ -271,7 +271,7 @@ const Particles = (function () {
   }
 
   /* 实体（普通混合、吃描边）的 kind；其余 dot / spark / ring 是光，走第二趟 lighter */
-  const SOLID = new Set(['soft', 'chip', 'star', 'heart', 'card', 'chat', 'tag', 'web', 'mosaic', 'moon']);
+  const SOLID = new Set(['soft', 'chip', 'star', 'heart', 'card', 'chat', 'tag', 'web', 'mosaic']);
 
   /* 同一格每帧同一个随机数（马赛克的灰度、散开方向）：按格坐标和粒子种子哈希，不在 draw 里抽随机 —— 抽的话每帧换色，读成雪花屏 */
   const hash = (i, j, s) => { const v = Math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };
@@ -347,14 +347,6 @@ const Particles = (function () {
         ctx.fillStyle = p.fill; ctx.fill();
         if (p.line) { ctx.lineWidth = p.lw; ctx.strokeStyle = p.line; ctx.stroke(); }
         ctx.fillStyle = '#ffffff'; ctx.fillText(p.text, 0, 1);
-        ctx.restore();
-      } else if (p.kind === 'moon') {
-        /* 小月牙（月亮查岗使的爱心光流里夹着的）：大圆减去错开的小圆，暖金填色 + 描边 */
-        const r = p.r + (p.r1 - p.r) * (1 - k);
-        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-        ctx.beginPath(); ctx.arc(0, 0, r, 0.35, 6.283 - 0.35); ctx.arc(r * 0.45, -r * 0.1, r * 0.78, 6.283 - 0.62, 0.62, true); ctx.closePath();
-        ctx.fillStyle = p.fill; ctx.fill();
-        if (p.line) { ctx.lineWidth = p.lw; ctx.strokeStyle = p.line; ctx.stroke(); }
         ctx.restore();
       } else if (p.kind === 'web') {
         /* 蛛网（黑蛛女特工打中男生脸）：前 15% 寿命从 r 张到 r1，之后贴在脸上不动。8 根辐条 + 3 圈折线环，

@@ -20,8 +20,10 @@ from scipy import ndimage
 PAD = 44                                   # 输出贴图四周给外发光留的边（输出像素），同 truth2 / demon1
 
 
-def cut(src, screen, key, erase=()):
-    """原图 → (rgb float32, alpha 0~1)。去溢色只动半透明过渡带（不透明的像素本来的颜色不动）。
+def cut(src, screen, key, erase=(), spill='edge'):
+    """原图 → (rgb float32, alpha 0~1)。去溢色默认只动半透明过渡带（不透明的像素本来的颜色不动）；
+    spill='all'：整张都去 —— 角色身上有透着幕布的薄纱（白娘子的披帛）时用：纱整块都被幕布染色，只去边的话纱是粉紫的。
+    这种角色身上本来就不能有幕布那个色相（白娘子一身白 + 冰蓝，品红度 ≈ 0）。
     erase：[(x0, y0, x1, y1), ...] 原图像素，这些框里一律抠掉（画进原图、但运行时另外画的东西，如黑蛛女特工手上往上的丝）。"""
     a = np.array(Image.open(src).convert('RGB')).astype(np.int16)
     if screen == 'green':
@@ -37,7 +39,7 @@ def cut(src, screen, key, erase=()):
         sz = ndimage.sum(np.ones_like(al), lab, range(1, n + 1))
         al[np.isin(lab, np.nonzero(sz < 60)[0] + 1)] = 0
     rgb = a.astype(np.float32)
-    edge = al < 0.99
+    edge = al < 0.99 if spill == 'edge' else np.ones_like(al, bool)
     if screen == 'green':
         rgb[..., 1] = np.where(edge, np.minimum(rgb[..., 1], np.maximum(rgb[..., 0], rgb[..., 2])), rgb[..., 1])
     else:
@@ -65,9 +67,9 @@ def edge_extend(rgb, al, it=12):
     return rgb
 
 
-def make(src, out, screen, key, K, glow, pts, margin=6, erase=()):
+def make(src, out, screen, key, K, glow, pts, margin=6, erase=(), spill='edge'):
     """pts：{名: (x, y)} 原图像素；返回输出贴图像素的量点。裁边框按剪影外框 + margin 自动取（量点按原图像素，不受影响）。"""
-    rgb, al = cut(src, screen, key, erase)
+    rgb, al = cut(src, screen, key, erase, spill)
     rgb = edge_extend(rgb, al)
     ys, xs = np.nonzero(al > 0.05)
     x0, y0 = max(0, xs.min() - margin), max(0, ys.min() - margin)

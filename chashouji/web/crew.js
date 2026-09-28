@@ -32,6 +32,7 @@ function Crew(cfg) {
   const A = cfg.anim || null;
   const REST = spr.rest || 0;                    // 贴图里喷口本来的指向（仰角，朝下为负）：真相女神第二版罐子本身就斜朝右下
   const PATH = cfg.path || {};                    // 悬停的人怎么来、怎么走（见 hoverPose）
+  const WK = cfg.whole && cfg.whole.k != null ? cfg.whole.k : 1;   // whole：整个人跟瞄准角转几成（白娘子 0.12：身子只轻轻倾，水流照样按完整角度出）
   let img = null, xi = {}, o = {};               // img[形象]：{ arm, body, lo }（arm 可无）；xi：cfg.xtra 的附属贴图（哮天犬）
   const bs = [], ps = [];                        // 在场的人、喷出去的东西（水滴 / 雾团）
 
@@ -120,7 +121,7 @@ function Crew(cfg) {
      （main.js G4STAND：每边同时一人，六个人各有一个大站位，缩放按身高统一，不用召唤时抽的 b.s）。
      来：从 PATH.from(s, hx, hy) 给的画外那一点冲过来，按 easeOut 减速刹停（不给就从正上方画外冲下来 —— 女神 / 恶魔）；
      走：朝 PATH.to(s, x, y) 加速离开（u²，不给就原地往上冲出画面）。悬着的时候慢慢晃一个横 8 字 + 上下浮（anim.bob）。
-     进出场时整个人另外转多少（roll：内裤侠横着飞进来、月亮查岗使转着圈落下）见 rollOf。 */
+     进出场时整个人另外转多少（roll：内裤侠横着飞进来、白娘子前倾着飞下来）见 rollOf。 */
   function hoverPose(b) {
     const [hx, hy, s] = o.perch(b), t = b.t, se = sprayEnd(b);
     const top = -(spr.foot[1] - spr.muzzle[1] + 120) * s;             // 脚底在这，整个人（含翘起的罐子）都在画外
@@ -203,7 +204,7 @@ function Crew(cfg) {
   /* 贴图上的点 q 跟着人转到哪：whole 先上身绕腰转 bt，再整个人绕 whole.pivot 转 th */
   function carried(p, q, th, b) {
     const bt = angles(b, th)[0], m1 = turn(at(p, q), at(p, spr.body.pivot), bt);
-    return turn(m1, at(p, cfg.whole.pivot), th);
+    return turn(m1, at(p, cfg.whole.pivot), th * WK);
   }
   function muzzle(p, th, b) {
     if (cfg.whole) return carried(p, spr.muzzle, th, b);
@@ -234,6 +235,9 @@ function Crew(cfg) {
       const top = o.top && o.top(d.x);
       return top != null && d.y >= top ? [d.x, top] : null;
     }
+    /* F.radius（白娘子）：离落点这么近就算中。她从左上方往下泼，水快竖着落到脸上 —— 按"越过落点那一列"判的话，
+       竖着落的水在那一列左边一点就一路掉下去了，永远越不过去（第一版整股水穿过男生砸到地板上） */
+    if (tg && F.radius && Math.hypot(d.x - tg[0], d.y - tg[1]) < F.radius) return [d.x, d.y];
     if (tg && past(tg[0]) && Math.abs(d.y - tg[1]) < F.miss)
       return [tg[0], F.snap == null ? d.y : tg[1] + Math.max(-F.snap, Math.min(F.snap, d.y - tg[1]))];
     const fr = o.front(d.y);
@@ -402,7 +406,7 @@ function Crew(cfg) {
     if (cfg.extra) cfg.extra(ctx, b, s, carry, 'back', xi, probe);
     ctx.save();
     if (rl) { const [cx, cy] = at(p, PATH.pivot || cfg.whole.pivot); ctx.translate(cx, cy); ctx.rotate(rl); ctx.translate(-cx, -cy); }
-    if (cfg.whole) spin(cfg.whole.pivot, b.aim);  // 悬空：整个人先绕重心转，上身再在这个基础上吃后坐
+    if (cfg.whole) spin(cfg.whole.pivot, b.aim * WK);  // 悬空：整个人先绕重心转（WK 成），上身再在这个基础上吃后坐
     if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q), probe);
     ctx.save();
     spin(spr.body.pivot, bt);
@@ -485,9 +489,13 @@ const WATER = {
   breakT: 0.14, brk: 0.16,           // 飞过多少秒以后开始会断、每滴身后断开的概率
   edge: [40, 110, 190], body: [150, 214, 255], glint: [4, 7],   // 描边色、水身色、高光：每 7 段亮 4 段
   mist: 0.35,                        // 水沫：每滴甩出的概率（按 j 取，同一滴每帧一样，不闪）
+  mistR: [1.8, 2],                   // 水沫颗粒半径 = mistR[0] + mistR[1] × (0~1)
+  alpha: [0.5, 0.85],                // 描边、水身的不透明度（再乘 a1 那条随飞行变淡的）
+  lanes: 0,                          // 水身里顺流的白色水纹几道（0 = 不画）
+  bead: [0.35, 0.2],                 // 断开后的水珠半径 = 此处水宽 × (bead[0] + bead[1] × 0~1)
 };
-function drawStream(ctx, ps, b) {
-  const W = WATER, wOf = (d) => W.w0 + (W.w1 - W.w0) * Math.min(1, d.t / W.grow);
+function drawStream(ctx, ps, b, W = WATER) {
+  const wOf = (d) => W.w0 + (W.w1 - W.w0) * Math.min(1, d.t / W.grow);
   const aOf = (d) => 1 - (1 - W.a1) * Math.min(1, d.t / W.grow);
   /* 连成段：[前一滴, 这一滴]；喷口那一段用一个 t=0 的假水滴 */
   const segs = [];
@@ -503,18 +511,32 @@ function drawStream(ctx, ps, b) {
   ctx.lineCap = 'round';
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
   /* 描边 → 水身：两遍，每段按两头的平均宽度/透明度 */
-  for (const [pad, col, k] of [[5, W.edge, 0.5], [0, W.body, 0.85]]) {
+  for (const [pad, col, k] of [[5, W.edge, W.alpha[0]], [0, W.body, W.alpha[1]]]) {
     for (const [p, d] of segs) {
       const m = { t: (p.t + d.t) / 2 };
       ctx.lineWidth = wOf(m) + pad; ctx.strokeStyle = rgba(col, aOf(m) * k);
       ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(d.x, d.y); ctx.stroke();
     }
   }
+  /* 顺流水纹（白娘子的大水流）：水身里几道细白线，沿每段偏到两侧不同位置、一段有一段没有 —— 读成一大股在流的水，不是一根实心管子 */
+  if (W.lanes) {
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(235,248,255,.75)'; ctx.beginPath();
+    for (let l = 0; l < W.lanes; l++) {
+      const f = (l + 0.5) / W.lanes - 0.5;
+      for (const [p, d] of segs) {
+        if ((d.seq + l * 3) % 5 >= 3) continue;
+        const dx = d.x - p.x, dy = d.y - p.y, L = Math.hypot(dx, dy) || 1, nx = dy / L, ny = -dx / L;
+        const o = wOf({ t: (p.t + d.t) / 2 }) * f * 0.8;
+        ctx.moveTo(p.x + nx * o, p.y + ny * o); ctx.lineTo(d.x + nx * o, d.y + ny * o);
+      }
+    }
+    ctx.stroke();
+  }
   /* 断开之后的水珠：后半段没连上的水滴，各画一颗 */
   const linked = new Set(); for (const [p, d] of segs) { linked.add(p); linked.add(d); }
   for (const d of ps) {
     if (linked.has(d) && d.j >= W.brk) continue;
-    const r = wOf(d) * (0.35 + 0.2 * ((d.j * 7) % 1));   // 大小按 j 散开一点，同一滴每帧一样
+    const r = wOf(d) * (W.bead[0] + W.bead[1] * ((d.j * 7) % 1));   // 大小按 j 散开一点，同一滴每帧一样
     ctx.fillStyle = rgba(W.edge, aOf(d) * 0.6); ctx.beginPath(); ctx.arc(d.x, d.y, r + 2, 0, 6.283); ctx.fill();
     ctx.fillStyle = rgba(W.body, aOf(d) * 0.9); ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, 6.283); ctx.fill();
   }
@@ -531,7 +553,7 @@ function drawStream(ctx, ps, b) {
   /* 水沫：飞过 breakT 的水滴，按 j 甩到两侧一点 */
   for (const d of ps) {
     if (d.t < W.breakT || d.j > W.mist) continue;
-    const k = d.j / W.mist, off = (k - 0.5) * 2 * wOf(d) * 1.3, r = 1.8 + 2 * k;
+    const k = d.j / W.mist, off = (k - 0.5) * 2 * wOf(d) * 1.3, r = W.mistR[0] + W.mistR[1] * k;
     const vl = Math.hypot(d.vx, d.vy) || 1, x = d.x - d.vy / vl * off, y = d.y + d.vx / vl * off;
     ctx.fillStyle = rgba(W.edge, 0.55); ctx.beginPath(); ctx.arc(x, y, r + 1.2, 0, 6.283); ctx.fill();
     ctx.fillStyle = rgba(W.body, 0.95); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
@@ -804,91 +826,85 @@ const DEMON = {
 const Demon = Crew(DEMON);
 
 /* ======== 档 4 每边一组三人（2026-09-28，规格 shots/review/trio/trio_spec.md；同日改成同时只一个在场、轮换，见 CrewGroup）========
-   女生侧：真相女神 + 月亮查岗使 + 黑蛛女特工；男生侧：灭迹恶魔 + 内裤外穿侠 + 二郎·打码神。
-   每个人的武器都不一样（雾 / 爱心光流 / 蛛网 / 射线 / 天眼 + 马赛克），不能走 skins 换皮（skins 要同一个裁边框、同一套 foot / muzzle），
+   女生侧：真相女神 + 白娘子（2026-09-28 替掉月亮查岗使）+ 黑蛛女特工；男生侧：灭迹恶魔 + 内裤外穿侠 + 二郎·打码神。
+   每个人的武器都不一样（雾 / 大水流 / 蛛网 / 射线 / 天眼 + 马赛克），不能走 skins 换皮（skins 要同一个裁边框、同一套 foot / muzzle），
    所以每人一份 Crew 配置，照 TRUTH / DEMON 的写法（悬停、whole 整个人小幅前后倾、二分反解瞄准），每边一个 CrewGroup（main.js），站位 main.js G4STAND。
    立绘 v14/<名>/make.py（共用 v14/crewart.py），量点都是它打印的贴图像素。
    配色按明亮底图的规矩（chashouji-fx）：发光靠色相、实体靠暖黑描边 WARM_INK。 */
 const WARM_INK = [58, 44, 38];
 const rgbaOf = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
-function heartAt(ctx, x, y, r, rot) {             // 爱心路径（同 fx.js heartPath，顶点偏下：视觉重心在下半）
-  ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
-  ctx.beginPath(); ctx.moveTo(0, r * 0.92);
-  ctx.bezierCurveTo(-r * 1.08, r * 0.10, -r * 0.62, -r * 1.02, 0, -r * 0.34);
-  ctx.bezierCurveTo(r * 0.62, -r * 1.02, r * 1.08, r * 0.10, 0, r * 0.92);
-  ctx.closePath(); ctx.restore();
-}
-
-/* ---- ② 月亮查岗使（水冰月底子）：短杖顶上的放大镜喷出一股粉色爱心 + 小月牙的光流，形状跟女神的雾锥一样，只换粒子 ----
-   爱心本体饱和粉、暖黑描边 3px（不描边在浅绿墙上看不见）；月牙暖金。底下垫一层很淡的粉雾把一颗颗连成一股。 */
-const MOON_FX = {
-  heart: [255, 90, 160], crescent: [255, 200, 60], mist: [255, 150, 205], ink: WARM_INK,
-  r: [9, 22],                // 爱心出口半径 → 飞完的半径
-  cr: [8, 16],               // 月牙
-  mistR: [14, 48], mistA: 0.1,
-  kinds: [0.5, 0.72],        // j < 0.5 爱心、< 0.72 月牙、其余只是雾（让一股里有疏有密，不是一串等距的心）
-  ring: [255, 110, 180], ringHi: [255, 225, 240],   // 脚下缎带光环（外圈 / 内圈）
-  flare: [26, 42],           // 放大镜口的闪光星半径 [小, 大]，随喷射节奏跳
+/* ---- ② 白娘子（2026-09-28 替掉月亮查岗使 —— 用户："水月冰太像原著了，可能会有版权风险"） ----
+   民间传说人物，没有版权问题；装束参考经典电视剧（白色广袖汉服 + 冰蓝银边、高髻珠钗、白披帛），脸是原创的（v14/baisu/make.py）。
+   用户要的四件事：① 从屏幕左上侧飞下来；② 比真相女神大 30%（main.js G4STAND.baisu 第三项）；③ 全身自发光；
+   ④ 念咒，从掌中召出大水流泼向男生，**持续 15 秒**；同时整个屏幕底部涌起海水、海里有虾兵蟹将（sea.js），她走海水就退。
+   · 念咒：立绘就是念咒的姿势（左手胸前剑指、右手托水球），不靠转身瞄准 —— 她比女神大三成、裙摆披帛往左上飘一大片，
+     整个人跟着瞄准倾 0.5 rad 的话，裙角要甩出去两百像素。所以 whole.k 只让身子跟瞄准角的一小份（轻轻前后倾，看着是活的），
+     水流方向照样按完整的瞄准角出（crew.js angles：喷口指向 = th）。
+   · 大水流：跟哥们的水柱同一套画法（drawStream），换一份更粗更猛的参数 TORRENT；一段"哗——"（pulse 1.0 秒）停一下（0.35），
+     每泼一下身子微微一震（kick）。带重力（G 700）：水是泼出去、往下砸的，不是射线。
+   · 自发光：三层冰蓝外发光烘在贴图里（make.py），运行时再加身后一团会呼吸的冷白光 + 绕着她飘的水珠 + 掌心水球的光（drawBaisuAura）。 */
+const TORRENT = {
+  ...WATER,
+  w0: 40, w1: 120, grow: 0.4,         // 掌心出口就有水球宽，飞 0.4 秒胀到 120（哥们的水柱 7 → 20）。第一版 26 → 84 看着是根水管
+  a1: 1, alpha: [0.95, 1],            // 不透明：半透明的圆头段一段段叠出深浅，第一版整股读成一串香肠泡泡
+  breakT: 0.34, brk: 0.03,            // 后段才断，断得很少：一大股水，不是一串水珠
+  lanes: 3,
+  bead: [0.1, 0.08],                  // 水宽 120 时按哥们的比例断出来的珠子直径 ~100，一颗大蓝球挂在男生身上
+  edge: [24, 84, 180], body: [128, 204, 255], glint: [3, 5],
+  mist: 0.7, mistR: [3, 6],           // 水沫多、颗粒大（哥们 1.8 + 2k）
 };
-function drawHeartFlow(ctx, ps, b) {
-  const F = MOON_FX, L = MOON.fluid.life;
-  for (const d of ps) {                          // 托底粉雾
-    const u = Math.min(1, d.t / L), r = F.mistR[0] + (F.mistR[1] - F.mistR[0]) * Math.sqrt(u);
-    ctx.fillStyle = rgbaOf(F.mist, (1 - u * u) * F.mistA); ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, 6.283); ctx.fill();
-  }
-  ctx.lineJoin = 'round';
-  for (const d of ps) {
-    if (d.j >= F.kinds[1]) continue;
-    const u = Math.min(1, d.t / L), a = u > 0.7 ? (1 - u) / 0.3 : 1;
-    ctx.globalAlpha = a;
-    if (d.j < F.kinds[0]) {
-      heartAt(ctx, d.x, d.y, F.r[0] + (F.r[1] - F.r[0]) * Math.sqrt(u), Math.sin(d.t * 6 + d.j * 50) * 0.35);
-      ctx.fillStyle = rgbaOf(F.heart, 1); ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = rgbaOf(F.ink, 1); ctx.stroke();
-    } else {
-      const r = F.cr[0] + (F.cr[1] - F.cr[0]) * Math.sqrt(u);
-      ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.t * 5 + d.j * 40);
-      ctx.beginPath(); ctx.arc(0, 0, r, 0.35, 6.283 - 0.35); ctx.arc(r * 0.45, -r * 0.1, r * 0.78, 6.283 - 0.62, 0.62, true); ctx.closePath();
-      ctx.fillStyle = rgbaOf(F.crescent, 1); ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = rgbaOf(F.ink, 1); ctx.stroke();
-      ctx.restore();
+const BAISU_FX = {
+  glow: { R: 380, a: 0.34, rgb: [150, 215, 255], core: [236, 248, 255], breath: [1.6, 0.18] },   // 身后冷光：半径、不透明度、颜色、亮芯、呼吸 [角频率, 幅度]
+  motes: { n: 12, R: [170, 330], r: [5, 10], spin: 0.5, edge: [24, 84, 180], fill: [200, 236, 255] },  // 绕身水珠：几颗、绕的半径范围、珠子半径、转速
+  orb: { R: 70, rgb: [120, 200, 255] },   // 掌心水球外的光团半径（贴图像素 × s）、颜色；泼的时候（kick）跟着胀一下
+};
+function drawBaisuAura(ctx, b, s, at, probe) {
+  const G = BAISU_FX.glow, M = BAISU_FX.motes, [cx, cy] = at(BAISU.spr.chest);
+  const k = Math.min(1, b.t / 0.4);
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
+  ctx.save();
+  if (!probe) {                                                  // measure 不量身后的光和水珠（特效层，同女神的光芒）
+    const br = 1 + G.breath[1] * Math.sin(b.t * G.breath[0]), R = G.R * s * br;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    g.addColorStop(0, rgba(G.core, G.a * k)); g.addColorStop(0.4, rgba(G.rgb, G.a * 0.55 * k)); g.addColorStop(1, rgba(G.rgb, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.283); ctx.fill();
+    /* 水珠：椭圆轨道绕胸口转，各自半径不同、忽远忽近（前半圈大、后半圈小一点 —— 读成绕着她转，不是贴在平面上） */
+    for (let i = 0; i < M.n; i++) {
+      const a = i / M.n * 6.283 + b.t * M.spin * (i % 2 ? 1 : -0.7), rr = (M.R[0] + (M.R[1] - M.R[0]) * ((i * 0.618) % 1)) * s;
+      const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.55, r = (M.r[0] + (M.r[1] - M.r[0]) * ((i * 0.37) % 1)) * s * (0.8 + 0.2 * Math.sin(a));
+      ctx.fillStyle = rgba(M.edge, 0.7 * k); ctx.beginPath(); ctx.arc(x, y, r + 2, 0, 6.283); ctx.fill();
+      ctx.fillStyle = rgba(M.fill, 0.95 * k); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+      ctx.fillStyle = rgba([255, 255, 255], k); ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.3, 0, 6.283); ctx.fill();
     }
   }
-  ctx.globalAlpha = 1;
-  if (b && b.m) {                                 // 放大镜口一颗八角闪光星，大小随后坐跳
-    const r = F.flare[0] + (F.flare[1] - F.flare[0]) * b.kick, [mx, my] = b.m;
-    ctx.save(); ctx.translate(mx, my); ctx.rotate(b.t * 3); ctx.beginPath();
-    for (let i = 0; i < 16; i++) { const a = i * 0.3927, rr = i % 2 ? r * 0.38 : r; i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(rr, 0); }
-    ctx.closePath(); ctx.fillStyle = rgbaOf(F.ringHi, 0.95); ctx.fill(); ctx.lineWidth = 3.5; ctx.strokeStyle = rgbaOf(F.heart, 1); ctx.stroke();
-    ctx.restore();
-  }
-}
-/* 脚下一圈粉色缎带光环（转着圈落下来的时候就有，悬着时一直在），画在她身后、跟着她倾 */
-function drawMoonAura(ctx, b, s, at) {
-  const F = MOON_FX, [fx, fy] = at(MOON.spr.foot), k = Math.min(1, b.t / 0.3);
-  const rx = 120 * s, ry = 26 * s, y = fy - 40 * s;
-  ctx.save(); ctx.globalAlpha = 0.9 * k; ctx.lineCap = 'round';
-  for (const [w, c] of [[14 * s, F.ring], [5 * s, F.ringHi]]) {
-    ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(c, 1);
-    ctx.beginPath(); ctx.ellipse(fx, y, rx, ry, 0, b.t * 2.2, b.t * 2.2 + 5.2); ctx.stroke();   // 缺一口的环在转：读成缎带不是呼啦圈
-  }
+  /* 掌心水球的光：跟着人画（算"人"的一部分，measure 量它） */
+  const O = BAISU_FX.orb, [ox, oy] = at(BAISU.spr.muzzle), R = O.R * s * (1 + 0.25 * b.kick + 0.08 * Math.sin(b.t * 5));
+  const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, R);
+  g.addColorStop(0, rgba([255, 255, 255], 0.85 * k)); g.addColorStop(0.35, rgba(O.rgb, 0.5 * k)); g.addColorStop(1, rgba(O.rgb, 0));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ox, oy, R, 0, 6.283); ctx.fill();
   ctx.restore();
 }
-const MOON = {
+const BAISU = {
   ...TRUTH,
-  whole: { pivot: [195, 256] },
-  exhaust: null,                                // 她不靠后坐力悬着（魔法少女本来就会飞），没有尾焰
-  spr: { src: 'assets/world/moon%n_%k.webp', body: { src: 'up', pivot: [195, 256], k: 1 },
-         foot: [180, 612], muzzle: [365, 355], rest: -0.685, head: [209, 50], chest: [224, 191], tall: 568 },
+  whole: { pivot: [534, 324], k: 0.12 },        // 身子只跟瞄准角的 12%（见上）
+  exhaust: null,                                // 仙人本来就会飞，没有尾焰
+  spr: { src: 'assets/world/baisu%n_%k.webp', body: { src: 'up', pivot: [534, 324], k: 1 },
+         foot: [343, 751], muzzle: [732, 447], rest: -0.9, head: [516, 60], chest: [546, 264], tall: 691 },   // v14/baisu/make.py 打印；foot 是裙摆最低那一角
   skins: [1],
-  aura: (ctx, b, s, at) => drawMoonAura(ctx, b, s, at),
-  /* 出场：从左上画外转一圈半落下来（spin），刹停时 main.js 出一个爱心冲击环（RECIPE.moon.arrive） */
-  path: { from: (s, hx, hy) => [hx - 420, hy - 700 * s], spin: -1.5 },
-  anim: { pulse: [0.55, 0.18], kick: [0, 0.06, 9], lean: 0.03, bob: [6, 2.4] },
-  T: { enter: 0.6, spray: 2.8, exit: 0.45, fire: 0.18 },
-  /* 爱心每颗都要描边画，比女神的雾团贵：rate 110（女神 220），靠每颗更大、更实来撑体量 */
-  fluid: { V: 620, G: 40, drag: 0.85, rate: 110, spread: 0.26, vJit: 0.18, life: 1.1, miss: 150, snap: 14, hitEvery: 0.25, floor: false,
-           draw: drawHeartFlow },
+  aura: (ctx, b, s, at, probe) => drawBaisuAura(ctx, b, s, at, probe),
+  /* rest -0.9：掌心 → 男生的脸大约朝右下 50°~70°（她悬在左上、男生在右下）；立绘里手腕 → 水球是 −0.70。
+     瞄准角 ±0.55 在它上下，水流方向落在 −1.45 ~ −0.35，男生站着、趴地都够得着。 */
+  aim: { lo: -0.55, hi: 0.55, rate: 1.6, follow: 8, stiff: 40 },
+  /* 出场：从左上画外斜着飞下来（带一点前倾 roll0，刹停时回正）；离场原路往左上飞走 */
+  path: { from: (s, hx, hy) => [hx - 700 * s, hy - 700 * s], roll0: -0.2, to: (s, x, y) => [x - 800 * s, y - 800 * s], rollOut: -0.15 },
+  anim: { pulse: [1.0, 0.35], kick: [0, 0.03, 6], lean: 0.02, bob: [8, 1.5] },
+  /* 在场共 15 秒（用户定）：飞下来 1.0 + 施法 13.5 + 飞走 0.5。续送再加 13.5（crew.js summon 续一段 T.spray）。 */
+  T: { enter: 1.0, spray: 13.5, exit: 0.5, fire: 0.3 },
+  /* life 0.7：打到脸上 ~0.4 秒，没打中的再飞一小段就散（1.2 时越过男生一路砸到地板上） */
+  fluid: { V: 1150, G: 700, drag: 0.3, rate: 80, spread: 0.05, vJit: 0.06, life: 0.7, miss: 130, radius: 75, snap: 14, hitEvery: 0.3, floor: false,
+           draw: (ctx, ps, b) => drawStream(ctx, ps, b, TORRENT) },
 };
-const Moon = Crew(MOON);
+const Baisu = Crew(BAISU);
 
 /* ---- ③ 黑蛛女特工（黑寡妇底子）：吊着一根丝从天花板降下来，腕部钩索装置朝右下射一张蛛网 ----
    不是雾：一发一发的网弹（anim.pulse 每按一下出一发），飞的时候拖一根丝连回腕口；打中了在男生脸上张开一张网
