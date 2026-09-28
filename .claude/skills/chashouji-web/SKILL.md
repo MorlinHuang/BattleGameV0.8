@@ -249,7 +249,12 @@ assets/ui/win_b2.webp  灭迹党胜·命中（怼到她面前）
 | `?bench=1&benchframes=N&benchrate=M` | 连点压测 |
 | `?benchoff=ammo\|part\|both` | 关掉某层做差值分账 |
 | `?skin=0\|1\|2` | 配 crew 类礼物（`ammogift=bestie/buddy/truth`）：强制出第几个形象（cfg.skins 下标，越界夹两头），不给挑空着的 |
-| `?crewlog=1` | 胶片模式下每格往控制台打真相喷雾的 aim / want / 落点 / 喷口（`--dump-dom --enable-logging=stderr` 抓 CONSOLE 行） |
+| `?crewlog=1` | 胶片模式下每格往控制台打档 4 六个人的 aim / want / 落点 / 喷口 / **实心外框 box**（离屏真画一遍扫 alpha>200，量中线余量和最低点用它） |
+| `?crewlog=2` | 胶片模式下每个 1/60 小步打档 4 每人的靴底 x、y、s（量换槽位连不连续） |
+| `?g4L=0\|1\|2` `?g4R=0\|1\|2` | 档 4 强制召组里第几个人（左：真相女神/月亮查岗使/黑蛛女特工；右：灭迹恶魔/内裤外穿侠/二郎·打码神）。胶片和真实送礼都认 |
+| `?ammogift2=<礼物>` | 同一条胶片再叫另一边的帮手：满员 6 人 `ammogift=truth&ammogift2=demon&buddyn=3` |
+| `?buddygap=<秒>` `?ammoskip=<秒>` | 胶片里第 k 个人在 k×gap 秒叫；第一格前先快进（注意顿帧会冻住帮手的时钟，按墙钟对不齐时用 crewlog=2 看） |
+| `&liveN=<次数>` | `liveEvery` 每边最多送几次（档 4：3 次满员、第 4 次只续时间 ×2） |
 
 **新加诊断模式时照这个套路**：每格强制指定内容，不要碰运气等随机——
 气泡按一两秒随机冒，混在别的胶片里拍不到语音条和撤回提示。
@@ -390,3 +395,16 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 - **由落点反推枪**：瞄点平滑跟随（`AIM.follow`，步态硬切帧会抖）→ 按固定 `V=1250` 反解仰角（与枪口位置互相依赖，迭代 6 次）→ 上半身按 `AIM.rate` 转过去、夹在 `AIM.lo~hi`；水**永远沿枪管以 V 射出**（每滴反解初速试过：前后两滴速度差大，水柱成锯齿）。打偏：离落点 `MISS` 内算中，否则碰 `girlFront`（轮廓、跳过手机那行 `BUDDY_ARM_GAP`）溅开。
 - **女生倒地**（`girlDown()` = 帧名 bF/bL 开头）：`girlTarget` 沿身体从头到脚取上沿上的点（`girlTop(x)` 查 world.json `edge.top`，build.py 按列量的女生上沿），返回第三项 `'top'`；buddy.js 每人每 `ZONE.every` 秒随机挑一个部位（u∈`ZONE.lo~hi`，背/屁股/腿）小幅扫；碰撞按"落到这一列上沿以下"，**不看前沿**（横躺时每行前沿都是手臂和头，浇背的水会全碎在头上）。落空的水在地板上溅开。出水按每滴实际出枪时刻补飞（掉帧不起疙瘩）；画线补一段枪口→最新一滴。扫动 `SWEEP=[1.2,2.8]` rad/s —— 快了（2.3/5.3）前后水滴落点差太远折成"7"。瞄点 u 从脸到大腿上段（`sp[1]-0.35h`）。水柱画法 `WATER`（crew.js）：出口细 w0 7 → 飞 0.3s 长到 w1 20、越飞越透；0.14s 后每滴 16% 概率在身后断开，断处画水珠；高光贴上沿、每 7 段亮 4 段；两侧甩水沫。第一版三遍等粗描线 26/19/6 + 连续白芯 = 光柱。连线按人找上一滴（几个人的水滴在 drops 里交错）。
 - 看效果：`?ammostrip=6&ammoms=450&ammogift=buddy&buddyn=3`（buddyn 一次叫几个；可加 `pos=-29` 看女生趴地）。
+
+## 档 4 每边三人（2026-09-28，规格 `shots/review/trio/trio_spec.md`）
+- 左 `G4L = CrewGroup([Truth, Moon, Widow])`、右 `G4R = CrewGroup([Demon, Briefs, Erlang])`，`GIFT.truth/demon.crew = 'g4L'/'g4R'`，`summonCrew()` 统一分发。
+  每人一份 Crew（武器各异不能走 skins），max 1；送一次召一个没在场的，三个都在场 → 剩余时间最短的 summon（= renew，名字条 ×N）。`CREWS` 是全部帮手的列表（update/reset/items 都走它）。
+- **站位**（main.js `G4SLOT` / `g4Targets` / `g4Tick` / `g4Perch`）：1 人用大站位（由 TRUTH_PERCH / DEMON_PERCH 换算的外框中线，所以女神/恶魔单人位置不变）；2~3 人按到场先后（`b.born`）排斜线三槽，新来的占 1 号前排。槽存"外框中线 cx + 靴底 y + s"，各人贴图宽不同也占同一块地。
+  换槽：`b.sl` 三次 Hermite（0.4 秒，起点带速度、终点速度 0），按这个人自己的 b.t 求值；`o.tick` 写状态、`o.perch(b)` 只读并返回 `[x, y, s]`（s 随时间变，crew.js hoverPose 用它）。实测滑动时每小步速度变化 ≤40 px/s。
+- **进出场路径** `cfg.path`：`from(s,hx,hy)` / `to(s,x,y)` / `roll0` / `spin`（圈）/ `rollOut` / `swing`（悬着时绕 `path.pivot` 摆）。不给就是女神那套（正上方冲下、往上冲走）。
+- **附属画**：`cfg.extra(ctx, b, s, carry, 'back'|'fore', xi)` 画在屏幕坐标、不跟人倾（黑蛛女的丝、哮天犬）；`cfg.xtra` 额外贴图（dog1_up.webp）。`spr.eyes` 射线从几只眼睛出（`b.eyes`）。
+- **别让人为了瞄准大倾**：射线出眼睛，`rest` 直接取典型俯角 −0.95、aim ±0.3；蛛网是**抛**的（V 1000 / G 2200），把落差交给重力。第一版三个人都斜成 40°。
+- F2：同边 n 人时 `rateK = 1/√n`；命中字 `tagsOf(s)`（重击 2 条、轻补两成 1 条）、`TAG.rise/drag` 从脸上方冒出往上飘走（原来停在脸前一秒，三人时一摞字盖死脸）。
+- 名字条：`STARS` 按成员给名字和颜色；同一边只演最新一条；两边同时各一条时后出来的往上挪 `INTRO.stack`。
+- 新配方 `RECIPE.moon/widow/briefs/erlang`；fx.js 新 kind `web`（蛛网+定位图钉）、`mosaic`（灰黑方块硬边，p.h 秒后散开）、`moon`（月牙）；实体 kind 统一在 `SOLID`。
+- 立绘管线 `v14/crewart.py`（抠像/去溢色/edge_extend/缩放/烘三层光，打印"轮廓内部被键吃掉的像素"自检），每人 `v14/<moon|widow|briefs|erlang>/make.py`。内裤侠的提示词写"复古披风英雄/内裤外穿"会被生图拒，按"自制英雄服的壮汉"描述才出图。

@@ -31,7 +31,8 @@ function Crew(cfg) {
   const F = cfg.fluid;
   const A = cfg.anim || null;
   const REST = spr.rest || 0;                    // 贴图里喷口本来的指向（仰角，朝下为负）：真相女神第二版罐子本身就斜朝右下
-  let img = null, o = {};                        // img[形象]：{ arm, body, lo }（arm 可无）
+  const PATH = cfg.path || {};                    // 悬停的人怎么来、怎么走（见 hoverPose）
+  let img = null, xi = {}, o = {};               // img[形象]：{ arm, body, lo }（arm 可无）；xi：cfg.xtra 的附属贴图（哮天犬）
   const bs = [], ps = [];                        // 在场的人、喷出去的东西（水滴 / 雾团）
 
   function init(opt) { o = opt; }
@@ -45,9 +46,13 @@ function Crew(cfg) {
       i.src = src + (v ? '?v=' + encodeURIComponent(v) : '');
     });
     const ks = ['arm', 'body', 'lo'].filter(k => spr[k]), src = (k, n) => spr.src.replace('%n', n).replace('%k', spr[k].src);
-    return Promise.all(cfg.skins.map(n => Promise.all(ks.map(k => one(src(k, n)))))).then((sets) => {
-      if (sets.every(ims => ims.every(Boolean)))
+    const xs = Object.entries(cfg.xtra || {});
+    return Promise.all([...cfg.skins.map(n => Promise.all(ks.map(k => one(src(k, n))))), Promise.all(xs.map(([, f]) => one(f)))]).then((all) => {
+      const xim = all.pop(), sets = all;
+      if (sets.every(ims => ims.every(Boolean)) && xim.every(Boolean)) {
         img = sets.map(ims => { const s = {}; ks.forEach((k, i) => { s[k] = ims[i]; }); return s; });
+        xs.forEach(([k], i) => { xi[k] = xim[i]; });
+      }
       return !!img;
     });
   }
@@ -95,26 +100,35 @@ function Crew(cfg) {
       const skins = cfg.skins.map((_, i) => i), unused = freeSkins();
       sk = (unused.length ? unused : skins)[Math.floor(Math.random() * (unused.length || skins.length))];
     }
-    bs.push({ t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
+    bs.push({ born: ++Crew.born, t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
               r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
               pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0 });
     bs.sort((a, b) => a.s - b.s);          // 远的先画
   }
+
+  /* 在场这个人还剩几秒（离场途中为负），没人为 null。CrewGroup 满员时挑最短的续 */
+  function left() { return bs.length ? Math.min(...bs.map(b => sprayEnd(b) - b.t)) : null; }
 
   /* 场上没人用的形象（下标） */
   function freeSkins() { return cfg.skins.map((_, i) => i).filter(i => !bs.some(b => b.skin === i)); }
 
   const easeOut = (u) => 1 - Math.pow(1 - u, 3);
 
-  /* 悬停（真相喷雾）：不站地，被罐子的后坐力顶在半空。o.perch() 给脚底该停在屏幕哪一点。
-     来：从画外顶上冲下来，按 easeOut 减速刹停（火箭点火刹车，不是自由落体）；
-     走：原地往上加速冲出画面（u²）。悬着的时候慢慢晃一个横 8 字 + 上下浮（anim.bob）。 */
+  /* 悬停（档 4 六个人）：不站地，悬在半空。o.perch(b) 给脚底该停在屏幕哪一点、缩放多大 [x, y, s]
+     （main.js 的槽位管理：同边 1 人是大站位，2~3 人滑到斜线三槽，换槽时位置和缩放一起按 0.4 秒 Hermite 平滑过去，
+     所以 s 不再是召唤那一刻定死的 b.s）。
+     来：从 PATH.from(s, hx, hy) 给的画外那一点冲过来，按 easeOut 减速刹停（不给就从正上方画外冲下来 —— 女神 / 恶魔）；
+     走：朝 PATH.to(s, x, y) 加速离开（u²，不给就原地往上冲出画面）。悬着的时候慢慢晃一个横 8 字 + 上下浮（anim.bob）。
+     进出场时整个人另外转多少（roll：内裤侠横着飞进来、月亮查岗使转着圈落下）见 rollOf。 */
   function hoverPose(b) {
-    const s = b.s, [hx, hy] = o.perch(), t = b.t, se = sprayEnd(b);
+    const pc = o.perch(b), hx = pc[0], hy = pc[1], s = pc[2] != null ? pc[2] : b.s, t = b.t, se = sprayEnd(b);
     const top = -(spr.foot[1] - spr.muzzle[1] + 120) * s;             // 脚底在这，整个人（含翘起的罐子）都在画外
     const sx = Math.sin(t * 0.9 + b.ph) * 8 * s, sy = Math.sin(t * 1.8 + b.ph) * 4 * s;
     const bob = A ? Math.sin(t * A.bob[1] + b.ph) * A.bob[0] * s : 0;
-    if (t < T.enter) return [hx, top + (hy - top) * easeOut(t / T.enter), s];
+    if (t < T.enter) {
+      const [fx, fy] = PATH.from ? PATH.from(s, hx, hy) : [hx, top], e = easeOut(t / T.enter);
+      return [fx + (hx - fx) * e, fy + (hy - fy) * e, s];
+    }
     const k = Math.min(1, (t - T.enter) / 0.3);                        // 刹停后 0.3 秒里晃动从 0 长满，不跳
     /* back：离场途中又被召唤（summon），从被叫住那一刻的高度落回悬停点，用三次 Hermite：
        起点带着当时往上冲的速度（backV），先减速到顶再落回来、到位速度 0 —— 位置、速度都不跳。
@@ -125,8 +139,21 @@ function Crew(cfg) {
       bk = b.back * (2 * u ** 3 - 3 * u * u + 1) + b.backV * D * (u ** 3 - 2 * u * u + u);
     }
     const x = hx + sx * k, y = hy + (sy + bob) * k + bk;
-    if (t > se) { const u = Math.min(1, (t - se) / T.exit); return [x, y + (top - y) * u * u, s]; }
+    if (t > se) {
+      const u = Math.min(1, (t - se) / T.exit), [tx, ty] = PATH.to ? PATH.to(s, x, y) : [x, top];
+      return [x + (tx - x) * u * u, y + (ty - y) * u * u, s];
+    }
     return [x, y, s];
+  }
+  /* 进出场时整个人额外转的角（canvas 顺时针为正），绕 PATH.pivot（贴图点，不给就是 whole.pivot）：
+     来的时候从 roll0 + spin 圈转回 0（easeOut，跟位移同步刹住）；走的时候从 0 转到 rollOut（u²）；
+     悬着时 swing = [幅度, 角频率] 轻轻摆（黑蛛女特工吊在丝上，绕抓丝的手摆）。只管画，喷口 / 瞄准不吃它 ——
+     转的时候都还没开火。 */
+  function rollOf(b) {
+    const t = b.t, se = sprayEnd(b);
+    if (t < T.enter) return ((PATH.roll0 || 0) + (PATH.spin || 0) * 6.2832) * (1 - easeOut(t / T.enter));
+    if (t > se) return (PATH.rollOut || 0) * Math.min(1, (t - se) / T.exit) ** 2;
+    return PATH.swing ? PATH.swing[0] * Math.sin((t - T.enter) * PATH.swing[1] + b.ph) * Math.min(1, (t - T.enter) / 0.4) : 0;
   }
 
   /* 此刻人站在哪（脚下滑板/平衡车底边中点的屏幕坐标）和缩放。
@@ -211,6 +238,7 @@ function Crew(cfg) {
   }
 
   function update(dt) {
+    if (o.tick) o.tick();                        // 槽位管理（main.js）：人数变了就开始往新槽位滑
     for (let i = ps.length - 1; i >= 0; i--) {
       const d = ps[i];
       if (F.drag) { const k = Math.exp(-F.drag * dt); d.vx *= k; d.vy *= k; }
@@ -220,7 +248,7 @@ function Crew(cfg) {
       if (h) {
         ps.splice(i, 1);
         o.onSplash(h[0], h[1]);
-        if (bs.includes(b) && b.hitCd <= 0) { o.onHit(h[0], h[1], b.first); b.first = false; b.hitCd = F.hitEvery; }
+        if (bs.includes(b) && b.hitCd <= 0) { o.onHit(h[0], h[1], b.first, b); b.first = false; b.hitCd = F.hitEvery; }
       } else if (d.y > o.ground()) { ps.splice(i, 1); if (F.floor) o.onSplash(d.x, o.ground()); }   // 落空的在地上
       else if (d.t > F.life || d.x < -80 || d.x > o.W + 80) ps.splice(i, 1);
     }
@@ -285,7 +313,7 @@ function Crew(cfg) {
         b.aim += b.av * dt;
       } else b.aim += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.aim));
       b.want = want;
-      b.m = null;
+      b.m = null; b.eyes = null;
       const spraying = b.t >= T.enter + (T.fire || 0) && b.t <= se && tg;   // T.fire：刹停之后隔一拍再开火
       if (A) {                                   // 一段段按：每次按下后坐一震；喷的时候上身往前探
         b.kick *= Math.exp(-A.kick[2] * dt);
@@ -321,8 +349,9 @@ function Crew(cfg) {
       if (A && (b.pt % (A.pulse[0] + A.pulse[1])) > A.pulse[0]) { b.emit = 0; continue; }   // 松开那一下
       /* 喷：从转过之后的喷口，沿喷口方向，速度 V（雾再加一点散角和快慢）。一帧攒够几个就出几个，
          每个按它**实际该出口的时刻**补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩。 */
-      b.emit += dt * F.rate;
+      b.emit += dt * F.rate * (o.rateK ? o.rateK() : 1);   // rateK：同边几个人一起喷时各自减量（main.js，F2）
       const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm || cfg.whole ? 1 : 0] + REST;   // 沿喷口此刻真的指向（含后坐）
+      if (spr.eyes) b.eyes = spr.eyes.map(q => carried(p, q, b.aim, b));   // 射线从几只眼睛各出一道（内裤外穿侠两只、二郎一只天眼）
       while (b.emit >= 1) {
         b.emit -= 1;
         const age = b.emit / F.rate, a = dir + (Math.random() - 0.5) * 2 * F.spread;
@@ -345,9 +374,11 @@ function Crew(cfg) {
     const out = [], groups = new Map();
     for (const d of ps) { const g = groups.get(d.b); g ? g.push(d) : groups.set(d.b, [d]); }
     const front = !!cfg.front;                   // 站在主角前面（真相喷雾）：main.js 把它们挪到主角之后画
-    for (const b of bs) out.push({ s: b.s, front, draw: (ctx) => drawOne(ctx, b) });
+    /* 悬停的人按此刻的缩放排（槽位会变：1 号前排 s 最大、画在最上），站地的按召唤时定的远近 */
+    const sOf = (b) => cfg.move === 'hover' && bs.includes(b) ? pose(b)[2] : b.s;
+    for (const b of bs) out.push({ s: sOf(b), front, draw: (ctx) => drawOne(ctx, b) });
     /* 人已离场、水还在飞的，按原来那个人的远近画 */
-    for (const [b, g] of groups) out.push({ s: b.s + 1e-6, front, draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
+    for (const [b, g] of groups) out.push({ s: sOf(b) + 1e-6, front, draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
     return out;
   }
 
@@ -358,7 +389,13 @@ function Crew(cfg) {
     const X = x - spr.foot[0] * s, Y = y - spr.foot[1] * s;
     const I = img[b.skin], put = (im) => ctx.drawImage(im, X, Y, im.width * s, im.height * s);
     const spin = (q, th) => { const [cx, cy] = at(p, q); ctx.translate(cx, cy); ctx.rotate(-face * th); ctx.translate(-cx, -cy); };
+    const rl = cfg.move === 'hover' ? rollOf(b) : 0;
+    /* cfg.extra（可无）：画在屏幕坐标里、不跟着人倾的东西（黑蛛女特工的丝、哮天犬）。carry(q) 给贴图点转过之后的屏幕位置
+       （不含进出场的 roll —— 丝绕抓丝的手摆，手本身不动）。先画 'back' 层，人画完再画 'fore' 层。 */
+    const carry = (q) => cfg.whole ? carried(p, q, b.aim, b) : at(p, q);
+    if (cfg.extra) cfg.extra(ctx, b, s, carry, 'back', xi);
     ctx.save();
+    if (rl) { const [cx, cy] = at(p, PATH.pivot || cfg.whole.pivot); ctx.translate(cx, cy); ctx.rotate(rl); ctx.translate(-cx, -cy); }
     if (cfg.whole) spin(cfg.whole.pivot, b.aim);  // 悬空：整个人先绕重心转，上身再在这个基础上吃后坐
     if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q));
     ctx.save();
@@ -368,6 +405,7 @@ function Crew(cfg) {
     ctx.restore();
     if (I.lo) put(I.lo);
     ctx.restore();
+    if (cfg.extra) cfg.extra(ctx, b, s, carry, 'fore', xi);
   }
 
   const active = () => bs.length > 0;
@@ -375,7 +413,43 @@ function Crew(cfg) {
 
   /* 诊断用：在场的人（只读），?crewlog=1 时 main.js 打印瞄准角 */
   const peek = () => bs;
-  return { init, load, summon, update, items, active, reset, peek };
+  const width = () => (img ? img[0].body.width : 0);   // 贴图宽（main.js 槽位按外框中线排）
+  /* 诊断（?crewlog=1）：这个人此刻画出来的实心范围 [x0, y0, x1, y1]（屏幕像素，alpha > 200：剪影 + 贴着轮廓的那圈亮边，
+     不含外圈柔光）。在离屏画布上真画一遍再扫像素 —— 按贴图外框算的话，斜着的人外框角远大于剪影，量不出中线余量。 */
+  let mc = null;
+  function measure(b) {
+    if (!img) return null;
+    if (!mc) { mc = document.createElement('canvas'); mc.width = o.W; mc.height = 1400; }
+    const c = mc.getContext('2d', { willReadFrequently: true });
+    c.clearRect(0, 0, mc.width, mc.height); drawOne(c, b);
+    const d = c.getImageData(0, 0, mc.width, mc.height).data;
+    let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+    for (let y = 0; y < mc.height; y++) for (let x = 0; x < mc.width; x++) {
+      if (d[(y * mc.width + x) * 4 + 3] <= 200) continue;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    return x1 < 0 ? null : [x0, y0, x1, y1];
+  }
+  return { init, load, summon, update, items, active, reset, peek, left, freeSkins, width, measure, where: (b) => pose(b), cfg };
+}
+Crew.born = 0;                                   // 召唤流水号：同边几个人按到场先后排槽（新来的占 1 号前排）
+
+/* 一组帮手合起来调度（档 4 每边三个人，各是一份 Crew、max 1）：送一次召一个**没在场**的成员（随机挑）；
+   三个都在场了（含正在离场的），给剩余时间最短的那个 summon —— max 1 的 Crew 满员时就是续一段 T.spray、
+   名字条重播「×N」；正在离场的剩余时间是负的，最先被挑中，从当前高度被叫回来（hoverPose 的 back）。
+   pick（可无）：强制召第几个成员（诊断参数 ?g4L= / ?g4R=，越界夹到两头）。 */
+function CrewGroup(members) {
+  return {
+    members,
+    summon(pick) {
+      if (pick != null && !Number.isNaN(pick)) return members[Math.max(0, Math.min(members.length - 1, pick | 0))].summon();
+      const off = members.filter(m => !m.active());
+      if (off.length) return off[Math.floor(Math.random() * off.length)].summon();
+      members.reduce((a, c) => (a.left() <= c.left() ? a : c)).summon();
+    },
+    active: () => members.some(m => m.active()),
+    reset: () => members.forEach(m => m.reset()),
+  };
 }
 
 /* 水柱（哥们）。ps 是同一个人喷出去的水滴（按出口顺序），b 是这个人（已离场为 null）。
@@ -704,3 +778,268 @@ const DEMON = {
   fluid: { ...TRUTH.fluid, draw: (ctx, ps, b) => drawSpray(DEMON_FX, DEMON, ctx, ps, b) },
 };
 const Demon = Crew(DEMON);
+
+/* ======== 档 4 每边三人（2026-09-28，规格 shots/review/trio/trio_spec.md）========
+   女生侧：真相女神 + 月亮查岗使 + 黑蛛女特工；男生侧：灭迹恶魔 + 内裤外穿侠 + 二郎·打码神。
+   每个人的武器都不一样（雾 / 爱心光流 / 蛛网 / 射线 / 天眼 + 马赛克），不能走 skins 换皮（skins 要同一个裁边框、同一套 foot / muzzle），
+   所以每人一份 Crew 配置，照 TRUTH / DEMON 的写法（悬停、whole 整个人小幅前后倾、二分反解瞄准），每边一个 CrewGroup（main.js）。
+   立绘 v14/<名>/make.py（共用 v14/crewart.py），量点都是它打印的贴图像素。
+   配色按明亮底图的规矩（chashouji-fx）：发光靠色相、实体靠暖黑描边 WARM_INK。 */
+const WARM_INK = [58, 44, 38];
+const rgbaOf = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
+function heartAt(ctx, x, y, r, rot) {             // 爱心路径（同 fx.js heartPath，顶点偏下：视觉重心在下半）
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot);
+  ctx.beginPath(); ctx.moveTo(0, r * 0.92);
+  ctx.bezierCurveTo(-r * 1.08, r * 0.10, -r * 0.62, -r * 1.02, 0, -r * 0.34);
+  ctx.bezierCurveTo(r * 0.62, -r * 1.02, r * 1.08, r * 0.10, 0, r * 0.92);
+  ctx.closePath(); ctx.restore();
+}
+
+/* ---- ② 月亮查岗使（水冰月底子）：短杖顶上的放大镜喷出一股粉色爱心 + 小月牙的光流，形状跟女神的雾锥一样，只换粒子 ----
+   爱心本体饱和粉、暖黑描边 3px（不描边在浅绿墙上看不见）；月牙暖金。底下垫一层很淡的粉雾把一颗颗连成一股。 */
+const MOON_FX = {
+  heart: [255, 90, 160], crescent: [255, 200, 60], mist: [255, 150, 205], ink: WARM_INK,
+  r: [9, 22],                // 爱心出口半径 → 飞完的半径
+  cr: [8, 16],               // 月牙
+  mistR: [14, 48], mistA: 0.1,
+  kinds: [0.5, 0.72],        // j < 0.5 爱心、< 0.72 月牙、其余只是雾（让一股里有疏有密，不是一串等距的心）
+  ring: [255, 110, 180], ringHi: [255, 225, 240],   // 脚下缎带光环（外圈 / 内圈）
+  flare: [26, 42],           // 放大镜口的闪光星半径 [小, 大]，随喷射节奏跳
+};
+function drawHeartFlow(ctx, ps, b) {
+  const F = MOON_FX, L = MOON.fluid.life;
+  for (const d of ps) {                          // 托底粉雾
+    const u = Math.min(1, d.t / L), r = F.mistR[0] + (F.mistR[1] - F.mistR[0]) * Math.sqrt(u);
+    ctx.fillStyle = rgbaOf(F.mist, (1 - u * u) * F.mistA); ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, 6.283); ctx.fill();
+  }
+  ctx.lineJoin = 'round';
+  for (const d of ps) {
+    if (d.j >= F.kinds[1]) continue;
+    const u = Math.min(1, d.t / L), a = u > 0.7 ? (1 - u) / 0.3 : 1;
+    ctx.globalAlpha = a;
+    if (d.j < F.kinds[0]) {
+      heartAt(ctx, d.x, d.y, F.r[0] + (F.r[1] - F.r[0]) * Math.sqrt(u), Math.sin(d.t * 6 + d.j * 50) * 0.35);
+      ctx.fillStyle = rgbaOf(F.heart, 1); ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = rgbaOf(F.ink, 1); ctx.stroke();
+    } else {
+      const r = F.cr[0] + (F.cr[1] - F.cr[0]) * Math.sqrt(u);
+      ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.t * 5 + d.j * 40);
+      ctx.beginPath(); ctx.arc(0, 0, r, 0.35, 6.283 - 0.35); ctx.arc(r * 0.45, -r * 0.1, r * 0.78, 6.283 - 0.62, 0.62, true); ctx.closePath();
+      ctx.fillStyle = rgbaOf(F.crescent, 1); ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = rgbaOf(F.ink, 1); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+  if (b && b.m) {                                 // 放大镜口一颗八角闪光星，大小随后坐跳
+    const r = F.flare[0] + (F.flare[1] - F.flare[0]) * b.kick, [mx, my] = b.m;
+    ctx.save(); ctx.translate(mx, my); ctx.rotate(b.t * 3); ctx.beginPath();
+    for (let i = 0; i < 16; i++) { const a = i * 0.3927, rr = i % 2 ? r * 0.38 : r; i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(rr, 0); }
+    ctx.closePath(); ctx.fillStyle = rgbaOf(F.ringHi, 0.95); ctx.fill(); ctx.lineWidth = 3.5; ctx.strokeStyle = rgbaOf(F.heart, 1); ctx.stroke();
+    ctx.restore();
+  }
+}
+/* 脚下一圈粉色缎带光环（转着圈落下来的时候就有，悬着时一直在），画在她身后、跟着她倾 */
+function drawMoonAura(ctx, b, s, at) {
+  const F = MOON_FX, [fx, fy] = at(MOON.spr.foot), k = Math.min(1, b.t / 0.3);
+  const rx = 120 * s, ry = 26 * s, y = fy - 40 * s;
+  ctx.save(); ctx.globalAlpha = 0.9 * k; ctx.lineCap = 'round';
+  for (const [w, c] of [[14 * s, F.ring], [5 * s, F.ringHi]]) {
+    ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(c, 1);
+    ctx.beginPath(); ctx.ellipse(fx, y, rx, ry, 0, b.t * 2.2, b.t * 2.2 + 5.2); ctx.stroke();   // 缺一口的环在转：读成缎带不是呼啦圈
+  }
+  ctx.restore();
+}
+const MOON = {
+  ...TRUTH,
+  whole: { pivot: [195, 256] },
+  exhaust: null,                                // 她不靠后坐力悬着（魔法少女本来就会飞），没有尾焰
+  spr: { src: 'assets/world/moon%n_%k.webp', body: { src: 'up', pivot: [195, 256], k: 1 },
+         foot: [180, 612], muzzle: [365, 355], rest: -0.685, head: [209, 50], chest: [224, 191] },
+  skins: [1],
+  aura: (ctx, b, s, at) => drawMoonAura(ctx, b, s, at),
+  /* 出场：从左上画外转一圈半落下来（spin），刹停时 main.js 出一个爱心冲击环（RECIPE.moon.arrive） */
+  path: { from: (s, hx, hy) => [hx - 420, hy - 700 * s], spin: -1.5 },
+  anim: { pulse: [0.55, 0.18], kick: [0, 0.06, 9], lean: 0.03, bob: [6, 2.4] },
+  T: { enter: 0.6, spray: 2.8, exit: 0.45, fire: 0.18 },
+  /* 爱心每颗都要描边画，比女神的雾团贵：rate 110（女神 220），靠每颗更大、更实来撑体量 */
+  fluid: { V: 620, G: 40, drag: 0.85, rate: 110, spread: 0.26, vJit: 0.18, life: 1.1, miss: 150, snap: 14, hitEvery: 0.25, floor: false,
+           draw: drawHeartFlow },
+};
+const Moon = Crew(MOON);
+
+/* ---- ③ 黑蛛女特工（黑寡妇底子）：吊着一根丝从天花板降下来，腕部钩索装置朝右下射一张蛛网 ----
+   不是雾：一发一发的网弹（anim.pulse 每按一下出一发），飞的时候拖一根丝连回腕口；打中了在男生脸上张开一张网
+   （fx.js kind 'web'，贴在脸上停一会儿），网上挂红色定位图钉。白丝在浅色底图上会消失：丝一律暗红描边 + 白芯。 */
+const WIDOW_FX = { edge: [120, 20, 30], core: [255, 255, 255], ball: 15 };
+function drawWebShots(ctx, ps, b) {
+  const F = WIDOW_FX;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const d of ps) {
+    if (d.ex) continue;
+    if (b) {                                      // 丝：腕口 → 这发网弹（腕口按此刻姿态算，人离场了就不画丝）
+      const m = b.wrist;
+      if (m) for (const [w, c] of [[5, F.edge], [2, F.core]]) {
+        ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(c, 1);
+        ctx.beginPath(); ctx.moveTo(m[0], m[1]); ctx.lineTo(d.x, d.y); ctx.stroke();
+      }
+    }
+    const r = F.ball * (0.7 + Math.min(1, d.t / 0.15) * 0.3);   // 飞行中的网弹：一团收拢的小网
+    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.t * 9);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) { const a = i * 1.047; ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+    for (let i = 0; i <= 6; i++) { const a = i * 1.047, rr = r * 0.6; i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(rr, 0); }
+    ctx.lineWidth = 6; ctx.strokeStyle = rgbaOf(F.edge, 1); ctx.stroke();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = rgbaOf(F.core, 1); ctx.stroke();
+    ctx.restore();
+  }
+}
+/* 吊着她的那根丝：从抓丝的手连到画面顶（一直往上出画），跟女神的尾焰是同一个作用 —— "为什么她能悬着" */
+function drawWidowRope(ctx, b, s, carry, layer) {
+  if (layer !== 'back') return;
+  const F = WIDOW_FX, [hx, hy] = carry(WIDOW.spr.hand);
+  b.wrist = carry(WIDOW.spr.muzzle);             // 网弹的丝从腕口出（drawWebShots 读）
+  ctx.save(); ctx.lineCap = 'round';
+  for (const [w, c] of [[6, F.edge], [2.5, F.core]]) {
+    ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(c, 1);
+    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx, -40); ctx.stroke();   // 摆动绕的就是这只手，丝始终竖直
+  }
+  ctx.restore();
+}
+const WIDOW = {
+  ...TRUTH,
+  whole: { pivot: [103, 288] },
+  exhaust: null,
+  spr: { src: 'assets/world/widow%n_%k.webp', body: { src: 'up', pivot: [103, 288], k: 1 },
+         foot: [99, 608], muzzle: [241, 269], rest: -0.471, hand: [80, 55], head: [107, 119], chest: [111, 213] },
+  skins: [1],
+  aura: null,
+  extra: (ctx, b, s, carry, layer) => drawWidowRope(ctx, b, s, carry, layer),
+  /* 出场：从正上方画外顺着丝降下来（身体始终竖直、不倒挂）；离场收丝往上拉走。悬着时绕抓丝的手轻轻摆 */
+  path: { pivot: [80, 55], swing: [0.035, 1.7] },
+  anim: { pulse: [0.12, 0.42], kick: [0, 0.07, 10], lean: 0.02, bob: [3, 1.6] },
+  T: { enter: 0.7, spray: 2.8, exit: 0.5, fire: 0.18 },
+  /* 网弹：每按一下出 1 发（pulse 0.12 秒 × rate 10 ≈ 1.2）；打中了 main.js 在脸上张网。
+     **抛出去的，不是直射**：V 1000、G 2200，沿腕口 27° 往右下出手、半秒落到男生脸上。直射（G 120）的话要从她的腕口打到下方的脸
+     得往下 ~50°，整个人要前倾 0.4~0.7 rad（第一版实测吊在丝上斜成 40°）；抛物线把这段落差交给重力，人只需小幅倾。 */
+  fluid: { V: 1000, G: 2200, drag: 0, rate: 10, spread: 0.02, vJit: 0, life: 0.9, miss: 90, snap: 10, hitEvery: 0.25, floor: false,
+           draw: drawWebShots },
+};
+const Widow = Crew(WIDOW);
+
+/* ---- ⑤ 内裤外穿侠（超人底子）：两只眼睛射出两道红橙色射线，直线、硬，跟恶魔的软雾一粗一细好分辨 ----
+   射线由运行时从贴图的两个眼睛点（spr.eyes）画：每道都是一串 G 0 的高速粒子连成的折线（粒子负责命中判定），
+   芯 EMBER、外层红橙、描边暗红 —— 这张底图上最显眼的色相。 */
+const BEAM_BRIEFS = { w: 9, edge: [110, 20, 10], outer: [255, 60, 30], core: [255, 156, 38], hot: [255, 236, 190] };
+const BEAM_ERLANG = { w: 15, edge: [120, 80, 10], outer: [255, 200, 60], core: [255, 236, 150], hot: [255, 252, 230] };
+/* 一个人的射线：粒子按出口顺序连成一串（seq 断开的地方 = 松开那一下，射线断开），每只眼睛各画一道（眼睛相对喷口平移） */
+function drawBeams(B, ctx, ps, b) {
+  if (!b || !b.eyes || !b.m) return;              // 只在按住射的那几帧有；松开时整道消失（射线不是飘出去的东西）
+  const run = [];
+  for (let i = ps.length - 1; i >= 0; i--) {     // 从最新一颗往回，接到 seq 断开为止
+    if (run.length && ps[i].seq !== run[run.length - 1].seq - 1) break;
+    run.push(ps[i]);
+  }
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const e of b.eyes) {
+    const ox = e[0] - b.m[0], oy = e[1] - b.m[1];
+    const line = () => { ctx.beginPath(); ctx.moveTo(e[0], e[1]); for (const d of run) ctx.lineTo(d.x + ox, d.y + oy); };
+    for (const [w, c, a] of [[B.w + 8, B.edge, 0.9], [B.w + 3, B.outer, 1], [B.w * 0.45, B.core, 1]]) {
+      line(); ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(c, a); ctx.stroke();
+    }
+    ctx.fillStyle = rgbaOf(B.hot, 1); ctx.strokeStyle = rgbaOf(B.outer, 1); ctx.lineWidth = 3;   // 眼睛上一个小亮点
+    ctx.beginPath(); ctx.arc(e[0], e[1], B.w * 0.7, 0, 6.283); ctx.fill(); ctx.stroke();
+  }
+}
+/* 横着飞进来时身后拖的速度线：画在他身后、跟着他转（进场他是横着的，身体坐标里"脚那头"就是身后） */
+function drawBriefsAura(ctx, b, s, at) {
+  const u = b.t / BRIEFS.T.enter;
+  if (u >= 1) return;
+  const [fx, fy] = at(BRIEFS.spr.foot), [cx] = at(BRIEFS.spr.chest), a = 1 - u;
+  ctx.save(); ctx.lineCap = 'round';
+  for (let i = 0; i < 6; i++) {
+    const x = cx + (i - 2.5) * 55 * s, y0 = fy - 260 * s + (i % 2) * 60 * s, len = (220 + (i * 37) % 90) * s;
+    for (const [w, c] of [[9, WARM_INK], [4, [255, 255, 255]]]) {
+      ctx.lineWidth = w * s; ctx.strokeStyle = rgbaOf(c, 0.85 * a);
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + len); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+const BRIEFS = {
+  ...DEMON,
+  whole: { pivot: [225, 272] },
+  exhaust: null,
+  spr: { src: 'assets/world/briefs%n_%k.webp', body: { src: 'up', pivot: [225, 272], k: 1 },
+         foot: [256, 603], muzzle: [190, 88], eyes: [[180, 89], [199, 86]], head: [202, 48], chest: [239, 189],
+         /* 射线出眼睛，眼睛不是一根有朝向的枪管：rest 直接取"从头顶的站位看女生脸"的典型俯角（~55°），
+            人只为了跟着脸上下扫而小幅倾（aim ±0.3）。第一版 rest −0.5（眼神的画法）要整个人前倾 0.6 rad 才够得着，斜成 40°。 */
+         rest: -0.95 },
+  aim: { lo: -0.35, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },
+  skins: [1],
+  aura: (ctx, b, s, at) => drawBriefsAura(ctx, b, s, at),
+  /* 出场：从右边画外横着飞进来（一拳朝前 = 头朝左，roll0 −1.45 rad），刹停后竖起来；离场时一拳朝上冲出画面（转 +1.3 往上飞） */
+  path: { from: (s, hx, hy) => [hx + 760, hy - 180 * s], roll0: -1.45, to: (s, x, y) => [x - 80, y - 1200 * s], rollOut: 1.3 },
+  anim: { pulse: [0.55, 0.2], kick: [0, 0.03, 9], lean: 0.02, bob: [5, 2.0] },
+  T: { enter: 0.55, spray: 2.8, exit: 0.45, fire: 0.18 },
+  /* 射线：极快（V 2600）、无重力、无散角 → 一条直线；miss 60（射线细，判定比雾窄） */
+  fluid: { V: 2600, G: 0, drag: 0, rate: 70, spread: 0, vJit: 0, life: 0.5, miss: 60, snap: 12, hitEvery: 0.25, floor: false,
+           draw: (ctx, ps, b) => drawBeams(BEAM_BRIEFS, ctx, ps, b) },
+};
+const Briefs = Crew(BRIEFS);
+
+/* ---- ⑥ 二郎·打码神（杨戬底子）：天眼一开射出一道金色竖光，打中的地方铺一块马赛克（main.js RECIPE.erlang）----
+   天眼：立绘里那只竖眼很小，运行时在 eye 点上画一只随喷射睁开的金色竖眼（spraying 时 b.lean 从 0 长到 1）。
+   哮天犬（cfg.xtra.dog）：圆滚滚的柴犬在祥云边上绕圈，二郎打中时 main.js 让一个聊天气泡飞向它嘴里（dogEat），到嘴时它扑起来一口吃掉。 */
+function drawErlangAura(ctx, b, s, at) {
+  const [ex, ey] = at(ERLANG.spr.eye), o = Math.max(0.15, b.lean);   // 睁开程度
+  ctx.save();
+  ctx.fillStyle = rgbaOf([255, 200, 60], 0.35 * o); ctx.beginPath(); ctx.arc(ex, ey, 26 * s, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(ex, ey, 5 * s, 13 * s * o, 0, 0, 6.283);
+  ctx.fillStyle = rgbaOf([255, 236, 150], 1); ctx.fill(); ctx.lineWidth = 2.5 * s; ctx.strokeStyle = rgbaOf([120, 80, 10], 1); ctx.stroke();
+  ctx.fillStyle = rgbaOf([90, 40, 10], 1); ctx.beginPath(); ctx.ellipse(ex, ey, 2 * s, 5 * s * o, 0, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+const DOG = { R: 120, H: 16, w: 1.6, lift: 34, k: 0.9, eatT: 0.35, hop: 60 };   // 绕云半径、上下半轴、角速度、脚离云底多高、缩放（×s）、扑咬多久、扑多高
+/* 狗此刻在哪、朝哪：绕着祥云转圈（椭圆轨道，远半圈画在他身后），b.dogEat 到点时往上扑一下 */
+function dogPose(b, s, carry) {
+  const [fx, fy] = carry(ERLANG.spr.foot), a = b.t * DOG.w + b.ph;
+  const x = fx + Math.cos(a) * DOG.R * s, back = Math.sin(a) < 0;
+  let y = fy - DOG.lift * s + Math.sin(a) * DOG.H * s;
+  const eu = b.dogEat != null ? (b.t - b.dogEat) / DOG.eatT : -1;
+  if (eu >= 0 && eu <= 1) y -= Math.sin(Math.PI * eu) * DOG.hop * s;
+  return { x, y, back, left: -Math.sin(a) < 0, eu };
+}
+function drawDog(ctx, b, s, carry, layer, xi) {
+  const im = xi.dog;
+  if (!im) return;
+  const d = dogPose(b, s, carry);
+  const k = DOG.k * s * (d.eu >= 0 && d.eu <= 1 ? 1 + 0.12 * Math.sin(Math.PI * d.eu) : 1), w = im.width * k, h = im.height * k;
+  const [mx, my] = ERLANG.dog.foot;              // 贴图里狗脚底（make.py 打印），对到轨道点
+  const [qx, qy] = ERLANG.dog.mouth;
+  if (layer === 'back') b.dogMouth = [d.x + (qx - mx) * k * (d.left ? 1 : -1), d.y + (qy - my) * k];   // main.js 让气泡飞向这里
+  if ((layer === 'back') !== d.back) return;
+  ctx.save(); ctx.translate(d.x, d.y);
+  if (!d.left) ctx.scale(-1, 1);                // 贴图朝左；往右跑时翻过来
+  ctx.drawImage(im, -mx * k, -my * k, w, h);
+  ctx.restore();
+}
+const ERLANG = {
+  ...DEMON,
+  whole: { pivot: [179, 257] },
+  exhaust: null,
+  spr: { src: 'assets/world/erlang%n_%k.webp', body: { src: 'up', pivot: [179, 257], k: 1 },
+         foot: [194, 609], muzzle: [156, 111], eye: [156, 111], eyes: [[156, 111]], head: [171, 55], chest: [175, 196],
+         rest: -0.95 },                         // 天眼同内裤外穿侠：rest 取典型俯角，人只小幅倾
+  aim: { lo: -0.35, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },
+  dog: { mouth: [55, 104], foot: [120, 184] },  // 哮天犬贴图量点（v14/erlang/make.py 打印）
+  xtra: { dog: 'assets/world/dog1_up.webp' },
+  skins: [1],
+  aura: (ctx, b, s, at) => drawErlangAura(ctx, b, s, at),
+  extra: (ctx, b, s, carry, layer, xi) => drawDog(ctx, b, s, carry, layer, xi),
+  /* 出场：脚踩祥云从右上画外斜着降下来；云留在脚下当悬停的理由 */
+  path: { from: (s, hx, hy) => [hx + 420, hy - 760 * s] },
+  anim: { pulse: [0.6, 0.25], kick: [0, 0.03, 9], lean: 0.02, bob: [4, 1.8] },
+  T: { enter: 0.65, spray: 2.8, exit: 0.45, fire: 0.18 },
+  fluid: { V: 2200, G: 0, drag: 0, rate: 60, spread: 0, vJit: 0, life: 0.55, miss: 80, snap: 12, hitEvery: 0.3, floor: false,
+           draw: (ctx, ps, b) => drawBeams(BEAM_ERLANG, ctx, ps, b) },
+};
+const Erlang = Crew(ERLANG);

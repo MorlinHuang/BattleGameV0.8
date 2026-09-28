@@ -293,7 +293,7 @@ function giveGift(side, key) {
   }
   if (it.tier >= 1) {
     const g = GIFT[ITEM_OF[side > 0 ? 'L' : 'R'][it.tier]];
-    if (g.style === 'crew') CREW[g.crew].summon();
+    if (g.style === 'crew') summonCrew(g.crew);
     else if (g.style === 'rain') RAIN[g.rain].summon();
     else Ammo.launch(g, null, { gift: true, exec: it.tier === 4 });
   } else {
@@ -315,7 +315,7 @@ function startMatch() {
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
-  Buddy.reset(); Bestie.reset(); Truth.reset(); Demon.reset(); DurianRain.reset(); SockRain.reset();
+  for (const c of CREWS) c.reset(); DurianRain.reset(); SockRain.reset();
   S.auto = false;
   Ammo.clear(); Particles.clear();
 }
@@ -463,6 +463,13 @@ function impact(side, y, power, recipe, x) {
    thud 是通用撞击，任何还没单独配方的东西都落到它上面。 */
 const INK = [58, 44, 38];        // 描边色，取角色线稿那个暖黑
 const EMBER = [255, 156, 38];    // 发光基色，高饱和暖橙
+
+/* 档 4 命中时蹦几条字（灭迹恶魔和新四人）：首击 / 续送（s 2.8）两条，之后每 0.25 秒一下的轻补（s 0.55）只有两成概率蹦一条。
+   轻补每下都蹦的话，同边三个人一起打是每秒十来条，全叠在对方脸上，脸就看不见了（满员截图实测，F2）。 */
+const tagsOf = (s) => (s >= 2 ? 2 : Math.random() < 0.2 ? 1 : 0);
+/* 字从脸的上方一点（rise）冒出来、往上飘走（drag 每帧 0.965）。原来贴着命中点出生、drag 0.94 飘五六十像素就停住，
+   一秒多的寿命全停在脸前 —— 三个人一起打，脸被一摞字盖死（满员截图实测）。灭迹恶魔的「已撤回」同一条规矩。 */
+const TAG = { rise: 46, drag: 0.965 };
 
 const RECIPE = {
   thud: {
@@ -894,7 +901,7 @@ const RECIPE = {
       Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.32, rgb: [150, 80, 220], lw: 3.5 * s });
       Particles.spawn({ kind: 'ring', x, y, r: 20 * s, r1: 170 * s, life: 0.4, rgb: [160, 20, 60], lw: 6 * s });
       Particles.spawn({ kind: 'ring', x, y, r: 20 * s, r1: 166 * s, life: 0.4, rgb: [255, 120, 220], lw: 2.5 * s });
-      for (let i = 0; i < Math.max(1, Math.round(2 * s)); i++) this.tag(x, y, side);
+      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
       for (let i = 0; i < Math.round(4 * s); i++) {
         const a = Math.random() * 6.283, sp = 160 + Math.random() * 260;
         Particles.spawn({ kind: 'star', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 120, g: 500, drag: 0.96,
@@ -906,7 +913,7 @@ const RECIPE = {
     /* 一条系统提示：从脸上往上、往场内飘，淡掉 */
     tag(x, y, side) {
       const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
-      Particles.spawn({ kind: 'tag', x, y, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: 0.94,
+      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
                         life: 1.0 + Math.random() * 0.3, r: 20, r1: 32, rgb: [118, 118, 128], edge: [40, 10, 60], lw: 3,
                         text: this.tags[Math.floor(Math.random() * this.tags.length)] });
     },
@@ -934,6 +941,174 @@ const RECIPE = {
                           rgb: [255, 150, 225], edge: [40, 10, 60], lw: 2.5 });
       }
       Particles.addShake(6);
+    },
+  },
+
+  /* ---- 档 4 新四人（2026-09-28，trio_spec.md 第二节）。每个配方四样：burst 首击 / 续送那一下（档 4 分量 s 2.8）、
+     drip 每个命中的粒子补一下（射线、光流每秒几十颗，drip 里按概率出东西，不然粒子池一秒就满）、arrive 到位那一下、
+     tags 命中时从脸上蹦的字（要短：直播画面缩到手机屏三分之一宽，长句糊成一条）。
+     配色同 fx-bright-background：发光靠色相，实体（爱心、标签、网、马赛克、碎片）一律深色描边。 ---- */
+
+  /* 月亮查岗使 → 男生的脸：粉爱心 + 金月牙炸开，蹦「代表月亮查你！」。爱心本体饱和粉、暖黑描边。 */
+  moon: {
+    tint: [255, 190, 222],
+    tags: ['代表月亮查你！', '已读', '查到了'],
+    tag(x, y, side) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
+      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
+                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [226, 62, 146], edge: [110, 20, 64], lw: 3,
+                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
+    },
+    heart(x, y, sp, r) {
+      const a = Math.random() * 6.283;
+      Particles.spawn({ kind: 'heart', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, g: -60, drag: 0.94,
+                        life: 0.7 + Math.random() * 0.4, r: r * 0.6, r1: r, rot: (Math.random() - 0.5) * 0.6,
+                        rgb: [255, 90, 160], edge: INK, lw: 3 });
+    },
+    crescent(x, y, sp) {
+      const a = Math.random() * 6.283;
+      Particles.spawn({ kind: 'moon', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 80, g: 300, drag: 0.95,
+                        life: 0.6 + Math.random() * 0.3, r: 8, r1: 13, rot: Math.random() * 6, vrot: 5,
+                        rgb: [255, 200, 60], edge: INK, lw: 2.5 });
+    },
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 80 * s, life: 0.16, rgb: [255, 150, 205], a: 0.8 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 120 * s, life: 0.32, rgb: [110, 20, 64], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.32, rgb: [255, 110, 180], lw: 3.5 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 20 * s, r1: 166 * s, life: 0.4, rgb: [255, 200, 60], lw: 3 * s });
+      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
+      for (let i = 0; i < Math.round(3 * s); i++) this.heart(x, y, 160 + Math.random() * 220, 16 + Math.random() * 8);
+      for (let i = 0; i < Math.round(2 * s); i++) this.crescent(x, y, 160 + Math.random() * 220);
+    },
+    drip(x, y, side) {                  // 光流每秒 ~100 颗打到脸上：一成出一颗小心、二十分之一出月牙、极少出字
+      const k = Math.random();
+      if (k < 0.1) this.heart(x, y, 60 + Math.random() * 120, 10 + Math.random() * 5);
+      else if (k < 0.15) this.crescent(x, y, 80 + Math.random() * 120);
+      else if (k < 0.157) this.tag(x, y, side);
+    },
+    arrive(x, y, s) {                  // (x, y) = 腰胯；"叮"一下：脚下一圈爱心往外冲 + 粉环（代替女神的青柠冲击环）
+      const cy = y + 330 * s;
+      Particles.spawn({ kind: 'dot', x, y: cy, r: 30 * s, r1: 150 * s, life: 0.2, rgb: [255, 150, 205], a: 0.7 });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 250 * s, life: 0.36, rgb: [110, 20, 64], lw: 9 * s });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 244 * s, life: 0.36, rgb: [255, 110, 180], lw: 4.5 * s });
+      for (let i = 0; i < 12; i++) {
+        const a = i / 12 * 6.283, sp = 420;
+        Particles.spawn({ kind: 'heart', x, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.5, g: 0, drag: 0.9,
+                          life: 0.55, r: 12, r1: 18, rgb: [255, 90, 160], edge: INK, lw: 3 });
+      }
+      Particles.addShake(5);
+    },
+  },
+
+  /* 黑蛛女特工 → 男生的脸：蛛网贴在脸上停一会儿（fx.js kind 'web'，暗红描边白芯 + 红色定位图钉），网张开时一圈红光。 */
+  widow: {
+    tint: [255, 196, 196],
+    tags: ['已定位', '行踪已锁定', '天网恢恢'],
+    tag(x, y, side) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
+      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
+                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [196, 36, 56], edge: [80, 10, 20], lw: 3,
+                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
+    },
+    web(x, y, r1, life) {
+      Particles.spawn({ kind: 'web', x, y, r: 12, r1, life, rot: Math.random() * 6, rgb: [255, 255, 255], edge: [120, 20, 30], lw: 2.5, drag: 1 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10, r1: r1 * 1.35, life: 0.3, rgb: [230, 40, 60], lw: 6 });
+    },
+    burst(x, y, side, s) {
+      this.web(x, y, 40 * s, 1.5);
+      Particles.spawn({ kind: 'dot', x, y, r: 14 * s, r1: 60 * s, life: 0.16, rgb: [255, 120, 130], a: 0.7 });
+      Particles.spawn({ kind: 'ring', x, y, r: 20 * s, r1: 150 * s, life: 0.4, rgb: [120, 20, 30], lw: 6 * s });
+      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
+    },
+    drip(x, y, side) {                  // 每发网弹打到脸上都张一张小网（每秒 ~2 发，不用限流）
+      this.web(x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 30, 58 + Math.random() * 16, 1.1);
+      if (Math.random() < 0.2) this.tag(x, y, side);
+    },
+    arrive(x, y, s) {                   // 顺着丝降下来，停住时轻：一圈暗红环 + 小震
+      Particles.spawn({ kind: 'ring', x, y: y + 300 * s, r: 30 * s, r1: 180 * s, life: 0.3, rgb: [200, 40, 60], lw: 5 * s });
+      Particles.addShake(3);
+    },
+  },
+
+  /* 内裤外穿侠 → 女生脸前的手机和气泡：射线把聊天记录烧成灰。蹦「已粉碎」「永久删除」，飘出烧焦的气泡碎片（灰聊天框、黑碎片、火星）。 */
+  briefs: {
+    tint: [255, 206, 160],
+    tags: ['已粉碎', '永久删除'],
+    tag(x, y, side) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
+      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
+                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [210, 50, 30], edge: [110, 20, 10], lw: 3,
+                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
+    },
+    ash(x, y, side, big) {              // 烧焦的气泡：灰框黑点往下掉；黑碎片带火星色描边
+      if (big) Particles.spawn({ kind: 'chat', x, y, vx: -side * (60 + Math.random() * 120), vy: -120 - Math.random() * 100, g: 420, drag: 0.96,
+                                 life: 0.9, r: 14, r1: 20, rgb: [120, 116, 110], edge: [40, 24, 16], lw: 3 });
+      Particles.spawn({ kind: 'chip', x, y, vx: (Math.random() - 0.5) * 320, vy: -80 - Math.random() * 200, g: 700, drag: 0.97,
+                        life: 0.7, w: 10 + Math.random() * 8, h: 6 + Math.random() * 5, rot: Math.random() * 6, vrot: 9,
+                        rgb: [44, 34, 30], edge: [255, 110, 30], lw: 2 });
+    },
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 80 * s, life: 0.18, rgb: EMBER, a: 0.85 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 120 * s, life: 0.32, rgb: [110, 20, 10], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.32, rgb: [255, 60, 30], lw: 3.5 * s });
+      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
+      for (let i = 0; i < Math.round(3 * s); i++) this.ash(x, y, side, i % 2 === 0);
+      for (let i = 0; i < Math.round(5 * s); i++) {
+        const a = Math.random() * 6.283, sp = 200 + Math.random() * 300;
+        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 400, drag: 0.95, life: 0.35, rgb: EMBER, lw: 3 });
+      }
+    },
+    drip(x, y, side) {                  // 射线每秒 ~70 颗打到：三成出火星、一成出碎片、少量烧焦气泡和字
+      const k = Math.random();
+      if (k < 0.3) { const a = Math.random() * 6.283, sp = 150 + Math.random() * 200;
+        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, g: 400, drag: 0.95, life: 0.3, rgb: EMBER, lw: 2.5 }); }
+      else if (k < 0.4) this.ash(x, y, side, k < 0.33);
+      else if (k < 0.405) this.tag(x, y, side);
+    },
+    arrive(x, y, s) {                   // 横着飞进来刹停：一圈白 + 红的气浪、震屏
+      Particles.spawn({ kind: 'ring', x, y, r: 30 * s, r1: 240 * s, life: 0.32, rgb: [110, 20, 10], lw: 8 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 30 * s, r1: 234 * s, life: 0.32, rgb: [255, 236, 200], lw: 4 * s });
+      Particles.addShake(7);
+    },
+  },
+
+  /* 二郎·打码神 → 女生的脸和手机：命中区域铺一块马赛克（fx.js kind 'mosaic'，灰黑方块、硬边，0.6 秒后散开），蹦「已打码」。 */
+  erlang: {
+    tint: [226, 226, 232],
+    tags: ['已打码', '此内容不可见'],
+    tag(x, y, side) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
+      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
+                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [60, 60, 70], edge: [120, 80, 10], lw: 3,
+                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
+    },
+    MOSAIC: { hold: 0.6, cell: 14 },   // 盖住不动几秒、方块边长
+    mosaic(x, y, r, life) {
+      Particles.spawn({ kind: 'mosaic', x: x + (Math.random() - 0.5) * 16, y: y + (Math.random() - 0.5) * 16, r, w: this.MOSAIC.cell, h: this.MOSAIC.hold, life, drag: 1 });
+    },
+    burst(x, y, side, s) {
+      this.mosaic(x, y, 20 * s, 1.1);            // 半径 ~56：盖住脸，手机和身子还露着（F2）
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 120 * s, life: 0.32, rgb: [120, 80, 10], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.32, rgb: [255, 200, 60], lw: 3.5 * s });
+      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
+    },
+    drip(x, y, side) {                  // 金光每秒 ~60 颗打到：二十分之一铺一小块马赛克（场上约 3 块）、少量金星
+      const k = Math.random();
+      if (k < 0.05) this.mosaic(x, y, 38, 1.0);
+      else if (k < 0.2) { const a = Math.random() * 6.283, sp = 120 + Math.random() * 180;
+        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 300, drag: 0.95, life: 0.3, rgb: [255, 200, 60], lw: 2.5 }); }
+      else if (k < 0.206) this.tag(x, y, side);
+    },
+    arrive(x, y, s) {                   // 踩云降下来：脚下一圈白云团 + 金环
+      const cy = y + 340 * s;
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * 6.283;
+        Particles.spawn({ kind: 'soft', x, y: cy, vx: Math.cos(a) * 260, vy: Math.sin(a) * 60, drag: 0.9, g: 0,
+                          r: 20, r1: 46, life: 0.55, rgb: [240, 246, 255], a: 0.8 });
+      }
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 240 * s, life: 0.36, rgb: [120, 80, 10], lw: 8 * s });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 234 * s, life: 0.36, rgb: [255, 200, 60], lw: 4 * s });
+      Particles.addShake(5);
     },
   },
 
@@ -1128,8 +1303,20 @@ const SHOP = {
    这不是折中，是两段要的东西本来就不同：档 1~2 一局出现上百次，它的好处恰恰
    是不够特别；档 3~4 一局只有几次，要的是"我没见过"—— 而这个题材里观众最没
    见过的，就是吵到最后砸过来的是一束花。 */
-// 档 3 的两个帮手角色 + 档 4 左的真相女神（crew.js），GIFT[..].crew 指到这里
-const CREW = { buddy: Buddy, bestie: Bestie, truth: Truth, demon: Demon };
+// 档 3 的两个帮手角色 + 档 4 两边各一组三人（crew.js），GIFT[..].crew 指到这里
+/* 档 4 每边最多 3 人（2026-09-28 用户定，跟闺蜜 / 哥们一样）：每送一次召一个没在场的，满 3 人再送 = 给剩余时间最短的续一段、
+   名字条重播「×N」（CrewGroup）。成员顺序就是 ?g4L= / ?g4R= 的下标。 */
+const G4L = CrewGroup([Truth, Moon, Widow]);     // 查岗党：真相女神 / 月亮查岗使 / 黑蛛女特工
+const G4R = CrewGroup([Demon, Briefs, Erlang]);  // 灭迹党：灭迹恶魔 / 内裤外穿侠 / 二郎·打码神
+const CREW = { buddy: Buddy, bestie: Bestie, g4L: G4L, g4R: G4R };
+const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 重置 / 画的全部帮手
+/* 召唤：组（档 4）按 URL ?g4L= / ?g4R= 强制召某一个人（诊断：胶片一个一个单独拍）；单个 Crew 可指定形象 sk（?skin=） */
+function summonCrew(name, sk) {
+  const c = CREW[name];
+  if (!c.members) return c.summon(sk);
+  const q = new URLSearchParams(location.search).get(name);
+  c.summon(q == null || q === '' ? undefined : +q);
+}
 const RAIN = { durian: DurianRain, sockball: SockRain };
 
 /* 高跟鞋砸头（档 1 左，榴莲鞋雨里的四只鞋）：爆点颜色跟鞋走（用户定的）—— 鞋跟"咔"一下，小而硬：
@@ -1215,7 +1402,9 @@ const GIFT = {
   /* 真相女神（2026-09-27 替换戒指盒，戒指盒那行留着当备选）：扛巨型「真相喷雾」从天上冲下来悬在女主左上方，
      朝男生的脸喷 2.8 秒（crew.js TRUTH）。第一下档 4、之后每 0.25 秒轻补。档 4 原来靠 exec 的全场预警 + 1.8 倍体积
      读出"贵"，她换成出场 1.4 秒全场压暗 + 名字条（truthIntro）。 */
-  truth:   { name: '真相女神', from: +1, style: 'crew',  crew: 'truth',  power: 4, recipe: 'truth', push: 600 },
+  /* 2026-09-28 扩成一组三人（crew 'g4L'）：真相女神 / 月亮查岗使 / 黑蛛女特工，名字条按成员各自取（main.js G4NAME）。
+     这里的 name 只是礼物按钮上的名字。 */
+  truth:   { name: '真相女神', from: +1, style: 'crew',  crew: 'g4L',  power: 4, recipe: 'truth', push: 600 },
   // 灭迹党（男方，在右，from=-1）
   /* 香蕉（2026-09-26 替换瓜子）：一次礼物三根、隔 0.5 秒一根（gap），瞄女生的脸（aim），碰撞点也是脸
      （穿过手臂、头发边，贴到脸上才爆）；砸中是白色爆点，脸上留下白点（stain，见 stainAt）。飞行 0.55s，spin = π/0.55。 */
@@ -1232,7 +1421,8 @@ const GIFT = {
   buddy:   { name: '哥们',   from: -1, style: 'crew',   crew: 'buddy',  power: 3, recipe: 'water',  push: 230 },
   /* 灭迹恶魔（2026-09-27 替换相框）：对应女生的真相女神 —— 悬在右上朝女生的脸喷"撤回烟雾"（crew.js DEMON），
      打中蹦「已撤回」「记录已清空」。出场同女神：全场压暗 + 名字条（从右边滑进来）。相框那行留着当备选。 */
-  demon:   { name: '灭迹恶魔', from: -1, style: 'crew',  crew: 'demon',  power: 4, recipe: 'demon', push: 600 },
+  /* 2026-09-28 扩成一组三人（crew 'g4R'）：灭迹恶魔 / 内裤外穿侠 / 二郎·打码神 */
+  demon:   { name: '灭迹恶魔', from: -1, style: 'crew',  crew: 'g4R',  power: 4, recipe: 'demon', push: 600 },
   photo:   { name: '相框',   from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
 };
 
@@ -1905,7 +2095,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      10 帧里 10 帧被气泡压住 —— 她在场期间新出的气泡**抬高** BUBBLE_TRUTH_DY 出生，从罐子上方飘，已经在飘的不动。
      不往右挪：右移 260 那版气泡正好从男生脸（命中爆点）上冒出来，还被屏幕右沿切掉。 */
   const BUBBLE_TRUTH_DY = 200;   // 灭迹恶魔（右上）在场时同样抬：他的罐口在 x≈560、气泡走廊的另一侧
-  Bubble.init({ W, phoneAt: () => { const [x, y] = phonePos(); return Truth.active() || Demon.active() ? [x, y - BUBBLE_TRUTH_DY] : [x, y]; } });
+  Bubble.init({ W, phoneAt: () => { const [x, y] = phonePos(); return G4L.active() || G4R.active() ? [x, y - BUBBLE_TRUTH_DY] : [x, y]; } });
 
   /* 两个档 3 帮手（crew.js）。zone = [喷口最多伸到哪（靠对方那边）, 人的外沿最多到哪（可以出画 90 像素）]：
      喷口不越过手机 100 像素（再近水就是竖着往下落），但手机很偏时（一方被拖着趴地）喷口那一头最多到
@@ -1978,34 +2168,97 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      整个人 ~535 高占左上 x 30~440；闺蜜站地、头在 y≈800 往下，两人上下错开。
      onArrive：冲下来刹停那一刻，脚下炸一圈青柠冲击环 + 星星 + 小震屏（不给反馈读成飘下来的）。 */
   const TRUTH_PERCH = [170, 740];
-  Truth.init({
-    W, ground: () => GROUND + FX.bob, horizon,
-    perch: () => TRUTH_PERCH,
-    target(u) {
-      const f = faceOf('b');
-      return f && [f[0] - 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]];
-    },
-    front: () => null,
-    onArrive: (x, y, s) => RECIPE.truth.arrive(x, y, s),
-    onSplash: (x, y) => RECIPE.truth.drip(x, y, -1),
-    onHit: (x, y, first) => impact(-1, y, first ? GIFT.truth.power : 1, RECIPE.truth, x),
-  });
-
+  const DEMON_PERCH = [790, 715];
   /* 灭迹恶魔（档 4 右，crew.js DEMON）：女神的镜像，瞄女生的脸。
      硬约束：男生站着时头顶最高到 y 781（bK），他连靴子带外发光的最低点要在 y 750 以上（靴底 715 + 晃 ~9 + 光 ~25）；
      横向占右上 x 560~960，喷口在 x≈610，跟左上的女神（到 x≈440）在中线附近不重叠。 */
-  const DEMON_PERCH = [790, 715];
-  Demon.init({
+
+  /* ---- 档 4 每边三人的站位（2026-09-28，规格 shots/review/trio/trio_spec.md 第三节） ----
+     每边一个人时用上面的大站位（s ≈ 0.95，已经占满自己那半边的上半屏）；2~3 人时全体滑到一条斜线上的三个槽位：
+     1 前（左下，最大）→ 3 后（右上，最小），三人沿"喷射方向的垂直线"排开 —— 每股都往右下喷，不穿过自己这边另外两个人；
+     每个槽位的脸都在前一个槽位的上沿之上（六张脸都露着），喷口在身体右侧、槽位往右上错开，喷口也不会被挡。
+     新来的人占 1 号前排（最显眼，也跟名字条对得上），在场的依次往后挪；降回 1 人时剩下那个滑回大站位。
+     槽位按 truth2 贴图量的，存成**外框中线 cx + 靴底 y + 缩放 s**：三个人贴图宽窄不一样，按外框中线排才都占同一块地方
+     （新立绘出图时人高 + 武器的包围盒都做得跟 truth2 差不多，最低点就是靴底）。男生侧镜像：cx → W − cx，靴底再上移 R_DY
+     （男生站着时头顶更高，最低点要 ≤ y750）。大站位由 TRUTH_PERCH / DEMON_PERCH 换算成外框中线，所以女神、恶魔单人时位置不变。
+     换槽位时位置和缩放一起按 GLIDE 秒的三次 Hermite 平滑过去（起点带着当时的速度、到位速度 0），位置、速度都不跳 ——
+     跟 crew.js hoverPose 离场召回那段同一个做法。 */
+  const G4SLOT = {
+    L: [{ cx: 135, y: 740, s: 0.66 }, { cx: 247, y: 626, s: 0.60 }, { cx: 359, y: 517, s: 0.55 }],   // 靴底 (100,740)/(215,626)/(330,517) 换算成外框中线
+    R_DY: 25,
+    GLIDE: 0.4,
+  };
+  const g4Big = { L: [TRUTH_PERCH[0] + (426 / 2 - 160) * 0.95, TRUTH_PERCH[1]],      // truth2 贴图宽 426、靴底 x 160，s 0.95
+                  R: [DEMON_PERCH[0] + (437 / 2 - 244) * 0.95, DEMON_PERCH[1]] };     // demon1 贴图宽 437、靴底 x 244
+  /* 某一边此刻每个在场的人该在哪：[靴底 x, 靴底 y, s]（离场途中的也算在场，飞走以后才让位） */
+  function g4Targets(side) {
+    const on = (side === 'L' ? G4L : G4R).members.flatMap(c => c.peek().map(b => [c, b])).sort((a, b) => b[1].born - a[1].born);
+    return on.map(([c, b], i) => {
+      let cx, y, s;
+      if (on.length === 1) { [cx, y] = g4Big[side]; s = b.s; }
+      else { const q = G4SLOT.L[Math.min(i, 2)]; cx = side === 'L' ? q.cx : W - q.cx; y = q.y - (side === 'L' ? 0 : G4SLOT.R_DY); s = q.s; }
+      const w = c.width(), fx = c.cfg.spr.foot[0];
+      return [b, [cx - (w / 2 - fx) * s, y, s]];
+    });
+  }
+  const herm = (u) => [2 * u ** 3 - 3 * u * u + 1, u ** 3 - 2 * u * u + u, -2 * u ** 3 + 3 * u * u];
+  const hermD = (u) => [6 * u * u - 6 * u, 3 * u * u - 4 * u + 1, -6 * u * u + 6 * u];
+  /* b.sl = { p0, v0, to, t0 }：按这个人自己的时钟 b.t 求值（不另开计时器；胶片 / 预热快进都跟着走） */
+  function slotAt(b, t) {
+    const L = b.sl, D = G4SLOT.GLIDE, u = Math.min(1, Math.max(0, (t - L.t0) / D));
+    if (u >= 1) return [L.to, [0, 0, 0]];
+    const h = herm(u), d = hermD(u);
+    return [L.to.map((p1, k) => h[0] * L.p0[k] + h[1] * D * L.v0[k] + h[2] * p1),
+            L.to.map((p1, k) => (d[0] * L.p0[k] + d[1] * D * L.v0[k] + d[2] * p1) / D)];
+  }
+  /* 每帧（crew.js update 开头 o.tick）：目标变了就从此刻的位置、速度起一段新的 Hermite。只在这里写状态，perch 只读 */
+  function g4Tick(side) {
+    for (const [b, to] of g4Targets(side)) {
+      if (!b.sl) { b.sl = { p0: to, v0: [0, 0, 0], to, t0: -1e9 }; continue; }
+      if (to.every((v, k) => Math.abs(v - b.sl.to[k]) < 1e-3)) continue;
+      const [p, v] = slotAt(b, b.t);
+      b.sl = { p0: p, v0: v, to, t0: b.t };
+    }
+  }
+  function g4Perch(side, b) {
+    if (!b.sl) g4Tick(side);                     // 刚召唤、还没 update 过（胶片第一格）
+    return b.sl ? slotAt(b, b.t)[0] : (side === 'L' ? [...TRUTH_PERCH, b.s] : [...DEMON_PERCH, b.s]);
+  }
+
+  /* 六个人的公共接线：女生侧瞄男生的脸、男生侧瞄女生的脸，落点同平衡车闺蜜（脸的中上部，u 在上下乱晃）；
+     front null：没打中脸的就散掉，不在身体轮廓上爆。onArrive / onSplash / onHit 走各自的配方（RECIPE.truth / moon / widow /
+     demon / briefs / erlang），第一下按档 4 力度打（续送那一下也是，crew.js renew）。 */
+  const faceTarget = (who, dir) => (u) => { const f = faceOf(who); return f && [f[0] + dir * 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]]; };
+  const g4Init = (crew, side, rcp, gift, extraHit) => crew.init({
     W, ground: () => GROUND + FX.bob, horizon,
-    perch: () => DEMON_PERCH,
-    target(u) {
-      const f = faceOf('a');
-      return f && [f[0] + 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]];
-    },
+    perch: (b) => g4Perch(side, b),
+    tick: () => g4Tick(side),
+    /* F2：同边 n 个人一起喷时，每人喷的量乘 1/√n —— 三股全开时雾 / 爱心 / 射线加起来是一个人的 √3 ≈ 1.7 倍，不是 3 倍，
+       男女主的脸还露得出来（规格第五节 F2）。只动出量，不动单颗大小和命中节奏（hitEvery）。 */
+    rateK: () => 1 / Math.sqrt(Math.max(1, (side === 'L' ? G4L : G4R).members.filter(c => c.active()).length)),
+    target: side === 'L' ? faceTarget('b', -1) : faceTarget('a', +1),
     front: () => null,
-    onArrive: (x, y, s) => RECIPE.demon.arrive(x, y, s),
-    onSplash: (x, y) => RECIPE.demon.drip(x, y, +1),
-    onHit: (x, y, first) => impact(+1, y, first ? GIFT.demon.power : 1, RECIPE.demon, x),
+    onArrive: (x, y, s) => RECIPE[rcp].arrive(x, y, s),
+    onSplash: (x, y) => RECIPE[rcp].drip(x, y, side === 'L' ? -1 : +1),
+    onHit: (x, y, first, b) => {
+      impact(side === 'L' ? -1 : +1, y, first ? GIFT[gift].power : 1, RECIPE[rcp], x);
+      if (extraHit) extraHit(x, y, b);
+    },
+  });
+  g4Init(Truth, 'L', 'truth', 'truth');
+  g4Init(Moon, 'L', 'moon', 'truth');
+  g4Init(Widow, 'L', 'widow', 'truth');
+  g4Init(Demon, 'R', 'demon', 'demon');
+  g4Init(Briefs, 'R', 'briefs', 'demon');
+  /* 二郎打中时：一个聊天气泡从女生脸上飞向哮天犬的嘴（DOG_EAT.fly 秒），到嘴那一刻狗往上扑一口吃掉（crew.js dogPose 读 b.dogEat）。
+     "狗把聊天记录吃了"。狗绕着云跑、嘴在动，气泡按出手那一刻的嘴位置飞，差的那点被狗扑起来的那一下盖住。 */
+  const DOG_EAT = { fly: 0.55, every: 0.9 };      // 飞多久、最多多久吃一个（每 0.3 秒一次命中都送一个的话狗一直在跳）
+  g4Init(Erlang, 'R', 'erlang', 'demon', (x, y, b) => {
+    if (!b || !b.dogMouth || (b.dogEat != null && b.t - b.dogEat < DOG_EAT.every)) return;
+    const [mx, my] = b.dogMouth, T = DOG_EAT.fly;
+    Particles.spawn({ kind: 'chat', x, y, vx: (mx - x) / T, vy: (my - y) / T, g: 0, drag: 1, life: T + 0.02,
+                      r: 20, r1: 16, rgb: [255, 255, 255], edge: [120, 80, 10], lw: 3 });
+    b.dogEat = b.t + T - 0.35 / 2;               // 扑到最高点（咬合）正好在气泡到嘴时（DOG.eatT 0.35）
   });
 
   /* 长卷背景与姿势贴图，都由 v14/build.py 生成。world.json 是它们的说明书：
@@ -2032,8 +2285,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Particles.loadShapes(Q0.get('v'), noSpr),
     Buddy.load(Q0.get('v'), noSpr),
     Bestie.load(Q0.get('v'), noSpr),
-    Truth.load(Q0.get('v'), noSpr),
-    Demon.load(Q0.get('v'), noSpr),
+    ...[...G4L.members, ...G4R.members].map(c => c.load(Q0.get('v'), noSpr)),
     DurianRain.load(Q0.get('v'), noSpr),
     SockRain.load(Q0.get('v'), noSpr),
   ]);
@@ -2063,13 +2315,14 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        是什么样"（含结算那格礼物数），只能走这条路。 */
     const every = Math.max(0, +(Q.get('liveEvery') || 0));
     const gA = Q.get('liveGA'), gB = Q.get('liveGB');
+    const liveN = Q.has('liveN') ? +Q.get('liveN') : Infinity;   // ?liveN=<次数>：liveEvery 每边最多送几次（档 4 连刷：3 次满员、第 4 次续时间）
     for (let k = 0; k < warm * 30; k++) {
       /* 分出胜负之后不再注入。这一局已经打完了，照注的话结算面板上"最终拉力"
          和"礼物"会一路涨下去，跟旁边那格"本局时长"对不上 —— 截出来的图自相
          矛盾（实测：26 秒结束的一局显示送了 12 件礼物）。 */
       if (S.phase !== 'over') {
         S.fA += liveA / 30; S.fB += liveB / 30;
-        if (every > 0 && k % Math.round(every * 30) === 0) {
+        if (every > 0 && k % Math.round(every * 30) === 0 && k / Math.round(every * 30) < liveN) {
           if (gA) giveGift(+1, gA);
           if (gB) giveGift(-1, gB);
         }
@@ -2079,7 +2332,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
          HUD 永远是"刚开局、什么都没闪过"的样子，?livet 微调也扫不到闪光。 */
       battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30;
       /* 帮手和礼物雨也要跟着快进：不推进的话预热里送的档 3 礼物全卡在 t=0 叠着（闺蜜被叫满、Truth 被连续续时间） */
-      Buddy.update(1 / 30); Bestie.update(1 / 30); Truth.update(1 / 30); Demon.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30);
+      for (const c of CREWS) c.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30);
       derive(1 / 30); hudTick(1 / 30);
     }
     // 预热完冻住**进度**：战况定在这一刻，而火力、弹幕、粒子照跑 —— 截图要的
@@ -2134,11 +2387,18 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      不另开计时器：续时间、离场召回都不会重播，只有新冲进来的那一次演。 */
   const INTRO = { dim: 0.45, rise: 0.15, hold: 1.1, fade: 0.35,        // 压暗：多深、几秒压到底、压到几秒（首击在 1.03~1.27s，压到首击后）、几秒亮回来
                   delay: 0.25, slide: 0.25, stay: 1.1, out: 0.3,        // 名字条：她俯冲的 0.25s 先不出（免得盖住头和罐子）、滑进来几秒、停到几秒、几秒淡掉
-                  y: 800, h: 112 };                                     // 名字条中线 y、条高：她脚下、两人头顶之上（330 时压在她身上）
-  /* 档 4 两边各一个：真相女神（左，名字条从左滑进、青柠）、灭迹恶魔（右，从右滑进、品紫）。两人同时在场各演各的，压暗取深的那个 */
+                  y: 800, h: 112,                                       // 名字条中线 y、条高：她脚下、两人头顶之上（330 时压在她身上）
+                  stack: 122 };                                         // 两边同时各一条时，后出来的往上挪多少（条高 + 10）
+  /* 档 4 每边三人，**按成员**各演各的：名字、条色、字色都跟人走（左边的从左滑进、右边的从右滑进）。
+     几个人同时在场，压暗取最深的那个（仍是"全场暗下去、只有她 / 他亮着"）。
+     fill 横幅底色、bar 上下两道色条、edge 字的描边、text 字色。名字都不出现原角色名（规格第一节）。 */
   const STARS = [
-    { crew: Truth, gift: 'truth', from: +1, fill: 'rgba(8,20,10,0.62)', bar: 'rgb(156,238,96)', edge: 'rgb(20,70,30)', text: 'rgb(214,255,150)' },
-    { crew: Demon, gift: 'demon', from: -1, fill: 'rgba(20,6,28,0.66)', bar: 'rgb(200,90,240)', edge: 'rgb(60,10,70)', text: 'rgb(246,200,255)' },
+    { crew: Truth,  name: '真相女神',     from: +1, fill: 'rgba(8,20,10,0.62)',  bar: 'rgb(156,238,96)', edge: 'rgb(20,70,30)',   text: 'rgb(214,255,150)' },
+    { crew: Moon,   name: '月亮查岗使',   from: +1, fill: 'rgba(40,8,28,0.62)',  bar: 'rgb(255,110,180)', edge: 'rgb(120,20,70)',  text: 'rgb(255,214,236)' },
+    { crew: Widow,  name: '黑蛛女特工',   from: +1, fill: 'rgba(24,4,8,0.66)',   bar: 'rgb(200,40,60)',  edge: 'rgb(90,10,20)',   text: 'rgb(255,190,196)' },
+    { crew: Demon,  name: '灭迹恶魔',     from: -1, fill: 'rgba(20,6,28,0.66)',  bar: 'rgb(200,90,240)', edge: 'rgb(60,10,70)',   text: 'rgb(246,200,255)' },
+    { crew: Briefs, name: '内裤外穿侠',   from: -1, fill: 'rgba(10,16,48,0.66)', bar: 'rgb(220,40,40)',  edge: 'rgb(20,30,110)',  text: 'rgb(255,255,255)' },
+    { crew: Erlang, name: '二郎·打码神', from: -1, fill: 'rgba(12,18,40,0.66)', bar: 'rgb(230,180,60)', edge: 'rgb(255,236,170)', text: 'rgb(20,34,90)' },
   ];
   const introT = (st) => { const b = st.crew.peek()[0]; return b ? b.t : 1e9; };
   /* 名字条的计时：出场从 delay 起算；在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */
@@ -2153,11 +2413,21 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     c.fillStyle = `rgba(8,14,10,${(I.dim * k).toFixed(3)})`;
     c.fillRect(-60, -60, W + 120, H + 120);                             // 多铺一圈：震屏时边上不漏亮
   }
-  function drawIntroName(c) { for (const st of STARS) drawIntroName1(c, st); }
-  function drawIntroName1(c, st) {
-    const t = nameT(st), I = INTRO, b = st.crew.peek()[0];
+  /* 同一边同时只演一条：新的一条（刚出场 / 刚续上）一出来，旧的那条立刻让位 —— 两条叠在同一个 y 上，字会印成一团（三人时实测）。
+     两边同时各有一条时，后出来的那条往上挪一个条高（INTRO.stack）：不挪的话后画的整条盖住先画的，先送礼那一边什么都看不到
+     （每边一人时也会撞，只是三人连刷时撞得勤）。只有一条时位置不变。 */
+  function drawIntroName(c) {
+    const cur = [+1, -1].map((from) => {
+      const live = STARS.filter(st => st.from === from && st.crew.peek()[0] && nameT(st) >= 0 && nameT(st) < INTRO.stay + INTRO.out);
+      return live.length ? live.reduce((a, b) => (nameT(a) <= nameT(b) ? a : b)) : null;
+    }).filter(Boolean);
+    if (cur.length === 2 && nameT(cur[0]) < nameT(cur[1])) cur.reverse();    // 先出来的（nameT 大）排前面，画在原位
+    cur.forEach((st, i) => drawIntroName1(c, st, i * INTRO.stack));
+  }
+  function drawIntroName1(c, st, dy) {
+    const t = nameT(st), I = { ...INTRO, y: INTRO.y - dy }, b = st.crew.peek()[0];
     if (t < 0 || t >= I.stay + I.out) return;
-    const name = GIFT[st.gift].name + (b.renew ? ' ×' + (b.renew + 1) : '');
+    const name = st.name + (b.renew ? ' ×' + (b.renew + 1) : '');
     const a = t < I.stay ? 1 : 1 - (t - I.stay) / I.out;
     const u = Math.min(1, t / I.slide), e = 1 - Math.pow(1 - u, 3);
     const x = W / 2 - st.from * (1 - e) * W;                            // 从自己那一侧滑进来（女神从左上、恶魔从右上冲进来）
@@ -2181,7 +2451,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     cctx.save(); cctx.translate(ox, oy);
     /* 哥们在男生斜后方、闺蜜在女生斜后方：连同各自喷的水 / 雾按远近排好，全在主角之前画，被主角挡住（crew.js items） */
     /* 站在主角前面的帮手（真相喷雾，front）画在主角和污渍之后 */
-    const crew = [...Buddy.items(), ...Bestie.items(), ...Truth.items(), ...Demon.items()].sort((a, b) => a.s - b.s);
+    const crew = CREWS.flatMap(c => c.items()).sort((a, b) => a.s - b.s);
     for (const it of crew) if (!it.front) it.draw(cctx);
     actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(cctx);
@@ -2298,23 +2568,45 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 
     // ?ammoy=aim：不钉高度，让瞄部位的礼物（香蕉瞄脸、口红瞄腰腿）按实际逻辑瞄
     /* ?buddyn=3 一次叫几个；?skin=0|1|2 强制出哪个形象（cfg.skins 下标），不给就挑空着的 */
-    if (g.style === 'crew') for (let k = +(Q.get('buddyn') || 1); k > 0; k--) CREW[g.crew].summon(Q.has('skin') ? +Q.get('skin') : undefined);
-    else if (g.style === 'rain') RAIN[g.rain].summon();
+    /* ?ammogift2=<礼物名>：同一条胶片里再叫另一边的帮手（档 4 满员 6 人：ammogift=truth&ammogift2=demon&buddyn=3）。
+       ?buddygap=<秒>：buddyn 个人不一起叫，第 k 个在 k×gap 秒时叫（看第 2、3 人进场时换槽位）；
+       ?ammoskip=<秒>：第一格之前先快进这么久（看离场时降回大站位，不用拍一长条）。 */
+    const g2 = GIFT[Q.get('ammogift2')], gap = Math.max(0, +(Q.get('buddygap') || 0));
+    const due = [];                                  // [第几秒, 叫谁]
+    const sk = Q.has('skin') ? +Q.get('skin') : undefined;
+    if (g.style === 'crew') {
+      for (const gg of g2 && g2.style === 'crew' ? [g, g2] : [g])
+        for (let k = 0; k < +(Q.get('buddyn') || 1); k++) due.push([k * gap, () => summonCrew(gg.crew, sk)]);
+    } else if (g.style === 'rain') RAIN[g.rain].summon();
     else Ammo.launch(g, Q.get('ammoy') === 'aim' ? null : clamp(+(Q.get('ammoy') || 560), 300, 960), { gift: true });
+    let simT = 0;
+    const callDue = () => { for (const q of due) if (q[1] && q[0] <= simT + 1e-6) { q[1](); q[1] = null; } };
+    callDue();
+    for (let k = Math.round(Math.max(0, +(Q.get('ammoskip') || 0)) * 60); k > 0; k--) {
+      const d = Particles.tick(1 / 60);
+      Particles.update(1 / 60); Ammo.update(d);
+      for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d);
+      Bubble.update(d, FX.struggle); derive(d); hudTick(d);
+      simT += 1 / 60; callDue();
+    }
     let el = 0;
     for (let i = 0; i < n; i++) {
       const step = i === 0 ? 1 / 60 : MS;
       for (let k = 0; k < Math.max(1, Math.round(step * 60)); k++) {
+        simT += 1 / 60; callDue();
+        /* ?crewlog=2：每一小步都记档 4 每个人的靴底 x、y、缩放（换槽位连不连续，按小步看，L2） */
+        if (Q.get('crewlog') === '2') for (const c of [...G4L.members, ...G4R.members]) for (const b of c.peek())
+          console.log(`crewlog ${c.cfg.spr.src.split('/').pop().split('%')[0]} sim=${simT.toFixed(3)} t=${b.t.toFixed(3)} n=${(c.cfg.face > 0 ? G4L : G4R).members.filter(m => m.active()).length} at=${c.where(b).map(v => v.toFixed(3))}`);
         const d = Particles.tick(1 / 60);
         Particles.update(1 / 60);
         Ammo.update(d);
-        Buddy.update(d); Bestie.update(d); Truth.update(d); Demon.update(d); DurianRain.update(d); SockRain.update(d);
+        for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d);
         Bubble.update(d, FX.struggle);
         derive(d); hudTick(d);
       }
       el += step;
-      if (Q.get('crewlog') === '1') for (const b of Truth.peek())
-        console.log(`crewlog t=${b.t.toFixed(2)} aim=${b.aim.toFixed(3)} want=${(b.want ?? NaN).toFixed(3)} tg=${b.tg && b.tg.map(v => v.toFixed(0))} m=${b.m && b.m.map(v => v.toFixed(0))}`);
+      if (Q.get('crewlog') === '1') for (const c of [...G4L.members, ...G4R.members]) for (const b of c.peek())
+        console.log(`crewlog ${c.cfg.spr.src.split('/').pop().split('%')[0]} t=${b.t.toFixed(2)} aim=${b.aim.toFixed(3)} want=${(b.want ?? NaN).toFixed(3)} tg=${b.tg && b.tg.map(v => v.toFixed(0))} m=${b.m && b.m.map(v => v.toFixed(0))} box=${c.measure(b)} part=${Particles.count()}`);
       render();
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
@@ -2404,8 +2696,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         derive(d); hudTick(d);
       }
       el += step;
-      if (Q.get('crewlog') === '1') for (const b of Truth.peek())
-        console.log(`crewlog t=${b.t.toFixed(2)} aim=${b.aim.toFixed(3)} want=${(b.want ?? NaN).toFixed(3)} tg=${b.tg && b.tg.map(v => v.toFixed(0))} m=${b.m && b.m.map(v => v.toFixed(0))}`);
+      if (Q.get('crewlog') === '1') for (const c of [...G4L.members, ...G4R.members]) for (const b of c.peek())
+        console.log(`crewlog ${c.cfg.spr.src.split('/').pop().split('%')[0]} t=${b.t.toFixed(2)} aim=${b.aim.toFixed(3)} want=${(b.want ?? NaN).toFixed(3)} tg=${b.tg && b.tg.map(v => v.toFixed(0))} m=${b.m && b.m.map(v => v.toFixed(0))} box=${c.measure(b)} part=${Particles.count()}`);
       render();
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
@@ -2546,7 +2838,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        这一下"的可视化，冻住它就迟到了；而正在飞的弹幕是**下一下**的前奏，
        顿帧的意思就是全世界停下来看这一击，此刻别的东西还在飞就散掉了。 */
     Ammo.update(dt);
-    Buddy.update(dt); Bestie.update(dt); Truth.update(dt); Demon.update(dt); DurianRain.update(dt); SockRain.update(dt);
+    for (const c of CREWS) c.update(dt); DurianRain.update(dt); SockRain.update(dt);
     // 气泡跟着逻辑时钟：顿帧时它也该停，那半秒全世界都在看刚才那一击
     Bubble.update(dt, FX.struggle);
     S.t += dt;

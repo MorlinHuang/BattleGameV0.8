@@ -270,13 +270,19 @@ const Particles = (function () {
     ctx.closePath();
   }
 
+  /* 实体（普通混合、吃描边）的 kind；其余 dot / spark / ring 是光，走第二趟 lighter */
+  const SOLID = new Set(['soft', 'chip', 'star', 'heart', 'card', 'chat', 'tag', 'web', 'mosaic', 'moon']);
+
+  /* 同一格每帧同一个随机数（马赛克的灰度、散开方向）：按格坐标和粒子种子哈希，不在 draw 里抽随机 —— 抽的话每帧换色，读成雪花屏 */
+  const hash = (i, j, s) => { const v = Math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };
+
   function draw(ctx) {
     // 第一趟：绒絮、碎片、星星，普通混合，它们是实体
     ctx.save();
     ctx.lineJoin = 'round';
     for (let i = 0; i < act.length; i++) {
       const p = act[i];
-      if (p.kind !== 'soft' && p.kind !== 'chip' && p.kind !== 'star' && p.kind !== 'heart' && p.kind !== 'card' && p.kind !== 'chat' && p.kind !== 'tag') continue;
+      if (!SOLID.has(p.kind)) continue;
       const k = p.life / p.maxLife;
       const alpha = p.a * fade(p);
       if (alpha <= 0.01) continue;
@@ -342,6 +348,60 @@ const Particles = (function () {
         if (p.line) { ctx.lineWidth = p.lw; ctx.strokeStyle = p.line; ctx.stroke(); }
         ctx.fillStyle = '#ffffff'; ctx.fillText(p.text, 0, 1);
         ctx.restore();
+      } else if (p.kind === 'moon') {
+        /* 小月牙（月亮查岗使的爱心光流里夹着的）：大圆减去错开的小圆，暖金填色 + 描边 */
+        const r = p.r + (p.r1 - p.r) * (1 - k);
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.beginPath(); ctx.arc(0, 0, r, 0.35, 6.283 - 0.35); ctx.arc(r * 0.45, -r * 0.1, r * 0.78, 6.283 - 0.62, 0.62, true); ctx.closePath();
+        ctx.fillStyle = p.fill; ctx.fill();
+        if (p.line) { ctx.lineWidth = p.lw; ctx.strokeStyle = p.line; ctx.stroke(); }
+        ctx.restore();
+      } else if (p.kind === 'web') {
+        /* 蛛网（黑蛛女特工打中男生脸）：前 15% 寿命从 r 张到 r1，之后贴在脸上不动。8 根辐条 + 3 圈折线环，
+           白丝在浅色底图上会消失，所以每根丝两遍：暗红 edge 粗描边（lw+4）→ 白芯（lw）。网上挂 3 个红色定位图钉。 */
+        const u = 1 - k, e = Math.min(1, u / 0.15), r = p.r + (p.r1 - p.r) * (1 - Math.pow(1 - e, 3));
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        const path = () => {
+          ctx.beginPath();
+          for (let i = 0; i < 8; i++) { const a = i * 0.7854; ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+          for (const f of [0.34, 0.64, 0.93]) {
+            for (let i = 0; i <= 8; i++) {
+              const a = i * 0.7854, rr = r * f * (i % 2 ? 0.9 : 1);    // 一圈里内外交错，像被拉紧的丝不是正多边形
+              i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(rr, 0);
+            }
+          }
+        };
+        path(); ctx.lineWidth = p.lw + 4; ctx.strokeStyle = p.line || '#781e1e'; ctx.stroke();
+        ctx.lineWidth = p.lw; ctx.strokeStyle = p.fill; ctx.stroke();
+        for (let i = 0; i < 3; i++) {                                   // 定位图钉：水滴形红头 + 白点，描边暗红
+          const a = p.seed + i * 2.1, d = r * (0.45 + 0.35 * hash(i, 1, p.seed)), pr = Math.max(7, r * 0.13);
+          ctx.save(); ctx.translate(Math.cos(a) * d, Math.sin(a) * d); ctx.rotate(-p.rot);
+          ctx.beginPath(); ctx.moveTo(0, pr * 1.4); ctx.arc(0, -pr * 0.2, pr, 2.5, 0.64); ctx.closePath();
+          ctx.fillStyle = '#e8283c'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = p.line || '#781e1e'; ctx.stroke();
+          ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, -pr * 0.25, pr * 0.36, 0, 6.283); ctx.fill();
+          ctx.restore();
+        }
+        ctx.restore();
+      } else if (p.kind === 'mosaic') {
+        /* 马赛克（二郎·打码神打中女生脸）：半径 r 的圆里铺边长 p.w 的灰黑方块，硬边、不发光 ——
+           黑灰方块在明亮底图上天然看得见。前 p.h 秒盖住不动，之后每格朝外飞散、下落、淡掉。 */
+        const c = p.w, n = Math.ceil(p.r / c), u = p.maxLife - p.life, fly = Math.max(0, u - p.h);
+        const ga = ctx.globalAlpha;
+        for (let i = -n; i < n; i++) for (let j = -n; j < n; j++) {
+          const cx = (i + 0.5) * c, cy = (j + 0.5) * c;
+          if (cx * cx + cy * cy > p.r * p.r) continue;
+          const h = hash(i, j, p.seed), g = 40 + Math.round(h * 120);
+          let x = p.x + i * c, y = p.y + j * c;
+          if (fly > 0) {
+            const d = Math.hypot(cx, cy) || 1, sp = 160 + h * 260;
+            x += cx / d * sp * fly; y += cy / d * sp * fly + 600 * fly * fly;
+            ctx.globalAlpha = ga * Math.max(0, 1 - fly / (p.maxLife - p.h));
+          }
+          ctx.fillStyle = `rgb(${g},${g},${g + 6})`;
+          ctx.fillRect(x, y, c - 1, c - 1);                             // 留 1 像素缝：一格一格读得出来是"打码"不是一块灰
+        }
+        ctx.globalAlpha = ga;
       } else if (p.kind === 'card') {
         /* 卡片：一张照片。它跟 chip 的区别不是参数而是**语义** —— chip 是
            "空中翻滚的薄片"，带描边时圆角被拉到半高满值、短边收成半圆，
@@ -394,7 +454,7 @@ const Particles = (function () {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < act.length; i++) {
       const p = act[i];
-      if (p.kind === 'soft' || p.kind === 'chip' || p.kind === 'star' || p.kind === 'heart' || p.kind === 'card' || p.kind === 'chat' || p.kind === 'tag') continue;
+      if (SOLID.has(p.kind)) continue;
       const k = p.life / p.maxLife;
       const alpha = p.a * fade(p);
       if (alpha <= 0.01) continue;
