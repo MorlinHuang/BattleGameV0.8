@@ -319,7 +319,7 @@ function startMatch() {
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
-  for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); Sea.reset(); HitSplash.reset();
+  for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); Sea.reset(); Scroll.reset(); Clash.reset(); Foam.reset();
   IntroVideo.stop();
   S.auto = false;
   Ammo.clear(); Particles.clear();
@@ -954,9 +954,9 @@ const RECIPE = {
      tags 命中时从脸上蹦的字（要短：直播画面缩到手机屏三分之一宽，长句糊成一条）。
      配色同 fx-bright-background：发光靠色相，实体（爱心、标签、网、马赛克、碎片）一律深色描边。 ---- */
 
-  /* 白娘子 → 男生（2026-09-28 替掉月亮查岗使）：一大泼水砸在脸上 —— 冷白闪 + 深蓝托底的水环 + 一圈往上溅的蓝白水珠，
-     蹦「水漫金山！」「现原形！」。水珠是描边的实体（chip pearl）：浅蓝在浅绿墙上不描边就化掉。
-     她泼 13.5 秒、每 0.3 秒一次命中，drip 按概率出东西（不然粒子池满、脸上一直被字盖着）。 */
+  /* 白娘子 → 男生（2026-09-28 替掉月亮查岗使）：水柱打在他身上**爆一团水泡沫**（sea.js Foam），蹦「水漫金山！」「现原形！」。
+     用户："打中后的水花特效明显不合适，直接爆水泡沫就行"（先前两版：冷白闪 + 深蓝环 + 描边水珠；Blender 渲的 3D 水冠）。
+     她泼 13.5 秒、每 0.3 秒一次命中（burst，s 1；首击 / 续送 s 2.8），中间每颗水滴打到身上都走 drip：零星冒一两个泡，极少出字。 */
   baisu: {
     tint: [200, 230, 255],
     tags: ['水漫金山！', '现原形！', '浇醒你！'],
@@ -966,31 +966,20 @@ const RECIPE = {
                         life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [40, 130, 230], edge: [14, 50, 120], lw: 3,
                         text: this.tags[Math.floor(Math.random() * this.tags.length)] });
     },
-    drops(x, y, n, sp0, sp1, d0, d1) {           // 往上溅的水珠：浅蓝 / 白两色、深蓝描边，带重力落下
-      for (let i = 0; i < n; i++) {
-        const a = -Math.PI / 2 + (Math.random() - 0.5) * 3.0, sp = sp0 + Math.random() * (sp1 - sp0), d = d0 + Math.random() * (d1 - d0);
-        Particles.spawn({ kind: 'chip', shape: 'pearl', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-                          g: 1400, drag: 0.98, life: 0.4 + Math.random() * 0.35, w: d, h: d, rot: 0, vrot: 0,
-                          rgb: i % 3 ? [150, 214, 255] : [245, 252, 255], edge: [14, 50, 120], lw: 1.6, a: 1 });
-      }
-    },
     burst(x, y, side, s) {
-      /* 3D 水花（sea.js HitSplash，Blender 渲的水冠）+ 几颗 3D 水珠（chip pearl 有转盘贴图）。第一版是冷白闪 + 深蓝环 + 蓝白圆点：
-         跟 3 渲 2 的水柱放在一起是两套画风（用户嫌"太 Q"），环和闪都去掉了 */
-      HitSplash.spawn(x, y, Math.min(1.05, 0.45 + 0.3 * s));   // 第一下（s 2.8）放到 1.3 时，收尾那圈带刺的环比男生的头还大
+      Foam.spawn(x, y, s);
       for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
-      this.drops(x, y, Math.round(8 * s), 260 * s, 620 * s, 7 * s, 13 * s);
     },
-    drip(x, y, side) {                  // 水流一路打在脸上：一半出两三颗小水珠，极少出字
+    drip(x, y, side) {
       const k = Math.random();
-      if (k < 0.5) this.drops(x, y, 2 + (Math.random() * 2 | 0), 160, 420, 5, 10);
-      else if (k < 0.506) this.tag(x, y, side);
+      if (k < 0.25) Foam.bubble(x, y);
+      else if (k < 0.256) this.tag(x, y, side);
     },
-    arrive(x, y, s) {                  // (x, y) = 腰；飞到位"定"住：身周一圈冷白光环往外冲 + 水珠四散 + 小震屏
+    arrive(x, y, s) {                  // (x, y) = 腰；飞到位"定"住：身周一圈冷白光环往外冲 + 一团泡沫 + 小震屏
       Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 220 * s, life: 0.24, rgb: [200, 236, 255], a: 0.7 });
       Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [20, 70, 160], lw: 10 * s });
       Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [170, 225, 255], lw: 5 * s });
-      this.drops(x, y, 14, 300, 620, 8, 14);
+      Foam.spawn(x, y, 1.5);
       Particles.addShake(6);
     },
   },
@@ -1104,6 +1093,49 @@ const RECIPE = {
       Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 240 * s, life: 0.36, rgb: [120, 80, 10], lw: 8 * s });
       Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 234 * s, life: 0.36, rgb: [255, 200, 60], lw: 4 * s });
       Particles.addShake(5);
+    },
+  },
+
+  /* 法海 → 女生（2026-09-28，跟白娘子对立）：金光咒语打在她身上，**迸出金字**（fx.js kind 'glyph'：卍、唵、嘛、呢、叭、咪、吽）
+     + 一圈金色佛光环（深褐托底、金芯，同二郎的金环配色），蹦「收！」「回头是岸」「大威天龙」。
+     咒语一发一发的（FAHAI.fluid rate 7），每发都走 drip：多半迸一个小金字，少量金星。 */
+  fahai: {
+    tint: [255, 236, 190],
+    tags: ['收！', '回头是岸', '大威天龙'],
+    GLYPHS: '卍唵嘛呢叭咪吽',
+    tag(x, y, side) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
+      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
+                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [200, 130, 20], edge: [90, 36, 6], lw: 3,
+                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
+    },
+    glyph(x, y, sz, sp0, sp1) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, sp = sp0 + Math.random() * (sp1 - sp0);
+      Particles.spawn({ kind: 'glyph', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 260, drag: 0.94,
+                        life: 0.6 + Math.random() * 0.3, r: sz * 0.6, r1: sz, rot: (Math.random() - 0.5) * 0.6, vrot: (Math.random() - 0.5) * 3,
+                        rgb: [255, 214, 70], edge: [90, 36, 6], lw: Math.max(3, sz * 0.14),
+                        text: this.GLYPHS[Math.floor(Math.random() * this.GLYPHS.length)] });
+    },
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 90 * s, life: 0.2, rgb: [255, 220, 120], a: 0.85 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 130 * s, life: 0.36, rgb: [120, 60, 10], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 126 * s, life: 0.36, rgb: [255, 206, 70], lw: 3.5 * s });
+      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
+      for (let i = 0; i < Math.round(3 * s); i++) this.glyph(x, y, 26 + 6 * s, 180, 380);
+    },
+    drip(x, y, side) {
+      const k = Math.random();
+      if (k < 0.55) this.glyph(x, y, 24 + Math.random() * 8, 120, 260);
+      else if (k < 0.8) { const a = Math.random() * 6.283, sp = 120 + Math.random() * 180;
+        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 300, drag: 0.95, life: 0.3, rgb: [255, 206, 70], lw: 2.5 }); }
+      else if (k < 0.84) this.tag(x, y, side);
+    },
+    arrive(x, y, s) {                   // (x, y) = 腰；飞到位"定"住：一圈金色佛光往外冲 + 几个金字四散 + 小震屏
+      Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 220 * s, life: 0.24, rgb: [255, 226, 140], a: 0.75 });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [120, 60, 10], lw: 10 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [255, 214, 90], lw: 5 * s });
+      for (let i = 0; i < 8; i++) this.glyph(x, y, 34, 300, 560);
+      Particles.addShake(6);
     },
   },
 
@@ -1300,11 +1332,11 @@ const SHOP = {
    见过的，就是吵到最后砸过来的是一束花。 */
 // 档 3 的两个帮手角色 + 档 4 两边各一组三人（crew.js），GIFT[..].crew 指到这里
 /* 档 4 每边一组三人、**同一时间只一个在场**（2026-09-28 用户："三个女神太多了，每个都显得特别小，还是改一个，放大一些"）：
-   场上没人时送 = 按下面的顺序轮到下一个（第一次是白娘子 / 恶魔）；有人在场再送 = 给他 / 她续一段、名字条重播「×N」，不换人
+   场上没人时送 = 按下面的顺序轮到下一个（第一次是白娘子 / 法海）；有人在场再送 = 给他 / 她续一段、名字条重播「×N」，不换人
    （crew.js CrewGroup）。成员顺序也是 ?g4L= / ?g4R= 的下标。
    女生侧白娘子打头（2026-09-28 用户："女神第一个出白娘子"）。 */
 const G4L = CrewGroup([Baisu, Truth, Widow]);    // 查岗党：白娘子（替掉月亮查岗使）/ 真相女神 / 黑蛛女特工
-const G4R = CrewGroup([Demon, Briefs, Erlang]);  // 灭迹党：灭迹恶魔 / 内裤外穿侠 / 二郎·打码神
+const G4R = CrewGroup([Fahai, Demon, Briefs, Erlang]);  // 灭迹党：法海（2026-09-28 加，跟白娘子对立，打头）/ 灭迹恶魔 / 内裤外穿侠 / 二郎·打码神
 const CREW = { buddy: Buddy, bestie: Bestie, g4L: G4L, g4R: G4R };
 const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
 /* 召唤：组（档 4）按 URL ?g4L= / ?g4R= 强制召某一个人（诊断：胶片一个一个单独拍）；单个 Crew 可指定形象 sk（?skin=） */
@@ -1318,8 +1350,16 @@ function summonCrew(name, sk) {
 /* 有出场视频的人 → intro.js CLIPS 的键 */
 const INTRO_OF = new Map([[Truth, 'truth']]);
 const RAIN = { durian: DurianRain, sockball: SockRain };
-/* 白娘子的海水（sea.js）跟着她：她在场、还没开始飞走（候场放视频时不算）就涨，飞走就退。续送她多待，海也多待。 */
-const seaOn = () => Baisu.peek().some(b => !b.hold && b.t <= Baisu.cfg.T.enter + b.spray);
+/* 屏幕底部的法术潮（sea.js）：白娘子的海水、法海的金光经卷，各跟着自己那个人 —— 在场、还没开始飞走（候场放视频时不算）就涨，
+   飞走就退。续送多待，潮也多待。 */
+const casting = (c) => c.peek().some(b => !b.hold && b.t <= c.cfg.T.enter + b.spray);
+/* 两片潮同时在场：按两边水位分左右（左海右经，各在自己那一方的脚下），只有一片时它占满全宽；交界处迸水花和金光（Clash） */
+const tideSplit = () => { const a = Sea.level(), b = Scroll.level(); return a + b > 0 ? W * a / (a + b) : W; };
+function tideUpdate(dt) {
+  Sea.update(dt, casting(Baisu)); Scroll.update(dt, casting(Fahai)); Foam.update(dt);
+  const x = tideSplit();
+  Clash.update(dt, x, Math.min(Sea.edgeY(x), Scroll.edgeY(x)), Math.min(Sea.level(), Scroll.level()));
+}
 /* ?crewlog=1（胶片每格一行）：档 4 在场的人瞄准角 / 目标 / 喷口，和 crew.js measure 的两个外框
    solid（最高点、中线余量按它）/ glow（含外发光，最低点按它），屏幕像素 x0,y0,x1,y1 */
 function crewLog() {
@@ -1508,6 +1548,25 @@ function bodyAt(who, u) {
   if (!cols.length) return null;
   const j = cols[Math.min(cols.length - 1, Math.floor(u * cols.length))];
   return [poseX(m, j * m.edge.step), poseY(m, t[j])];
+}
+
+/* 挨打那个人身上"从头到脚"第 u 那一点（白娘子的水、法海的咒语打全身用，main.js bodyTarget）。who 'topB' 男生 / 'top' 女生。
+   站着 / 跪着：按行取 —— 身上第 u 那一行朝着对方的那条边（edge.b 男生左沿 / edge.a 女生右沿），往身子里收 inset；手机那几行不算。
+   第一版按列取上沿（bodyAt）：人站着时每一列的最上面都是头、肩、伸出去的胳膊，腿和肚子一次都打不到。
+   被拖倒（这个人身上的行加起来不到 SPREAD_ROWS 像素高，横躺着）：按列取上沿往下收 inset —— 横躺时"从头到脚"是横着的。 */
+const SPREAD_ROWS = 260, SPREAD_ARM = 60;   // 横躺判定的高度、手机那几行上下各让开多少（同 init 里的 ARM_GAP）
+function spreadAt(who, u, inset) {
+  const m = WORLD && WORLD.poses[FX.frame];
+  if (!m || !m.edge) return null;
+  const e = m.edge, boy = who === 'topB', row = boy ? e.b : e.a, rows = [];
+  for (let j = 0; j < row.length; j++) {
+    if (row[j] < 0) continue;
+    const y = poseY(m, j * e.step);
+    if (Math.abs(y - FX.phoneY) > SPREAD_ARM) rows.push(j);
+  }
+  if (rows.length * e.step < SPREAD_ROWS) { const p = bodyAt(who, u); return p && [p[0], p[1] + inset]; }
+  const j = rows[Math.min(rows.length - 1, Math.floor(u * rows.length))];
+  return [poseX(m, row[j]) + (boy ? inset : -inset), poseY(m, j * e.step)];
 }
 
 /* 男生的腰和大腿（他的藏青短裤）此刻在屏幕上的外框 [x0, y0, x1, y1] 与落点行。
@@ -2149,7 +2208,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* 天上掉东西（rain.js）：target(u) = 挨砸那个人身上第 u 那一列的上沿（bodyAt，跪下、被拖倒都跟着走），
      top(x) = 这一列的上沿（落到这里就算砸中）。砸中按礼物分量 power 爆（重的档 2、轻的档 1），爆点颜色跟着东西走。
      榴莲鞋雨（查岗党档 2）砸男生：榴莲白、鞋红 / 粉 / 黑。臭袜子足球（灭迹党档 2）砸女生：足球黑白、袜子灰绿臭气。 */
-  Sea.init(W, H);
+  Sea.init(W, H); Scroll.init(W, H);
   DurianRain.init({
     target: (u) => bodyAt('topB', u), top: (x) => topAt('topB', x),
     onHit: (kind, col, x, y, power) => impact(-1, y, power, kind === 'durian' ? RECIPE.durian : HEEL_RECIPE[col], x),
@@ -2195,6 +2254,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        往左的披帛尾巴（~190 像素）出画 —— 她是从左上飞进来的。 */
     baisu:  [110, 886, 1.3],
     demon:  [791, 712],  briefs: [783, 707],  erlang: [788, 701],
+    /* 法海：跟白娘子对称 —— 同样比这一边的人大 30%，最低点是右脚草鞋（在身子右下）。第一版 x 905：左脚草鞋正踩在男主头上
+       （男主被拽着往右仰，头在 x ≈ 820）；挪到 x 985 贴着右边出画一截（袈裟尾巴出画，同白娘子的披帛），左脚在男主头右上方。
+       伸出去的左掌在 x ≈ 580、y ≈ 310：比白娘子掌心的水球（x ≈ 500、y ≈ 580）高出一大截，两人一上一下对着施法。 */
+    fahai:  [985, 850, 1.3],
   };
   const g4Perch = (rcp, side, crew) => (b) => { const [x, y, k = 1] = G4STAND[rcp]; return [x, y, G4STAND.H[side] * k / crew.cfg.spr.tall]; };
 
@@ -2202,10 +2265,16 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      front null：没打中脸的就散掉，不在身体轮廓上爆。onArrive / onSplash / onHit 走各自的配方（RECIPE.truth / baisu / widow /
      demon / briefs / erlang），第一下按档 4 力度打（续送那一下也是，crew.js renew）。 */
   const faceTarget = (who, dir) => (u) => { const f = faceOf(who); return f && [f[0] + dir * 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]]; };
+  /* 白娘子、法海打全身（2026-09-28 用户："白娘子洒出的水流可以往男生身上各处洒，不用只洒头"）：
+     u 从头到脚取对方身上的一点（spreadAt），往身子里收 BODY_IN 像素 —— 正打在轮廓上的话，一半水从边上擦过去。
+     瞄准时 u 按 cfg.sweep 慢慢来回扫（BAISU / FAHAI 的 sweep 扫满 0~1）。 */
+  const BODY_IN = 24;
+  const bodyTarget = (who) => (u) => spreadAt(who, u, BODY_IN);
+  const BODY_AIM = new Set(['baisu', 'fahai']);
   const g4Init = (crew, side, rcp, gift, extraHit) => crew.init({
     W, ground: () => GROUND + FX.bob, horizon,
     perch: g4Perch(rcp, side, crew),
-    target: side === 'L' ? faceTarget('b', -1) : faceTarget('a', +1),
+    target: BODY_AIM.has(rcp) ? bodyTarget(side === 'L' ? 'topB' : 'top') : side === 'L' ? faceTarget('b', -1) : faceTarget('a', +1),
     front: () => null,
     onArrive: (x, y, s) => RECIPE[rcp].arrive(x, y, s),
     onSplash: (x, y) => RECIPE[rcp].drip(x, y, side === 'L' ? -1 : +1),
@@ -2217,6 +2286,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   g4Init(Truth, 'L', 'truth', 'truth');
   g4Init(Baisu, 'L', 'baisu', 'truth');
   g4Init(Widow, 'L', 'widow', 'truth');
+  g4Init(Fahai, 'R', 'fahai', 'demon');
   g4Init(Demon, 'R', 'demon', 'demon');
   g4Init(Briefs, 'R', 'briefs', 'demon');
   /* 二郎打中时：一个聊天气泡从女生脸上飞向哮天犬的嘴（DOG_EAT.fly 秒），到嘴那一刻狗往上扑一口吃掉（crew.js dogPose 读 b.dogEat）。
@@ -2257,6 +2327,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     ...[...G4L.members, ...G4R.members].map(c => c.load(Q0.get('v'), noSpr)),
     DurianRain.load(Q0.get('v'), noSpr),
     Sea.load(Q0.get('v'), noSpr),
+    Scroll.load(Q0.get('v'), noSpr),
     WaterArt.load(Q0.get('v'), noSpr),
     SockRain.load(Q0.get('v'), noSpr),
   ]);
@@ -2303,7 +2374,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
          HUD 永远是"刚开局、什么都没闪过"的样子，?livet 微调也扫不到闪光。 */
       battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30;
       /* 帮手和礼物雨也要跟着快进：不推进的话预热里送的档 3 礼物全卡在 t=0 叠着（闺蜜被叫满、Truth 被连续续时间） */
-      for (const c of CREWS) c.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30); Sea.update(1 / 30, seaOn()); HitSplash.update(1 / 30);
+      for (const c of CREWS) c.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30); tideUpdate(1 / 30);
       derive(1 / 30); hudTick(1 / 30);
     }
     // 预热完冻住**进度**：战况定在这一刻，而火力、弹幕、粒子照跑 —— 截图要的
@@ -2367,6 +2438,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     { crew: Truth,  name: '真相女神',     from: +1, fill: 'rgba(8,20,10,0.62)',  bar: 'rgb(156,238,96)', edge: 'rgb(20,70,30)',   text: 'rgb(214,255,150)' },
     { crew: Baisu,  name: '白娘子',       from: +1, fill: 'rgba(8,22,48,0.62)',  bar: 'rgb(120,200,255)', edge: 'rgb(16,56,130)',  text: 'rgb(236,248,255)' },
     { crew: Widow,  name: '黑蛛女特工',   from: +1, fill: 'rgba(24,4,8,0.66)',   bar: 'rgb(200,40,60)',  edge: 'rgb(90,10,20)',   text: 'rgb(255,190,196)' },
+    { crew: Fahai,  name: '法海',         from: -1, fill: 'rgba(40,14,4,0.66)',  bar: 'rgb(255,196,60)', edge: 'rgb(120,40,10)',  text: 'rgb(255,240,190)' },
     { crew: Demon,  name: '灭迹恶魔',     from: -1, fill: 'rgba(20,6,28,0.66)',  bar: 'rgb(200,90,240)', edge: 'rgb(60,10,70)',   text: 'rgb(246,200,255)' },
     { crew: Briefs, name: '内裤外穿侠',   from: -1, fill: 'rgba(10,16,48,0.66)', bar: 'rgb(220,40,40)',  edge: 'rgb(20,30,110)',  text: 'rgb(255,255,255)' },
     { crew: Erlang, name: '二郎·打码神', from: -1, fill: 'rgba(12,18,40,0.66)', bar: 'rgb(230,180,60)', edge: 'rgb(255,236,170)', text: 'rgb(20,34,90)' },
@@ -2419,7 +2491,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* 哥们在男生斜后方、闺蜜在女生斜后方：连同各自喷的水 / 雾按远近排好，全在主角之前画，被主角挡住（crew.js items） */
     /* 站在主角前面的帮手（真相喷雾，front）画在主角和污渍之后 */
     const crew = CREWS.flatMap(c => c.items()).sort((a, b) => a.s - b.s);
-    Sea.draw(cctx);                      // 白娘子的海水：地板上最底下一层，海面顶到两人脚下，不盖人
+    const split = tideSplit();           // 白娘子的海水 / 法海的经卷：地板上最底下一层，顶到两人脚下，不盖人
+    Sea.draw(cctx, 0, split); Scroll.draw(cctx, split, W); Clash.draw(cctx);
     for (const it of crew) if (!it.front) it.draw(cctx);
     actors.draw(cctx, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(cctx);
@@ -2438,7 +2511,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        最后那段就被身体挡掉了；而粒子是命中的爆炸，该盖在弹幕上面。 */
     Ammo.draw(fctx);
     DurianRain.draw(fctx); SockRain.draw(fctx);   // 天上掉的东西从镜头这一侧砸在人身上，盖在人物之上、爆点之下
-    HitSplash.draw(fctx);                         // 白娘子水柱打在脸上的水花，同样盖在人物之上
+    Foam.draw(fctx);                              // 白娘子水柱打在身上爆的水泡沫，同样盖在人物之上
     Particles.draw(fctx);
     fctx.restore();
     /* 结算全屏接管：演出图铺满整幅，距离条不再画。结果已经写在画面里
@@ -2554,7 +2627,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     for (let k = Math.round(Math.max(0, +(Q.get('ammoskip') || 0)) * 60); k > 0; k--) {
       const d = Particles.tick(1 / 60);
       Particles.update(1 / 60); Ammo.update(d);
-      for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); Sea.update(d, seaOn()); HitSplash.update(d);
+      for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); tideUpdate(d);
       Bubble.update(d, FX.struggle); derive(d); hudTick(d);
       simT += 1 / 60; callDue();
     }
@@ -2566,7 +2639,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         const d = Particles.tick(1 / 60);
         Particles.update(1 / 60);
         Ammo.update(d);
-        for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); Sea.update(d, seaOn()); HitSplash.update(d);
+        for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); tideUpdate(d);
         Bubble.update(d, FX.struggle);
         derive(d); hudTick(d);
       }
@@ -2804,7 +2877,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        这一下"的可视化，冻住它就迟到了；而正在飞的弹幕是**下一下**的前奏，
        顿帧的意思就是全世界停下来看这一击，此刻别的东西还在飞就散掉了。 */
     Ammo.update(dt);
-    for (const c of CREWS) c.update(dt); DurianRain.update(dt); SockRain.update(dt); Sea.update(dt, seaOn()); HitSplash.update(dt);
+    for (const c of CREWS) c.update(dt); DurianRain.update(dt); SockRain.update(dt); tideUpdate(dt);
     // 气泡跟着逻辑时钟：顿帧时它也该停，那半秒全世界都在看刚才那一击
     Bubble.update(dt, FX.struggle);
     S.t += dt;

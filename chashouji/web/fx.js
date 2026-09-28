@@ -271,7 +271,7 @@ const Particles = (function () {
   }
 
   /* 实体（普通混合、吃描边）的 kind；其余 dot / spark / ring 是光，走第二趟 lighter */
-  const SOLID = new Set(['soft', 'chip', 'star', 'heart', 'card', 'chat', 'tag', 'web', 'mosaic']);
+  const SOLID = new Set(['soft', 'chip', 'star', 'heart', 'card', 'chat', 'tag', 'glyph', 'web', 'mosaic']);
 
   /* 同一格每帧同一个随机数（马赛克的灰度、散开方向）：按格坐标和粒子种子哈希，不在 draw 里抽随机 —— 抽的话每帧换色，读成雪花屏 */
   const hash = (i, j, s) => { const v = Math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };
@@ -347,6 +347,17 @@ const Particles = (function () {
         ctx.fillStyle = p.fill; ctx.fill();
         if (p.line) { ctx.lineWidth = p.lw; ctx.strokeStyle = p.line; ctx.stroke(); }
         ctx.fillStyle = '#ffffff'; ctx.fillText(p.text, 0, 1);
+        ctx.restore();
+      } else if (p.kind === 'glyph') {
+        /* 一个金字（法海的咒语打中女生：「卍」「唵」「吽」这些字从她身上迸出来）：金芯 + 深褐粗描边，r → r1 是字号，
+           先弹大一点再回落，边飞边慢慢转。金字在浅色底图上不描边就化掉。 */
+        const u = 1 - k, sz = p.r1 * (u < 0.12 ? 0.6 + 0.4 * u / 0.12 * 1.3 : 1);
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.font = `900 ${sz.toFixed(1)}px "Noto Serif CJK SC","Songti SC","STSong","SimSun",serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.lineWidth = p.lw; ctx.strokeStyle = p.line || '#5a2a08'; ctx.strokeText(p.text, 0, 0);
+        ctx.fillStyle = p.fill; ctx.fillText(p.text, 0, 0);
         ctx.restore();
       } else if (p.kind === 'web') {
         /* 蛛网（黑蛛女特工打中男生脸）：前 15% 寿命从 r 张到 r1，之后贴在脸上不动。8 根辐条 + 3 圈折线环，

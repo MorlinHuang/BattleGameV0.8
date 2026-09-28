@@ -237,7 +237,9 @@ function Crew(cfg) {
     }
     /* F.radius（白娘子）：离落点这么近就算中。她从左上方往下泼，水快竖着落到脸上 —— 按"越过落点那一列"判的话，
        竖着落的水在那一列左边一点就一路掉下去了，永远越不过去（第一版整股水穿过男生砸到地板上） */
-    if (tg && F.radius && Math.hypot(d.x - tg[0], d.y - tg[1]) < F.radius) return [d.x, d.y];
+    /* 有 radius 的只按半径判：她 / 法海改打全身之后（落点可以在腿上、背上），"越过落点那一列、上下 miss 以内"那条规则在
+       落点上方一百多像素就判中了（从左上往下泼，水先越过那一列、再往下落）—— 水柱画到判中那颗水滴为止，停在半空。 */
+    if (tg && F.radius) return Math.hypot(d.x - tg[0], d.y - tg[1]) < F.radius ? [d.x, d.y] : null;
     if (tg && past(tg[0]) && Math.abs(d.y - tg[1]) < F.miss)
       return [tg[0], F.snap == null ? d.y : tg[1] + Math.max(-F.snap, Math.min(F.snap, d.y - tg[1]))];
     const fr = o.front(d.y);
@@ -385,7 +387,9 @@ function Crew(cfg) {
     const sOf = (b) => cfg.move === 'hover' && bs.includes(b) ? pose(b)[2] : b.s;
     for (const b of bs) if (!b.hold) out.push({ s: sOf(b), front, draw: (ctx) => drawOne(ctx, b) });
     /* 人已离场、水还在飞的，按原来那个人的远近画 */
-    for (const [b, g] of groups) out.push({ s: sOf(b) + 1e-6, front, draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
+    /* cfg.over（白娘子、法海）：放出去的东西画在所有帮手之上 —— 两人一左一右同时在场，法海的金字从白娘子半透明的广袖后面飞过去，
+       被袖子蒙成一层白雾，读成"字在她身后"而不是"打向女生" */
+    for (const [b, g] of groups) out.push({ s: sOf(b) + (cfg.over ? 100 : 1e-6), front, draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
     return out;
   }
 
@@ -808,7 +812,7 @@ const DEMON = {
 const Demon = Crew(DEMON);
 
 /* ======== 档 4 每边一组三人（2026-09-28，规格 shots/review/trio/trio_spec.md；同日改成同时只一个在场、轮换，见 CrewGroup）========
-   女生侧：真相女神 + 白娘子（2026-09-28 替掉月亮查岗使）+ 黑蛛女特工；男生侧：灭迹恶魔 + 内裤外穿侠 + 二郎·打码神。
+   女生侧：真相女神 + 白娘子（2026-09-28 替掉月亮查岗使）+ 黑蛛女特工；男生侧：法海（同日加，跟白娘子对立）+ 灭迹恶魔 + 内裤外穿侠 + 二郎·打码神。
    每个人的武器都不一样（雾 / 大水流 / 蛛网 / 射线 / 天眼 + 马赛克），不能走 skins 换皮（skins 要同一个裁边框、同一套 foot / muzzle），
    所以每人一份 Crew 配置，照 TRUTH / DEMON 的写法（悬停、whole 整个人小幅前后倾、二分反解瞄准），每边一个 CrewGroup（main.js），站位 main.js G4STAND。
    立绘 v14/<名>/make.py（共用 v14/crewart.py），量点都是它打印的贴图像素。
@@ -891,6 +895,7 @@ function drawBaisuAura(ctx, b, s, at, probe) {
 const BAISU = {
   ...TRUTH,
   whole: { pivot: [534, 324], k: 0.12 },        // 身子只跟瞄准角的 12%（见上）
+  over: true,                                   // 水柱画在所有帮手之上（crew.js items）
   exhaust: null,                                // 仙人本来就会飞，没有尾焰
   spr: { src: 'assets/world/baisu%n_%k.webp', body: { src: 'up', pivot: [534, 324], k: 1 },
          foot: [343, 751], muzzle: [732, 447], rest: -0.9, head: [516, 60], chest: [546, 264], tall: 691 },   // v14/baisu/make.py 打印；foot 是裙摆最低那一角
@@ -899,6 +904,9 @@ const BAISU = {
   /* rest -0.9：掌心 → 男生的脸大约朝右下 50°~70°（她悬在左上、男生在右下）；立绘里手腕 → 水球是 −0.70。
      瞄准角 ±0.55 在它上下，水流方向落在 −1.45 ~ −0.35，男生站着、趴地都够得着。 */
   aim: { lo: -0.55, hi: 0.55, rate: 1.6, follow: 8, stiff: 40 },
+  /* 打全身（2026-09-28 用户："水流可以往男生身上各处洒，不用只洒头"）：main.js 给的落点 u 0 → 1 是他身上从一头到另一头的上沿，
+     u 以 0.5 为中心扫 ±0.55（两个正弦叠，夹到 0~1），比女神慢一半：水柱在他身上一路扫过去看得清 */
+  sweep: { a: [0.4, 0.15], w: [0.6, 1.5] },
   /* 出场：从左上画外斜着飞下来（带一点前倾 roll0，刹停时回正）；离场原路往左上飞走 */
   path: { from: (s, hx, hy) => [hx - 700 * s, hy - 700 * s], roll0: -0.2, to: (s, x, y) => [x - 800 * s, y - 800 * s], rollOut: -0.15 },
   anim: { pulse: [1.0, 0.35], kick: [0, 0.03, 6], lean: 0.02, bob: [8, 1.5] },
@@ -1087,3 +1095,100 @@ const ERLANG = {
            draw: (ctx, ps, b) => drawBeams(BEAM_ERLANG, ctx, ps, b) },
 };
 const Erlang = Crew(ERLANG);
+
+
+/* ---- ⑦ 法海（男生档 4，2026-09-28，跟白娘子对立）----
+   用户："给男生那边做个法海，与白娘子对立，在男生那边。法海可以向女神发送各种金光咒语，周身也是金光自发光。
+          同样也需要跟白娘子海面的动效，可能是在金光虚化的佛经卷轴，也会和海平面一样波动，虾兵蟹将可以对应神兽小佛"。
+   跟白娘子左右对称：从右上画外斜着飞下来，比同侧的人大 30%（main.js G4STAND.fahai 第三项），在场 15 秒，脚下铺金光经卷（sea.js Scroll）。
+   立绘 v14/fahai/make.py：原创脸，光头戒疤、黄僧袍红金袈裟、托金钵，左掌朝女生伸出（掌心一团金光）—— 咒语从掌心出（muzzle）。
+   · 咒语：一个个金字（卍 唵 嘛 呢 叭 咪 吽 轮着来）从掌心直直打出去（G 0），打在女生身上迸成更多金字（main.js RECIPE.fahai）；
+     一段"念"（pulse 1.1 秒）停一下（0.35），跟白娘子一样只让身子跟瞄准角的一小份（whole.k），咒语按完整角度出。
+   · 自发光：三层金色外发光烘在贴图里（make.py），运行时身后再加一圈慢慢转的佛光（放射金光 + 头后光轮）、掌心金光团（drawFahaiAura）。
+   · 打全身：同白娘子，落点从她身上一头扫到另一头（main.js bodyTarget）。 */
+const FAHAI_FX = {
+  halo: { at: 'head', R: 92, lw: 7, rgb: [255, 206, 70], edge: [140, 70, 10] },       // 头后光轮：半径（贴图像素 × s）、线宽、金、深褐托底
+  rays: { n: 14, R: [150, 420], w: 0.09, spin: 0.12, rgb: [255, 200, 60], a: 0.28 },   // 身后放射金光：几道、从多远到多远、每道张角、转速
+  glow: { R: 360, a: 0.3, rgb: [255, 196, 70], core: [255, 244, 200] },               // 身后一团暖光
+  orb: { R: 64, rgb: [255, 200, 60] },                                                 // 掌心金光团
+  mantra: { chars: '卍唵嘛呢叭咪吽', size: [24, 50], grow: 0.18, fill: [255, 220, 90], edge: [96, 40, 6], glow: [255, 190, 40] },   // 咒语金字：出手时字号 → 飞 grow 秒后的字号
+};
+function drawFahaiAura(ctx, b, s, at, probe) {
+  const F = FAHAI_FX, k = Math.min(1, b.t / 0.4), [cx, cy] = at(FAHAI.spr.chest);
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
+  ctx.save();
+  if (!probe) {                                                  // measure 不量身后的光（特效层，同女神的光芒）
+    const G = F.glow, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, G.R * s);
+    g.addColorStop(0, rgba(G.core, G.a * k)); g.addColorStop(0.45, rgba(G.rgb, G.a * 0.5 * k)); g.addColorStop(1, rgba(G.rgb, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, G.R * s, 0, 6.283); ctx.fill();
+    /* 放射金光：一道道细长的扇形，慢慢转，一明一暗 */
+    const R = F.rays;
+    for (let i = 0; i < R.n; i++) {
+      const a = i / R.n * 6.283 + b.t * R.spin, fl = 0.6 + 0.4 * Math.sin(b.t * 2.3 + i * 1.9);
+      const r0 = R.R[0] * s, r1 = R.R[1] * s * (0.8 + 0.2 * Math.sin(i * 2.7));
+      const rg = ctx.createRadialGradient(cx, cy, r0, cx, cy, r1);
+      rg.addColorStop(0, rgba(R.rgb, R.a * fl * k)); rg.addColorStop(1, rgba(R.rgb, 0));
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r1, a - R.w, a + R.w); ctx.closePath(); ctx.fill();
+    }
+  }
+  /* 头后光轮：算"人"的一部分（measure 量它） */
+  const H = F.halo, [hx, hy] = at(FAHAI.spr.halo), hr = H.R * s;
+  ctx.lineWidth = (H.lw + 4) * s; ctx.strokeStyle = rgba(H.edge, 0.55 * k); ctx.beginPath(); ctx.arc(hx, hy, hr, 0, 6.283); ctx.stroke();
+  ctx.lineWidth = H.lw * s; ctx.strokeStyle = rgba(H.rgb, 0.9 * k); ctx.beginPath(); ctx.arc(hx, hy, hr, 0, 6.283); ctx.stroke();
+  /* 掌心金光团：念的时候（kick）胀一下 */
+  const O = F.orb, [ox, oy] = at(FAHAI.spr.muzzle), orR = O.R * s * (1 + 0.3 * b.kick + 0.08 * Math.sin(b.t * 6));
+  const og = ctx.createRadialGradient(ox, oy, 0, ox, oy, orR);
+  og.addColorStop(0, rgba([255, 255, 240], 0.95 * k)); og.addColorStop(0.35, rgba(O.rgb, 0.6 * k)); og.addColorStop(1, rgba(O.rgb, 0));
+  ctx.fillStyle = og; ctx.beginPath(); ctx.arc(ox, oy, orR, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+/* 咒语：每颗粒子画一个金字（按 seq 轮着取字），身后一团金光、拖一小截金色残影；出手时小、飞 grow 秒长到全尺寸 */
+function drawMantra(ctx, ps) {
+  const M = FAHAI_FX.mantra, rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  for (const d of ps) {
+    if (d.ex) continue;
+    const e = Math.min(1, d.t / M.grow), sz = M.size[0] + (M.size[1] - M.size[0]) * e;
+    const sp = Math.hypot(d.vx, d.vy) || 1, tx = -d.vx / sp, ty = -d.vy / sp;
+    const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, sz * 1.1);
+    g.addColorStop(0, rgba(M.glow, 0.55)); g.addColorStop(1, rgba(M.glow, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, sz * 1.1, 0, 6.283); ctx.fill();
+    ctx.lineCap = 'round';
+    for (const [w, a, L] of [[sz * 0.5, 0.22, 2.2], [sz * 0.22, 0.5, 1.4]]) {   // 残影：往来的方向拖两道渐短的金光
+      ctx.lineWidth = w; ctx.strokeStyle = rgba(M.glow, a);
+      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + tx * sz * L, d.y + ty * sz * L); ctx.stroke();
+    }
+    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(Math.sin(d.t * 5 + d.j * 6) * 0.25);
+    ctx.font = `900 ${sz.toFixed(1)}px "Noto Serif CJK SC","Songti SC","STSong","SimSun",serif`;
+    const ch = M.chars[((d.seq % M.chars.length) + M.chars.length) % M.chars.length];
+    ctx.lineWidth = Math.max(3, sz * 0.16); ctx.strokeStyle = rgba(M.edge, 1); ctx.strokeText(ch, 0, 1);
+    ctx.fillStyle = rgba(M.fill, 1); ctx.fillText(ch, 0, 1);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+const FAHAI = {
+  ...DEMON,
+  whole: { pivot: [292, 310], k: 0.12 },        // 身子只跟瞄准角的 12%（同白娘子：大袖子、袈裟往右上飘一大片，整个人倾会甩出画）
+  exhaust: null,                                // 仙佛本来就会飞，没有尾焰
+  over: true,                                   // 咒语画在所有帮手之上（crew.js items）
+  spr: { src: 'assets/world/fahai%n_%k.webp', body: { src: 'up', pivot: [292, 310], k: 1 },
+         foot: [486, 716], muzzle: [77, 170], head: [262, 84], chest: [269, 250], halo: [262, 140], tall: 632,   // v14/fahai/make.py 打印；foot 是右脚草鞋底
+         /* rest −1.15：掌心 → 女生身上大约朝左下 55°~75°（他悬在右上、女生在左下）。掌心不是枪管，rest 直接取典型俯角；
+            瞄准角 −0.4 ~ +0.45 在它上下，咒语方向落在 −1.55 ~ −0.7，女生站着、倒地都够得着 */
+         rest: -1.15 },
+  skins: [1],
+  aura: (ctx, b, s, at, probe) => drawFahaiAura(ctx, b, s, at, probe),
+  aim: { lo: -0.4, hi: 0.45, rate: 1.6, follow: 8, stiff: 40 },
+  sweep: { a: [0.4, 0.15], w: [0.6, 1.5] },      // 打全身，同白娘子
+  /* 出场：从右上画外斜着飞下来（带一点前倾 roll0，刹停时回正）；离场原路往右上飞走 */
+  path: { from: (s, hx, hy) => [hx + 700 * s, hy - 700 * s], roll0: 0.2, to: (s, x, y) => [x + 800 * s, y - 800 * s], rollOut: 0.15 },
+  anim: { pulse: [1.1, 0.35], kick: [0, 0.03, 6], lean: 0.02, bob: [8, 1.5] },
+  /* 在场共 15 秒（同白娘子）：飞下来 1.0 + 施法 13.5 + 飞走 0.5。续送再加 13.5。 */
+  T: { enter: 1.0, spray: 13.5, exit: 0.5, fire: 0.3 },
+  /* 咒语：直线（G 0）、不快（V 820，一个字看得清），每秒 10 个；radius 近距命中（同白娘子：从上往下打，越不过落点那一列） */
+  fluid: { V: 820, G: 0, drag: 0, rate: 10, spread: 0.05, vJit: 0.05, life: 1.3, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
+           draw: (ctx, ps) => drawMantra(ctx, ps) },
+};
+const Fahai = Crew(FAHAI);

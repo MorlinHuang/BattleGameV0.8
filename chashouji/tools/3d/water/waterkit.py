@@ -1,4 +1,4 @@
-"""水的 3 渲 2 公共件（2026-09-28）：白娘子的掌心水柱（jet.py）、水花（splash.py）共用。
+"""水的 3 渲 2 公共件（2026-09-28）：白娘子的掌心水柱（jet.py）用（先前还有海面 sea.py、水花 splash.py，都被否掉删了）。
 
 跟八件礼物（tools/3d/common.py）同一套画风 —— 硬边分档明暗 + Freestyle 描边，但**不走 Cycles 的光照**：
 明暗在材质里用法线现算（N·L 按 TONES 硬切几档），用自发光输出。试过 common.mat 的 Toon BSDF + 太阳 + 环境补光：
