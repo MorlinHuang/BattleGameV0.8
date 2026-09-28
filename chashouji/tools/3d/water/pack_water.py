@@ -1,0 +1,50 @@
+"""把 sea.py / jet.py / splash.py 渲出来的帧打成 WebP 图集（2026-09-28），打印引擎要填的数。
+用法：python3 pack_water.py <渲染根目录（含 sea_out jet_out splash_out）> <web/assets/fx 目录>
+
+每一套按**所有帧的并集外框**裁（逐帧裁的话帧与帧对不齐、播起来抖），再按 SCALE 缩，排成 COLS 列：
+  sea_<far|mid|near>.webp：海面三层。0.6 倍（全尺寸 36 帧 × 三层解码要 ~120MB，手机扛不住；0.6 倍 ~43MB），
+      引擎按 1/0.6 放大画回 960 宽。打印的 top 是这一层裁剪框上沿在渲染图里的 y（引擎：屏幕 y = SEA_TOP + top）。
+  jet.webp：水柱 16 帧，原尺寸。打印的 x0 = 掌心（渲染图 x 12 像素处，jet.py X0）在裁剪框里的 x，cy = 中轴在裁剪框里的 y。
+  splash.webp：水花 10 帧，原尺寸。打印 ox, oy = 撞击点（splash.py ORIGIN）在裁剪框里的位置。
+"""
+import os, sys, glob
+from PIL import Image
+
+SRC, DST = sys.argv[1], sys.argv[2]
+
+
+def union(files):
+    box = None
+    for f in files:
+        b = Image.open(f).getbbox()
+        if b is None: continue
+        box = b if box is None else (min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3]))
+    return box
+
+
+def pack(files, out, scale, cols, full_width=False):
+    box = union(files)
+    if full_width: box = (0, box[1], Image.open(files[0]).width, box[3])   # 海面：横向不裁（左右都是满的）
+    w, h = box[2] - box[0], box[3] - box[1]
+    cw, ch = round(w * scale), round(h * scale)
+    rows = (len(files) + cols - 1) // cols
+    at = Image.new('RGBA', (cw * cols, ch * rows))
+    for i, f in enumerate(files):
+        im = Image.open(f).crop(box)
+        if scale != 1: im = im.resize((cw, ch), Image.LANCZOS)
+        at.paste(im, ((i % cols) * cw, (i // cols) * ch))
+    at.save(out, 'WEBP', quality=86, method=6)
+    print(f'{os.path.basename(out)}: {len(files)} 帧 cell {cw}x{ch} cols {cols} 裁剪框 {box} 文件 {os.path.getsize(out) // 1024}KB')
+    return box
+
+
+for band in ('far', 'mid', 'near'):
+    fs = sorted(glob.glob(os.path.join(SRC, 'sea_out', f'{band}_*.png')))
+    b = pack(fs, os.path.join(DST, f'sea_{band}.webp'), 0.6, 6, full_width=True)
+    print(f'  {band} top {b[1]} h {b[3] - b[1]}')
+fs = sorted(glob.glob(os.path.join(SRC, 'jet_out', 'jet_*.png')))
+b = pack(fs, os.path.join(DST, 'jet.webp'), 1, 4)
+print(f'  jet 掌心 x0 {12 - b[0]} 中轴 cy {120 - b[1]}（jet.py：X0 = −2.9 → 渲染 x = (−2.9 + 3) × 120 = 12，出口封口描边往左 ~3 像素）')
+fs = sorted(glob.glob(os.path.join(SRC, 'splash_out', 'splash_*.png')))
+b = pack(fs, os.path.join(DST, 'splash.webp'), 1, 5)
+print(f'  splash 撞击点 ox {160 - b[0]} oy {160 + 72 - b[1]}（splash.py ORIGIN z −0.9 → 渲染 y 160 + 0.9 × 80）')

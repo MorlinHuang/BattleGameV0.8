@@ -489,13 +489,9 @@ const WATER = {
   breakT: 0.14, brk: 0.16,           // 飞过多少秒以后开始会断、每滴身后断开的概率
   edge: [40, 110, 190], body: [150, 214, 255], glint: [4, 7],   // 描边色、水身色、高光：每 7 段亮 4 段
   mist: 0.35,                        // 水沫：每滴甩出的概率（按 j 取，同一滴每帧一样，不闪）
-  mistR: [1.8, 2],                   // 水沫颗粒半径 = mistR[0] + mistR[1] × (0~1)
-  alpha: [0.5, 0.85],                // 描边、水身的不透明度（再乘 a1 那条随飞行变淡的）
-  lanes: 0,                          // 水身里顺流的白色水纹几道（0 = 不画）
-  bead: [0.35, 0.2],                 // 断开后的水珠半径 = 此处水宽 × (bead[0] + bead[1] × 0~1)
 };
-function drawStream(ctx, ps, b, W = WATER) {
-  const wOf = (d) => W.w0 + (W.w1 - W.w0) * Math.min(1, d.t / W.grow);
+function drawStream(ctx, ps, b) {
+  const W = WATER, wOf = (d) => W.w0 + (W.w1 - W.w0) * Math.min(1, d.t / W.grow);
   const aOf = (d) => 1 - (1 - W.a1) * Math.min(1, d.t / W.grow);
   /* 连成段：[前一滴, 这一滴]；喷口那一段用一个 t=0 的假水滴 */
   const segs = [];
@@ -511,32 +507,18 @@ function drawStream(ctx, ps, b, W = WATER) {
   ctx.lineCap = 'round';
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
   /* 描边 → 水身：两遍，每段按两头的平均宽度/透明度 */
-  for (const [pad, col, k] of [[5, W.edge, W.alpha[0]], [0, W.body, W.alpha[1]]]) {
+  for (const [pad, col, k] of [[5, W.edge, 0.5], [0, W.body, 0.85]]) {
     for (const [p, d] of segs) {
       const m = { t: (p.t + d.t) / 2 };
       ctx.lineWidth = wOf(m) + pad; ctx.strokeStyle = rgba(col, aOf(m) * k);
       ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(d.x, d.y); ctx.stroke();
     }
   }
-  /* 顺流水纹（白娘子的大水流）：水身里几道细白线，沿每段偏到两侧不同位置、一段有一段没有 —— 读成一大股在流的水，不是一根实心管子 */
-  if (W.lanes) {
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(235,248,255,.75)'; ctx.beginPath();
-    for (let l = 0; l < W.lanes; l++) {
-      const f = (l + 0.5) / W.lanes - 0.5;
-      for (const [p, d] of segs) {
-        if ((d.seq + l * 3) % 5 >= 3) continue;
-        const dx = d.x - p.x, dy = d.y - p.y, L = Math.hypot(dx, dy) || 1, nx = dy / L, ny = -dx / L;
-        const o = wOf({ t: (p.t + d.t) / 2 }) * f * 0.8;
-        ctx.moveTo(p.x + nx * o, p.y + ny * o); ctx.lineTo(d.x + nx * o, d.y + ny * o);
-      }
-    }
-    ctx.stroke();
-  }
   /* 断开之后的水珠：后半段没连上的水滴，各画一颗 */
   const linked = new Set(); for (const [p, d] of segs) { linked.add(p); linked.add(d); }
   for (const d of ps) {
     if (linked.has(d) && d.j >= W.brk) continue;
-    const r = wOf(d) * (W.bead[0] + W.bead[1] * ((d.j * 7) % 1));   // 大小按 j 散开一点，同一滴每帧一样
+    const r = wOf(d) * (0.35 + 0.2 * ((d.j * 7) % 1));   // 大小按 j 散开一点，同一滴每帧一样
     ctx.fillStyle = rgba(W.edge, aOf(d) * 0.6); ctx.beginPath(); ctx.arc(d.x, d.y, r + 2, 0, 6.283); ctx.fill();
     ctx.fillStyle = rgba(W.body, aOf(d) * 0.9); ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, 6.283); ctx.fill();
   }
@@ -553,7 +535,7 @@ function drawStream(ctx, ps, b, W = WATER) {
   /* 水沫：飞过 breakT 的水滴，按 j 甩到两侧一点 */
   for (const d of ps) {
     if (d.t < W.breakT || d.j > W.mist) continue;
-    const k = d.j / W.mist, off = (k - 0.5) * 2 * wOf(d) * 1.3, r = W.mistR[0] + W.mistR[1] * k;
+    const k = d.j / W.mist, off = (k - 0.5) * 2 * wOf(d) * 1.3, r = 1.8 + 2 * k;
     const vl = Math.hypot(d.vx, d.vy) || 1, x = d.x - d.vy / vl * off, y = d.y + d.vx / vl * off;
     ctx.fillStyle = rgba(W.edge, 0.55); ctx.beginPath(); ctx.arc(x, y, r + 1.2, 0, 6.283); ctx.fill();
     ctx.fillStyle = rgba(W.body, 0.95); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
@@ -840,19 +822,41 @@ const rgbaOf = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
    · 念咒：立绘就是念咒的姿势（左手胸前剑指、右手托水球），不靠转身瞄准 —— 她比女神大三成、裙摆披帛往左上飘一大片，
      整个人跟着瞄准倾 0.5 rad 的话，裙角要甩出去两百像素。所以 whole.k 只让身子跟瞄准角的一小份（轻轻前后倾，看着是活的），
      水流方向照样按完整的瞄准角出（crew.js angles：喷口指向 = th）。
-   · 大水流：跟哥们的水柱同一套画法（drawStream），换一份更粗更猛的参数 TORRENT；一段"哗——"（pulse 1.0 秒）停一下（0.35），
-     每泼一下身子微微一震（kick）。带重力（G 700）：水是泼出去、往下砸的，不是射线。
+   · 掌心水柱：3 渲 2 序列帧（drawJet）；一段"哗——"（pulse 1.0 秒）停一下（0.35），每喷一下身子微微一震（kick）。
    · 自发光：三层冰蓝外发光烘在贴图里（make.py），运行时再加身后一团会呼吸的冷白光 + 绕着她飘的水珠 + 掌心水球的光（drawBaisuAura）。 */
-const TORRENT = {
-  ...WATER,
-  w0: 40, w1: 120, grow: 0.4,         // 掌心出口就有水球宽，飞 0.4 秒胀到 120（哥们的水柱 7 → 20）。第一版 26 → 84 看着是根水管
-  a1: 1, alpha: [0.95, 1],            // 不透明：半透明的圆头段一段段叠出深浅，第一版整股读成一串香肠泡泡
-  breakT: 0.34, brk: 0.03,            // 后段才断，断得很少：一大股水，不是一串水珠
-  lanes: 3,
-  bead: [0.1, 0.08],                  // 水宽 120 时按哥们的比例断出来的珠子直径 ~100，一颗大蓝球挂在男生身上
-  edge: [24, 84, 180], body: [128, 204, 255], glint: [3, 5],
-  mist: 0.7, mistR: [3, 6],           // 水沫多、颗粒大（哥们 1.8 + 2k）
-};
+/* 掌心水柱：Blender 渲的 3 渲 2 循环帧（tools/3d/water/jet.py，贴图参数在 sea.js WaterArt.jet）。
+   第一版用 drawStream 的粗线段连水滴（出口 40 像素宽、圆头一段段叠起来），读成一只倒扣的瓶子往下倒水 ——
+   用户："不要用瓶子倒水，而是直接从手掌中喷水"。现在是一束高压水：掌心细、往前胀、表面水纹往前滚、末端碎成水珠。
+   水滴（ps）照旧按物理飞、管命中（crew.js update / hitTest），但**不画**，只用来定水柱的两头：
+     · 按住喷（b.m 有）：水柱从掌心接到最老那颗水滴，整张贴图按这段长度缩放（喷出去的那 0.3 秒里水柱一路伸长）；
+     · 松开（b.m 没了）：掌心那头从最新那颗水滴起算 —— 尾巴离开掌心往前飞，贴图只截后面那一段。
+   方向：掌心 → 瞄的落点（b.tg）。水滴走的是带重力的弧线，水柱画直线：打到脸上这段只有 0.3~0.4 秒，弧度看不出来。 */
+const JET_BODY = 0.88;                                         // 贴图的这一成长度对准落点（柱身到 0.84，再带一点碎水）
+function drawJet(ctx, ps, b, hitR) {
+  const J = WaterArt.jet;
+  if (!J.img || !ps.length) return;
+  const old = ps[0], neu = ps[ps.length - 1];
+  if (b && b.m) b.jm = b.m;                                     // 记住掌心（松开之后还要按它截尾巴）
+  const M = b && b.jm ? b.jm : [neu.x, neu.y];
+  const T = b && b.tg ? b.tg : [old.x, old.y];
+  /* 伸到哪：最老那颗水滴再往前 hitR（命中半径）—— 水滴一进半径就判中、被拿掉，最老的那颗永远差落点一截，
+     只画到它的话水柱停在男生头顶上方六十像素（真页面上男生趴地时看得最清楚） */
+  const D = Math.hypot(T[0] - M[0], T[1] - M[1]), reach = Math.min(D, Math.hypot(old.x - M[0], old.y - M[1]) + hitR);
+  const tail = b && b.m ? 0 : Math.min(reach, Math.hypot(neu.x - M[0], neu.y - M[1]));
+  if (reach - tail < 12) return;
+  /* L：贴图里柱身 + 碎开那一段的长度。柱身在 jet.py 里只到全长的 84%，后面是散开的水珠 —— 按 JET_BODY 对准落点，
+     柱身正好砸到脸上，水珠冲过去一点盖进水花里 */
+  const L = (J.w - J.x0) * JET_BODY, ang = Math.atan2(T[1] - M[1], T[0] - M[0]);
+  const k = (b && b.m ? reach : D) / L;                        // 长度方向的缩放：按住时整张缩到当前长度，松开后按全长截
+  const ws = Math.max(0.8, Math.min(1.05, D / L));             // 粗细：离得近细一点，不跟长度一起压扁
+  const i = Math.floor(((b ? b.t : neu.t) / J.loop % 1) * J.n) % J.n;
+  const [sx, sy, , sh] = atlasCell(J, J, i);
+  const a = tail / k, e = (b && b.m ? J.w - J.x0 : reach / k);
+  ctx.save();
+  ctx.translate(M[0], M[1]); ctx.rotate(ang); ctx.scale(k, ws);
+  ctx.drawImage(J.img, sx + J.x0 + a, sy, e - a, sh, a, -J.cy, e - a, sh);
+  ctx.restore();
+}
 const BAISU_FX = {
   glow: { R: 380, a: 0.34, rgb: [150, 215, 255], core: [236, 248, 255], breath: [1.6, 0.18] },   // 身后冷光：半径、不透明度、颜色、亮芯、呼吸 [角频率, 幅度]
   motes: { n: 12, R: [170, 330], r: [5, 10], spin: 0.5, edge: [24, 84, 180], fill: [200, 236, 255] },  // 绕身水珠：几颗、绕的半径范围、珠子半径、转速
@@ -902,7 +906,7 @@ const BAISU = {
   T: { enter: 1.0, spray: 13.5, exit: 0.5, fire: 0.3 },
   /* life 0.7：打到脸上 ~0.4 秒，没打中的再飞一小段就散（1.2 时越过男生一路砸到地板上） */
   fluid: { V: 1150, G: 700, drag: 0.3, rate: 80, spread: 0.05, vJit: 0.06, life: 0.7, miss: 130, radius: 75, snap: 14, hitEvery: 0.3, floor: false,
-           draw: (ctx, ps, b) => drawStream(ctx, ps, b, TORRENT) },
+           draw: (ctx, ps, b) => drawJet(ctx, ps, b, BAISU.fluid.radius) },
 };
 const Baisu = Crew(BAISU);
 

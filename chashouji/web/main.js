@@ -319,7 +319,7 @@ function startMatch() {
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
-  for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); Sea.reset();
+  for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); Sea.reset(); HitSplash.reset();
   IntroVideo.stop();
   S.auto = false;
   Ammo.clear(); Particles.clear();
@@ -975,11 +975,11 @@ const RECIPE = {
       }
     },
     burst(x, y, side, s) {
-      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 90 * s, life: 0.16, rgb: [200, 236, 255], a: 0.85 });
-      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 130 * s, life: 0.32, rgb: [20, 70, 160], lw: 8 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 126 * s, life: 0.32, rgb: [150, 214, 255], lw: 4.5 * s });
+      /* 3D 水花（sea.js HitSplash，Blender 渲的水冠）+ 几颗 3D 水珠（chip pearl 有转盘贴图）。第一版是冷白闪 + 深蓝环 + 蓝白圆点：
+         跟 3 渲 2 的水柱放在一起是两套画风（用户嫌"太 Q"），环和闪都去掉了 */
+      HitSplash.spawn(x, y, Math.min(1.05, 0.45 + 0.3 * s));   // 第一下（s 2.8）放到 1.3 时，收尾那圈带刺的环比男生的头还大
       for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
-      this.drops(x, y, Math.round(16 * s), 260 * s, 700 * s, 7 * s, 14 * s);
+      this.drops(x, y, Math.round(8 * s), 260 * s, 620 * s, 7 * s, 13 * s);
     },
     drip(x, y, side) {                  // 水流一路打在脸上：一半出两三颗小水珠，极少出字
       const k = Math.random();
@@ -2256,6 +2256,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     ...[...G4L.members, ...G4R.members].map(c => c.load(Q0.get('v'), noSpr)),
     DurianRain.load(Q0.get('v'), noSpr),
     Sea.load(Q0.get('v'), noSpr),
+    WaterArt.load(Q0.get('v'), noSpr),
     SockRain.load(Q0.get('v'), noSpr),
   ]);
   document.getElementById('msg').textContent =
@@ -2301,7 +2302,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
          HUD 永远是"刚开局、什么都没闪过"的样子，?livet 微调也扫不到闪光。 */
       battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30;
       /* 帮手和礼物雨也要跟着快进：不推进的话预热里送的档 3 礼物全卡在 t=0 叠着（闺蜜被叫满、Truth 被连续续时间） */
-      for (const c of CREWS) c.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30); Sea.update(1 / 30, seaOn());
+      for (const c of CREWS) c.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30); Sea.update(1 / 30, seaOn()); HitSplash.update(1 / 30);
       derive(1 / 30); hudTick(1 / 30);
     }
     // 预热完冻住**进度**：战况定在这一刻，而火力、弹幕、粒子照跑 —— 截图要的
@@ -2436,6 +2437,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        最后那段就被身体挡掉了；而粒子是命中的爆炸，该盖在弹幕上面。 */
     Ammo.draw(fctx);
     DurianRain.draw(fctx); SockRain.draw(fctx);   // 天上掉的东西从镜头这一侧砸在人身上，盖在人物之上、爆点之下
+    HitSplash.draw(fctx);                         // 白娘子水柱打在脸上的水花，同样盖在人物之上
     Particles.draw(fctx);
     fctx.restore();
     /* 结算全屏接管：演出图铺满整幅，距离条不再画。结果已经写在画面里
@@ -2551,7 +2553,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     for (let k = Math.round(Math.max(0, +(Q.get('ammoskip') || 0)) * 60); k > 0; k--) {
       const d = Particles.tick(1 / 60);
       Particles.update(1 / 60); Ammo.update(d);
-      for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); Sea.update(d, seaOn());
+      for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); Sea.update(d, seaOn()); HitSplash.update(d);
       Bubble.update(d, FX.struggle); derive(d); hudTick(d);
       simT += 1 / 60; callDue();
     }
@@ -2563,7 +2565,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         const d = Particles.tick(1 / 60);
         Particles.update(1 / 60);
         Ammo.update(d);
-        for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); Sea.update(d, seaOn());
+        for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); Sea.update(d, seaOn()); HitSplash.update(d);
         Bubble.update(d, FX.struggle);
         derive(d); hudTick(d);
       }
@@ -2786,7 +2788,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   let last = performance.now(), fps = 0, fr = 0, acc = 0, dir = 1;
   function frame(now) {
     if (stopAll) { render(); requestAnimationFrame(frame); return; }
-    const raw = Math.min(.05, (now - last) / 1000); last = now;
+    /* 夹到 ≥ 0：rAF 给的第一帧时间戳可能早于上面启动时记的 performance.now()，差出来是负的 ——
+       白娘子的海按时钟取帧号，负时钟取模成负下标直接抛错（真页面第一次召她就崩）；别的模块只是悄悄倒退一帧 */
+    const raw = Math.max(0, Math.min(.05, (now - last) / 1000)); last = now;
     fr++; acc += raw;
     if (acc >= .5) { fps = fr / acc; fr = 0; acc = 0; }
     /* 顿帧冻住的是游戏逻辑（角色姿态、对抗线、进度），特效照真实时间走。
@@ -2799,7 +2803,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        这一下"的可视化，冻住它就迟到了；而正在飞的弹幕是**下一下**的前奏，
        顿帧的意思就是全世界停下来看这一击，此刻别的东西还在飞就散掉了。 */
     Ammo.update(dt);
-    for (const c of CREWS) c.update(dt); DurianRain.update(dt); SockRain.update(dt); Sea.update(dt, seaOn());
+    for (const c of CREWS) c.update(dt); DurianRain.update(dt); SockRain.update(dt); Sea.update(dt, seaOn()); HitSplash.update(dt);
     // 气泡跟着逻辑时钟：顿帧时它也该停，那半秒全世界都在看刚才那一击
     Bubble.update(dt, FX.struggle);
     S.t += dt;

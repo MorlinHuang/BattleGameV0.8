@@ -6,7 +6,7 @@ const { chromium } = require('/home/op/shots/node_modules/playwright-core');
   const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
   const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
   const errs = [];
-  p.on('pageerror', e => errs.push(e.message));
+  p.on('pageerror', e => errs.push(e.stack || e.message));
   await p.goto('http://127.0.0.1:40235/index.html?v=' + Date.now());
   await p.waitForTimeout(4000);
   const who = () => p.evaluate(() => (Truth.active() ? 'T' : '') + (Baisu.active() ? 'B' : '') + (Widow.active() ? 'W' : '') + (Sea.active() ? '~' : ''));

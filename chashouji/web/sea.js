@@ -1,185 +1,178 @@
-/* sea.js —— 白娘子的水法术：整个屏幕底部涌起海水（2026-09-28）。
+/* sea.js —— 白娘子的水（2026-09-28）：底部海水 Sea、水花 Splashes、以及三套 3D 序列帧贴图 WaterArt（掌心水柱在 crew.js drawJet 里画）。
  * 用户："整个屏幕的底部，从下边缘到男女生下方，用海水汹涌填充（代表白娘子的水法术），海水也需要持续的动画，
  *        海里可以有些虾兵蟹将。白娘子持续 15s，海水也一样。当白娘子消失的时候，海水也消散。"
+ * 第二版（同日）用户："水流和海面美术风格实在是太 Q 了，需要更写实，参考之前的花束等礼物，做出类似 3 渲 2 的体积感"。
+ * 第一版海面是 canvas 现画的四条正弦色带 + 白线；现在三样水全是 Blender 渲的 3 渲 2 序列帧（tools/3d/water/：
+ * sea.py 周期 Gerstner 海面、jet.py 掌心水柱、splash.py 水花；打包 pack_water.py，下面的数照它打印的填）。
  *
- * 跟着她走，不自己计时：main.js 每帧告诉 update 她在不在施法（on）。在 → 水位 lv 从 0 涨到 1（RISE 秒，从屏幕下沿涌上来）；
- * 不在（飞走了）→ 退回 0（FALL 秒：往下沉、越沉越透、浪头的白沫先散）。续送她多待一段，海水也就多待一段。
+ * 海：跟着她走，不自己计时 —— main.js 每帧告诉 update 她在不在施法（on）。在 → 水位 lv 从 0 涨到 1（RISE 秒，整片从屏幕下沿涌上来）；
+ * 不在（飞走了）→ 退回 0（FALL 秒：往下沉、越沉越透）。续送她多待一段，海水也就多待一段。
+ * 海面按远近渲成三层（SEA.bands），按 远 → 第一排虾兵蟹将 → 中 → 第二排 → 近 叠：兵的下半截被它前面那层海盖住，泡在水里。
+ * 兵跟着前面那层海的浪上沿起伏、按坡度歪 —— 浪上沿是加载时从每一帧贴图里量出来的（heights）。
+ * 帧与帧之间交叉淡化（36 帧 / 3 秒 = 12 帧每秒，不淡化看得出一跳一跳）。
  *
- * 画法（从远到近，都在 draw 里现算，没有贴图）：
- *   几层浪（LAYERS），每层上沿是两个正弦叠出来的尖顶浪 —— 浪尖削尖、浪谷拉平，读成"汹涌"而不是水波纹；
- *   越靠前越深、浪越高、走得越快，相邻两层往相反方向走（远近错开，不是整块平移）；
- *   每层浪尖一条断断续续的白沫线 + 浪身上几道横的高光；浪尖高过一定程度就甩出水花（sprays）。
- *   虾兵蟹将（MOBS）夹在浪层之间：跟着所在那层的浪上下起伏、按浪的坡度歪，下半截被前一层浪盖住（像泡在水里）；
- *   一律朝右冲（冲着男生那边：她的兵），出了右边从左边再进来；隔几秒有一只蹦出水面、落回去溅一圈水。
- *
- * 层级：main.js 画在人物之前（最底下、背景之上）—— 海面顶到男女生脚下（TOP），不盖人；
- * 档 4 出场压暗照样压它（只有白娘子本人是亮的）。
- * 配色按明亮底图：水身不透明的饱和蓝（半透明的浅蓝在米色地板上是一片灰），浪尖白沫带深蓝托底。
+ * 层级：main.js 画在人物之前（最底下、背景之上）—— 海面顶到男女生脚下，不盖人；档 4 出场压暗照样压它（只有白娘子本人是亮的）。
  */
 'use strict';
 
+/* 三套贴图的参数（pack_water.py 打印的，重渲后重填）。
+   sea：36 帧、6 列，存成 0.6 倍（全尺寸解码 ~120MB 手机扛不住），画的时候放大回 960 宽；top = 这一层在渲染图里的上沿 y。
+   jet：16 帧、4 列，x0 = 掌心在格子里的 x、cy = 中轴的 y；loop = 引擎里多少秒转一圈（jet.py 按整周期渲，首尾相接）。
+   splash：10 帧、5 列，(ox, oy) = 撞击点在格子里的位置；life = 播一遍多少秒。 */
+const WaterArt = {
+  sea: { n: 36, cols: 6, scale: 0.6, loop: 3.0,
+         bands: [{ src: 'assets/fx/sea_far.webp', w: 576, h: 143, top: 9 },
+                 { src: 'assets/fx/sea_mid.webp', w: 576, h: 220, top: 72 },
+                 { src: 'assets/fx/sea_near.webp', w: 576, h: 230, top: 137 }] },
+  jet: { src: 'assets/fx/jet.webp', n: 16, cols: 4, w: 712, h: 171, x0: 4, cy: 92, loop: 0.5 },
+  splash: { src: 'assets/fx/splash.webp', n: 10, cols: 5, w: 320, h: 239, ox: 160, oy: 151, life: 0.45 },
+  load(v, off) {
+    if (off) return Promise.resolve(false);
+    const one = (o) => new Promise((ok) => {
+      const i = new Image();
+      i.onload = () => { o.img = i; ok(true); }; i.onerror = () => ok(false);
+      i.src = o.src + (v ? '?v=' + encodeURIComponent(v) : '');
+    });
+    return Promise.all([...this.sea.bands.map(one), one(this.jet), one(this.splash)]).then(r => r.every(Boolean));
+  },
+};
+/* 图集里第 i 帧的源矩形 [sx, sy, sw, sh] */
+const atlasCell = (A, o, i) => [(i % A.cols) * o.w, ((i / A.cols) | 0) * o.h, o.w, o.h];
+
+/* 水花：一朵 3D 水冠在 (x, y) 播一遍（WaterArt.splash），s = 缩放。白娘子打中男生（main.js）、虾兵蟹将落回水里（Sea）各用一份。 */
+function Splashes() {
+  const list = [];
+  return {
+    spawn(x, y, s) { list.push({ x, y, s, t: 0 }); },
+    update(dt) { for (let i = list.length - 1; i >= 0; i--) if ((list[i].t += dt) >= WaterArt.splash.life) list.splice(i, 1); },
+    draw(ctx, alpha = 1) {
+      const S = WaterArt.splash;
+      if (!S.img) return;
+      ctx.save();
+      for (const p of list) {
+        const u = p.t / S.life, i = Math.min(S.n - 1, Math.floor(u * S.n)), [sx, sy, sw, sh] = atlasCell(S, S, i);
+        /* 后五成淡掉：水冠最后收成一圈带刺的环，放大到 1.3 倍（第一下）时整圈清清楚楚，像个救生圈 */
+        ctx.globalAlpha = alpha * Math.min(1, (1 - u) / 0.5);
+        ctx.drawImage(S.img, sx, sy, sw, sh, p.x - S.ox * p.s, p.y - S.oy * p.s, sw * p.s, sh * p.s);
+      }
+      ctx.restore();
+    },
+    reset() { list.length = 0; },
+  };
+}
+const HitSplash = Splashes();      // 白娘子水柱打中男生：main.js 在特效层画
+
 const Sea = (() => {
-  const TOP = 1222;          // 海面（第一层浪的平均高度）：男女生脚底（GROUND 1195）往下一点 —— 浪尖顶到脚下，不淹脚。
-                             // 第一版 1272：脚下空出 80 像素地板，读成"海在远处"不是"涌到脚下"
+  const SEA_TOP = 1190;      // 渲染图第 0 行摆在屏幕哪（最远的浪尖 top 9 → 1199，正好到两人脚底 GROUND 1195）
   const RISE = 1.2, FALL = 1.6;   // 涨满、退干各几秒
-  /* 浪层（远 → 近）：y 相对 TOP 的平均高度、浪高 A、波长 L、走速 v（像素/秒，正 = 往右）、颜色 [上, 下]、白沫线宽 */
-  /* 第一版浪高 10~28、相邻层颜色只差一点：整片读成一块平的蓝布，白沫是飘在上面的细线。
-     现在浪高翻倍、相邻层明暗拉开（远的浅青、近的深蓝），每层上沿一道亮边、浪尖一顶按高度变粗的白沫帽。 */
-  const LAYERS = [
-    { y: 0,   A: 18, L: 280, v: -50, col: [[132, 206, 246], [88, 166, 232]],  foam: 7 },
-    { y: 55,  A: 28, L: 360, v: 80,  col: [[74, 152, 232], [42, 112, 206]],   foam: 9 },
-    { y: 125, A: 36, L: 440, v: -110, col: [[38, 102, 206], [22, 70, 172]],   foam: 11 },
-    { y: 240, A: 44, L: 540, v: 150, col: [[22, 64, 162], [10, 36, 112]],     foam: 13 },
-  ];
-  const SURGE = [0.3, 0.7];       // 浪高随时间涨落：± 几成、角频率（一阵大一阵小，"汹涌"不是匀速的正弦）
-  const INK = [16, 50, 120];      // 白沫、水花的深蓝托底
-  const SWELL = [7, 1.1];         // 整层随涌浪上下起伏 [幅度, 角频率]
-  const SPRAY = { every: 0.07, crest: 0.8, V: [180, 320], G: 900, life: 0.7, r: [3, 7] };   // 浪尖水花：多久一颗、浪尖高过几成才甩、初速、重力、寿命、颗粒半径
-  /* 虾兵蟹将：贴图（v14/sea/make.py，都朝右）、走速。MOBS 的 row = 画在第几层浪之后：它泡在下一层浪（row + 1）里，
-     跟着那一层的浪线起伏、下半截被那一层盖住 —— 按自己这层的浪线摆的话，下半截画在水面上，读成站在水上。 */
+  /* 虾兵蟹将：贴图（v14/sea/make.py，都朝右）、走速。row 0 泡在中层海里（画在远层之后、中层之前），row 1 泡在近层里。
+     2026-09-28 用户："往上挪挪，但不要盖住男女生"：直播画面下半截压着礼物面板（画布 y ≈ 1373 以下看不见），
+     两排都摆在面板之上 —— 中层浪上沿 ≈ 1270~1300、近层 ≈ 1330~1370。兵都画在人物之前的那一趟，蹦起来也只在人身后。
+     缩放按透视：中层远（~0.75）、近层近（1.0）。 */
   const KINDS = [
     { src: 'assets/world/sea_shrimp1.webp', v: 60 }, { src: 'assets/world/sea_shrimp2.webp', v: 70 },
     { src: 'assets/world/sea_crab1.webp', v: 45 },   { src: 'assets/world/sea_crab2.webp', v: 50 },
   ];
-  /* 2026-09-28 用户："往上挪挪，但不要盖住男女生"。直播画面下半截压着礼物面板（画布 y ≈ 1373 以下看不见），
-     第一版两行兵泡在第 2、3 层浪（y 1402 / 1542）里，后一排整个被面板挡住。现在浪层往上收（55 / 125 / 240），
-     两行兵泡在第 1、2 层（y ≈ 1277 / 1347）：后排头顶 ≈ 1193，正好到两人脚底（GROUND 1195）；前排露出大半身在面板之上。
-     兵都画在人物之前的那一趟（main.js Sea.draw 在 actors 之前），蹦起来也只会在人身后，盖不到人。 */
-  const MOBS = [            // 开场摆好的位置（x 占屏宽的几成）、哪一行、第几种、缩放
-    { x: 0.08, row: 0, k: 2, s: 0.8 }, { x: 0.42, row: 0, k: 0, s: 0.8 }, { x: 0.76, row: 0, k: 3, s: 0.8 },
+  const MOBS = [            // 开场摆好的位置（x 占屏宽的几成）、哪一排、第几种、缩放
+    { x: 0.08, row: 0, k: 2, s: 0.75 }, { x: 0.42, row: 0, k: 0, s: 0.75 }, { x: 0.76, row: 0, k: 3, s: 0.75 },
     { x: 0.22, row: 1, k: 1, s: 1.0 }, { x: 0.58, row: 1, k: 2, s: 1.0 }, { x: 0.92, row: 1, k: 0, s: 1.0 },
   ];
-  const SINK = 0.3;               // 泡在水里：贴图下沿压到浪线以下 30% 的高度（被前一层浪盖住）
-  const HOP = { every: [2.2, 4.0], T: 0.7, h: 70 };    // 蹦出水面：隔多久一次、在空中多久、多高（110 时后排蹦到两人膝盖高，躲在腿后面一闪一闪）
+  const SINK = 0.3;               // 泡在水里：贴图下沿压到浪上沿以下 30% 的高度（被那一层海盖住）
+  const HOP = { every: [2.2, 4.0], T: 0.7, h: 70, splash: 0.45 };   // 蹦出水面：隔多久一次、在空中多久、多高、落水水花多大
 
   let W = 960, H = 1707;
-  let lv = 0, t = 0, imgs = [], mobs = [], sprays = [], sprayT = 0, hopT = 3;
+  let lv = 0, t = 0, imgs = [], mobs = [], hopT = 3, heights = null;
+  const drops = Splashes();
 
   function init(w, h) { W = w; H = h; reset(); }
 
+  /* 每层每帧每一列浪的上沿（格子像素，-1 = 这一列没有水）：从贴图 alpha 量。中、近两层要（兵泡在它们里面） */
+  function measure(o) {
+    const A = WaterArt.sea, c = document.createElement('canvas');
+    c.width = o.img.width; c.height = o.img.height;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(o.img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data, out = [];
+    for (let i = 0; i < A.n; i++) {
+      const [sx, sy] = atlasCell(A, o, i), col = new Int16Array(o.w).fill(-1);
+      for (let x = 0; x < o.w; x++)
+        for (let y = 0; y < o.h; y++) if (d[((sy + y) * c.width + sx + x) * 4 + 3] > 128) { col[x] = y; break; }
+      out.push(col);
+    }
+    return out;
+  }
+
   function load(v, off) {
     if (off) return Promise.resolve(false);
-    return Promise.all(KINDS.map(K => new Promise((ok) => {
+    const mob = Promise.all(KINDS.map(K => new Promise((ok) => {
       const i = new Image();
       i.onload = () => ok(i); i.onerror = () => ok(null);
       i.src = K.src + (v ? '?v=' + encodeURIComponent(v) : '');
     }))).then(r => { imgs = r; return r.every(Boolean); });
+    /* WaterArt 由 main.js 另外加载（水柱、水花也要用），这里等它好了量浪上沿 */
+    return mob;
+  }
+  function ready() {
+    const B = WaterArt.sea.bands;
+    if (!heights && B[1].img && B[2].img) heights = [measure(B[1]), measure(B[2])];
   }
 
   function reset() {
-    lv = 0; t = 0; sprays = []; sprayT = 0; hopT = 3;
+    lv = 0; t = 0; hopT = 3; drops.reset();
     mobs = MOBS.map(m => ({ ...m, x: m.x * W, ph: Math.random() * 6, hop: -1 }));
   }
 
   /* 水位：lv 0~1，按缓动映射成整片海往下沉多少（没涨满时整片在屏幕下沿以下） */
   const ease = (u) => u * u * (3 - 2 * u);
-  const sinkOf = () => (1 - ease(lv)) * (H - TOP + 60);
+  const sinkOf = () => (1 - ease(lv)) * (H - SEA_TOP + 40);
+  const frameOf = () => { const A = WaterArt.sea, f = (t / A.loop % 1) * A.n; return [Math.floor(f) % A.n, f - Math.floor(f)]; };
 
-  /* 第 i 层浪在 x 处的上沿 y（屏幕像素）。尖顶浪：两个正弦叠加后按 |·|^1.5 把正半周削尖、负半周拉平 */
-  function waveY(i, x) {
-    const Lr = LAYERS[i], k = 6.2832 / Lr.L;
-    const a = Math.sin(k * (x - Lr.v * t) + i * 1.7), b = Math.sin(k * 2.3 * (x + Lr.v * 0.6 * t) + i * 0.9);
-    const w = 0.7 * a + 0.3 * b, crest = w > 0 ? Math.pow(w, 1.8) : w * 0.4;
-    const A = Lr.A * (1 + SURGE[0] * Math.sin(t * SURGE[1] + i * 2.1 + x * 0.004));
-    return TOP + Lr.y - A * lv * crest * 2 + Math.sin(t * SWELL[1] + i * 1.3) * SWELL[0] + sinkOf();
+  /* 第 row 排兵所在那层海（中 / 近）在屏幕 x 处的浪上沿（屏幕 y），两帧之间插值 */
+  function surfY(row, x) {
+    const A = WaterArt.sea, o = A.bands[row + 1], [i, a] = frameOf();
+    const cx = Math.max(0, Math.min(o.w - 1, Math.round(x * A.scale)));
+    const h0 = heights[row][i][cx], h1 = heights[row][(i + 1) % A.n][cx];
+    const h = h0 < 0 ? h1 : h1 < 0 ? h0 : h0 + (h1 - h0) * a;
+    return SEA_TOP + o.top + Math.max(0, h) / A.scale + sinkOf();
   }
 
   function update(dt, on) {
     lv = Math.max(0, Math.min(1, lv + (on ? dt / RISE : -dt / FALL)));
-    if (lv <= 0) { if (sprays.length) sprays = []; return; }
+    drops.update(dt);
+    if (lv <= 0) return;
     t += dt;
-    /* 虾兵蟹将往右冲，出了右边从左边再进来；隔几秒挑一只蹦出水面 */
+    ready();
+    if (!heights) return;
+    /* 虾兵蟹将往右冲，出了右边从左边再进来；隔几秒挑一只蹦出水面，落回去溅一朵水花 */
     for (const m of mobs) {
       m.x += KINDS[m.k].v * m.s * dt;
       const w = imgs[m.k] ? imgs[m.k].width * m.s : 150;
       if (m.x - w / 2 > W) m.x = -w / 2;
-      if (m.hop >= 0 && (m.hop += dt) > HOP.T) { m.hop = -1; splash(m.x, waveY(m.row + 1, m.x), 10); }
+      if (m.hop >= 0 && (m.hop += dt) > HOP.T) { m.hop = -1; drops.spawn(m.x, surfY(m.row, m.x), HOP.splash * m.s); }
     }
     if (on && (hopT -= dt) <= 0) {
       const idle = mobs.filter(m => m.hop < 0 && m.x > 40 && m.x < W - 40);
       if (idle.length) idle[Math.floor(Math.random() * idle.length)].hop = 0;
       hopT = HOP.every[0] + Math.random() * (HOP.every[1] - HOP.every[0]);
     }
-    /* 浪尖水花：随机挑一层、一个 x，浪尖够高就甩一颗（退潮时不甩） */
-    if (on) for (sprayT += dt; sprayT >= SPRAY.every; sprayT -= SPRAY.every) {
-      const i = 1 + Math.floor(Math.random() * (LAYERS.length - 1)), x = Math.random() * W, y = waveY(i, x);
-      if (TOP + LAYERS[i].y + sinkOf() - y > LAYERS[i].A * SPRAY.crest * 2) splash(x, y, 1);
-    }
-    for (let i = sprays.length - 1; i >= 0; i--) {
-      const p = sprays[i];
-      p.vy += SPRAY.G * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.t += dt;
-      if (p.t > SPRAY.life) sprays.splice(i, 1);
-    }
   }
 
-  function splash(x, y, n) {
-    for (let k = 0; k < n; k++) {
-      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.4, v = SPRAY.V[0] + Math.random() * (SPRAY.V[1] - SPRAY.V[0]);
-      sprays.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0, r: SPRAY.r[0] + Math.random() * (SPRAY.r[1] - SPRAY.r[0]) });
-    }
-  }
-
-  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
-  const STEP = 16;                // 浪线每隔几像素取一个点
-
-  function drawLayer(ctx, i, a) {
-    const Lr = LAYERS[i], y0 = TOP + Lr.y + sinkOf();
-    if (y0 - Lr.A * 2 > H) return;
-    const pts = [];
-    for (let x = -STEP; x <= W + STEP; x += STEP) pts.push([x, waveY(i, x)]);
-    /* 水身：上沿浪线 → 屏幕下沿，竖直渐变 */
-    const g = ctx.createLinearGradient(0, y0 - Lr.A * 2, 0, y0 + 220);
-    g.addColorStop(0, rgba(Lr.col[0], a)); g.addColorStop(1, rgba(Lr.col[1], a));
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.moveTo(pts[0][0], H + 10);
-    for (const [x, y] of pts) ctx.lineTo(x, y);
-    ctx.lineTo(pts[pts.length - 1][0], H + 10); ctx.closePath(); ctx.fill();
-    /* 上沿亮边：浪线往下一道宽的浅色带（水面反光），让每层浪的轮廓从后一层里跳出来 */
-    const hi = Lr.col[0].map(c => Math.round(c + (255 - c) * 0.45));
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.lineWidth = 12; ctx.strokeStyle = rgba(hi, 0.8 * a);
-    ctx.beginPath(); pts.forEach(([x, y], n) => n ? ctx.lineTo(x, y + 7) : ctx.moveTo(x, y + 7)); ctx.stroke();
-    /* 浪身上的横高光：几道短白线，跟着这层的走速漂 */
-    ctx.lineWidth = 3; ctx.strokeStyle = rgba([220, 240, 255], 0.4 * a);
-    ctx.beginPath();
-    for (let j = 0; j < 7; j++) {
-      const x = ((j * 157 + i * 71 + Lr.v * t * 0.8) % (W + 120) + W + 120) % (W + 120) - 60, y = waveY(i, x) + 30 + ((j * 37) % 60);
-      const len = 26 + (j * 13) % 30;
-      ctx.moveTo(x, y); ctx.lineTo(x + len, y);
-    }
-    ctx.stroke();
-    /* 浪尖白沫帽：只在高过平均线的那几段描，越靠浪尖越粗（lw = foam × (0.4 + 1.2·high)）—— 读成浪头翻起的白沫，不是一根白线。
-       先描深蓝托底再描白。退潮时先散（× lv²） */
-    const fa = a * lv * lv;
-    if (fa < 0.02) return;
-    const segs = [];
-    for (let n = 1; n < pts.length; n++) {
-      const [x0, yA] = pts[n - 1], [x1, yB] = pts[n];
-      const high = (y0 + Math.sin(t * SWELL[1] + i * 1.3) * SWELL[0] - (yA + yB) / 2) / (Lr.A * 2 * lv + 1e-3);   // 这一段多靠近浪尖（0 平均线 … 1 浪尖）
-      if (high > 0.08) segs.push([x0, yA, x1, yB, Math.min(1, high)]);
-    }
-    for (const [pad, c, al] of [[4, INK, 0.45], [0, [255, 255, 255], 0.95]]) {
-      ctx.strokeStyle = rgba(c, al * fa);
-      for (const [x0, yA, x1, yB, h] of segs) {
-        ctx.lineWidth = Lr.foam * (0.4 + 1.2 * h) + pad;
-        ctx.beginPath(); ctx.moveTo(x0, yA + 2); ctx.lineTo(x1, yB + 2); ctx.stroke();
-      }
-    }
-    /* 浪头后面拖的碎沫：浪尖以下几颗小白点，跟着浪走 */
-    ctx.fillStyle = rgba([255, 255, 255], 0.8 * fa);
-    for (const [x0, yA, , , h] of segs) {
-      if (h < 0.5) continue;
-      const q = Math.sin(x0 * 12.9898 + i * 78.233) * 43758.5453, j = q - Math.floor(q);
-      ctx.beginPath(); ctx.arc(x0 + j * STEP, yA + 14 + j * 16, 2 + j * 3, 0, 6.283); ctx.fill();
-    }
+  function drawBand(ctx, k, a) {
+    const A = WaterArt.sea, o = A.bands[k];
+    if (!o.img) return;
+    const [i, f] = frameOf(), y = SEA_TOP + o.top + sinkOf(), dh = o.h / A.scale;
+    if (y > H) return;
+    const put = (j, al) => { const [sx, sy, sw, sh] = atlasCell(A, o, j); ctx.globalAlpha = al; ctx.drawImage(o.img, sx, sy, sw, sh, 0, y, W, dh); };
+    put(i, a);
+    if (f > 0.02) put((i + 1) % A.n, a * f);           // 下一帧叠上来：12 帧每秒不淡化看得出一跳一跳
   }
 
   function drawMob(ctx, m) {
     const im = imgs[m.k];
     if (!im) return;
     const w = im.width * m.s, h = im.height * m.s;
-    const L = m.row + 1, wy = waveY(L, m.x), slope = (waveY(L, m.x + 12) - waveY(L, m.x - 12)) / 24;
-    let y = wy + h * SINK + Math.sin(t * 3 + m.ph) * 4, rot = Math.atan(slope) * 0.8;
+    const wy = surfY(m.row, m.x), slope = (surfY(m.row, m.x + 14) - surfY(m.row, m.x - 14)) / 28;
+    let y = wy + h * SINK + Math.sin(t * 3 + m.ph) * 3, rot = Math.atan(slope) * 0.6;
     if (m.hop >= 0) {                                 // 蹦出水面：抛物线，空中打个前滚半圈
       const u = m.hop / HOP.T;
       y -= HOP.h * 4 * u * (1 - u);
@@ -191,21 +184,15 @@ const Sea = (() => {
   }
 
   function draw(ctx) {
-    if (lv <= 0) return;
+    if (lv <= 0 || !heights) return;
     const a = Math.min(1, lv * 1.6);                 // 退潮后段整片淡掉（涨潮时很快不透明）
     ctx.save();
-    for (let i = 0; i < LAYERS.length; i++) {
-      drawLayer(ctx, i, a);
-      ctx.globalAlpha = a;
-      for (const m of mobs) if (m.row === i) drawMob(ctx, m);   // 这一行的兵画在这层浪之后、下一层浪之前：下半截被下一层盖住
-      ctx.globalAlpha = 1;
-    }
-    for (const p of sprays) {
-      const k = 1 - p.t / SPRAY.life;
-      ctx.fillStyle = rgba(INK, 0.5 * k * a); ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 2, 0, 6.283); ctx.fill();
-      ctx.fillStyle = rgba([240, 250, 255], 0.95 * k * a); ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
+    for (let k = 0; k < 3; k++) {
+      drawBand(ctx, k, a);
+      if (k < 2) { ctx.globalAlpha = a; for (const m of mobs) if (m.row === k) drawMob(ctx, m); }
     }
     ctx.restore();
+    drops.draw(ctx, a);
   }
 
   const active = () => lv > 0;
