@@ -1,10 +1,20 @@
 """闺蜜立绘：品红底原图 → 抠像、裁边、缩放 → 切成三层，打印 foot / muzzle / 两个转轴（输出贴图像素）。
-用法：python3 v14/bestie/make.py [原图 编号]，默认 src2.png 1；三个形象：src2/3/4.png → bestie1/2/3_arm|up|lo.webp
+用法：python3 v14/bestie/make.py [原图 编号]，默认 src2.png 1；九个形象：src2~10.png → bestie1~9_arm|up|lo.webp
+（一次全出：for i in $(seq 2 10); do python3 v14/bestie/make.py src$i.png $((i-1)); done）
 
 src2.png = src1.png 改图把喷雾罐放大到小灭火器那么大（用户要"更大更夸张"），人和平衡车没动。
 src3（黑短发、条纹比基尼、粉平衡车）、src4（金发双马尾、黑比基尼、紫平衡车）是 src2 改图换人，姿势和罐子没动 ——
 实测喷口、肩、手臂在原位 ±2 像素，三个共用下面这套常数和同一个裁边框 CROP（三张图外框的并集：src4 的双马尾
 往左、往上多出一截）。**裁边不能按每张图自己的外框**：外框一变，输出贴图里所有点都跟着挪。
+
+2026-09-29 用户嫌三个"整体造型太相近"，加六个借 80/90 后熟知角色的形象（只留认人特征，发型服饰重新设计），同样是 src2 改图换人：
+  src5 红衣忍者扇娘（不知火舞：高马尾长发带、腰后大蝴蝶结；紫黑配色、花纹、腰插折扇）
+  src6 麻花辫探险家（劳拉：长麻花辫、背心热裤、大腿绑带插备用喷雾，没有枪）
+  src7 蓝发发明家（布尔玛：青蓝马尾、粉连体短裤、工具腰带；罐子换成自制科幻喷雾器，喷口原位）
+  src8 月光水手少女（银白单侧马尾、星星发饰、水手领比基尼；用户要"瘦点、更符合原著"重出过一版）
+  src9 紫衣仙子（紫霞：高髻、紫纱、披帛；第一版披帛缠在举罐的手臂上，手臂一转就断开 —— 改图让右边的披帛从腰后垂下；旧的存 src9_v1_披帛缠手臂.png）
+  src10 格格（小燕子：小号旗头牡丹花冠、粉短旗装）
+实测喷罐、手臂、平衡车都在原位 ±1 像素，照旧共用一套常数。src5 的发带、src9 的披帛往左伸得远，CROP 放宽到它们的并集。
 
 输出（同一张画布，叠起来就是原图），画的顺序 arm → up → lo：
   web/assets/world/bestie_arm.webp  伸直的右臂 + 手 + 喷雾罐 —— 绕肩关节 PIVOT 转，喷口对准男生的脸
@@ -26,7 +36,7 @@ from build import load_cut, edge_extend
 HERE = os.path.dirname(__file__)
 SRC = os.path.join(HERE, sys.argv[1] if len(sys.argv) > 1 else 'src2.png')
 OUT = os.path.join(HERE, '../../web/assets/world/bestie%s_%%s.webp' % (sys.argv[2] if len(sys.argv) > 2 else '1'))
-CROP = (332, 5, 1065, 1221)             # 原图裁边框 x0, y0, x1, y1（三个形象共用）
+CROP = (155, 0, 1065, 1221)             # 原图裁边框 x0, y0, x1, y1（九个形象共用：src9 的披帛最左、发髻顶到最上）
 K = 0.4
 ARM_X0, ARM_X1, ARM_Y = 630, 660, 300   # 手臂层从 x0 起、身体层到 x1 为止（原图像素），都只管 y ≤ ARM_Y
 ARM_TOP, HAND_X = 222, 700              # 肩膀附近只取 y ≥ ARM_TOP 的几行（再往上是脸边那缕头发）；
@@ -57,6 +67,11 @@ up[CUT:] = 0
 row = px[CUT - 3, WAIST[0]:WAIST[1]].copy()             # 腰上那一行肚皮，往下复制
 row[..., 3] = np.where(row[..., 3] > 0, 255, 0)
 up[CUT:CUT + BELLY, WAIST[0]:WAIST[1]] = row
+# 肚皮两边跨过切线往下垂的东西（长发、发带、披帛、麻花辫）也往下补 BELLY 行，补的是原图切线下面那几行：
+# 上身一前倾，离腰越远的地方抬得越高，只补肚皮时垂过切线的头发在切线上裂一道缝（2026-09-29 不知火舞的长发）
+side = px[CUT - 3, :, 3] > 0
+side[WAIST[0]:WAIST[1]] = False
+up[CUT:CUT + BELLY, side] = px[CUT:CUT + BELLY, side]
 lo[:CUT - 4] = 0                                          # 下层从切线上方 4 行开始，盖住接缝
 
 
