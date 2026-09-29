@@ -57,7 +57,7 @@ KEYS = {
 }
 KEY_NAMES = {'green': '绿幕', 'magenta': '品红幕', 'blue': '蓝幕', 'ai': 'AI 抠人物（场景背景）', None: '不抠像'}
 KEY_CHOICES = ('auto', 'none', 'ai', *KEYS)
-FX_NAMES = {'sea': '海浪 + 虾兵蟹将（白娘子）'}   # 底部法术潮（layer.py SEA）
+FX_NAMES = {'sea': '海浪 + 虾兵蟹将（白娘子）', 'cloud': '月夜云海 + 玉兔金蟾（嫦娥）'}   # 底部法术潮（layer.py FX）
 
 
 class VFError(Exception):
@@ -429,6 +429,16 @@ def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=No
                     if i % 6 == 0:
                         say(f'AI 抠人物 {i}/{len(raws)} 帧（还要约 {(len(raws) - i) * 9 // workers + 5} 秒）',
                             0.2 + 0.2 * i / len(raws))
+            if fx:
+                # 法术潮进画面的帧：把它盖成背景色再抠一次人物（layer.fx_cover：不盖的话人物会被抠淡）
+                say('法术潮进画面的帧重抠人物', 0.4)
+                covered = os.path.join(tmp, 'covered')
+                os.makedirs(covered)
+                cj = [(os.path.join(raw, f), os.path.join(mattes, f), os.path.join(covered, f), fx) for f in raws]
+                with ProcessPoolExecutor(workers) as ex:
+                    redo = [f for f, hit in zip(raws, ex.map(layer.fx_cover, cj, chunksize=4)) if hit]
+                with ProcessPoolExecutor(workers, initializer=layer.matte_init, initargs=(1,)) as ex:
+                    list(ex.map(layer.matte_frame, [(os.path.join(covered, f), os.path.join(mattes, f)) for f in redo]))
             say('图层合成（人物清晰、环境淡淡透出、光效保留）', 0.4)
             jobs = [(os.path.join(raw, f), os.path.join(mattes, f), os.path.join(full, f),
                      layer.env_weight(i, len(raws), work_fps), fx) for i, f in enumerate(raws)]
@@ -480,7 +490,7 @@ def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=No
             if key_used != 'ai':
                 warnings.append('底部法术潮只在 AI 抠人物时保留，这次没用上。')
             else:
-                y = layer.sea_line(os.path.join(raw, raws[-1]), os.path.join(mattes, raws[-1]))
+                y = layer.sea_line(os.path.join(raw, raws[-1]), os.path.join(mattes, raws[-1]), fx)
                 if y is None:
                     warnings.append('最后一帧里没找到海，游戏里的海没法从视频里接上。')
                 else:
@@ -625,7 +635,7 @@ def main():
     ap.add_argument('-p', '--preset', default='均衡', choices=list(PRESETS))
     ap.add_argument('-k', '--key', default='auto', choices=list(KEY_CHOICES),
                     help='抠像：auto 自动判断（默认；纯色幕布按颜色抠，场景背景用 AI） / none 不抠 / ai / green / magenta / blue')
-    ap.add_argument('--fx', choices=list(FX_NAMES), help='视频底部带的法术潮：sea = 白娘子的海 + 虾兵蟹将（整条保留）')
+    ap.add_argument('--fx', choices=list(FX_NAMES), help='视频底部带的法术潮（整条保留）：sea = 白娘子的海 + 虾兵蟹将，cloud = 嫦娥的月夜云海 + 玉兔金蟾')
     ap.add_argument('-s', '--standee', help='立绘（透明底 PNG/WebP）：给了就量它在视频最后一帧里的位置')
     a = ap.parse_args()
     out = a.out or os.path.splitext(a.video)[0] + '_vframes'

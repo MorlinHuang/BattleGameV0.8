@@ -164,11 +164,110 @@ def sea_mask(c, m):
     return np.clip(_blur(out, SEA['soft']), 0, 1)
 
 
-def sea_line(frame_png, matte_png):
-    """最后一帧里海面的高度（视频像素）：海的遮罩每列最上沿，取有海的那些列的中位数。没有海返回 None。"""
+# 月夜银云海（2026-09-29 嫦娥）：深蓝 + 银白的云浪，玉兔、金蟾骑在浪上，从左边涌进来，最后铺在画面底部。
+# 跟白娘子的海反过来认：背景是很匀的深蓝夜空（饱和度 ~0.69、亮度 ~0.40），云浪要么更亮（银白）、要么更暗（浪身深蓝），
+# 所以"不像夜空"的就是云。浪身有几行深蓝跟夜空分不开，不要求整列连成一段，按"这一行往下一半以上是云"判。
+CLOUD = {
+    'from': 0.45,                   # 只在画面上沿往下这一成以下找（她在上半截）
+    'sky_sat': 0.58, 'sky_v': (0.33, 0.48),   # 夜空：饱和度 > sky_sat、亮度在这个范围里（只按颜色 —— 浪头上方满天金色光点，按纹理会被当成云）
+    'halo': 40,                     # 人物遮罩往外这么多像素都不算（她的外发光）
+    'run': 8, 'dense': 0.6,         # 二维平滑半径 / 占比：零星的星点、金色光点连不成片
+    'fill': 0.55,                   # 这一行往下到底边，云占这么多以上才算云海
+    'min': 10,                      # 云海不到这么多行高的列不算
+    'col': 12,                      # 云海高度按左右 2·col+1 列取中位数
+    'grow': 120, 'bright': 0.55,    # 浪尖白沫、骑在浪上的玉兔（亮）/ 金蟾（金色）：从云海往上最多长多少像素，只长在亮的 / 金色的像素上
+    'spike': 8,                     # 浪身轮廓开运算：比 2·spike 列窄的竖刺削掉
+    'feather': 24,                  # 浪身左右两侧横向羽化多少列
+    'soft': 3, 'bottom': 0.02,
+}
+
+
+def _vsmooth_edge(a, r):
+    """同 _vsmooth，但上下边按最近一行延伸（底边几行不会被补的 0 平均掉）"""
+    p = np.pad(a.astype(np.float32), ((r + 1, r), (0, 0)), mode='edge').cumsum(0)
+    return (p[2 * r + 1:] - p[:-2 * r - 1]) / (2 * r + 1)
+
+
+def cloud_mask(c, m):
+    """RGB（0~1）+ 人物遮罩 → 云海的遮罩（0~1）"""
+    C = CLOUD
+    h, w = m.shape
+    r, g, b = c[..., 0], c[..., 1], c[..., 2]
+    mx = c.max(2)
+    sat = (mx - c.min(2)) / np.maximum(mx, 1e-3)
+    sky = (sat > C['sky_sat']) & (mx > C['sky_v'][0]) & (mx < C['sky_v'][1])
+    near = _blur(m, C['halo']) > 0.02
+    solid = ~sky & ~near
+    y0 = int(h * C['from'])
+    solid[:y0] = False
+    core = _blur(solid.astype(np.float32), C['run']) > C['dense']
+    below = np.cumsum(core[::-1], 0)[::-1] / np.arange(h, 0, -1)[:, None]
+    ok = core & (below > C['fill'])
+    top = np.where(ok.any(0), ok.argmax(0), h).astype(np.float32)
+    top[(h - top) < C['min']] = h
+    k = C['col']
+    tp = np.pad(top, k, mode='edge')
+    top = np.median(np.stack([tp[i:i + w] for i in range(2 * k + 1)]), 0)
+    # 从左边涌进来：只要从左边缘连过来的那一片（右下角贴着她衣袖的蓝光不算）
+    has = top < h
+    if not has[0]:
+        return np.zeros((h, w), np.float32)
+    top[np.cumprod(has) == 0] = h
+    yy = np.arange(h)[:, None]
+    body_top = top
+    k = C['spike']
+    win = lambda a, f: f(np.stack([np.pad(a, k, mode='edge')[i:i + w] for i in range(2 * k + 1)]), 0)
+    body = yy >= win(win(top, np.max), np.min)[None, :]
+    # 浪尖白沫、骑在浪上的玉兔金蟾：从云海往上长，只长在亮的 / 金色的像素上，长出来的只留它本身
+    # （往下填满会把腾空的兔子和浪之间那段夜空也包进来）
+    bright = ((mx > C['bright']) | ((r > g) & (g > b) & (sat > 0.35))) & ~near
+    up = body.copy()
+    cols = np.arange(w)
+    for d in range(1, C['grow'] + 1):
+        row = (body_top - d).astype(int)
+        ok = (row >= y0) & bright[np.clip(row, 0, h - 1), cols] & up[np.clip(row + 1, 0, h - 1), cols]
+        up[row[ok], cols[ok]] = True
+    up = body | (up & bright)
+    # 浪身左右两侧只横向羽化：浪刚涌进来时右半边深蓝跟夜空分不开，识别会竖着切一刀，
+    # 100% 的浪挨着 22% 的环境，硬边一眼就看得出来；横向羽化不往上带出一圈夜空
+    bf = body.astype(np.float32)
+    k = C['feather']
+    for _ in range(2):
+        p = np.pad(bf, ((0, 0), (k + 1, k)), mode='edge').cumsum(1)
+        bf = (p[:, 2 * k + 1:] - p[:, :-2 * k - 1]) / (2 * k + 1)
+    return np.clip(np.maximum(_blur(up.astype(np.float32), C['soft']), np.minimum(1, bf * 1.6) * (yy >= top.min())), 0, 1)
+
+
+# 底部法术潮：名字 → (遮罩函数, 参数)。vframes.py FX_NAMES 是给人看的名字
+FX = {'sea': (sea_mask, SEA), 'cloud': (cloud_mask, CLOUD)}
+
+
+def fx_cover(job):
+    """法术潮盖掉再抠一次人物用的画面：大浪、玉兔进画面以后，isnet 会把注意力分给它们，人物被抠淡
+    （嫦娥 5.9~6.5 秒人物像素从 15 万掉到几百）。把法术潮那片（往外扩一点）换成同一行里其余背景的中位色，
+    写到 dst。这一帧没有法术潮返回 False（不用重抠）。"""
+    src, msk, dst, fx = job
+    c = np.asarray(Image.open(src).convert('RGB')).astype(np.float32) / 255
+    m = np.asarray(Image.open(msk).convert('L')).astype(np.float32) / 255
+    s = FX[fx][0](c, m)
+    if s.max() < 0.02:
+        return False
+    cover = _blur((s > 0.02).astype(np.float32), 12) > 0.01
+    bg = ~cover & (_blur(m, 20) < 0.02)
+    fill, last = c.copy(), np.median(c[bg], 0) if bg.any() else c.reshape(-1, 3).mean(0)
+    for y in range(c.shape[0]):
+        if bg[y].sum() > 20:
+            last = np.median(c[y][bg[y]], 0)
+        fill[y] = last
+    Image.fromarray((np.where(cover[..., None], fill, c) * 255).round().astype(np.uint8)).save(dst)
+    return True
+
+
+def sea_line(frame_png, matte_png, fx='sea'):
+    """最后一帧里法术潮上沿的高度（视频像素）：遮罩每列最上沿，取有法术潮的那些列的中位数。没有返回 None。"""
     c = np.asarray(Image.open(frame_png).convert('RGB')).astype(np.float32) / 255
     m = np.asarray(Image.open(matte_png).convert('L')).astype(np.float32) / 255
-    s = sea_mask(c, m) > 0.5
+    s = FX[fx][0](c, m) > 0.5
     has = s.any(0)
     return int(np.median(s.argmax(0)[has])) if has.mean() > 0.5 else None
 
@@ -186,8 +285,9 @@ def bake_frame(job):
     ec = np.minimum(np.minimum(u, 1 - u), np.minimum(v, (1 - v) * 0.25) * asp)     # 人物：底边软得宽 4 倍
     hl = ss(0.62, 0.95, c.max(2))                                                  # 亮部：光柱、亮片、金光
     a = np.maximum(m * ss(0, EDGE, ec), ss(0, FEATHER, e) * env * np.maximum(BG, GLOW * hl))
-    if fx == 'sea':
-        a = np.maximum(a, sea_mask(c, m) * ss(0, SEA['bottom'], (1 - v) * asp))
+    if fx:
+        f, P = FX[fx]
+        a = np.maximum(a, f(c, m) * ss(0, P['bottom'], (1 - v) * asp))
     Image.fromarray(np.dstack([(c * 255).round(), (a * 255).round()]).astype(np.uint8), 'RGBA').save(dst, compress_level=1)
     return int((m > 0.5).sum()), 0
 
