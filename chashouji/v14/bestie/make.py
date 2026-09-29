@@ -1,6 +1,7 @@
 """闺蜜立绘：品红底原图 → 抠像、裁边、缩放 → 切成三层，打印 foot / muzzle / 两个转轴（输出贴图像素）。
-用法：python3 v14/bestie/make.py [原图 编号]，默认 src2.png 1；九个形象：src2~10.png → bestie1~9_arm|up|lo.webp
-（一次全出：for i in $(seq 2 10); do python3 v14/bestie/make.py src$i.png $((i-1)); done）
+用法：python3 v14/bestie/make.py [原图 编号]，默认 src2.png 1；src2~10.png → bestie1~9_arm|up|lo.webp，
+网页只用七个（crew.js MIST.skins：src3、src5~10 → bestie2、4~9；src2、src4 用户说"没特色"拿掉了，贴图不留，但 src2 仍是量点的底图）
+（一次全出：for i in 3 5 6 7 8 9 10; do python3 v14/bestie/make.py src$i.png $((i-1)); done）
 
 src2.png = src1.png 改图把喷雾罐放大到小灭火器那么大（用户要"更大更夸张"），人和平衡车没动。
 src3（黑短发、条纹比基尼、粉平衡车）、src4（金发双马尾、黑比基尼、紫平衡车）是 src2 改图换人，姿势和罐子没动 ——
