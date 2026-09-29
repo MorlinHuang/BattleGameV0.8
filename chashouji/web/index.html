@@ -53,7 +53,10 @@
   <!-- 按钮文字由 main.js 按 ITEM_OF + GIFT.name 覆写成实际飞出来的物品名（左边
        口红/榴莲鞋雨/闺蜜/真相女神，右边香蕉/臭袜子足球/哥们/灭迹恶魔；档 4 两边各是三人一组、
        同时只一个在场，场上没人时按顺序轮到下一个：左 白娘子/真相女神/嫦娥，右 法海/灭迹恶魔/后羿/绿茶妹妹；
-       想看指定哪个用最下面一行的「看特效」下拉）。这里写的只是没跑 JS 时
+       想看指定哪个用最下面一行的「看特效」下拉）。档 3 闺蜜 / 哥们一次出三个人（trio.js）：后排地面一个（平衡车喷雾 / 滑板水枪）、
+       上方一个（闺蜜荡秋千：格格抛绣球 / 紫衣仙子飞吻留口红印；哥们扒右墙：假面绅士甩玫瑰 / 草帽船长橡皮拳）、
+       前景地板一个（闺蜜：忍者扇娘丢胸罩挂他头上 / 探险家拍照取证；哥们：樱木趴地甩篮球 / 悟空水版龟派气功），
+       在场再送给三个人各续一段；诊断 ?buddy=0.1.1 / ?bestie= 指定每个槽位第几个。这里写的只是没跑 JS 时
        的回退，data-shop 才是真的入口 —— 它指的是平台礼物，数值从那边来。 -->
   <div class="row">
     <span class="side g">查岗党</span>
@@ -90,7 +93,7 @@
 (function () {
   var v = new URLSearchParams(location.search).get('v');
   var q = v ? '?v=' + encodeURIComponent(v) : '';
-  var fs = ['fx.js', 'ammo.js', 'crew.js', 'rain.js', 'sea.js', 'bubble.js', 'result.js', 'intro.js', 'bgmotion.js', 'main.js'];
+  var fs = ['fx.js', 'ammo.js', 'crew.js', 'trio.js', 'rain.js', 'sea.js', 'bubble.js', 'result.js', 'intro.js', 'bgmotion.js', 'main.js'];
   for (var i = 0; i < fs.length; i++) document.write('<scr' + 'ipt src="' + fs[i] + q + '"></scr' + 'ipt>');
   /* 读数行本身要留着（截图与压测都往里写），只是默认藏起来。这里必须写死 'flex'
      而不是清空 —— 清空只是去掉行内样式，#devrow{display:none} 那条还在，行还是不出来。 */

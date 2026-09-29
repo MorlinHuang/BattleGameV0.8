@@ -1354,14 +1354,20 @@ const SHOP = {
    同日删掉黑蛛女特工、内裤外穿侠、二郎·打码神，加嫦娥、后羿） */
 const G4L = CrewGroup([Baisu, Truth, Change]);   // 查岗党：白娘子 / 真相女神 / 嫦娥
 const G4R = CrewGroup([Fahai, Demon, Houyi, Sister]);    // 灭迹党：法海 / 灭迹恶魔 / 后羿 / 绿茶妹妹
-const CREW = { buddy: Buddy, bestie: Bestie, g4L: G4L, g4R: G4R };
-const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
+/* 档 3 三人组（trio.js，2026-09-29）：一次送礼三个槽位各出一人 —— 后排地面（crew.js 滑板哥们 / 平衡车闺蜜）、上方、前景地板 */
+const BuddyTrio = Trio([[Buddy], [MaskMan, StrawMan], [Sakura, Goku]]);
+const BestieTrio = Trio([[Bestie], [Gege, Fairy], [Ninja, Explorer]]);
+const ACTS = [MaskMan, StrawMan, Sakura, Goku, Gege, Fairy, Ninja, Explorer];
+const CREW = { buddy: BuddyTrio, bestie: BestieTrio, g4L: G4L, g4R: G4R };
+const CREWS = [...BuddyTrio.all, ...BestieTrio.all, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
 /* 召唤：组（档 4）按 URL ?g4L= / ?g4R= 强制召某一个人（诊断：胶片一个一个单独拍）；单个 Crew 可指定形象 sk（?skin=） */
 /* 返回 [召到的那一份 Crew, 新来的人 b]（续时间 / 叫回时 b 为 undefined） */
 /* pick（调试台「看特效」下拉）：指定召组里第几个；场上是组里别人的话先把那人（连同他正放的出场视频）清掉，
    不然 CrewGroup 只会给在场那位续时间，选了嫦娥出来的还是白娘子。 */
 function summonCrew(name, sk, pick) {
   const c = CREW[name];
+  /* 三人组：?buddy=1.0.1 / ?bestie= 每个槽位指定第几个（诊断）；不返回新来的人（没有出场视频） */
+  if (c.slots) { c.summon(new URLSearchParams(location.search).get(name) || undefined); return [c, undefined]; }
   if (!c.members) return [c, c.summon(sk)];
   if (pick != null) {
     for (const m of c.members) if (m !== c.members[pick] && m.active()) { if (IntroVideo.owner() === m) IntroVideo.stop(); m.reset(); }
@@ -2219,29 +2225,30 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   const offArm = (y) => Math.abs(y - FX.phoneY) < ARM_GAP;
   /* 哥们（灭迹党）→ 女生。落点 u=0 脸、u=1 大腿上段（再往下水就朝下扎了）；手机那一行跳过去。
      脸那一段碰脸的前沿，其余碰那一行的身体前沿。 */
+  function girlAim(u) {
+    const f = faceOf('a'), sp = targetSpan(-1);
+    if (!f || !sp) return null;
+    /* 倒地：她横躺着，沿身体从头（u=0，脸后面一点）到脚（u=1）取上沿上的点 —— 水从上往下浇。
+       第三项 'top' 告诉 crew.js 碰撞按上沿判（水滴落到这一列的上沿以下就算打中）。
+       脚那头取到最左有她的那一列往里 EDGE_STEP×2，贴着脚尖浇会像浇在地上。 */
+    if (girlDown()) {
+      const m = WORLD.poses[FX.frame], t = m.edge.top, st = m.edge.step;
+      const j0 = t.findIndex(v => v >= 0) + 2;
+      const x0 = poseX(m, j0 * st), x1 = f[0];
+      const x = x1 + (x0 - x1) * u, y = girlTop(x);
+      return y == null ? null : [x, y, 'top'];
+    }
+    const lo = f[1], hi = sp[1] - (sp[1] - sp[0]) * 0.35;
+    let y = lo + (hi - lo) * u;
+    if (offArm(y)) y = FX.phoneY + (u < 0.5 ? -ARM_GAP : ARM_GAP);
+    if (Math.abs(y - f[1]) < f[2]) return [f[0] + 0.5 * f[2], y];
+    const x = frontAt(y, -1);
+    return x == null ? null : [x, y];
+  }
   Buddy.init({
     W, ground: () => GROUND + FX.bob, horizon,
     zone: () => [Math.min(FX.phoneX + 100, W - 420), W + 90],
-    target(u) {
-      const f = faceOf('a'), sp = targetSpan(-1);
-      if (!f || !sp) return null;
-      /* 倒地：她横躺着，沿身体从头（u=0，脸后面一点）到脚（u=1）取上沿上的点 —— 水从上往下浇。
-         第三项 'top' 告诉 crew.js 碰撞按上沿判（水滴落到这一列的上沿以下就算打中）。
-         脚那头取到最左有她的那一列往里 EDGE_STEP×2，贴着脚尖浇会像浇在地上。 */
-      if (girlDown()) {
-        const m = WORLD.poses[FX.frame], t = m.edge.top, st = m.edge.step;
-        const j0 = t.findIndex(v => v >= 0) + 2;
-        const x0 = poseX(m, j0 * st), x1 = f[0];
-        const x = x1 + (x0 - x1) * u, y = girlTop(x);
-        return y == null ? null : [x, y, 'top'];
-      }
-      const lo = f[1], hi = sp[1] - (sp[1] - sp[0]) * 0.35;
-      let y = lo + (hi - lo) * u;
-      if (offArm(y)) y = FX.phoneY + (u < 0.5 ? -ARM_GAP : ARM_GAP);
-      if (Math.abs(y - f[1]) < f[2]) return [f[0] + 0.5 * f[2], y];
-      const x = frontAt(y, -1);
-      return x == null ? null : [x, y];
-    },
+    target: girlAim,
     top: girlTop,
     down: girlDown,
     front: (y) => offArm(y) ? null : frontAt(y, -1),   // 打偏的碰她身体轮廓也溅开；手机那行不算
@@ -2260,6 +2267,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     target: (u) => bodyAt('top', u), top: girlTop,
     onHit: (kind, col, x, y, power) => impact(+1, y, power, kind === 'football' ? RECIPE.ball : RECIPE.stink, x),
   });
+  function boyAim(u) {
+    const f = faceOf('b');
+    return f && [f[0] - 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]];
+  }
   /* 闺蜜（查岗党）→ 男生的脸。落点在脸的**中上部**（眼睛那一带）：x 往女生那边 0.3 个半径，y 从脸心往上 0.55
      到往下 0.05 个半径乱晃；他跪下、趴下，脸跟着走。
      不取下半张脸：男生被拖倒时脸朝下贴地，伸出去的胳膊正好横在下半张脸前面，爆点全落在胳膊上。
@@ -2267,13 +2278,22 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   Bestie.init({
     W, ground: () => GROUND + FX.bob, horizon,
     zone: () => [Math.max(FX.phoneX - 60, 420), -40],   // 女生身后到屏幕左沿很窄，只许出画 40
-    target(u) {
-      const f = faceOf('b');
-      return f && [f[0] - 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]];
-    },
+    target: boyAim,
     front: () => null,
     onSplash: (x, y) => RECIPE.pepper.drip(x, y, -1),
     onHit: (x, y, first) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE.pepper, x),
+  });
+
+  /* 三人组里的新角色（trio.js）：哥们侧打女生（落点同水枪哥们 girlAim），闺蜜侧打男生的脸（同喷雾闺蜜 boyAim）。
+     第一下按档 3 力度，之后每下轻补。 */
+  for (const a of [MaskMan, StrawMan, Sakura, Goku]) a.init({
+    face: () => faceOf('a'), aim: girlAim, ground: () => GROUND + FX.bob,
+    onHit: (x, y, first, rc) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE[rc], x),
+    onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
+  });
+  for (const a of [Gege, Fairy, Ninja, Explorer]) a.init({
+    face: () => faceOf('b'), aim: boyAim, ground: () => GROUND + FX.bob,
+    onHit: (x, y, first, rc) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE[rc], x),
   });
 
   /* ---- 档 4 的站位 ----
@@ -2373,6 +2393,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Particles.loadShapes(Q0.get('v'), noSpr),
     Buddy.load(Q0.get('v'), noSpr),
     Bestie.load(Q0.get('v'), noSpr),
+    ...ACTS.map(a => a.load(Q0.get('v'), noSpr)),
     ...[...G4L.members, ...G4R.members].map(c => c.load(Q0.get('v'), noSpr)),
     DurianRain.load(Q0.get('v'), noSpr),
     ...[...TIDE_OF.values()].map(t => t.load(Q0.get('v'), noSpr)),
@@ -2468,7 +2489,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     bctx.clearRect(0, 0, W, H);
     drawWorld(bctx, rooms);
     /* 背景里会动的东西（bgmotion.js）：档 3/4 帮手在场时让位 */
-    BgMotion.draw(bctx, Math.round(-(FX.camX - MID)), W, H, Buddy.active() || Bestie.active() || G4L.active() || G4R.active());
+    BgMotion.draw(bctx, Math.round(-(FX.camX - MID)), W, H, BuddyTrio.active() || BestieTrio.active() || G4L.active() || G4R.active());
     drawGoalFloor(bctx);
   }
 
@@ -2569,6 +2590,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     actors.draw(ac, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(ac);
     for (const it of crew) if (near(it)) it.draw(ac);
+    for (const a of ACTS) a.drawOver(ac);        // 三人组扔出去的东西、挂在人身上的记号、橡皮手臂、气功波：盖在主角之上
     if (dim > 0) {
       drawIntroDim(ac, dim, 'source-atop');
       cctx.save(); cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.drawImage(actorBuf, 0, 0); cctx.restore();
@@ -2671,7 +2693,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   if (Q.has('ammostrip')) {
     const n = clamp(+Q.get('ammostrip') | 0, 2, 12);
     const MS = clamp(+(Q.get('ammoms') || 110), 16, 400) / 1000;
-    const sc = 0.5, gname = Q.get('ammogift') || 'pillow';
+    const sc = clamp(+(Q.get('ammosc') || 0.5), 0.2, 1), gname = Q.get('ammogift') || 'pillow';   // ?ammosc=1 原尺寸看细节
     /* ?ammospin=<rad/s> 临时换转速、?ammobare=1 只画本体（关掉色晕/拖尾/残影）。
        "看不出体积感"可能是转太快、也可能是被特效糊住，这两个因素在成品图里
        纠缠在一起，分不开就只能靠猜。给两个开关才能一次分清。 */

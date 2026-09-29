@@ -75,7 +75,8 @@ function Crew(cfg) {
   /* 候场（b.hold，intro.js）：出场视频放着的时候她已经占了名额（再送走续时间、组里不轮到下一个），但不走时钟、不画、不喷。
      视频放完 intro.js 清掉 hold、把 t 归零、给 b.from = 视频尾帧里她的 [脚底 x, 脚底 y, 缩放]，hoverPose 从那里滑进悬停位。
      sk（可无）：指定形象编号（cfg.skins 的下标，越界夹到两头）；不给就挑场上没人用的。诊断参数 ?skin= 用它。 */
-  function summon(sk) {
+  /* wait（可无）：先等这么多秒再进场（三人组错开进场，trio.js Trio），等的时候不走时钟、不画 */
+  function summon(sk, wait = 0) {
     if (sk != null) sk = Math.max(0, Math.min(cfg.skins.length - 1, sk | 0));
     const staying = bs.filter(b => b.t <= sprayEnd(b));
     if (bs.length >= cfg.max) {
@@ -105,7 +106,7 @@ function Crew(cfg) {
     const b = { t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
                 r: pickR(R[2], R[3]), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
                 pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0,
-                hold: false, from: null };
+                hold: false, from: null, wait };
     if (PATH.pop && o.origin) { b.pop = o.origin(); if (o.onPop) o.onPop(b.pop[0], b.pop[1]); }   // 从手机里蹦出来（绿茶妹妹）
     bs.push(b);
     bs.sort((a, b) => a.s - b.s);          // 远的先画
@@ -326,6 +327,7 @@ function Crew(cfg) {
     for (let i = bs.length - 1; i >= 0; i--) {
       const b = bs[i];
       if (b.hold) continue;                      // 候场：出场视频还在放
+      if (b.wait > 0) { b.wait -= dt; continue; }
       b.t += dt; b.hitCd -= dt;
       const se = sprayEnd(b);
       if (!b.landed && b.t >= T.enter) {        // 到位（刹停 / 滑停）那一刻通知 main.js（真相喷雾：刹停的冲击环）
@@ -452,7 +454,7 @@ function Crew(cfg) {
     for (const d of ps) { const g = groups.get(d.b); g ? g.push(d) : groups.set(d.b, [d]); }
     /* 悬停的人按此刻 pose 的缩放排（缩放由 o.perch 给，main.js G4STAND，不是召唤时抽的 b.s），站地的按召唤时定的远近 */
     const sOf = (b) => cfg.move === 'hover' && bs.includes(b) ? pose(b)[2] : b.s;
-    for (const b of bs) if (!b.hold) out.push({ s: sOf(b), draw: (ctx) => drawOne(ctx, b) });
+    for (const b of bs) if (!b.hold && !(b.wait > 0)) out.push({ s: sOf(b), draw: (ctx) => drawOne(ctx, b) });
     /* 光束画在本人身后（从头顶光点往男生那边打，左边、正上方那两个光点的光束会斜穿过她的脸和身子 —— 第一版画在身前，像把她切开），
        光点画在本人之前（它们在头顶，不跟人重叠，被她挡住就看不见了） */
     if (BM) for (const b of bs) if (!b.hold) {
@@ -648,19 +650,21 @@ const Buddy = Crew({
   /* 八个形象，点一次随机挑一个场上没人用的。1 是最早三个里留下的；4~10 是 2026-09-29 加的（用户嫌前三个"整体造型太相近"），
      借 80/90 后熟知的角色，只留认人特征、发型服饰重新设计（v14/buddy/make.py 有逐个说明）。
      2、3（反戴红帽 / 金发花衬衫）用户要求删掉，原图、贴图都删了。 */
+  /* 2026-09-29 起哥们是三人组（trio.js）里"后排地面"那一个：只留踩滑板端水枪的四个，每次一个。
+     另外四个（假面绅士、草帽船长、樱木、悟空）换了新姿势和新攻击，在 trio.js（MaskMan / StrawMan / Sakura / Goku），滑板贴图留着没删。 */
   skins: [1,                        // skate1 棕发护目镜花短裤红滑板
-          4, 5, 6, 7,               // skate4 金箍浪子（至尊宝）/ skate5 格格府贝勒（五阿哥）/ skate6 夜色假面绅士 / skate7 红发宿敌（八神庵）
-          8, 9, 10],                // skate8 刺猬头武道家 / skate9 红发篮球少年 / skate10 草帽船长
-  T: { enter: 0.55, spray: 2.5, exit: 0.5 },
-  max: 3, gap: 0.3,
-  /* 三排在男生身后（被男生挡住），两排在他前面（2026-09-29 用户："哥们出现的位置不一定是男生后面，也可以出现在前面，
+          4, 5, 7],                 // skate4 金箍浪子（至尊宝）/ skate5 格格府贝勒（五阿哥）/ skate7 红发宿敌（八神庵）
+  T: { enter: 0.55, spray: 3.2, exit: 0.5 },
+  max: 1, gap: 0.3,
+  /* 三人组里只站后排（下面两排前排不用了：前景地板是 trio.js 趴着 / 半跪的那一个）。
+     三排在男生身后（被男生挡住），两排在他前面（2026-09-29 用户："哥们出现的位置不一定是男生后面，也可以出现在前面，
      注意近大远小和遮挡"；"前面最多可以站两个"）：前排脚底往下（crew.js pose：抬高 = (地面 − 视平线) × (1 − d)，d > 1 就是往下），
      画在男生之上。前排只站右半边（r 0.5~1，人往屏幕右沿靠）：站中间会把手机和两人的手整个挡住。闺蜜（MIST.rows）同样。
      一排 = [远近 d 下限, 上限, r 下限, 上限]；画多大 = d × k。k 0.85：d = 1（跟男生一样远）时哥们跟男生一样大（截图对照 1 / 0.85 / 0.75 定的）。
      后排的 d 是原来的缩放 ÷ 0.85（原 0.74~0.80 / 0.66~0.71 / 0.58~0.63）：画出来一样大，脚底按透视往下挪 25~45 像素。
      前排 d 1.04~1.14 → 画出来是男生的 0.88~0.97 倍（第一版 k = 1、d 1.10~1.16，比男生大一圈多，用户："比男女主大很多，不合理"）。 */
   k: 0.85,
-  rows: [[0.87, 0.94], [0.78, 0.84], [0.68, 0.74], [1.04, 1.08, 0.5, 1], [1.10, 1.14, 0.5, 1]],
+  rows: [[0.87, 0.94], [0.78, 0.84]],
   aim: { lo: -0.52, hi: 0.21, rate: 2.4, follow: 10 },
   sweep: { a: [0.32, 0.2], w: [1.2, 2.8] },
   zone: { every: 1.0, lo: 0.2, hi: 0.85, span: 0.1 },
@@ -684,16 +688,19 @@ const MIST = {
   /* 七个形象，点一次随机挑一个场上没人用的（summon）。2 是最早三个比基尼里留下的那个；4~9 是 2026-09-29 加的（用户嫌前三个"整体造型太相近"），
      借 80/90 后熟知的角色，只留认人特征、发型服饰重新设计（v14/bestie/make.py 有逐个说明）。
      1、3（src2 棕色高马尾红比基尼、src4 金发双马尾黑比基尼）用户说"没特色"拿掉了，贴图删了，要回来重跑 make.py。 */
+  /* 2026-09-29 起闺蜜是三人组（trio.js）里"后排地面"那一个：只留踩平衡车举喷雾的三个，每次一个。
+     忍者扇娘、探险家、紫衣仙子、格格换了新姿势和新攻击，在 trio.js（Ninja / Explorer / Fairy / Gege）。 */
   skins: [2,                        // src3 黑短发头顶墨镜、条纹比基尼、粉平衡车
-          4, 5, 6,                  // src5 红衣忍者扇娘（紫黑）/ src6 麻花辫探险家 / src7 蓝发发明家（自制喷雾器）
-          7, 8, 9],                 // src8 月光水手少女 / src9 紫衣仙子 / src10 格格
+          6, 7],                    // src7 蓝发发明家（自制喷雾器）/ src8 月光水手少女
   anim: { pulse: [0.42, 0.14], kick: [0.12, 0.05, 10], lean: 0.08, bob: [3, 2.6] },
-  T: { enter: 0.55, spray: 2.5, exit: 0.5 },
-  max: 3, gap: 0.3,                 // 同屏最多三个（≤ 形象数）：满员时续时间，同时在场的各不相同
+  T: { enter: 0.55, spray: 3.2, exit: 0.5 },
+  max: 1, gap: 0.3,                 // 三人组里的一个：再送续时间
   /* 同哥们（Buddy.rows、k）：三排在女生身后，两排在她前面（2026-09-29 用户："闺蜜也是一样的逻辑"）—— 脚往下、画在女生之上；
      前排只站左半边（r 0.5~1，人往屏幕左沿靠）。k 0.85：d = 1 时闺蜜跟女生一样高（她站得直、脚下有平衡车，k = 1 高出一截）。 */
   k: 0.85,
-  rows: [[0.87, 0.94], [0.78, 0.84], [0.68, 0.74], [1.04, 1.08, 0.5, 1], [1.10, 1.14, 0.5, 1]],
+  /* 三人组里只站最远那一排：她身前的女主往后仰、长发甩到左边，近两排整个人被女主挡住（2026-09-29 三人组胶片）；
+     远排小、脚底高，头露在女主的头发上方 */
+  rows: [[0.68, 0.74]],
   aim: { lo: -0.7, hi: 0.35, rate: 2.4, follow: 10 },
   sweep: { a: [0.3, 0.15], w: [1.3, 3.1] },
   zone: null,
