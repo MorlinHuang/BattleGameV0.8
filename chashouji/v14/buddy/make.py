@@ -1,6 +1,7 @@
 """哥们立绘：品红底原图 → 抠像、裁边、缩放 → 在腰上切成两层，打印 foot / muzzle / pivot。
 用法：python3 v14/buddy/make.py [原图 编号]，默认 skate1.png 1；skate1~10.png → buddy1~10_up|lo.webp
-网页用八个（crew.js Buddy.skins：skate1、skate4~10）；skate2（反戴红帽）、skate3（金发花衬衫）用户拿掉了，贴图不留
+网页用八个（crew.js Buddy.skins：skate1、skate4~10），点一次随机挑一个场上没人用的；
+最早的 skate2（反戴红帽）、skate3（金发花衬衫）用户要求删掉，原图和贴图都已删（git 历史里还有）
 （一次全出：for i in 1 4 5 6 7 8 9 10; do python3 v14/buddy/make.py skate$i.png $i; done）
 
 2026-09-29 用户嫌三个"整体造型太相近"，留 skate1，加七个借 80/90 后熟知角色的形象（只留认人特征，发型服饰重新设计），
@@ -19,7 +20,7 @@
 实测枪、滑板都在原位（掩码重合 0.9 上下），共用一套常数。礼帽顶、炸毛发尖顶到原图上沿，CROP 上沿从 26 放到 0
 （CUT / PIVOT 跟着 +10 输出像素，WAIST 横向不变）。
 
-skate2、skate3 是 skate1 改图换人（发型、脸、肤色、衣服、滑板配色），姿势和枪没动 —— 实测枪口、腰、轮子都在
+（已删的 skate2、skate3 当年）是 skate1 改图换人（发型、脸、肤色、衣服、滑板配色），姿势和枪没动 —— 实测枪口、腰、轮子都在
 原位 ±2 像素，所以三个共用同一套 CUT / WAIST / PIVOT 和同一个裁边框 CROP（按 skate1 裁；skate3 的金发
 高出 6 像素，被切掉的不到 1 个输出像素）。**裁边不能按每张图自己的外框**：头发高低不同，外框一变，
 输出贴图里所有点都跟着挪，三个人的 foot / muzzle / pivot 就不一样了。
