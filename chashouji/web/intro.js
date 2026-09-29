@@ -36,7 +36,11 @@ const IntroVideo = (() => {
        宽高 = 834×1112 × k。右沿正好贴屏幕右边，左边 166 像素在屏幕外（#stage overflow:hidden），只裁掉开场正面镜头左侧一点衣袖。
        tide：视频最后一帧里海面的高度（视频像素，vframes --fx sea 量的）—— 游戏里的海从这个高度接上（sea.js handoff）。
        视频由 video/vframes 出：vframes.py 原片 -s baisu1_up.webp --fx sea（底部的海 + 虾兵蟹将整条保留、不随环境退掉）。 */
-    baisu: { src: 'assets/video/baisu_intro_alpha.webm', box: [-165.9, 101.6, 1125.1, 1500.1], vw: 834, end: { s: 0.745, x: -51, y: 22 }, tide: 900 },
+    baisu: { src: 'assets/video/baisu_intro_alpha.webm', box: [-165.9, 101.6, 1125.1, 1500.1], vw: 834, end: { s: 0.745, x: -51, y: 22 }, tide: 900,
+             open: [-86.9, 101.6], move: [4.6, 6.2] },
+    /* open / move：开场时视频区左上角在 open，move 这段（秒）平滑移到 box。box 是按尾帧反推的，比居中往左 79 像素 ——
+       前 4.5 秒她正面居中（视频里人物重心在宽度的 50.4%），不挪回来就整段偏左（用户 2026-09-29："出场后位置偏左，不在正中心"）。
+       move 取她飞向左上、镜头后拉那一段：画面本来就在动，视频区跟着平移看不出来，最后一帧照样压在悬停位上。 */
   };
   const POP = 0.35, FADE = 0.45;         // 浮现几秒、结尾淡掉几秒
   /* VP9 透明只有 Chromium 内核认。按 UA 判（Safari 的 canPlayType 也说能放 webm，但透明通道丢掉，变黑底） */
@@ -51,14 +55,30 @@ const IntroVideo = (() => {
     for (const [k, c] of Object.entries(CLIPS)) {
       const v = document.createElement('video');
       v.src = c.src; v.preload = 'auto'; v.playsInline = true;
-      const [x, y, w, h] = c.box;
+      const [, , w, h] = c.box;
       Object.assign(v.style, {
-        position: 'absolute', left: x / W * 100 + '%', top: y / H * 100 + '%', width: w / W * 100 + '%', height: h / H * 100 + '%',
+        position: 'absolute', width: w / W * 100 + '%', height: h / H * 100 + '%',
         objectFit: 'fill', visibility: 'hidden', pointerEvents: 'none',
       });
+      place(v, c, 0);
       stage.insertBefore(v, stage.querySelector('.panel'));
       vids[k] = v;
     }
+  }
+
+  /* 视频区左上角跟着播放进度走（只有配了 open 的才动）：t 秒时在 open → box 之间哪里 */
+  function place(v, c, t) {
+    let [x, y] = c.box;
+    if (c.open) {
+      const u = Math.min(1, Math.max(0, (t - c.move[0]) / (c.move[1] - c.move[0]))), e = u * u * (3 - 2 * u);
+      x = c.open[0] + (x - c.open[0]) * e; y = c.open[1] + (y - c.open[1]) * e;
+    }
+    v.style.left = x / W * 100 + '%'; v.style.top = y / H * 100 + '%';
+  }
+  function follow() {
+    if (!cur || cur.done) return;
+    place(cur.v, cur.c, cur.v.currentTime);
+    requestAnimationFrame(follow);
   }
 
   /* 立绘在尾帧里的位置 → 游戏里她此刻该在哪：[脚底 x, 脚底 y, 缩放]（跟 crew.js hoverPose 同一套量） */
@@ -75,6 +95,8 @@ const IntroVideo = (() => {
     b.hold = true;
     cur = { v, crew, b, c, done: false };
     v.currentTime = 0;
+    place(v, c, 0);
+    if (c.open) requestAnimationFrame(follow);
     v.style.transition = 'none'; v.style.opacity = '0'; v.style.transform = 'scale(1.04)'; v.style.visibility = 'visible';
     requestAnimationFrame(() => {             // 浮现：淡入 + 从略大收回来（没有弹框，是一层光慢慢显出来）
       v.style.transition = `opacity ${POP}s ease-out, transform ${POP * 1.6}s ease-out`;
@@ -95,6 +117,7 @@ const IntroVideo = (() => {
     if (!cur || cur.done) return;
     const me = cur, { v, crew, b, c } = me;
     me.done = true;
+    place(v, c, Infinity);                  // 放完一定落在 box（尾帧对准的位置），不管最后一帧 rAF 赶没赶上
     if (crew.peek().includes(b)) {
       b.hold = false; b.t = 0; b.from = endPose(c, crew.cfg.spr);
       /* 视频里带着的特效（白娘子的海）：游戏里那一份在视频底下原位铺好，视频淡掉时两层交叠换手（main.js 接） */
