@@ -282,6 +282,7 @@ function giveGift(side, key, pick) {
   const boost = (S.stand > 0 && side === loser) ? 2 : 1;
   const amt = it.push * (1 - deb) * boost;
   if (side > 0) { S.fA += amt; S.giftA++; } else { S.fB += amt; S.giftB++; }
+  BgMotion.chatPush();                              // 电竞房聊天屏冒一条（背景联动）
 
   /* 高档礼物的第二维度：压制。光靠 push 拉开差距会逼出很难看的数值，而
      "让对方刷的每一件都打折"才是贵真正买到的东西。 */
@@ -2351,7 +2352,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   if (Q0.get('bg')) Object.assign(WORLD, await (await fetch(bgDir + 'rooms.json' + vq)).json());
   WORLD.total = WORLD.rooms.reduce((a, b) => a + b, 0);
   const rooms = await Promise.all(WORLD.rooms.map((_, i) => load(`${bgDir}room${i}.webp`)));
-  const motionN = Q0.get('bg') ? await BgMotion.load(bgDir + 'anim/', vq) : 0;   // 这套房间里会动的几块（没有 anim.json 就是 0）
+  const motionN = Q0.get('bg') ? await BgMotion.load(bgDir, vq) : 0;   // 这套房间里会动的东西（视频动区 + 程序光效，没有就是 0）
   const poseNames = Object.keys(WORLD.poses);
   const poseImgs = {};
   await Promise.all(poseNames.map(n => load(`assets/world/pose_${n}.webp`).then(im => { poseImgs[n] = im; })));
@@ -2377,7 +2378,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     SockRain.load(Q0.get('v'), noSpr),
   ]);
   document.getElementById('msg').textContent =
-    `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` + (motionN ? ` · 背景动区 ${motionN}` : '') +
+    `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` + (motionN ? ` · 背景动效 ${motionN}` : '') +
     (sprOK.some(Boolean) ? ` · 物品转盘 ${sprOK.filter(Boolean).length}` : '') +
     (shpOK.some(Boolean) ? ` · 粒子 ${shpOK.filter(Boolean).length}` : '') +
     (resN ? ` · 结算 ${resN}` : '');
@@ -2464,8 +2465,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   function renderBg() {
     bctx.clearRect(0, 0, W, H);
     drawWorld(bctx, rooms);
-    /* 背景动区（bgmotion.js）：档 3/4 帮手在场时让位 */
-    BgMotion.draw(bctx, Math.round(-(FX.camX - MID)), W, Buddy.active() || Bestie.active() || G4L.active() || G4R.active());
+    /* 背景里会动的东西（bgmotion.js）：档 3/4 帮手在场时让位 */
+    BgMotion.draw(bctx, Math.round(-(FX.camX - MID)), W, H, Buddy.active() || Bestie.active() || G4L.active() || G4R.active());
     drawGoalFloor(bctx);
   }
 
