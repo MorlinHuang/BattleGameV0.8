@@ -2346,13 +2346,15 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      每间房多宽、客厅正中在哪、每张贴图的锚点和手机位置。 */
   const vq = Q0.get('v') ? '?v=' + encodeURIComponent(Q0.get('v')) : '';
   WORLD = await (await fetch('assets/world/world.json' + vq)).json();
-  /* ?bg=<目录>：换一套房间预览（assets/world/<目录>/ 下的 room{i}.webp + rooms.json 的 rooms / center），
-     姿势贴图照旧。v15 重画三间房定稿前用它在实机里看，不动默认长卷。 */
-  const bgDir = Q0.get('bg') ? `assets/world/${Q0.get('bg')}/` : 'assets/world/';
-  if (Q0.get('bg')) Object.assign(WORLD, await (await fetch(bgDir + 'rooms.json' + vq)).json());
+  /* 房间是一套一套的：assets/world/<套>/ 下的 room{i}.webp + rooms.json（rooms / center）+ anim/、fx/（会动的东西，bgmotion.js）。
+     默认 v15 雷雨夜（2026-09-29 用户定稿）；?bg=v14 看旧的白天长卷（world.json 自带的 rooms / center，图在 assets/world/ 根下，不会动）。
+     姿势贴图两套共用。 */
+  const bgName = Q0.get('bg') || 'v15';
+  const bgDir = bgName === 'v14' ? 'assets/world/' : `assets/world/${bgName}/`;
+  if (bgName !== 'v14') Object.assign(WORLD, await (await fetch(bgDir + 'rooms.json' + vq)).json());
   WORLD.total = WORLD.rooms.reduce((a, b) => a + b, 0);
   const rooms = await Promise.all(WORLD.rooms.map((_, i) => load(`${bgDir}room${i}.webp`)));
-  const motionN = Q0.get('bg') ? await BgMotion.load(bgDir, vq) : 0;   // 这套房间里会动的东西（视频动区 + 程序光效，没有就是 0）
+  const motionN = bgName !== 'v14' ? await BgMotion.load(bgDir, vq) : 0;   // 这套房间里会动的东西（视频动区 + 程序光效，没有就是 0）
   const poseNames = Object.keys(WORLD.poses);
   const poseImgs = {};
   await Promise.all(poseNames.map(n => load(`assets/world/pose_${n}.webp`).then(im => { poseImgs[n] = im; })));
