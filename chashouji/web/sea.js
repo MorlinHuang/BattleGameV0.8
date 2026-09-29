@@ -2,7 +2,7 @@
  *
  * 六片：白娘子 海 Sea / 法海 经卷 Scroll（下面细说）；2026-09-29 加真相女神 真相云海 TruthTide / 灭迹恶魔 碎纸黑烟 DemonTide /
  * 嫦娥 明月银河 MoonSky / 后羿 烈日火空 SunSky（文件末尾，同一个 Sky，不是层层浪；贴图 v14/tides/make.py、v14/moonsky、v14/sunsky）。
- * 左边三片从左推进、右边三片从右。
+ * 再加绿茶妹妹 奶盖爱心泡泡海 TeaTide（同 DemonTide）。左边三片从左推进、右边四片从右。
  *
  * 白娘子（女生侧）→ 海水 Sea。用户："整个屏幕的底部，从下边缘到男女生下方，用海水汹涌填充（代表白娘子的水法术），
  *   海水也需要持续的动画，海里可以有些虾兵蟹将。白娘子持续 15s，海水也一样。当白娘子消失的时候，海水也消散。"
@@ -131,7 +131,7 @@ const Foam = (() => {
            swell [起伏幅度, 涌浪长, 走速]（按列起伏）, bob [幅度, 角频率]（整层上下晃） }；
    haze（可无）：画在三层之下的一片竖向渐变 [颜色, 上沿不透明度, 下沿不透明度]，从 top + haze[3] 到屏幕下沿；
    spray：上沿甩出的东西 { every（多久试一次）, crest（上沿最高那几成才甩）, V, spread, G（正 = 往下掉，负 = 往上飘）, life, r, a, dot（软点三色）, layers（哪几层甩），
-          shape（可无）：[形状, 占几成, 大小倍数, ...颜色] —— 'chat' 聊天气泡 [.., 填色, 描边]、'paper' 碎纸条 [.., 纸色]，其余几成照样是软点 }；
+          shape（可无）：[形状, 占几成, 大小倍数, ...颜色] —— 'chat' 聊天气泡 [.., 填色, 描边]、'paper' 碎纸条 [.., 纸色]、'heart' 爱心 [.., 填色, 描边]，其余几成照样是软点 }；
    kinds：小兵贴图、走速；dir：小兵往哪走（+1 右 / −1 左，贴图朝向要跟它一致）；mobs：开场位置；sink：贴图下沿压到上沿以下几成；
    hop：蹦起来 { every, T, h, splash（落回去甩几颗）}。 */
 /* 一片潮只画 [x0, x1)，两头各羽化 FEATHER 像素（贴着屏幕边的那头不羽化）：第一版硬裁一刀，海和经卷之间一条笔直的竖线，
@@ -286,11 +286,12 @@ function Tide(C) {
     }
   }
 
-  /* 有形状的飞沫：真相云海往上冒聊天气泡（被翻出来的聊天记录）、灭迹黑烟里翻飞碎纸条（被撕掉的证据） */
+  /* 有形状的飞沫：真相云海往上冒聊天气泡（被翻出来的聊天记录）、灭迹黑烟里翻飞碎纸条（被撕掉的证据）、奶盖海往上飘粉色爱心 */
   function drawShape(ctx, p, r) {
     const [kind, , , c0, c1] = S.shape;
     ctx.save(); ctx.translate(p.x, p.y);
     if (kind === 'chat') { ctx.rotate(Math.sin(p.t * 3 + p.j * 20) * 0.2); drawChatIcon(ctx, r, c0, c1, 2, c1); }
+    else if (kind === 'heart') { ctx.rotate(Math.sin(p.t * 2.5 + p.j * 20) * 0.3); heartPath(ctx, 0, 0, r); ctx.fillStyle = c0; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = c1; ctx.stroke(); }
     else { ctx.rotate(p.vr * p.t + p.j * 6); ctx.fillStyle = c0; ctx.fillRect(-r, -r * 0.3, 2 * r, r * 0.6); }
     ctx.restore();
   }
@@ -512,6 +513,20 @@ const DemonTide = Tide({
   dir: -1, mobs: TIDE_MOBS,
   sink: 0.22,
   hop: { every: [2.0, 3.6], T: 0.7, h: 80, splash: 14 },
+});
+
+/* 奶盖爱心泡泡海（绿茶妹妹，男生档 4 第四人，2026-09-29）：奶白浅粉奶泡浪，浪尖往上飘粉色爱心和奶白泡泡（茶言茶语的"心"意）；
+   白莲花精灵、兔耳奶茶杯、抱手机的小白兔、哭唧唧爱心往左冲女生。不用绿：女生那边的真相云海是翠绿，两片可能同时在场。 */
+const TeaTide = Tide({
+  top: 1190, rise: 1.4, fall: 1.4, side: +1, front: { every: 0.014 },
+  layers: tideLayers('tea', [['far', 535, 299, 20], ['mid', 693, 387, 73], ['near', 888, 496, 115]], -1),
+  spray: { every: 0.04, crest: 0.4, V: [40, 120], spread: 1.2, G: -60, life: [1.0, 1.6], r: [3, 6], a: 0.95, layers: [0, 1, 2],
+           dot: ['rgba(255,250,252,1)', 'rgba(255,190,220,0.85)', 'rgba(255,120,180,0)'],
+           shape: ['heart', 0.35, 2.4, 'rgba(255,160,205,0.95)', 'rgb(255,245,250)'] },
+  kinds: tideKinds('tea', [['lotus', 55], ['cup', 65], ['bunny', 70], ['heart', 50]]),
+  dir: -1, mobs: TIDE_MOBS,
+  sink: 0.22,
+  hop: { every: [2.0, 3.6], T: 0.7, h: 80, splash: 12 },
 });
 
 /* ---- 嫦娥的明月银河 MoonSky / 后羿的烈日火空 SunSky（2026-09-29，替掉月夜银云海、太阳火云海）----

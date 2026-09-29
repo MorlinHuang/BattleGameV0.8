@@ -1368,7 +1368,7 @@ const INTRO_OF = new Map([[Truth, 'truth'], [Baisu, 'baisu'], [Change, 'change']
 const RAIN = { durian: DurianRain, sockball: SockRain };
 /* 屏幕底部的法术潮（sea.js）：档 4 每个人一片，跟着自己那个人 —— 在场、还没开始飞走（候场放视频时不算）就推进来，
    飞走就退。续送多待，潮也多待。左边三片从左推进（side −1），右边三片从右（side +1）。 */
-const TIDE_OF = new Map([[Baisu, Sea], [Truth, TruthTide], [Change, MoonSky], [Fahai, Scroll], [Demon, DemonTide], [Houyi, SunSky]]);
+const TIDE_OF = new Map([[Baisu, Sea], [Truth, TruthTide], [Change, MoonSky], [Fahai, Scroll], [Demon, DemonTide], [Houyi, SunSky], [Sister, TeaTide]]);
 const TIDES_L = [...TIDE_OF.values()].filter(t => t.side < 0), TIDES_R = [...TIDE_OF.values()].filter(t => t.side > 0);
 const casting = (c) => c.peek().some(b => !b.hold && b.t <= c.cfg.T.enter + b.spray);
 /* 两边各从自己那一边横着推进来（2026-09-28 用户："分别从左右进场，这样同时播放"）。每边同时只一个人在场，
