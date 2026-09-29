@@ -74,10 +74,109 @@ def env_weight(i, n, fps):
     return min(1.0, max(0.0, (left - ENV_OFF[1]) / (ENV_OFF[0] - ENV_OFF[1])))
 
 
+def _vsmooth(a, r):
+    """按列上下 2r+1 行求平均（累加和，O(像素数)）"""
+    p = np.pad(a.astype(np.float32), ((r + 1, r), (0, 0))).cumsum(0)
+    return (p[2 * r + 1:] - p[:-2 * r - 1]) / (2 * r + 1)
+
+
+def _blur(a, r):
+    """方框模糊两遍（近似高斯），边缘按最近像素延伸"""
+    for _ in range(2):
+        p = np.pad(a, ((r + 1, r), (0, 0)), mode='edge').cumsum(0)
+        a = (p[2 * r + 1:] - p[:-2 * r - 1]) / (2 * r + 1)
+        p = np.pad(a, ((0, 0), (r + 1, r)), mode='edge').cumsum(1)
+        a = (p[:, 2 * r + 1:] - p[:, :-2 * r - 1]) / (2 * r + 1)
+    return a
+
+
+# 底部法术潮（2026-09-29 白娘子）：视频里从左边涌进来、最后铺在画面底部的大海 + 虾兵蟹将。
+# 它是特效不是环境：整条保留、不随环境在结尾退掉 —— 游戏里的海在视频放完时原位接上（main.js / sea.js handoff）。
+# 按颜色找：每一列最上面那段"成片的青蓝"就是海面（夜色湖面是灰蓝，G、B 比 R 高得少、饱和度也低，实测分得开），
+# 海面往下到画面底边全算海；海面上方紧挨着的亮白（浪尖白沫）、橙红（骑在浪头上的虾兵蟹将）也算。
+SEA = {
+    'from': 0.35,        # 只在画面上沿往下这一成以下找海（掌心的蓝水球、发光在上半截）
+    # 海水（青蓝）：饱和度、G−R、B−R 都要够，且 B−G 不能太大 —— 身上的冰蓝光晕是纯蓝（B 比 G 高一大截），
+    # 暗处的湖面 G 比 R 高得不够；亮度太低的暗蓝也不算
+    'sat': 0.45, 'gr': 0.15, 'br': 0.2, 'bg': 0.15, 'v': 0.3,
+    'run': 6,            # 上下 2·run+1 行里三成以上是海水才算海面（零星的蓝点不算）
+    'onset': 0.005,      # 整帧海水像素超过这个比例才算"海来了"（之前的帧不找海：夜色湖面零星会有几颗像海水的像素）
+    # 不是雾的像素：雾是灰淡的浅蓝（饱和度 ~0.22、亮度 ~0.8）；白沫更亮、海水和兵更艳、阴影更暗
+    'mist': (0.32, 0.9, 0.45),             # 饱和度 > 0.32 或 亮度 > 0.9 或 亮度 < 0.45 就不是雾
+    # 或者有纹理：雾是平的（7×7 里亮度标准差 ~0.01），浪沫、浪花有纹理 —— 浪尖发灰的白沫跟雾一样亮、一样淡（亮度 0.67~0.87），
+    # 只能靠这个认出来
+    'tex': 0.03,
+    'grow': 80,          # 浪尖白沫 / 飞沫：从海面往上最多长多少像素（只长在"不是雾、且下面一行已经是海"的地方）
+    'mob': 30,           # 虾兵蟹将：橙红色块周围这么多像素以内、不是雾的都算（金盔、兵器、脸）
+    'edge': 20,          # 海面轮廓的闭运算半径：比 2·edge 列窄的凹口填平（再大会把浪头上虾兵之间的雾也填成灰块）
+    'col': 12,           # 海面高度按左右 2·col+1 列取中位数（去掉尖刺、补上整列都是白沫找不到海水的缝）
+    'soft': 3,           # 边缘羽化半径
+    'bottom': 0.02,      # 画框底边软掉多宽（占宽的比例）
+}
+
+
+def sea_mask(c, m):
+    """RGB（0~1）+ 人物遮罩 → 海的遮罩（0~1）"""
+    h, w = m.shape
+    r, g, b = c[..., 0], c[..., 1], c[..., 2]
+    mx = c.max(2)
+    sat = (mx - c.min(2)) / np.maximum(mx, 1e-3)
+    y0 = int(h * SEA['from'])
+    water = ((sat > SEA['sat']) & (g - r > SEA['gr']) & (b - r > SEA['br']) & (b - g < SEA['bg'])
+             & (mx > SEA['v']) & (m < 0.5))
+    water[:y0] = False
+    if water.mean() < SEA['onset']:
+        return np.zeros((h, w), np.float32)
+    core = _vsmooth(water, SEA['run']) > 0.3
+    has = core.any(0)
+    top = np.where(has, core.argmax(0), h).astype(np.float32)
+    k = SEA['col']
+    tp = np.pad(top, k, mode='edge')
+    top = np.median(np.stack([tp[i:i + w] for i in range(2 * k + 1)]), 0)
+    yy = np.arange(h)[:, None]
+    sea = yy >= top[None, :]
+    ms, mh, ml = SEA['mist']
+    mean = _blur(mx, 3)
+    tex = np.sqrt(np.maximum(_blur(mx * mx, 3) - mean * mean, 0))
+    vivid = ((sat > ms) | (mx > mh) | (mx < ml)) & (m < 0.5)     # 按颜色不是雾
+    solid = vivid | ((tex > SEA['tex']) & (m < 0.5))             # 按颜色或纹理不是雾（纹理在物体边上会往外带出几像素）
+    solid[:y0] = False
+    vivid[:y0] = False
+    # 浪尖白沫、飞沫：从海面一行行往上长，只长在"不是雾、且正下方已经是海"的地方
+    up = sea.copy()
+    cols = np.arange(w)
+    for d in range(1, SEA['grow'] + 1):
+        row = (top - d).astype(int)
+        ok = (row >= y0) & solid[np.clip(row, 0, h - 1), cols] & up[np.clip(row + 1, 0, h - 1), cols]
+        up[row[ok], cols[ok]] = True
+    # 骑在浪头上的虾兵蟹将：橙红色块，加上它周围一圈不是雾的（金盔、兵器、脸）
+    # 海面轮廓：每列最上面那个海像素往下全填上（浪卷里面露出的雾、白沫里的小缺口都是海的一部分）；
+    # 轮廓再做一次闭运算（先取左右 edge 列里最高的、再取最低的）：比 2·edge 窄的凹口填平，浪尖原样不削
+    env_top = np.where(up.any(0), up.argmax(0), h).astype(np.float32)
+    k = SEA['edge']
+    win = lambda a, f: f(np.stack([np.pad(a, k, mode='edge')[i:i + w] for i in range(2 * k + 1)]), 0)
+    env_top = win(win(env_top, np.min), np.max)
+    up = yy >= env_top[None, :]
+    # 虾兵蟹将只按颜色：它周围是雾，按纹理的话身边会带出一圈灰边
+    orange = (r - g > 0.2) & (r - b > 0.25) & (sat > 0.5) & vivid
+    near_mob = _blur(orange.astype(np.float32), SEA['mob']) > 0.01
+    out = (up | orange | (near_mob & vivid)).astype(np.float32)
+    return np.clip(_blur(out, SEA['soft']), 0, 1)
+
+
+def sea_line(frame_png, matte_png):
+    """最后一帧里海面的高度（视频像素）：海的遮罩每列最上沿，取有海的那些列的中位数。没有海返回 None。"""
+    c = np.asarray(Image.open(frame_png).convert('RGB')).astype(np.float32) / 255
+    m = np.asarray(Image.open(matte_png).convert('L')).astype(np.float32) / 255
+    s = sea_mask(c, m) > 0.5
+    has = s.any(0)
+    return int(np.median(s.argmax(0)[has])) if has.mean() > 0.5 else None
+
+
 def bake_frame(job):
     """原帧 + 人物遮罩 → RGBA。颜色不动，只算 alpha：
-    a = max(人物 × 画框边软化, 环境画框边淡入 × 环境权重 × max(BG, GLOW × 亮部))"""
-    src, msk, dst, env = job
+    a = max(人物 × 画框边软化, 环境画框边淡入 × 环境权重 × max(BG, GLOW × 亮部), 底部法术潮 × 底边软化)"""
+    src, msk, dst, env, fx = job
     c = np.asarray(Image.open(src).convert('RGB')).astype(np.float32) / 255
     m = np.asarray(Image.open(msk).convert('L')).astype(np.float32) / 255
     h, w = m.shape
@@ -87,6 +186,8 @@ def bake_frame(job):
     ec = np.minimum(np.minimum(u, 1 - u), np.minimum(v, (1 - v) * 0.25) * asp)     # 人物：底边软得宽 4 倍
     hl = ss(0.62, 0.95, c.max(2))                                                  # 亮部：光柱、亮片、金光
     a = np.maximum(m * ss(0, EDGE, ec), ss(0, FEATHER, e) * env * np.maximum(BG, GLOW * hl))
+    if fx == 'sea':
+        a = np.maximum(a, sea_mask(c, m) * ss(0, SEA['bottom'], (1 - v) * asp))
     Image.fromarray(np.dstack([(c * 255).round(), (a * 255).round()]).astype(np.uint8), 'RGBA').save(dst, compress_level=1)
     return int((m > 0.5).sum()), 0
 

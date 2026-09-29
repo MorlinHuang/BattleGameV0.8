@@ -140,6 +140,9 @@ function Tide(C) {
   let W = 960, H = 1707;
   const N = C.layers.length, LAST = C.layers[N - 1];
   let lv = 0, t = 0, imgs = [], mobs = [], hopT = 3, sprays = [], sprayT = 0, frontT = 0, dot = null;
+  /* 从出场视频接过来（handoff）：整片先抬 / 压到视频里海面的高度，SETTLE 秒里落回自己的位置 */
+  const SETTLE = 1.2, EMERGE = [0.25, 0.22];     // 回位几秒；小兵第一只几秒后蹦出来、之后每隔几秒一只
+  let lift = 0, liftT = -1;
 
   function init(w, h) { W = w; H = h; reset(); }
 
@@ -175,16 +178,17 @@ function Tide(C) {
   }
 
   function reset() {
-    lv = 0; t = 0; hopT = 3; sprays = []; sprayT = 0; frontT = 0;
-    mobs = C.mobs.map(m => ({ ...m, x: m.x * W, ph: Math.random() * 6, hop: -1 }));
+    lv = 0; t = 0; hopT = 3; sprays = []; sprayT = 0; frontT = 0; lift = 0; liftT = -1;
+    mobs = C.mobs.map(m => ({ ...m, x: m.x * W, ph: Math.random() * 6, hop: -1, wait: 0, em: false }));
   }
 
   const ease = (u) => u * u * (3 - 2 * u);
   const mod = (a, n) => ((a % n) + n) % n;
   /* 第 k 层贴图上沿在屏幕 x 处的 y（不含浪形，只含整层位置 + 起伏） */
+  const liftNow = () => liftT < 0 ? 0 : lift * (1 - ease(Math.min(1, liftT / SETTLE)));
   function baseY(k, x) {
     const L = C.layers[k];
-    return C.top + L.y + L.bob[0] * Math.sin(t * L.bob[1] + k * 1.7)
+    return C.top + liftNow() + L.y + L.bob[0] * Math.sin(t * L.bob[1] + k * 1.7)
       + L.swell[0] * Math.sin(6.2832 * (x - L.swell[2] * t) / L.swell[1]);
   }
   /* 第 k 层在屏幕 x 处的上沿（屏幕 y） */
@@ -219,6 +223,7 @@ function Tide(C) {
     }
     if (lv <= 0) return;
     t += dt;
+    if (liftT >= 0 && (liftT += dt) >= SETTLE) liftT = -1;
     if (!LAST.top) return;
     /* 小兵往 dir 那边冲，出了画从另一边再进来；隔几秒挑一只蹦起来，落回去甩一圈 */
     for (const m of mobs) {
@@ -226,10 +231,11 @@ function Tide(C) {
       const w = imgs[m.k] ? imgs[m.k].width * m.s : 150;
       if (C.dir > 0 && m.x - w / 2 > W) m.x = -w / 2;
       if (C.dir < 0 && m.x + w / 2 < 0) m.x = W + w / 2;
-      if (m.hop >= 0 && (m.hop += dt) > C.hop.T) { m.hop = -1; spray(m.row + 1, m.x, surfY(m.row + 1, m.x), C.hop.splash, true); }
+      if (m.wait > 0 && (m.wait -= dt) <= 0) { m.hop = 0; m.em = true; spray(m.row + 1, m.x, surfY(m.row + 1, m.x), C.hop.splash, true); }
+      if (m.hop >= 0 && (m.hop += dt) > C.hop.T) { m.hop = -1; m.em = false; spray(m.row + 1, m.x, surfY(m.row + 1, m.x), C.hop.splash, true); }
     }
     if (on && (hopT -= dt) <= 0) {
-      const idle = mobs.filter(m => m.hop < 0 && m.x > 40 && m.x < W - 40);
+      const idle = mobs.filter(m => m.hop < 0 && !(m.wait > 0) && m.x > 40 && m.x < W - 40);
       if (idle.length) idle[Math.floor(Math.random() * idle.length)].hop = 0;
       hopT = C.hop.every[0] + Math.random() * (C.hop.every[1] - C.hop.every[0]);
     }
@@ -273,13 +279,14 @@ function Tide(C) {
 
   function drawMob(ctx, m) {
     const im = imgs[m.k];
-    if (!im) return;
+    if (!im || m.wait > 0) return;                    // 还潜在水里（handoff 后还没轮到它蹦出来）
     const w = im.width * m.s, h = im.height * m.s, k = m.row + 1;
     const wy = surfY(k, m.x), slope = (surfY(k, m.x + 18) - surfY(k, m.x - 18)) / 36;
     let y = wy + h * C.sink + Math.sin(t * 3 + m.ph) * 3, rot = Math.atan(slope) * 0.6;
     if (m.hop >= 0) {                                 // 蹦起来：抛物线，空中朝前打半个滚
       const u = m.hop / C.hop.T;
       y -= C.hop.h * 4 * u * (1 - u);
+      if (m.em) y += h * 0.8 * Math.max(0, 1 - u * 2.5);   // 第一次是从水底下蹦出来：起跳时整只还在水面以下
       rot += C.dir * Math.sin(u * Math.PI) * 0.5;
     }
     ctx.save(); ctx.translate(m.x, y); ctx.rotate(rot);
@@ -326,12 +333,27 @@ function Tide(C) {
     for (let k = 0; k < N; k++) drawSprays(out, k);
   }
 
+  /* 出场视频放完（intro.js → main.js）：视频底部带着同一片海，视频淡掉时这片海要已经原位铺满 ——
+     不从画外推进来，直接满；整片从视频里海面的高度 y（画布）落回自己的位置；视频结尾虾兵蟹将潜回水里了，
+     这边的小兵先藏着，隔一会儿一只只从海里蹦出来（读成从视频的海里冲进游戏）。
+     "海面高度"两边按同一个量法：每列最上沿取中位数（vframes layer.sea_line / 这里第 0 层上沿）。 */
+  function handoff(y) {
+    if (!LAST.top) return;
+    lv = 1; liftT = -1;
+    const tops = [];
+    for (let x = 0; x < W; x += SL) tops.push(surfY(0, x));
+    tops.sort((a, b) => a - b);
+    lift = y - tops[tops.length >> 1]; liftT = 0;
+    const order = mobs.map((_, i) => i).sort(() => Math.random() - 0.5);
+    order.forEach((i, n) => { mobs[i].wait = EMERGE[0] + n * EMERGE[1]; mobs[i].hop = -1; });
+  }
+
   const active = () => lv > 0;
   const level = () => ease(lv);
   const dotImg = () => dot;              // 交界对撞（Clash）用这片潮自己的飞沫颜色
   /* 上沿（给交界处的对撞找高度）：最远那层在 x 处的上沿 */
   const edgeY = (x) => C.layers[0].top ? surfY(0, x) : H;
-  return { init, load, update, draw, reset, active, level, edgeY, dotImg, side: C.side };
+  return { init, load, update, draw, reset, handoff, active, level, edgeY, dotImg, side: C.side };
 }
 
 /* ---- 白娘子的海 ----

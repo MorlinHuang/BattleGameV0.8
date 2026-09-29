@@ -30,16 +30,23 @@ const IntroVideo = (() => {
      视频像素 (x, y) 时跟尾帧重合（在尾帧上按像素色差搜出来的，残差 18/255，发丝和罐口都对得上）；vw 是视频宽（像素）。 */
   const CLIPS = {
     truth: { src: 'assets/video/truth_intro_alpha.webm', box: [0, 200, 960, 1280], vw: 834, end: { s: 0.819, x: 6, y: 7 } },
+    /* 白娘子（2026-09-29）：box 反过来按尾帧定 —— 最后一帧里她正好落在游戏悬停位（main.js G4STAND.baisu [110, 886, 1.005]）、
+       同样大，视频放完立绘原地接上，不滑、不放大（真相女神尾帧是 0.94 倍，现身后要边滑边放大）。
+       k = 1.005 / end.s（画布像素 / 视频像素）；box.x = 110 − (end.x + foot.x·end.s)·k，box.y = 886 − (end.y + foot.y·end.s)·k，
+       宽高 = 834×1112 × k。右沿正好贴屏幕右边，左边 166 像素在屏幕外（#stage overflow:hidden），只裁掉开场正面镜头左侧一点衣袖。
+       tide：视频最后一帧里海面的高度（视频像素，vframes --fx sea 量的）—— 游戏里的海从这个高度接上（sea.js handoff）。
+       视频由 video/vframes 出：vframes.py 原片 -s baisu1_up.webp --fx sea（底部的海 + 虾兵蟹将整条保留、不随环境退掉）。 */
+    baisu: { src: 'assets/video/baisu_intro_alpha.webm', box: [-165.9, 101.6, 1125.1, 1500.1], vw: 834, end: { s: 0.745, x: -51, y: 22 }, tide: 900 },
   };
   const POP = 0.35, FADE = 0.45;         // 浮现几秒、结尾淡掉几秒
   /* VP9 透明只有 Chromium 内核认。按 UA 判（Safari 的 canPlayType 也说能放 webm，但透明通道丢掉，变黑底） */
   const ALPHA_OK = /Chrom(e|ium)\/|Edg\//.test(navigator.userAgent);
 
-  let stage = null, W = 960, H = 1707, cur = null;
+  let stage = null, W = 960, H = 1707, cur = null, onRelease = null;
   const vids = {};                         // 配方名 → 预加载好的 <video>
 
   function init(opt) {
-    stage = opt.stage; W = opt.W; H = opt.H;
+    stage = opt.stage; W = opt.W; H = opt.H; onRelease = opt.onRelease || null;
     if (new URLSearchParams(location.search).get('introvideo') === '0' || !ALPHA_OK) return;   // ?introvideo=0：关掉（胶片 / 压测用）
     for (const [k, c] of Object.entries(CLIPS)) {
       const v = document.createElement('video');
@@ -88,7 +95,11 @@ const IntroVideo = (() => {
     if (!cur || cur.done) return;
     const me = cur, { v, crew, b, c } = me;
     me.done = true;
-    if (crew.peek().includes(b)) { b.hold = false; b.t = 0; b.from = endPose(c, crew.cfg.spr); }
+    if (crew.peek().includes(b)) {
+      b.hold = false; b.t = 0; b.from = endPose(c, crew.cfg.spr);
+      /* 视频里带着的特效（白娘子的海）：游戏里那一份在视频底下原位铺好，视频淡掉时两层交叠换手（main.js 接） */
+      if (onRelease && c.tide != null) onRelease(crew, c.box[1] + c.tide * c.box[2] / c.vw);
+    }
     v.style.transition = `opacity ${FADE}s ease-in`;
     v.style.opacity = '0';
     setTimeout(() => { if (cur === me) { hide(v); cur = null; } }, FADE * 1000);

@@ -57,6 +57,7 @@ KEYS = {
 }
 KEY_NAMES = {'green': '绿幕', 'magenta': '品红幕', 'blue': '蓝幕', 'ai': 'AI 抠人物（场景背景）', None: '不抠像'}
 KEY_CHOICES = ('auto', 'none', 'ai', *KEYS)
+FX_NAMES = {'sea': '海浪 + 虾兵蟹将（白娘子）'}   # 底部法术潮（layer.py SEA）
 
 
 class VFError(Exception):
@@ -336,9 +337,10 @@ def is_previous_output(d):
 
 # ---------------------------------------------------------------- 主流程
 
-def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=None, tmp_root=None, standee=None):
+def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=None, tmp_root=None, standee=None, fx=None):
     """src → out_dir 全部产物。progress(步骤名, 0~1) 给网页版报进度。返回 manifest。
     standee：立绘文件（透明底），给了就量尾帧对齐。
+    fx：视频底部带的法术潮（'sea' = 白娘子的海 + 虾兵蟹将），AI 抠人物时整条保留、不随环境在结尾退掉（layer.SEA）。
     失败时 out_dir 整个删掉，不留半套产物。中间帧放在 tmp_root（默认系统临时目录）下，结束就删。"""
     t_start = time.time()
     say = progress or (lambda step, pct: print(f'[{pct * 100:5.1f}%] {time.time() - t_start:6.1f}s  {step}', flush=True))
@@ -346,6 +348,8 @@ def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=No
         raise VFError(f'没有「{preset}」这个预设，可选：{"、".join(PRESETS)}')
     if key not in KEY_CHOICES:
         raise VFError(f'抠像方式只能是 {" / ".join(KEY_CHOICES)}')
+    if fx not in (None, *FX_NAMES):
+        raise VFError(f'底部法术潮只能是 {" / ".join(FX_NAMES)}')
     if key == 'ai' and not layer.model_ok():
         raise VFError(f'AI 抠人物要用的模型或 onnxruntime 不在这台机器上（模型路径 {layer.MODEL}）。')
     if standee:
@@ -427,7 +431,7 @@ def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=No
                             0.2 + 0.2 * i / len(raws))
             say('图层合成（人物清晰、环境淡淡透出、光效保留）', 0.4)
             jobs = [(os.path.join(raw, f), os.path.join(mattes, f), os.path.join(full, f),
-                     layer.env_weight(i, len(raws), work_fps)) for i, f in enumerate(raws)]
+                     layer.env_weight(i, len(raws), work_fps), fx) for i, f in enumerate(raws)]
             with ProcessPoolExecutor(workers) as ex:
                 stats = list(ex.map(layer.bake_frame, jobs, chunksize=4))
             if not sum(s[0] for s in stats):
@@ -469,6 +473,18 @@ def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=No
                     if end['residual'] > layer.ALIGN_WARN:
                         warnings.append(f'立绘和视频最后一帧对不太上（平均色差 {end["residual"]}，真相女神是 18）：'
                                         '视频可能没按这张立绘生成、或最后一帧姿势变了。游戏里换立绘那一下会看得出跳。')
+
+        # 底部法术潮在最后一帧里的海面高度：游戏里的海从这个高度接上、再落回自己的位置（sea.js handoff）
+        tide = None
+        if fx:
+            if key_used != 'ai':
+                warnings.append('底部法术潮只在 AI 抠人物时保留，这次没用上。')
+            else:
+                y = layer.sea_line(os.path.join(raw, raws[-1]), os.path.join(mattes, raws[-1]))
+                if y is None:
+                    warnings.append('最后一帧里没找到海，游戏里的海没法从视频里接上。')
+                else:
+                    tide = {'fx': fx, 'y': y, 'vw': work_w}
 
         # 3. 帧动画：按时间从工作帧里挑帧，整幅缩到目标大小，再各自裁到人物外框
         say('生成帧动画', 0.45)
@@ -545,6 +561,8 @@ def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=No
             'warnings': warnings,
             # 尾帧对齐（附了立绘才有）：立绘缩放 end.s、左上角放在视频像素 (end.x, end.y) 跟最后一帧重合；vw 是视频宽
             'intro': intro,
+            # 底部法术潮（有 fx 才有）：最后一帧里海面（每列最上沿的中位数）在视频像素的 y
+            'tide': tide,
             'fps': anim_fps, 'count': len(frames), 'duration': round(len(frames) / anim_fps, 3),
             'canvas': list(canvas),   # 帧动画所在的整幅画面（坐标系），跟方案一视频画面一一对应
             # 每帧：图集第 sheet 张的 (x, y, w, h) 那块，画到整幅画面的 (ox, oy)；w = h = 0 是空帧，什么都不画。
@@ -607,11 +625,12 @@ def main():
     ap.add_argument('-p', '--preset', default='均衡', choices=list(PRESETS))
     ap.add_argument('-k', '--key', default='auto', choices=list(KEY_CHOICES),
                     help='抠像：auto 自动判断（默认；纯色幕布按颜色抠，场景背景用 AI） / none 不抠 / ai / green / magenta / blue')
+    ap.add_argument('--fx', choices=list(FX_NAMES), help='视频底部带的法术潮：sea = 白娘子的海 + 虾兵蟹将（整条保留）')
     ap.add_argument('-s', '--standee', help='立绘（透明底 PNG/WebP）：给了就量它在视频最后一帧里的位置')
     a = ap.parse_args()
     out = a.out or os.path.splitext(a.video)[0] + '_vframes'
     try:
-        m = process(a.video, out, a.preset, a.key, standee=a.standee)
+        m = process(a.video, out, a.preset, a.key, standee=a.standee, fx=a.fx)
     except VFError as e:
         print('失败：' + str(e), file=sys.stderr)
         sys.exit(1)
@@ -622,6 +641,8 @@ def main():
     print(f"  图集 {len(m['sheets'])} 张，{st['atlas_bytes'] / 1e6:.1f} MB，解码后占内存 {st['atlas_decoded_bytes'] / 1e6:.0f} MB")
     if m['intro']:
         print(f"  尾帧对齐：{intro_snippet(m)}")
+    if m['tide']:
+        print(f"  尾帧海面：视频像素 y {m['tide']['y']}")
     for w in m['warnings']:
         print('  ⚠ ' + w)
     print(f"  打开 {os.path.join(out, 'preview.html')} 对比两个方案")

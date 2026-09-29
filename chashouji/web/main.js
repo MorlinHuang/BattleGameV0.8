@@ -1318,7 +1318,7 @@ function summonCrew(name, sk) {
   return c.summon(q == null || q === '' ? undefined : +q);
 }
 /* 有出场视频的人 → intro.js CLIPS 的键 */
-const INTRO_OF = new Map([[Truth, 'truth']]);
+const INTRO_OF = new Map([[Truth, 'truth'], [Baisu, 'baisu']]);
 const RAIN = { durian: DurianRain, sockball: SockRain };
 /* 屏幕底部的法术潮（sea.js）：档 4 每个人一片，跟着自己那个人 —— 在场、还没开始飞走（候场放视频时不算）就推进来，
    飞走就退。续送多待，潮也多待。左边三片从左推进（side −1），右边三片从右（side +1）。 */
@@ -2098,7 +2098,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 
 (async function boot() {
   const cvBg = document.getElementById('bg'), cvCh = document.getElementById('ch'), cvFx = document.getElementById('fx');
-  IntroVideo.init({ stage: document.getElementById('stage'), W, H });
+  /* 出场视频放完、视频里带着底部法术潮（白娘子的海）：她那片潮直接铺满，从视频里海面的高度（画布 y）落回自己的位置 */
+  IntroVideo.init({ stage: document.getElementById('stage'), W, H, onRelease: (crew, y) => { const t = TIDE_OF.get(crew); if (t) t.handoff(y); } });
   const bctx = cvBg.getContext('2d'), cctx = cvCh.getContext('2d'), fctx = cvFx.getContext('2d');
 
   /* ?sim=1 纯数值快进：不渲染、不发弹幕，只跑 battle，用来核对局长和手感。

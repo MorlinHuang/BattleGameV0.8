@@ -75,7 +75,7 @@ def work(j):
         jd = os.path.join(JOBS, j['id'])
         try:
             m = vframes.process(j['src'], os.path.join(jd, 'out'), j['preset'], j['key'], progress, tmp_root=jd,
-                                standee=j.get('standee'))
+                                standee=j.get('standee'), fx=j.get('fx') or None)
             big = max(m['frames'], key=lambda f: f['w'] * f['h'])
             update(j, state='done', pct=1.0, step='完成', zip=m['zip'], warnings=m['warnings'],
                    summary={'key': vframes.KEY_NAMES[m['key']], 'count': m['count'], 'fps': m['fps'],
@@ -83,7 +83,8 @@ def work(j):
                             'atlas_mb': round(m['stats']['atlas_bytes'] / 1e6, 1),
                             'decoded_mb': round(m['stats']['atlas_decoded_bytes'] / 1e6),
                             'seconds': m['stats']['seconds'],
-                            'intro': m['intro'] and vframes.intro_snippet(m)})
+                            'intro': m['intro'] and vframes.intro_snippet(m),
+                            'tide': m['tide'] and f"尾帧海面 y {m['tide']['y']}（视频像素）"})
         except vframes.VFError as e:
             update(j, state='error', error=str(e))
         except Exception as e:                               # 真正的 bug：原样记下来，页面上能看到
@@ -220,7 +221,9 @@ class H(BaseHTTPRequestHandler):
         preset = q.get('preset', ['均衡'])[0]
         key = q.get('key', ['auto'])[0]
         token = q.get('standee', [''])[0]
-        if preset not in vframes.PRESETS or key not in vframes.KEY_CHOICES or (token and not re.fullmatch(r'[0-9a-f]{32}', token)):
+        fx = q.get('fx', [''])[0]
+        if (preset not in vframes.PRESETS or key not in vframes.KEY_CHOICES or (fx and fx not in vframes.FX_NAMES)
+                or (token and not re.fullmatch(r'[0-9a-f]{32}', token))):
             return self.send_json({'error': '参数不对'}, 400)
         if token and not os.path.isfile(os.path.join(STANDEES, token)):
             return self.send_json({'error': '立绘找不到了（服务重启过？），请重新选一次立绘。'}, 400)
@@ -237,7 +240,7 @@ class H(BaseHTTPRequestHandler):
         named = os.path.join(d, name if name.lower().endswith(os.path.splitext(src)[1].lower()) else name + os.path.splitext(src)[1])
         os.rename(src, named)
         j = {'id': jid, 'name': name, 'preset': preset, 'key': key, 'src': named, 'state': 'queued',
-             'step': '排队中', 'pct': 0, 'created': time.time()}
+             'step': '排队中', 'pct': 0, 'created': time.time(), 'fx': fx}
         if token:                                            # 立绘复制进任务目录：同一张立绘可以配好几条视频
             j['standee'] = os.path.join(d, 'standee')
             shutil.copy(os.path.join(STANDEES, token), j['standee'])
