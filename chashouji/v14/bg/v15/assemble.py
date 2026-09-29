@@ -33,24 +33,60 @@ def fit(path, w, keep, ceil=CEIL_Y, floor=FLOOR_Y):
     x0 = {'left': 0, 'right': im.width - w, 'center': (im.width - w) // 2}[keep]
     return im.crop((x0, 0, x0 + w, H))
 
-# 房间分界（2026-09-29 用户：不要门、不要半隔断，照最早那张长卷——两间房直接挨着）：
-# 墙面在接缝处硬切（换墙色），只压一道很淡的墙角阴影；地板两边各 FLOOR_BLEND 渐变过去，不留竖条。
-# 渐变要用到对方房间越过接缝的像素，房间图里没有，就用各自边缘往外镜像补。
-FLOOR_BLEND, CORNER_SHADE = 40, 0.18
+# 房间分界（2026-09-29 用户：照 v14 长卷里那根墙柱——只要柱子这个框，不要门、不要半隔断）：
+# post_src.png 是 v14 长卷里女生房 / 客厅接缝那一段（旧世界 x 1300~1700），柱子在其中 POST_X（含描边与底座），
+# 底座下沿在 POST_BOT，地板上的木压条从 STRIP_TOP 往下（按木色抠出来）。贴到新接缝时：
+#   · 柱子按行缩放，让底座下沿落在新墙地线下 12 px（旧图里底座比墙地线低 12）；压条按行拉到新地板上；
+#   · 重打光：旧图是白天，柱子两侧分别乘"新墙 / 旧墙"的逐通道比值（左半用左墙、右半用右墙，中间渐变），
+#     压条乘"新地板 / 旧地板"——在电竞房那侧自然被染成蓝紫、在女生房那侧偏暖粉。
+# 两边地板在接缝处先各 FLOOR_BLEND 渐变（压条盖住中间），墙面直接由柱子隔开。
+POST_X, POST_BOT, STRIP_TOP, OLD_FLOOR = (140, 229), 898, 887, 886
+OLD_WALL = ((60, 120), (270, 330))      # post_src 里柱子左 / 右两块旧墙（量光用的列范围）
+FLOOR_BLEND = 40
 
 def seams(world):
+    src = np.asarray(Image.open(os.path.join(HERE, 'post_src.png')).convert('RGB'), np.float32)
     a = np.array(world, np.float32)
+    wall_rows, floor_rows = slice(300, 700), slice(1000, 1300)
+    old_l = src[wall_rows, OLD_WALL[0][0]:OLD_WALL[0][1]].reshape(-1, 3).mean(0)
+    old_r = src[wall_rows, OLD_WALL[1][0]:OLD_WALL[1][1]].reshape(-1, 3).mean(0)
+    old_f = src[floor_rows, 20:380].reshape(-1, 3).mean(0)
+    px0, px1 = POST_X; pw = px1 - px0; pc = (px0 + px1) / 2
     for x in (SIDE_W, SIDE_W + LIV_W):
+        # 地板先渐变
         L = a[:, x - 2 * FLOOR_BLEND:x]; R = a[:, x:x + 2 * FLOOR_BLEND]
-        left_ext = np.concatenate([L, L[:, ::-1]], 1)            # 左房间越过接缝的部分用镜像补
-        right_ext = np.concatenate([R[:, ::-1], R], 1)
         t = np.clip((np.arange(4 * FLOOR_BLEND) - FLOOR_BLEND) / (2 * FLOOR_BLEND), 0, 1)[None, :, None]
-        blend = left_ext * (1 - t) + right_ext * t
+        blend = np.concatenate([L, L[:, ::-1]], 1) * (1 - t) + np.concatenate([R[:, ::-1], R], 1) * t
         a[FLOOR_Y:, x - 2 * FLOOR_BLEND:x + 2 * FLOOR_BLEND] = blend[FLOOR_Y:]
-        # 墙角：接缝两侧各 6 px 由深到浅，只在墙面上
-        d = np.abs(np.arange(-6, 6) + 0.5)
-        k = 1 - CORNER_SHADE * (1 - d / 6)
-        a[:FLOOR_Y, x - 6:x + 6] *= k[None, :, None]
+        # 光照比值
+        new_l = a[wall_rows, x - 90:x - 50].reshape(-1, 3).mean(0)
+        new_r = a[wall_rows, x + 50:x + 90].reshape(-1, 3).mean(0)
+        new_f = a[floor_rows, x - 200:x + 200].reshape(-1, 3).mean(0)
+        # 柱子只按亮度换光，再带 35% 墙的色相（整个按逐通道比值乘会把奶白柱子染成墙色）
+        lum = lambda c: c @ np.array([0.299, 0.587, 0.114])
+        tint = lambda c: 0.65 + 0.35 * c / c.mean()
+        gl = lum(new_l) / lum(old_l) * tint(new_l); gr = lum(new_r) / lum(old_r) * tint(new_r)
+        gf = new_f / old_f
+        # 柱子：行 0..POST_BOT → 0..FLOOR_Y+12
+        bot = FLOOR_Y + (POST_BOT - OLD_FLOOR)
+        ys = np.clip(np.arange(bot) * POST_BOT / bot, 0, POST_BOT - 1).astype(int)
+        post = src[ys, px0:px1]
+        k = np.linspace(0, 1, pw)[None, :, None]
+        post = post * (gl * (1 - k) + gr * k)
+        x0 = int(round(x - pw / 2))
+        a[:bot, x0:x0 + pw] = post
+        # 压条：旧 STRIP_TOP..H → 新 FLOOR_Y+1..H，按木色抠
+        n = H - (FLOOR_Y + 1)
+        ys = np.clip(STRIP_TOP + np.arange(n) * (H - STRIP_TOP) / n, 0, H - 1).astype(int)
+        cols = slice(int(pc - 90), int(pc + 90))
+        st = src[ys, cols]
+        # 压条是一条往下略变宽的梯形（量的 post_src 坐标：y 890 处 224~244，y 1700 处 209~269）
+        yy = ys[:, None].astype(np.float32); xx = np.arange(int(pc - 90), int(pc + 90))[None, :].astype(np.float32)
+        le = 224 - (yy - 890) * 0.0185; ri = 244 + (yy - 890) * 0.031
+        al = (np.clip(xx - le + 0.5, 0, 1) * np.clip(ri - xx + 0.5, 0, 1))[..., None]
+        sx0 = int(round(x - 90))
+        region = a[FLOOR_Y + 1:, sx0:sx0 + 180]
+        a[FLOOR_Y + 1:, sx0:sx0 + 180] = region * (1 - al) + st * gf * al
     world.paste(Image.fromarray(a.clip(0, 255).astype(np.uint8)))
 
 # 各房间生成图（缩到高 H 后）量到的顶角线下沿、墙地交界 y
