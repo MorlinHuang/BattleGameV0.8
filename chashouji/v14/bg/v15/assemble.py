@@ -33,20 +33,25 @@ def fit(path, w, keep, ceil=CEIL_Y, floor=FLOOR_Y):
     x0 = {'left': 0, 'right': im.width - w, 'center': (im.width - w) // 2}[keep]
     return im.crop((x0, 0, x0 + w, H))
 
-# 隔墙（2026-09-29 用户：脚本画的两根白柱子"有点丑，没有很好的融入环境"）：
-# 以接缝为中心取 960 宽，中间 ±SEAM_HALF 交给局部重绘，画成"左边房间的墙转角包着顶角线和踢脚线 → 木门套和暗的门洞
-# → 右边房间的墙"，两侧各被自己房间的灯光染色。seam{k}_src.png 是带旧白柱子的输入，seam{k}_mask.png 是蒙版，
-# seam{k}_gen.png 是挑中的生成图（任何一间房换图后要重新生成对应的接缝）。只混入竖带，边上 SEAM_FEATHER 渐变。
-SEAM_HALF, SEAM_FEATHER = 95, 14
+# 房间分界（2026-09-29 用户：不要门、不要半隔断，照最早那张长卷——两间房直接挨着）：
+# 墙面在接缝处硬切（换墙色），只压一道很淡的墙角阴影；地板两边各 FLOOR_BLEND 渐变过去，不留竖条。
+# 渐变要用到对方房间越过接缝的像素，房间图里没有，就用各自边缘往外镜像补。
+FLOOR_BLEND, CORNER_SHADE = 40, 0.18
 
 def seams(world):
-    for k, x in enumerate((SIDE_W, SIDE_W + LIV_W)):
-        gen = Image.open(os.path.join(HERE, f'seam{k}_gen.png')).convert('RGB').resize((960, H), Image.LANCZOS)
-        cv = world.crop((x - 480, 0, x + 480, H))
-        xs = np.arange(960) - 480
-        w = np.clip((SEAM_HALF - np.abs(xs)) / SEAM_FEATHER, 0, 1)[None, :, None]
-        out = np.array(cv, np.float32) * (1 - w) + np.array(gen, np.float32) * w
-        world.paste(Image.fromarray(out.clip(0, 255).astype(np.uint8)), (x - 480, 0))
+    a = np.array(world, np.float32)
+    for x in (SIDE_W, SIDE_W + LIV_W):
+        L = a[:, x - 2 * FLOOR_BLEND:x]; R = a[:, x:x + 2 * FLOOR_BLEND]
+        left_ext = np.concatenate([L, L[:, ::-1]], 1)            # 左房间越过接缝的部分用镜像补
+        right_ext = np.concatenate([R[:, ::-1], R], 1)
+        t = np.clip((np.arange(4 * FLOOR_BLEND) - FLOOR_BLEND) / (2 * FLOOR_BLEND), 0, 1)[None, :, None]
+        blend = left_ext * (1 - t) + right_ext * t
+        a[FLOOR_Y:, x - 2 * FLOOR_BLEND:x + 2 * FLOOR_BLEND] = blend[FLOOR_Y:]
+        # 墙角：接缝两侧各 6 px 由深到浅，只在墙面上
+        d = np.abs(np.arange(-6, 6) + 0.5)
+        k = 1 - CORNER_SHADE * (1 - d / 6)
+        a[:FLOOR_Y, x - 6:x + 6] *= k[None, :, None]
+    world.paste(Image.fromarray(a.clip(0, 255).astype(np.uint8)))
 
 # 各房间生成图（缩到高 H 后）量到的顶角线下沿、墙地交界 y
 LINES = {'girl_2.png': (67, 830), 'livfix_1.png': (66, 790), 'boy_3n.png': (52, 868)}
