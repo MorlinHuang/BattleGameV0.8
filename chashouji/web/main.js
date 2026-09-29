@@ -1730,10 +1730,10 @@ class PoseView {
    背景**不跟着震**：机位是固定的，整幅一起震就得把背景放大做 overscan 才不
    露边；震动留给人、弹幕和粒子 —— 那些才是正在发生冲突的东西。 */
 function drawWorld(ctx, rooms) {
-  let x = -(FX.camX - MID);
+  let x = Math.round(-(FX.camX - MID));
   for (let i = 0; i < rooms.length; i++) {
     const w = WORLD.rooms[i];
-    if (x + w > 0 && x < W) ctx.drawImage(rooms[i], Math.round(x), 0, w, H);
+    if (x + w > 0 && x < W) ctx.drawImage(rooms[i], x, 0, w, H);
     x += w;
   }
 }
@@ -2351,6 +2351,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   if (Q0.get('bg')) Object.assign(WORLD, await (await fetch(bgDir + 'rooms.json' + vq)).json());
   WORLD.total = WORLD.rooms.reduce((a, b) => a + b, 0);
   const rooms = await Promise.all(WORLD.rooms.map((_, i) => load(`${bgDir}room${i}.webp`)));
+  const motionN = Q0.get('bg') ? await BgMotion.load(bgDir + 'anim/', vq) : 0;   // 这套房间里会动的几块（没有 anim.json 就是 0）
   const poseNames = Object.keys(WORLD.poses);
   const poseImgs = {};
   await Promise.all(poseNames.map(n => load(`assets/world/pose_${n}.webp`).then(im => { poseImgs[n] = im; })));
@@ -2376,7 +2377,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     SockRain.load(Q0.get('v'), noSpr),
   ]);
   document.getElementById('msg').textContent =
-    `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` +
+    `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` + (motionN ? ` · 背景动区 ${motionN}` : '') +
     (sprOK.some(Boolean) ? ` · 物品转盘 ${sprOK.filter(Boolean).length}` : '') +
     (shpOK.some(Boolean) ? ` · 粒子 ${shpOK.filter(Boolean).length}` : '') +
     (resN ? ` · 结算 ${resN}` : '');
@@ -2463,6 +2464,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   function renderBg() {
     bctx.clearRect(0, 0, W, H);
     drawWorld(bctx, rooms);
+    /* 背景动区（bgmotion.js）：档 3/4 帮手在场时让位 */
+    BgMotion.draw(bctx, Math.round(-(FX.camX - MID)), W, Buddy.active() || Bestie.active() || G4L.active() || G4R.active());
     drawGoalFloor(bctx);
   }
 

@@ -1,0 +1,72 @@
+[
+ {
+  "name": "鱼缸",
+  "kind": "loop",
+  "x": 1675,
+  "y": 570,
+  "w": 170,
+  "h": 130,
+  "src": "fish.mp4",
+  "rate": 1
+ },
+ {
+  "name": "阳台雨",
+  "kind": "loop",
+  "x": 2400,
+  "y": 255,
+  "w": 164,
+  "h": 554,
+  "src": "balcony.mp4",
+  "rate": 1
+ },
+ {
+  "name": "女生雨窗",
+  "kind": "loop",
+  "x": 655,
+  "y": 240,
+  "w": 224,
+  "h": 420,
+  "src": "girl_window.mp4",
+  "rate": 1
+ },
+ {
+  "name": "写真",
+  "kind": "event",
+  "x": 1300,
+  "y": 210,
+  "w": 184,
+  "h": 274,
+  "src": "photo.mp4",
+  "rate": 1
+ },
+ {
+  "name": "黑猫",
+  "kind": "loop",
+  "x": 3040,
+  "y": 580,
+  "w": 144,
+  "h": 132,
+  "src": "cat.mp4",
+  "rate": 1
+ },
+ {
+  "name": "男生雨窗",
+  "kind": "loop",
+  "x": 3340,
+  "y": 230,
+  "w": 314,
+  "h": 370,
+  "src": "boy_window.mp4",
+  "rate": 1
+ },
+ {
+  "name": "床幔",
+  "kind": "loop",
+  "x": 300,
+  "y": 215,
+  "w": 300,
+  "h": 634,
+  "src": "canopy.mp4",
+  "rate": 0.7
+ }
+]
