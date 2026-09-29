@@ -14,7 +14,6 @@ SIDE_W = round((GOAL_M - DOOR_M) * PX_PER_M) + MID        # 1628
 CENTER = SIDE_W + LIV_W // 2                              # 2120
 CEIL_Y, FLOOR_Y = 67, 830    # 统一的顶角线下沿 / 墙地交界（踢脚线下沿）。三张生成图各自量出来的线按行分段线性拉到这两条上，
                               # 隔墙两边的墙地线、顶角线才对得上（生成图同一张模板也会偏 ±40）
-PILLAR = 64
 
 def warp_rows(im, ceil, floor):
     """行映射：0→0、ceil→CEIL_Y、floor→FLOOR_Y、H→H，段内线性。"""
@@ -34,22 +33,20 @@ def fit(path, w, keep, ceil=CEIL_Y, floor=FLOOR_Y):
     x0 = {'left': 0, 'right': im.width - w, 'center': (im.width - w) // 2}[keep]
     return im.crop((x0, 0, x0 + w, H))
 
-def pillar(img, x):
-    d = ImageDraw.Draw(img)
-    a, b = x - PILLAR // 2, x + PILLAR // 2
-    # 隔墙剖面：从天花板到地板线，浅暖灰，左右描边 + 内侧一条阴影
-    for yy in range(0, FLOOR_Y):
-        t = yy / FLOOR_Y
-        c = tuple(int(v) for v in np.array([236, 230, 220]) * (0.93 + 0.07 * t))
-        d.line((a, yy, b, yy), fill=c)
-    d.rectangle((a, 0, a + 3, FLOOR_Y), fill=(120, 112, 104)); d.rectangle((b - 3, 0, b, FLOOR_Y), fill=(120, 112, 104))
-    d.rectangle((a + 4, 0, a + 9, FLOOR_Y), fill=(208, 200, 190))
-    # 门槛压条：地板线到画面底，往下略加宽
-    for yy in range(FLOOR_Y, H):
-        t = (yy - FLOOR_Y) / (H - FLOOR_Y); hw = 22 + 16 * t
-        d.line((x - hw, yy, x + hw, yy), fill=(150, 112, 78))
-        d.point((x - hw, yy), fill=(95, 70, 50)); d.point((x + hw, yy), fill=(95, 70, 50))
-        d.line((x - hw + 4, yy, x - hw + 7, yy), fill=(196, 156, 112))
+# 隔墙（2026-09-29 用户：脚本画的两根白柱子"有点丑，没有很好的融入环境"）：
+# 以接缝为中心取 960 宽，中间 ±SEAM_HALF 交给局部重绘，画成"左边房间的墙转角包着顶角线和踢脚线 → 木门套和暗的门洞
+# → 右边房间的墙"，两侧各被自己房间的灯光染色。seam{k}_src.png 是带旧白柱子的输入，seam{k}_mask.png 是蒙版，
+# seam{k}_gen.png 是挑中的生成图（任何一间房换图后要重新生成对应的接缝）。只混入竖带，边上 SEAM_FEATHER 渐变。
+SEAM_HALF, SEAM_FEATHER = 95, 14
+
+def seams(world):
+    for k, x in enumerate((SIDE_W, SIDE_W + LIV_W)):
+        gen = Image.open(os.path.join(HERE, f'seam{k}_gen.png')).convert('RGB').resize((960, H), Image.LANCZOS)
+        cv = world.crop((x - 480, 0, x + 480, H))
+        xs = np.arange(960) - 480
+        w = np.clip((SEAM_HALF - np.abs(xs)) / SEAM_FEATHER, 0, 1)[None, :, None]
+        out = np.array(cv, np.float32) * (1 - w) + np.array(gen, np.float32) * w
+        world.paste(Image.fromarray(out.clip(0, 255).astype(np.uint8)), (x - 480, 0))
 
 # 各房间生成图（缩到高 H 后）量到的顶角线下沿、墙地交界 y
 LINES = {'girl_2.png': (67, 830), 'livfix_1.png': (66, 790), 'boy_3n.png': (52, 868)}
@@ -60,7 +57,7 @@ def build(girl, living, boy, out):
     world = Image.new('RGB', (2 * SIDE_W + LIV_W, H)); x = 0
     for r in rooms: world.paste(r, (x, 0)); x += r.width
     goals(world)
-    pillar(world, SIDE_W); pillar(world, SIDE_W + LIV_W)
+    seams(world)
     world.save(out)
     return world
 
