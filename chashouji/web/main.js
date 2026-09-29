@@ -2542,8 +2542,11 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const crew = CREWS.flatMap(c => c.items().map(it => ({ ...it, behind: BEHIND.has(c) }))).sort((a, b) => a.s - b.s);
     /* 档 4 出场压暗：主角和背景暗下去，出场的她 / 他是亮的。他们在主角身后，所以先压背景和哥们闺蜜，再画他们，
        主角单独画进离屏画布压暗了再贴上来 */
+    /* near：站在主角前面的帮手（缩放 > 1，离镜头近 —— 哥们的前排，crew.js Buddy.rows），连同他喷的水画在主角之上，挡住主角；
+       跟主角进同一块画布，出场压暗时一起暗 */
+    const near = (it) => !it.behind && it.s > 1;
     const dim = introDim();
-    for (const it of crew) if (!it.behind) it.draw(cctx);
+    for (const it of crew) if (!it.behind && !near(it)) it.draw(cctx);
     if (dim > 0) drawIntroDim(cctx, dim);
     for (const it of crew) if (it.behind) it.draw(cctx);
     let ac = cctx;
@@ -2555,6 +2558,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     }
     actors.draw(ac, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
     drawStains(ac);
+    for (const it of crew) if (near(it)) it.draw(ac);
     if (dim > 0) {
       drawIntroDim(ac, dim, 'source-atop');
       cctx.save(); cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.drawImage(actorBuf, 0, 0); cctx.restore();

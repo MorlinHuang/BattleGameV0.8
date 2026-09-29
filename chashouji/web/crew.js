@@ -57,11 +57,12 @@ function Crew(cfg) {
 
   const sprayEnd = (b) => T.enter + b.spray;
 
-  /* 横向位置：抽 12 次，取离已有的人最远的那个（够 gap 就直接用） */
-  function pickR() {
-    let best = Math.random(), bestD = -1;
+  /* 横向位置：在 lo~hi 里抽 12 次，取离已有的人最远的那个（够 gap 就直接用） */
+  function pickR(lo = 0, hi = 1) {
+    const rnd = () => lo + Math.random() * (hi - lo);
+    let best = rnd(), bestD = -1;
     for (let k = 0; k < 12; k++) {
-      const r = Math.random(), d = Math.min(1, ...bs.map(b => Math.abs(b.r - r)));
+      const r = rnd(), d = Math.min(1, ...bs.map(b => Math.abs(b.r - r)));
       if (d >= cfg.gap) return r;
       if (d > bestD) { best = r; bestD = d; }
     }
@@ -92,7 +93,8 @@ function Crew(cfg) {
       }
       bs.splice(bs.indexOf(far), 1);      // 全在离场：顶掉走得最远的（站地的往画外溜，被顶掉看不出来）
     }
-    /* 远近：每人占一排（rows 里挑没人的），远排小、脚底高 —— 喷口上下错开，几股不会从同一点分叉 */
+    /* 远近：每人占一排（rows 里挑没人的），远排小、脚底高 —— 喷口上下错开，几股不会从同一点分叉。
+       一排 = [缩放下限, 上限, 横向 r 下限, 上限]（后两项可无 = 0~1）。缩放 > 1 的排在主角前面（离镜头近），main.js 画在主角之上 */
     const free = cfg.rows.filter(R => !bs.some(b => b.s >= R[0] && b.s <= R[1]));
     const pool = free.length ? free : cfg.rows, R = pool[Math.floor(Math.random() * pool.length)];
     /* 形象：挑一个场上没人用的（max 不超过形象数，同时在场的一定各不相同） */
@@ -101,7 +103,7 @@ function Crew(cfg) {
       sk = (unused.length ? unused : skins)[Math.floor(Math.random() * (unused.length || skins.length))];
     }
     const b = { t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
-                r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
+                r: pickR(R[2], R[3]), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
                 pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0,
                 hold: false, from: null };
     if (PATH.pop && o.origin) { b.pop = o.origin(); if (o.onPop) o.onPop(b.pop[0], b.pop[1]); }   // 从手机里蹦出来（绿茶妹妹）
@@ -351,24 +353,21 @@ function Crew(cfg) {
       }
       const tg = raw && b.tg;
       let want = 0;
-      if (tg && cfg.whole) {
-        /* 整个人绕 whole.pivot 倾：喷口跟着挪，不能用下面那套"按喷口反解再迭代"—— 转动半径比喷口到落点的距离还大时，
-           每转一点喷口挪得比角度变得还多，迭代来回振荡（第一版立绘实测一次停在 −0.45、一次顶到上限 +0.1，要的是 −0.35）。
-           改成二分：err(θ) = 从此刻喷口打中落点要的仰角 − 喷口此刻的指向。θ 往上，指向涨 1:1、要的仰角只跟着喷口的挪动慢慢变，
-           err 单调减 —— 在 [lo, hi] 里二分 16 次（精度 1e-5 rad）；两头同号就贴那一头。 */
-        const err = (th) => { const m = muzzle(p, th, b); return elevation(tg[0] - m[0], tg[1] - m[1]) - (angles(b, th)[1] + REST); };
+      if (tg) {
+        /* 反解仰角：err(θ) = 从转到 θ 时的喷口打中落点要的仰角 − 喷口转到 θ 时的指向。θ 往上，指向涨 1:1、要的仰角只跟着
+           喷口的挪动慢慢变，err 单调减 —— 在 [lo, hi] 里二分 16 次（精度 1e-5 rad）；两头同号就贴那一头。
+           不用"按此刻喷口反解 → 转过去 → 再按新喷口反解"的迭代：转动半径跟喷口到落点的距离差不多大时，每转一点喷口挪得
+           比角度变得还多，迭代发散 —— 悬空的真相喷雾第一版实测一次停在 −0.45、一次顶到上限 +0.1（要的是 −0.35）；
+           哥们站到男生前排（2026-09-29）离女生近、人又放大，枪口离裤腰转轴 ~300 像素，一直往上翻到上限 +0.21，水从女生头顶飞过去。
+           指向：整个人转的（whole）是 angles 的总指向 + REST；其余的指向就是 θ（后坐、前探不算进瞄准）。 */
+        const dir = cfg.whole ? (th) => angles(b, th)[1] + REST : (th) => th;
+        const err = (th) => { const m = muzzle(p, th, b); return elevation(tg[0] - m[0], tg[1] - m[1]) - dir(th); };
         if (err(AIM.lo) <= 0) want = AIM.lo;
         else if (err(AIM.hi) >= 0) want = AIM.hi;
         else {
           let lo = AIM.lo, hi = AIM.hi;
           for (let k = 0; k < 16; k++) { const mid = (lo + hi) / 2; if (err(mid) > 0) lo = mid; else hi = mid; }
           want = (lo + hi) / 2;
-        }
-      } else if (tg) {
-        want = b.aim;
-        for (let k = 0; k < 6; k++) {
-          const m0 = muzzle(p, want, b);
-          want = Math.min(AIM.hi, Math.max(AIM.lo, elevation(tg[0] - m0[0], tg[1] - m0[1])));
         }
       }
       if (cfg.whole) {
@@ -651,7 +650,10 @@ const Buddy = Crew({
           8, 9, 10],                // skate8 刺猬头武道家 / skate9 红发篮球少年 / skate10 草帽船长
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
   max: 3, gap: 0.3,
-  rows: [[0.74, 0.80], [0.66, 0.71], [0.58, 0.63]],
+  /* 三排在男生身后（被男生挡住），一排在他前面（2026-09-29 用户："哥们出现的位置不一定是男生后面，也可以出现在前面，
+     注意近大远小和遮挡"）：前排放大、脚底往下（crew.js pose：抬高 = (地面 − 视平线) × (1 − s)，s > 1 就是往下），
+     画在男生之上。前排只站右半边（r 0.5~1，人往屏幕右沿靠）：站中间会把手机和两人的手整个挡住。 */
+  rows: [[0.74, 0.80], [0.66, 0.71], [0.58, 0.63], [1.10, 1.16, 0.5, 1]],
   aim: { lo: -0.52, hi: 0.21, rate: 2.4, follow: 10 },
   sweep: { a: [0.32, 0.2], w: [1.2, 2.8] },
   zone: { every: 1.0, lo: 0.2, hi: 0.85, span: 0.1 },
