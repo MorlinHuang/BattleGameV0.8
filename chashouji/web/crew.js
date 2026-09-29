@@ -218,12 +218,31 @@ function Crew(cfg) {
     return [m1[0] + sh1[0] - sh[0], m1[1] + sh1[1] - sh[1]];
   }
 
-  /* 出口速度 V、重力 G，打中 (dx, dy)（屏幕坐标）要的仰角（低弹道）。够不着就按 45°。 */
+  /* 出口速度 V、重力 G，打中 (dx, dy)（屏幕坐标）要的仰角（低弹道）。够不着就按 45°。
+     F.arc 的不瞄（走 arcStep 的弧线，出口方向无所谓）：要的仰角就是喷口本来的指向，转角停在 0，人站得直直的。 */
   function elevation(dx, dy) {
+    if (F.arc) return REST;
     const D = Math.abs(dx), h = -dy, v2 = F.V * F.V, g = F.G;
     if (g === 0) return Math.atan2(h, D);
     const disc = v2 * v2 - g * (g * D * D + 2 * h * v2);
     return disc >= 0 ? Math.atan((v2 - Math.sqrt(disc)) / (g * D)) : Math.PI / 4;
+  }
+  /* F.arc（绿茶妹妹的气泡）：不走重力，沿一条二次贝塞尔从手机飞到落点 —— 控制点在落点外侧 out、手机上方 up，
+     弧往她面朝的那边上方鼓出去，最后从外上方砸下来；进度 e = (t / T)^ease 越飞越快（砸）。
+     落点每帧取现在的（女生被拖着走也追得上）。为什么不用抛物线：她在女生右上方，横着差 ~280、竖着差 ~640，
+     重力弹道不论多大仰角都是"往上一钩、再竖直掉下去"（叠帧实测一根竖柱）—— 用户要的是"有个弧度砸在女生身上，而不是直接掉下来"。 */
+  function arcStep(d, dt) {
+    const A = F.arc, tg = o.target(d.u);
+    if (tg) d.p2 = tg;
+    d.t += dt;
+    const s = Math.min(1, d.t / A.T), e = Math.pow(s, A.ease), k = 0.7 + 0.6 * d.j;
+    const p0 = d.p0, p2 = d.p2, p1 = [p2[0] + face * A.out * k, p0[1] - A.up * k];
+    const q = 1 - e;
+    d.x = q * q * p0[0] + 2 * q * e * p1[0] + e * e * p2[0];
+    d.y = q * q * p0[1] + 2 * q * e * p1[1] + e * e * p2[1];
+    const de = A.ease * Math.pow(Math.max(s, 1e-3), A.ease - 1) / A.T;          // 速度只给画气泡尾巴的朝向用
+    d.vx = 2 * (q * (p1[0] - p0[0]) + e * (p2[0] - p1[0])) * de;
+    d.vy = 2 * (q * (p1[1] - p0[1]) + e * (p2[1] - p1[1])) * de;
   }
 
   /* 碰到对方了没有（有就返回命中点 [x, y]）。
@@ -284,8 +303,11 @@ function Crew(cfg) {
     for (let i = ps.length - 1; i >= 0; i--) {
       const d = ps[i];
       if (d.stuck != null) { if ((d.stuck += dt) > F.stick) ps.splice(i, 1); continue; }   // 钉在身上的箭：停 F.stick 秒
-      if (F.drag) { const k = Math.exp(-F.drag * dt); d.vx *= k; d.vy *= k; }
-      d.vy += F.G * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.t += dt;
+      if (d.p0) arcStep(d, dt);
+      else {
+        if (F.drag) { const k = Math.exp(-F.drag * dt); d.vx *= k; d.vy *= k; }
+        d.vy += F.G * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.t += dt;
+      }
       if (d.ex) { if (d.t > cfg.exhaust.life) ps.splice(i, 1); continue; }
       const b = d.b, h = hitTest(d, o.target(d.u));
       if (h) {
@@ -409,6 +431,7 @@ function Crew(cfg) {
         const age = b.emit / F.rate, a = dir + (Math.random() - 0.5) * 2 * F.spread;
         const v = F.V * (1 + (Math.random() - 0.5) * 2 * F.vJit);
         const vx = face * v * Math.cos(a), vy = -v * Math.sin(a);
+        if (F.arc && b.tg) { const d = { x: m[0], y: m[1], vx, vy, t: 0, u, b, seq: b.seq++, j: Math.random(), p0: m, p2: b.tg }; arcStep(d, age); ps.push(d); continue; }
         ps.push({ x: m[0] + vx * age, y: m[1] + vy * age + 0.5 * F.G * age * age, vx, vy: vy + F.G * age,
                   t: age, u, b, seq: b.seq++, j: Math.random() });
       }
@@ -1390,20 +1413,22 @@ function drawChatter(ctx, ps) {
 }
 const SISTER = {
   ...FAHAI,
-  whole: { pivot: [280, 453], k: 0.12 },
-  spr: { src: 'assets/world/sister%n_%k.webp', body: { src: 'up', pivot: [280, 453], k: 1 },
-         foot: [520, 825], muzzle: [76, 313], head: [154, 51], chest: [244, 345], face: [199, 213],   // v14/sister/make.py 打印；foot 是后面那只靴底
-         /* 手机屏幕在贴图里朝左上（rest 1.4），但它不是枪管：rest 取典型俯角（同法海 −1.15，悬在右上、女生的脸在左下） */
-         rest: -1.15 },
+  whole: { pivot: [171, 449], k: 0.12 },
+  spr: { src: 'assets/world/sister%n_%k.webp', body: { src: 'up', pivot: [171, 449], k: 1 },
+         foot: [279, 984], muzzle: [73, 225], head: [148, 48], chest: [154, 319], face: [151, 205],   // v14/sister/make.py 打印；foot 是下面那只靴底
+         /* 手机是竖着举在脸边的，不是枪管；气泡走 fluid.arc 不靠瞄准（crew.js elevation），rest 只定气泡刚出手时尾巴朝哪 */
+         rest: 0.6 },
   aura: (ctx, b, s, at, probe) => drawSisterAura(ctx, b, s, at, probe),
-  aim: { lo: -0.4, hi: 0.45, rate: 1.6, follow: 8, stiff: 40 },
+  aim: { lo: -0.3, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },
   sweep: { a: [0.15, 0.08], w: [0.6, 1.5] },    // 打脸（同恶魔），扫得比打全身小
   /* 出场：从手机里蹦出来（crew.js hoverPose b.pop）：弧线拱起 h × 缩放、人从 0.15 倍长大；离场往右上飞走 */
   path: { pop: { h: 260, s0: 0.15 }, to: (s, x, y) => [x + 800 * s, y - 800 * s], rollOut: 0.15 },
   anim: { pulse: [1.1, 0.35], kick: [0, 0.03, 6], lean: 0.02, bob: [8, 1.5] },
   T: { enter: 0.9, spray: 13.6, exit: 0.5, fire: 0.3 },
-  /* 气泡：直线、慢（V 560，一句话飞 1.6 秒看得清），每秒 15 颗、每 3 颗一个气泡 = 每秒 5 句 */
-  fluid: { V: 560, G: 0, drag: 0, rate: 15, spread: 0.14, vJit: 0.05, life: 1.6, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
+  /* 气泡：往左上鼓出去一道弧、从女生外上方砸到脸上（crew.js arcStep；用户："让她嘴里的碎碎念有个弧度砸在女生身上，而不是直接掉下来"）。
+     弧：控制点在落点外侧 out 170、手机上方 up 160（每颗 ×0.7~1.3 各不相同）；T 1.5 秒飞到（一句话看得清），ease 1.6 越飞越快。
+     每秒 15 颗、每 3 颗一个气泡 = 每秒 5 句 */
+  fluid: { V: 300, G: 0, arc: { T: 1.5, out: 170, up: 160, ease: 1.6 }, drag: 0, rate: 15, spread: 0, vJit: 0, life: 2.0, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
            draw: (ctx, ps) => drawChatter(ctx, ps) },
 };
 const Sister = Crew(SISTER);
