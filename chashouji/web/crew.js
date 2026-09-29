@@ -9,7 +9,7 @@
  * anim（可无）是闺蜜那种"呲—呲—"一段段按的喷法：按一下（pulse.on 秒）松一下（pulse.off 秒），
  * 每次按下手臂后坐往上一震（kick），上身喷的时候往前探（lean）；平衡车上人轻轻浮（bob）。
  * 只转一条胳膊、其余一动不动（闺蜜第一版）读成静帧。
- * 形象 skins：哥们三个、闺蜜七个（同一姿势改图换人，make.py 用同一个裁边框出图，所以 foot / muzzle / 转轴全都一样，
+ * 形象 skins：哥们八个、闺蜜七个（同一姿势改图换人，make.py 用同一个裁边框出图，所以 foot / muzzle / 转轴全都一样，
  * 只换贴图）。贴图路径 spr.src 里 %n 换成形象编号、%k 换成层名。召唤时挑场上没人用的那个。
  *
  * **由落点反推枪口**：每帧看该打对方身上哪一点（o.target(u)），按喷出物的出口速度 V 和重力 G 反解要的
@@ -641,9 +641,14 @@ function drawMist(ctx, ps) {
    fluid：出口速度 V、重力 G，每人每秒 rate 滴；miss、snap 见 hitTest；hitEvery 每人多久补一下命中反馈。 */
 const Buddy = Crew({
   face: -1,
-  spr: { src: 'assets/world/buddy%n_%k.webp', body: { src: 'up', pivot: [266, 190], k: 1 }, lo: { src: 'lo' },
-         foot: [260, 436], muzzle: [2, 78] },
-  skins: [1, 2, 3],                 // skate1 棕发护目镜花短裤红滑板 / skate2 反戴红帽黑短裤蓝滑板 / skate3 金发花衬衫迷彩裤黄滑板
+  spr: { src: 'assets/world/buddy%n_%k.webp', body: { src: 'up', pivot: [266, 200], k: 1 }, lo: { src: 'lo' },
+         foot: [260, 446], muzzle: [2, 88] },
+  /* 八个形象，点一次随机挑一个场上没人用的。1 是最早三个里留下的；4~10 是 2026-09-29 加的（用户嫌前三个"整体造型太相近"），
+     借 80/90 后熟知的角色，只留认人特征、发型服饰重新设计（v14/buddy/make.py 有逐个说明）。
+     2、3（反戴红帽 / 金发花衬衫）用户拿掉了，贴图删了。 */
+  skins: [1,                        // skate1 棕发护目镜花短裤红滑板
+          4, 5, 6, 7,               // skate4 金箍浪子（至尊宝）/ skate5 格格府贝勒（五阿哥）/ skate6 夜色假面绅士 / skate7 莫西干球星（巴神）
+          8, 9, 10],                // skate8 刺猬头武道家 / skate9 红发篮球少年 / skate10 草帽船长
   T: { enter: 0.55, spray: 2.5, exit: 0.5 },
   max: 3, gap: 0.3,
   rows: [[0.74, 0.80], [0.66, 0.71], [0.58, 0.63]],
