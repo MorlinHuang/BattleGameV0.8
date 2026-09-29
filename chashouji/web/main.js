@@ -1027,7 +1027,7 @@ const RECIPE = {
     },
   },
 
-  /* 嫦娥 → 男生（2026-09-29，跟后羿对立：月 vs 日）：月牙光刃打在身上，迸一圈银白月光环 + 碎银光点 + 两三弯小月牙飞散，
+  /* 嫦娥 → 男生（2026-09-29，跟后羿对立：月 vs 日）：头顶光点轰下来的月光束砸在身上（crew.js drawMoonBeams），每一发迸一圈银白月光环 + 两三弯小月牙飞散，
      蹦「月照现形！」「广寒一击」「玉兔来也」。配色：银白在浅墙上会化掉，托底用靛蓝（实体靠轮廓）。 */
   change: {
     tint: [214, 226, 255],
@@ -1051,12 +1051,12 @@ const RECIPE = {
       for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
       for (let i = 0; i < Math.round(3 * s); i++) this.moon(x, y, 30 + 8 * s, 180, 380);
     },
-    drip(x, y, side) {                 // 每颗打中的粒子一次；光刃每秒 30 颗（crew.js CHANGE.fluid.rate），比例同法海
+    drip(x, y, side) {                 // 光束轰着的时候每 0.06 秒一次（crew.js CHANGE.beam.drip），一发 5 次、平均每秒 ~6.7 次
       const k = Math.random();
-      if (k < 0.12) this.moon(x, y, 30 + Math.random() * 10, 120, 260);
-      else if (k < 0.27) { const a = Math.random() * 6.283, sp = 120 + Math.random() * 180;
+      if (k < 0.35) this.moon(x, y, 30 + Math.random() * 10, 120, 260);
+      else if (k < 0.85) { const a = Math.random() * 6.283, sp = 120 + Math.random() * 180;
         Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 200, drag: 0.95, life: 0.35, rgb: [200, 215, 255], lw: 2.5 }); }
-      else if (k < 0.28) this.tag(x, y, side);
+      else if (k < 0.9) this.tag(x, y, side);
     },
     arrive(x, y, s) {                  // (x, y) = 腰；飞到位"定"住：一圈银白月光环往外冲 + 几弯月牙四散 + 小震屏
       Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 220 * s, life: 0.24, rgb: [220, 230, 255], a: 0.7 });
@@ -1322,7 +1322,7 @@ const INTRO_OF = new Map([[Truth, 'truth'], [Baisu, 'baisu'], [Change, 'change']
 const RAIN = { durian: DurianRain, sockball: SockRain };
 /* 屏幕底部的法术潮（sea.js）：档 4 每个人一片，跟着自己那个人 —— 在场、还没开始飞走（候场放视频时不算）就推进来，
    飞走就退。续送多待，潮也多待。左边三片从左推进（side −1），右边三片从右（side +1）。 */
-const TIDE_OF = new Map([[Baisu, Sea], [Truth, TruthTide], [Change, MoonTide], [Fahai, Scroll], [Demon, DemonTide], [Houyi, SunTide]]);
+const TIDE_OF = new Map([[Baisu, Sea], [Truth, TruthTide], [Change, MoonSky], [Fahai, Scroll], [Demon, DemonTide], [Houyi, SunTide]]);
 const TIDES_L = [...TIDE_OF.values()].filter(t => t.side < 0), TIDES_R = [...TIDE_OF.values()].filter(t => t.side > 0);
 const casting = (c) => c.peek().some(b => !b.hold && b.t <= c.cfg.T.enter + b.spray);
 /* 两边各从自己那一边横着推进来（2026-09-28 用户："分别从左右进场，这样同时播放"）。每边同时只一个人在场，
@@ -2241,8 +2241,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     baisu:  [110, 886, 1.005],
     /* 真相女神：光环顶 ≈ y 190，罐口 ≈ (480, 593)；左边出画 ~20 像素。出场视频尾帧里她是 0.94 倍，现身后边滑进悬停位边放大（crew.js hoverPose b.from） */
     truth:  [196, 963, 1.35],
-    /* 嫦娥：发髻顶 ≈ y 200，掌心月牙 ≈ (541, 467)；披帛往左出画 */
-    change: [240, 908, 0.88],
+    /* 嫦娥：发髻顶 ≈ y 270，掌心月牙 ≈ (505, 470)；披帛往左出画。
+       比别人低 70（2026-09-29 改月光束）：头顶一道弧上三个光点（crew.js CHANGE.beam.orbs）要在拉力条下沿（y ≈ 195）之下 ——
+       发髻顶原来就贴着拉力条，光点全被挡住。现在光点 ≈ (249, 282)、(407, 230)、(565, 282)。 */
+    change: [240, 978, 0.88],
     /* 法海：最低点是右脚草鞋。光轮顶 ≈ y 173（压到拉力条下沿一点，光轮是虚的），伸出去的左掌 ≈ (439, 320)，袈裟右边出画 ~100 像素 */
     fahai:  [930, 975, 1.2],
     /* 灭迹恶魔：角尖 ≈ y 190，喷口 ≈ (473, 598)；右边出画 ~50 像素 */

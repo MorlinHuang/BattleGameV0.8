@@ -1,7 +1,8 @@
 /* sea.js —— 档 4 六个人各自铺在屏幕底部的"法术潮"（2026-09-28 起）+ 白娘子的掌心水柱贴图 WaterArt、命中的爆水泡沫 Foam。
  *
  * 六片：白娘子 海 Sea / 法海 经卷 Scroll（下面细说）；2026-09-29 加真相女神 真相云海 TruthTide / 灭迹恶魔 碎纸黑烟 DemonTide /
- * 嫦娥 月夜银云海 MoonTide / 后羿 太阳火云海 SunTide（文件末尾，贴图 v14/tides/make.py）。左边三片从左推进、右边三片从右。
+ * 嫦娥 明月银河 MoonSky（单独写，不是层层浪）/ 后羿 太阳火云海 SunTide（文件末尾，贴图 v14/tides/make.py、v14/moonsky/make.py）。
+ * 左边三片从左推进、右边三片从右。
  *
  * 白娘子（女生侧）→ 海水 Sea。用户："整个屏幕的底部，从下边缘到男女生下方，用海水汹涌填充（代表白娘子的水法术），
  *   海水也需要持续的动画，海里可以有些虾兵蟹将。白娘子持续 15s，海水也一样。当白娘子消失的时候，海水也消散。"
@@ -11,7 +12,7 @@
  *   虾兵蟹将可以对应神兽小佛"。三条金色《心经》卷轴（v14/scroll/make.py 程序画的，经文是真字）一层层起伏，
  *   底下一片金色光雾，卷轴上骑着神兽小佛（v14/scroll/beasts.py：小沙弥、麒麟崽、小石狮、小白象）。
  *
- * 六片都是同一套东西（Tide）：三层横向无缝长条贴图，
+ * 除嫦娥的明月银河（MoonSky，单独写）外，五片都是同一套东西（Tide）：三层横向无缝长条贴图，
  *   · 各层往相反方向平移（远慢近快，远近错开不是整块挪）；
  *   · 按列上下起伏（每 SL 像素一条竖条各自上下挪：一道道涌浪从画面里走过去，卷轴像绸带一样飘）；
  *   · 浪尖 / 卷轴上沿随机甩出东西（海：白色飞沫往上溅、落回去；经卷：金色光点往上飘）；
@@ -133,6 +134,35 @@ const Foam = (() => {
           shape（可无）：[形状, 占几成, 大小倍数, ...颜色] —— 'chat' 聊天气泡 [.., 填色, 描边]、'paper' 碎纸条 [.., 纸色]，其余几成照样是软点 }；
    kinds：小兵贴图、走速；dir：小兵往哪走（+1 右 / −1 左，贴图朝向要跟它一致）；mobs：开场位置；sink：贴图下沿压到上沿以下几成；
    hop：蹦起来 { every, T, h, splash（落回去甩几颗）}。 */
+/* 一片潮只画 [x0, x1)，两头各羽化 FEATHER 像素（贴着屏幕边的那头不羽化）：第一版硬裁一刀，海和经卷之间一条笔直的竖线，
+   像两张图拼起来的。先画进自己的离屏画布（begin 给它），end 按横向渐变抠掉交界那一段再贴回去 ——
+   两边在交界处互相淡进淡出（小兵走过交界也是慢慢淡掉，不是被一刀切掉）。 */
+function SpanBuf() {
+  const FEATHER = 70;
+  let buf = null;
+  return {
+    begin(W, H) {
+      if (!buf) { buf = document.createElement('canvas'); buf.width = W; buf.height = H; }
+      const c = buf.getContext('2d');
+      c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+      return c;
+    },
+    end(out, x0, x1) {
+      const c = buf.getContext('2d'), W = buf.width, H = buf.height;
+      if (x0 > 0 || x1 < W) {
+        const g = c.createLinearGradient(x0 - FEATHER, 0, x1 + FEATHER, 0), L = x1 - x0 + 2 * FEATHER;
+        const edge = (x, on) => [(x - (x0 - FEATHER)) / L, on];
+        for (const [u, on] of [edge(x0 - FEATHER, x0 <= 0 ? 1 : 0), edge(x0 + FEATHER, 1), edge(x1 - FEATHER, 1), edge(x1 + FEATHER, x1 >= W ? 1 : 0)])
+          g.addColorStop(Math.max(0, Math.min(1, u)), `rgba(0,0,0,${on})`);
+        c.globalCompositeOperation = 'destination-in';
+        c.fillStyle = g; c.fillRect(0, 0, W, H);
+        c.globalCompositeOperation = 'source-over';
+      }
+      out.drawImage(buf, 0, 0);
+    },
+  };
+}
+
 function Tide(C) {
   const SL = 8;              // 按列起伏的竖条宽（像素）：相邻两条的高差 ≤ A·2π/L·SL，1 像素以内看不出台阶
   const LIP = 10;            // 量上沿：从上往下第一个"下面连着 LIP 个不透明像素"的点（浪尖上方飞着的水沫不算）
@@ -294,20 +324,13 @@ function Tide(C) {
     ctx.restore();
   }
 
-  /* 只画 [x0, x1) 这一段（推进到哪 / 两个人同时在场时各占一边，main.js tideSpan）。两头各羽化 FEATHER 像素（贴着屏幕边的那头不羽化）：
-     第一版硬裁一刀，海和经卷之间一条笔直的竖线，像两张图拼起来的。现在先画进自己的离屏画布，再按横向渐变抠掉交界那一段，
-     两边在交界处互相淡进淡出（小兵走过交界也是慢慢淡掉，不是被一刀切掉）。
+  /* 只画 [x0, x1) 这一段（推进到哪 / 两个人同时在场时各占一边，main.js tideSpan），两头羽化（featherSpan）。
      飞沫 / 光点不裁：前沿甩出来的正好在羽化带上，裁了就只剩一半；它们飞到对面那片上头也是对撞的一部分。 */
-  const FEATHER = 70;
-  let buf = null;
+  const span = SpanBuf();
   function draw(ctx, x0 = 0, x1 = W) {
     if (!LAST.top || (lv <= 0 && !sprays.length)) return;
     const full = x0 <= 0 && x1 >= W, out = ctx;
-    if (!full) {
-      if (!buf) { buf = document.createElement('canvas'); buf.width = W; buf.height = H; }
-      ctx = buf.getContext('2d');
-      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
-    }
+    if (!full) ctx = span.begin(W, H);
     const on = lv > 0 && x1 > x0;                    // 退空了只剩飞在半空的飞沫 / 光点
     ctx.save();
     if (C.haze && on) {
@@ -322,14 +345,7 @@ function Tide(C) {
     }
     ctx.restore();
     if (full) return;
-    const g = ctx.createLinearGradient(x0 - FEATHER, 0, x1 + FEATHER, 0), L = x1 - x0 + 2 * FEATHER;
-    const edge = (x, on) => [(x - (x0 - FEATHER)) / L, on];
-    for (const [u, on] of [edge(x0 - FEATHER, x0 <= 0 ? 1 : 0), edge(x0 + FEATHER, 1), edge(x1 - FEATHER, 1), edge(x1 + FEATHER, x1 >= W ? 1 : 0)])
-      g.addColorStop(Math.max(0, Math.min(1, u)), `rgba(0,0,0,${on})`);
-    ctx.globalCompositeOperation = 'destination-in';
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.globalCompositeOperation = 'source-over';
-    out.drawImage(buf, 0, 0);
+    span.end(out, x0, x1);
     for (let k = 0; k < N; k++) drawSprays(out, k);
   }
 
@@ -455,7 +471,7 @@ const Clash = (() => {
   };
 })();
 
-/* ---- 真相女神、灭迹恶魔、嫦娥、后羿的四片潮（2026-09-29）----
+/* ---- 真相女神、灭迹恶魔、后羿的三片潮（2026-09-29；嫦娥原来的月夜银云海换成了 MoonSky）----
    用户："给真相女神和恶魔添加类似水面和卷轴的效果"；"新增一对嫦娥 vs 后羿，制作规格和白娘子法海一致"。
    贴图 v14/tides/make.py 出（尺寸是它打印的）：每片一张生图，远 / 中 / 近三层（中层水平翻），小兵是 2×2 一张切的。
    摆位同海：三层浪上沿的中位数各对齐海那一层（远 1246、中 1311、近 1366，y = 1246 − 1190 − 贴图里上沿中位数），近层都高到出屏。
@@ -498,17 +514,184 @@ const DemonTide = Tide({
   hop: { every: [2.0, 3.6], T: 0.7, h: 80, splash: 14 },
 });
 
-/* 月夜银云海：银白月蓝云浪，银色星光慢慢往上飘；三只玉兔、一只金蟾往右跑 */
-const MoonTide = Tide({
-  top: 1190, rise: 1.4, fall: 1.4, side: -1, front: { every: 0.014 },
-  layers: tideLayers('moon', [['far', 535, 275, 29], ['mid', 693, 356, 86], ['near', 888, 456, 131]], +1),
-  spray: { every: 0.04, crest: 0.45, V: [30, 90], spread: 1.4, G: -50, life: [0.9, 1.5], r: [2.5, 5.5], a: 0.95, layers: [0, 1, 2],
-           dot: ['rgba(255,255,255,1)', 'rgba(215,228,255,0.85)', 'rgba(140,170,255,0)'] },
-  kinds: tideKinds('moon', [['rabbit1', 66], ['rabbit2', 78], ['toad', 48], ['rabbit3', 70]]),
-  dir: +1, mobs: TIDE_MOBS,
-  sink: 0.2,
-  hop: { every: [1.6, 3.0], T: 0.7, h: 90, splash: 12 },     // 兔子蹦得勤、蹦得高
-});
+/* ---- 嫦娥的明月银河 MoonSky（2026-09-29，替掉月夜银云海）----
+   用户："嫦娥的特效太像水面了，跟白娘子的重复而且与嫦娥设定不搭。屏幕下方的特效，可以做一轮明月 + 银河星带，里面再漂些兔子和薄纱就行"。
+   选的方案 A：深蓝夜空底，左下角半轮大明月从下沿升起；一条银河星带从明月往右上铺开、星尘缓缓往右流、星星一闪一闪；
+   四只玉兔（抱药杵 / 提灯笼 / 蜷着睡 / 张开手脚）失重般慢慢翻着往右漂；几条淡紫薄纱在里面飘。
+   不是层层浪（Tide），没有"上沿"可骑，单独写；对外接口跟 Tide 一样（main.js TIDE_OF 照常推进 / 退场 / 两边对顶 / 羽化）。
+   进场：星带跟着 [x0, x1) 从左往右铺开（main.js tideSpan），明月同时从下沿升起（sink × (1 − 进度)），前沿一路迸星光。
+   贴图 v14/moonsky/make.py（银河、明月、玉兔）；夜空、星星、星尘、薄纱现画。
+   画法：夜空 + 星带 + 星星 + 星尘先画进离屏画布、按竖向渐变把上沿抠成渐隐（它们一起淡进客厅），再画月、纱、兔（不淡，月顶就是上沿最高处）。 */
+const MoonSky = (() => {
+  const C = {
+    side: -1, rise: 1.4, fall: 1.4,
+    /* 夜空：y0 全透 → y1 不透明，往下 top 色渐到 bot 色（竖向渐隐也管星带和星星） */
+    sky: { y0: 1175, y1: 1238, top: [14, 18, 58], bot: [38, 22, 78], a: 0.93 },
+    /* 星带：贴图缩放 k，中线在屏幕正中过 y，斜 tilt（负 = 往右上抬），往右流 v px/s */
+    galaxy: { src: 'assets/world/moonsky_galaxy.webp', k: 0.8, y: 1300, tilt: -0.07, v: 22 },
+    /* 明月：直径 D，圆心 (x, y)，没升起时往下沉 sink；月晕半径 R、颜色、不透明度 */
+    moon: { src: 'assets/world/moonsky_moon.webp', D: 300, x: 125, y: 1338, sink: 300, halo: { R: 270, rgb: [200, 214, 255], a: 0.5 } },
+    stars: { n: 90, big: 9 },                          // 满天小星几颗、其中带十字芒的几颗
+    dust: { n: 80, v: [25, 80], band: 60, r: [1.5, 3.5] },   // 星尘：沿星带往右流，离中线 ±band
+    /* 薄纱：一条条有头有尾的纱往右飘（头走到 W + len 再从左边画外重来）；y 中线、A 波幅、L 波长、v 走速、len 长、w 宽、tw 翻面周期、颜色、亮边 */
+    ribbons: [
+      { y: 1262, A: 16, L: 460, v: 46, len: 620, w: 30, tw: 210, x: 0.2, rgb: [196, 178, 255], a: 0.34 },
+      { y: 1318, A: 22, L: 560, v: 34, len: 760, w: 38, tw: 260, x: 0.75, rgb: [176, 196, 255], a: 0.3 },
+      { y: 1290, A: 14, L: 400, v: 58, len: 520, w: 24, tw: 180, x: 0.45, rgb: [226, 194, 255], a: 0.32 },
+    ],
+    /* 玉兔：贴图 k（0 抱药杵 / 1 提灯笼 / 2 蜷着睡 / 3 张开手脚）、开场 x（屏宽几成）、y、往右漂 v、缩放 s、spin（整圈慢慢翻 rad/s，0 = 只左右摆） */
+    rabbits: [
+      { k: 0, x: 0.12, y: 1262, v: 30, s: 0.72, spin: 0 },
+      { k: 1, x: 0.4, y: 1300, v: 24, s: 0.8, spin: 0 },
+      { k: 2, x: 0.66, y: 1250, v: 36, s: 0.62, spin: 0.5 },
+      { k: 3, x: 0.9, y: 1292, v: 28, s: 0.76, spin: -0.35 },
+    ],
+    rsrc: (k) => `assets/world/moonsky_rabbit${k + 1}.webp`,
+    front: { every: 0.014 },                           // 推进 / 退回时前沿每隔几秒迸一颗星光
+  };
+  let W = 960, H = 1707, lv = 0, t = 0, frontT = 0, gal = null, moon = null, bun = [], stars = [], dust = [], sparks = [];
+  const dot = softDot('rgba(255,255,255,1)', 'rgba(215,228,255,0.85)', 'rgba(150,170,255,0)');
+  const span = SpanBuf();
+  const ease = (u) => u * u * (3 - 2 * u), mod = (a, n) => ((a % n) + n) % n, rnd = (a, b) => a + Math.random() * (b - a);
+  const G = C.galaxy, bandY = (x) => G.y + (x - W / 2) * Math.tan(G.tilt);
+
+  function init(w, h) { W = w; H = h; reset(); }
+  function load(v, off) {
+    if (off) return Promise.resolve(false);
+    const img = (src) => new Promise((ok) => {
+      const i = new Image();
+      i.onload = () => ok(i); i.onerror = () => ok(null);
+      i.src = src + (v ? '?v=' + encodeURIComponent(v) : '');
+    });
+    return Promise.all([img(G.src), img(C.moon.src), ...C.rabbits.map(r => img(C.rsrc(r.k)))]).then(([g, m, ...rs]) => {
+      gal = g; moon = m; bun = rs;
+      return !!g && !!m && rs.every(Boolean);
+    });
+  }
+  function reset() {
+    lv = 0; t = 0; frontT = 0; sparks = [];
+    const S = C.sky;
+    stars = Array.from({ length: C.stars.n }, (_, i) => ({ x: Math.random() * W, y: rnd(S.y1 - 10, H), r: rnd(0.8, 2.2), big: i < C.stars.big,
+                                                         w: rnd(1.5, 4), ph: Math.random() * 6.3 }));
+    dust = Array.from({ length: C.dust.n }, () => newDust(Math.random() * W));
+  }
+  function newDust(x) {
+    const D = C.dust;
+    return { x, off: (Math.random() + Math.random() - 1) * D.band, v: rnd(D.v[0], D.v[1]), r: rnd(D.r[0], D.r[1]), ph: Math.random() * 6.3 };
+  }
+
+  function update(dt, on, front) {
+    const lv0 = lv;
+    lv = Math.max(0, Math.min(1, lv + (on ? dt / C.rise : -dt / C.fall)));
+    if (front != null && lv !== lv0) for (frontT += dt; frontT >= C.front.every; frontT -= C.front.every)
+      sparks.push({ x: front + rnd(-20, 20), y: rnd(C.sky.y1, 1400), vx: rnd(-40, 120), vy: rnd(-130, -30), t: 0, life: rnd(0.6, 1.0), r: rnd(3, 7) });
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const p = sparks[i];
+      p.vy -= 30 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if ((p.t += dt) > p.life) sparks.splice(i, 1);
+    }
+    if (lv <= 0) return;
+    t += dt;
+    for (const d of dust) if ((d.x += d.v * dt) > W + 10) Object.assign(d, newDust(-10));
+  }
+
+  /* 十字芒：两道细光交叉 + 一颗亮点 */
+  function cross(ctx, x, y, R, a) {
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(235,242,255,1)';
+    ctx.fillRect(x - R, y - 0.8, 2 * R, 1.6); ctx.fillRect(x - 0.8, y - R, 1.6, 2 * R);
+    ctx.drawImage(dot, x - R * 0.45, y - R * 0.45, R * 0.9, R * 0.9);
+  }
+
+  /* 一条纱：头在 hx，身子往左拖 len；中线是往右走的正弦，宽度两头收尖、按 tw 周期"翻面"（窄 → 宽 → 窄，读成绸子在转） */
+  function ribbon(ctx, R, i) {
+    const hx = mod(R.x * (W + R.len + 200) + R.v * t, W + R.len + 200) - 100;
+    const up = [], dn = [], n = 40;
+    for (let k = 0; k <= n; k++) {
+      const u = k / n, x = hx - R.len * u;
+      const yc = R.y + R.A * Math.sin(6.2832 * (x - 1.6 * R.v * t) / R.L + i * 2.1) + 5 * Math.sin(t * 0.8 + i);
+      const hw = R.w / 2 * Math.pow(Math.sin(Math.PI * u), 0.6) * (0.25 + 0.75 * Math.abs(Math.cos(6.2832 * (x - 0.7 * R.v * t) / R.tw + i)));
+      up.push([x, yc - hw]); dn.push([x, yc + hw]);
+    }
+    ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.moveTo(...up[0]);
+    for (const q of up) ctx.lineTo(...q);
+    for (let k = dn.length - 1; k >= 0; k--) ctx.lineTo(...dn[k]);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${R.rgb},${R.a})`; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(...up[0]);
+    for (const q of up) ctx.lineTo(...q);
+    ctx.lineWidth = 1.5; ctx.strokeStyle = `rgba(248,244,255,${(R.a * 1.6).toFixed(2)})`; ctx.stroke();
+  }
+
+  function rabbit(ctx, R, i) {
+    const im = bun[i];
+    if (!im) return;
+    const w = im.width * R.s, h = im.height * R.s, x = mod(R.x * (W + 260) + R.v * t, W + 260) - 130;
+    const y = R.y + 12 * Math.sin(t * 0.9 + i * 1.7), rot = R.spin ? t * R.spin + i : 0.3 * Math.sin(t * 0.6 + i * 2.3);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalAlpha = 1;
+    ctx.drawImage(im, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+
+  function draw(out, x0 = 0, x1 = W) {
+    if (!gal || (lv <= 0 && !sparks.length)) return;
+    if (lv > 0 && x1 > x0) {
+      const ctx = span.begin(W, H), S = C.sky;
+      ctx.save();
+      /* 夜空 */
+      const g = ctx.createLinearGradient(0, S.y0, 0, H);
+      g.addColorStop(0, `rgba(${S.top},${S.a})`); g.addColorStop(1, `rgba(${S.bot},${S.a})`);
+      ctx.fillStyle = g; ctx.fillRect(x0, S.y0, x1 - x0, H - S.y0);
+      /* 星带：斜着铺、往右流（贴图横向无缝，接着画） */
+      const tw = gal.width * G.k, th = gal.height * G.k, off = mod(G.v * t, tw);
+      ctx.save(); ctx.translate(W / 2, G.y); ctx.rotate(G.tilt);
+      for (let x = -W / 2 - 160 - tw + off; x < W / 2 + 160; x += tw) ctx.drawImage(gal, x, -th / 2, tw + 1, th);
+      ctx.restore();
+      /* 星星：一闪一闪；带芒的几颗大一点 */
+      for (const p of stars) {
+        const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * p.w + p.ph));
+        if (p.big) cross(ctx, p.x, p.y, 7 + 5 * a, a);
+        else { ctx.globalAlpha = a; ctx.drawImage(dot, p.x - p.r * 1.6, p.y - p.r * 1.6, p.r * 3.2, p.r * 3.2); }
+      }
+      /* 星尘：沿星带往右流 */
+      for (const d of dust) {
+        ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 3 + d.ph);
+        ctx.drawImage(dot, d.x - d.r * 1.6, bandY(d.x) + d.off - d.r * 1.6, d.r * 3.2, d.r * 3.2);
+      }
+      /* 上沿渐隐：y0 全透 → y1 */
+      ctx.globalAlpha = 1;
+      const m = ctx.createLinearGradient(0, S.y0, 0, S.y1);
+      m.addColorStop(0, 'rgba(0,0,0,0)'); m.addColorStop(1, 'rgba(0,0,0,1)');
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.fillStyle = m; ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
+      /* 明月：月晕 + 月，跟着进度从下沿升起 */
+      const M = C.moon, cy = M.y + M.sink * (1 - ease(lv)), hl = M.halo;
+      const hg = ctx.createRadialGradient(M.x, cy, M.D * 0.45, M.x, cy, hl.R);
+      hg.addColorStop(0, `rgba(${hl.rgb},${hl.a})`); hg.addColorStop(1, `rgba(${hl.rgb},0)`);
+      ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(M.x, cy, hl.R, 0, 6.2832); ctx.fill();
+      ctx.drawImage(moon, M.x - M.D / 2, cy - M.D / 2, M.D, M.D);
+      /* 纱和兔穿插：第 0 条纱在兔子后面，另两条在前面 */
+      ribbon(ctx, C.ribbons[0], 0);
+      C.rabbits.forEach((R, i) => rabbit(ctx, R, i));
+      for (let i = 1; i < C.ribbons.length; i++) ribbon(ctx, C.ribbons[i], i);
+      ctx.restore();
+      span.end(out, x0, x1);
+    }
+    /* 前沿迸的星光不裁（同 Tide 的飞沫） */
+    for (const p of sparks) {
+      const u = p.t / p.life, r = p.r * (1 + 0.5 * u);
+      out.globalAlpha = u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85;
+      out.drawImage(dot, p.x - r, p.y - r, 2 * r, 2 * r);
+    }
+    out.globalAlpha = 1;
+  }
+
+  /* 出场视频放完（intro.js → main.js）：直接铺满、月已升起（视频底部那片接过来） */
+  function handoff() { lv = 1; }
+  return { init, load, update, draw, reset, handoff, active: () => lv > 0, level: () => ease(lv), edgeY: () => C.sky.y1, dotImg: () => dot, side: C.side };
+})();
 
 /* 太阳火云海：金红火焰云浪，火星往上蹿；四只三足金乌贴着火浪往左飞（sink 负：飞在浪尖上方，不泡在里面） */
 const SunTide = Tide({

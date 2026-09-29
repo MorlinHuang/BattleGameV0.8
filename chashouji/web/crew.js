@@ -32,7 +32,8 @@ function Crew(cfg) {
   const A = cfg.anim || null;
   const REST = spr.rest || 0;                    // 贴图里喷口本来的指向（仰角，朝下为负）：真相女神第二版罐子本身就斜朝右下
   const PATH = cfg.path || {};                    // 悬停的人怎么来、怎么走（见 hoverPose）
-  const WK = cfg.whole && cfg.whole.k != null ? cfg.whole.k : 1;   // whole：整个人跟瞄准角转几成（白娘子 0.12：身子只轻轻倾，水流照样按完整角度出）
+  const WK = cfg.whole && cfg.whole.k != null ? cfg.whole.k : 1;
+  const BM = cfg.beam || null;                    // 光束（嫦娥）：不喷东西，头顶几个光点轮流蓄力、轰一束直光（beamStep）   // whole：整个人跟瞄准角转几成（白娘子 0.12：身子只轻轻倾，水流照样按完整角度出）
   let img = null, o = {};                       // img[形象]：{ arm, body, lo }（arm 可无）
   const bs = [], ps = [];                        // 在场的人、喷出去的东西（水滴 / 雾团）
 
@@ -240,6 +241,37 @@ function Crew(cfg) {
     return fr != null && past(fr) ? [fr, d.y] : null;
   }
 
+  /* 光束（cfg.beam，嫦娥 2026-09-29）：用户要"连续召唤月光束来轰击男生，有点像超人的红眼光束，召唤的位置是头顶出现 3 个光点，
+     分别召唤月光束"，节奏选的"轮番蓄力点射"：一个光点先聚光 T.charge 秒（变亮、四周的光往里吸），轰出一条粗光束 T.fire 秒，
+     隔 T.gap 换下一个，蓄—轰—蓄—轰。光点在贴图上的位置 orbs（跟着人一起倾、一起浮），进场时依次亮起（appear）。
+     每一发：出手那一刻定下打他身上哪一点（u，跟着他身子动，不跟着瞄准扫），开轰那一下 onHit（第一发按礼物力度），
+     轰着的时候每 drip 秒 onSplash 一次（碎光、小月牙）。状态记在 b.beam：k 第几个光点、ph 'charge' | 'fire' | 'gap'、pt 这一段过了几秒。
+     b.beam.fx：画要的东西（光点位置由 items 画的时候现算，这里只管时间和打哪）。 */
+  function beamStep(b, dt, on, u) {
+    const S = b.beam || (b.beam = { k: 0, ph: 'charge', pt: 0, u: 0.5, dr: 0, motes: [] });
+    for (let i = S.motes.length - 1; i >= 0; i--) if ((S.motes[i].t += dt) > S.motes[i].life) S.motes.splice(i, 1);
+    if (!on) { S.ph = 'charge'; S.pt = 0; return; }
+    S.pt += dt;
+    const T_ = BM.T;
+    if (S.ph === 'charge') {
+      if (Math.random() < dt * BM.mote.rate) S.motes.push({ k: S.k, a: Math.random() * 6.283, t: 0, life: BM.mote.life });
+      if (S.pt >= T_.charge) {
+        S.ph = 'fire'; S.pt = 0; S.u = u; S.dr = 0;
+        const h = o.target(S.u);
+        if (h) { o.onHit(h[0], h[1], b.first, b); b.first = false; }
+        if (A) b.kick = 1;
+      }
+    } else if (S.ph === 'fire') {
+      if ((S.dr += dt) >= BM.drip) { S.dr -= BM.drip; const h = o.target(S.u); if (h) o.onSplash(h[0], h[1]); }
+      if (S.pt >= T_.fire) { S.ph = 'gap'; S.pt = 0; }
+    } else if (S.pt >= T_.gap) { S.ph = 'charge'; S.pt = 0; S.k = (S.k + 1) % BM.orbs.length; }
+  }
+  /* 此刻几个光点在屏幕哪（跟着人倾、浮），和光束该打到哪 */
+  function beamGeo(b) {
+    const p = pose(b);
+    return { orbs: BM.orbs.map(q => carried(p, q, b.aim, b)), end: b.beam && b.beam.ph === 'fire' ? o.target(b.beam.u) : null, s: p[2] };
+  }
+
   function update(dt) {
     for (let i = ps.length - 1; i >= 0; i--) {
       const d = ps[i];
@@ -321,7 +353,7 @@ function Crew(cfg) {
       if (A) {                                   // 一段段按：每次按下后坐一震；喷的时候上身往前探
         b.kick *= Math.exp(-A.kick[2] * dt);
         b.lean += ((spraying ? 1 : 0) - b.lean) * (1 - Math.exp(-dt * 6));
-        if (spraying) {
+        if (spraying && !BM) {                   // 光束的一震跟着每一发（beamStep）
           const cyc = A.pulse[0] + A.pulse[1];
           if (b.pt === 0 || Math.floor((b.pt + dt) / cyc) > Math.floor(b.pt / cyc)) b.kick = 1;
           b.pt += dt;
@@ -348,6 +380,7 @@ function Crew(cfg) {
                     vx, vy, t: age, u: 0, b, seq: -1, j: 1, ex: true });
         }
       }
+      if (BM) { beamStep(b, dt, spraying, u); continue; }
       if (!spraying) continue;
       if (A && (b.pt % (A.pulse[0] + A.pulse[1])) > A.pulse[0]) { b.emit = 0; continue; }   // 松开那一下
       /* 喷：从转过之后的喷口，沿喷口方向，速度 V（雾再加一点散角和快慢）。一帧攒够几个就出几个，
@@ -378,6 +411,12 @@ function Crew(cfg) {
     /* 悬停的人按此刻 pose 的缩放排（缩放由 o.perch 给，main.js G4STAND，不是召唤时抽的 b.s），站地的按召唤时定的远近 */
     const sOf = (b) => cfg.move === 'hover' && bs.includes(b) ? pose(b)[2] : b.s;
     for (const b of bs) if (!b.hold) out.push({ s: sOf(b), draw: (ctx) => drawOne(ctx, b) });
+    /* 光束画在本人身后（从头顶光点往男生那边打，左边、正上方那两个光点的光束会斜穿过她的脸和身子 —— 第一版画在身前，像把她切开），
+       光点画在本人之前（它们在头顶，不跟人重叠，被她挡住就看不见了） */
+    if (BM) for (const b of bs) if (!b.hold) {
+      out.push({ s: sOf(b) - 1e-6, draw: (ctx) => BM.draw(ctx, b, beamGeo(b), T, 'beam') });
+      out.push({ s: sOf(b) + 1e-6, draw: (ctx) => BM.draw(ctx, b, beamGeo(b), T, 'orbs') });
+    }
     /* 人已离场、水还在飞的，按原来那个人的远近画 */
     /* cfg.over（白娘子、法海）：放出去的东西画在所有帮手之上 —— 两人一左一右同时在场，法海的金字从白娘子半透明的广袖后面飞过去，
        被袖子蒙成一层白雾，读成"字在她身后"而不是"打向女生" */
@@ -1022,49 +1061,86 @@ const FAHAI = {
 const Fahai = Crew(FAHAI);
 
 /* ---- ⑧ 嫦娥（女生档 4，2026-09-29，跟后羿对立：月 vs 日）----
-   用户："新增一对人物，嫦娥 vs 后羿，主题为月和日。制作规格和白娘子法海一致"；打的是"月光 + 玉兔"。
-   · 立绘 v14/change/make.py：月白浅紫广袖、飞天髻月牙发饰、长披帛，朝右飞，右掌心上方悬一弯银白月牙（光刃从这出）；银蓝外发光烘在贴图里。
+   用户："新增一对人物，嫦娥 vs 后羿，主题为月和日。制作规格和白娘子法海一致"。
+   · 立绘 v14/change/make.py：月白浅紫广袖、飞天髻月牙发饰、长披帛，朝右飞，右掌心上方悬一弯银白小月牙（现在只是装饰，掌心光团 drawGodAura）；
+     银蓝外发光烘在贴图里。
    · 规格照白娘子：从左上飞下来、在场 15 秒、whole.k 0.12 身子只轻轻倾、打男生全身（main.js BODY_AIM）、在男女主身后，
-     底下铺月夜银云海（sea.js MoonTide，玉兔、金蟾在云上跑）。
-   · 光刃：一弯弯银白月牙往男生飞（drawCrescents），刃口朝前、边飞边转；外面套一层银蓝雾锥（CHANGE_FX.mist，同法海的金光雾）。
-     打中迸银光、蹦字（main.js RECIPE.change）。 */
+     底下铺明月银河（sea.js MoonSky）。
+   · 攻击（2026-09-29 第二版）：头顶一道弧上三个光点，轮番蓄力、轰出一条月光束砸在男生身上（crew.js beamStep，画法 drawMoonBeams）。
+     用户："连续召唤月光束来轰击男生，有点像超人的红眼光束。召唤的位置是头顶出现 3 个光点，分别召唤月光束"，节奏选"轮番蓄力点射"。
+     第一版是掌心打一串月牙光刃 + 银蓝雾锥（照法海咒语的做法）—— 用户："太像水面了，跟白娘子的重复"。
+     打中迸月光环、小月牙，蹦字（main.js RECIPE.change）。 */
 const CHANGE_FX = {
   halo: { R: 96, lw: 6, rgb: [226, 236, 255], edge: [70, 90, 160] },                   // 头后一轮满月光环
   rays: { n: 12, R: [150, 400], w: 0.08, spin: -0.1, rgb: [190, 210, 255], a: 0.24 },  // 身后放射的月光
   glow: { R: 360, a: 0.3, rgb: [170, 196, 255], core: [245, 248, 255] },
   orb: { R: 60, rgb: [200, 220, 255] },                                                // 掌心月牙的光团
-  /* 月牙光刃：出手 size[0] → 飞 grow 秒后 size[1]（外圆半径）；every：每几颗粒子画一弯（其余只当雾）；spin：边飞边转（rad/s） */
-  /* thick：月牙中间多厚（× 半径）。第一版 30 → 70、内弧只挖掉一小块（中间厚 0.56 倍半径），一串飞过去读成一摞白圆盘 */
-  blade: { size: [24, 52], grow: 0.22, every: 3, spin: 5, thick: 0.4, fill: [246, 250, 255], edge: [90, 110, 190], glow: [170, 200, 255] },
-  mist: { r0: 30, r1: 110, rim: [70, 90, 170], body: [200, 216, 255], core: [250, 252, 255], a: [0.18, 0.28], star: 0 },
+  /* 头顶的光点：半径 R（屏幕像素 × s）；蓄满时胀到 1 + grow 倍；芒长 flare × R；托底深靛描一圈（浅墙上银白会化掉，实体靠轮廓） */
+  star: { R: 26, grow: 0.7, flare: 2.2, core: [255, 255, 255], rgb: [190, 205, 255], edge: [40, 50, 130] },
+  /* 光束：芯宽 W（× s）；四层 [宽 × W, 颜色, 不透明度]（外晕 → 深靛托底 → 银蓝 → 白芯）；出手 rise、收尾 tail（占这一发的几成） */
+  beam: { W: 30, layers: [[3.4, [150, 160, 255], 0.2], [1.4, [40, 50, 130], 0.55], [1.0, [196, 212, 255], 0.95], [0.42, [255, 255, 255], 1]],
+          rise: 0.12, tail: 0.35, sparks: 7 },
 };
-/* 一弯月牙：半径 r 的圆减去往后挪 d 的等大圆（中间厚 d、两头收成尖，凸的一边朝飞的方向），身后一团银光、拖一截残影 */
-function drawCrescents(ctx, ps) {
-  const M = CHANGE_FX.blade;
+/* 三个光点 + 正在轰的那一束。g：beamGeo（光点屏幕位置、光束终点、缩放）；T：CHANGE.T（进出场时刻，光点跟着亮起 / 熄掉）；
+   what：'beam' 只画光束（在她身后）、'orbs' 只画光点（在她身前），见 Crew items */
+function drawMoonBeams(ctx, b, g, T, what) {
+  const F = CHANGE_FX, B = CHANGE.beam, S = b.beam, s = g.s, se = T.enter + b.spray;
+  const out = b.t > se ? Math.max(0, 1 - (b.t - se) / T.exit) : 1;
   ctx.save();
   ctx.lineCap = 'round';
-  for (const d of ps) {
-    if (d.ex || d.seq % M.every) continue;
-    const e = Math.min(1, d.t / M.grow), r = M.size[0] + (M.size[1] - M.size[0]) * e;
-    const sp = Math.hypot(d.vx, d.vy) || 1, ux = d.vx / sp, uy = d.vy / sp;
-    const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, r * 1.3);
-    g.addColorStop(0, rgbaOf(M.glow, 0.6)); g.addColorStop(1, rgbaOf(M.glow, 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, r * 1.3, 0, 6.283); ctx.fill();
-    for (const [w, a, L] of [[r * 0.5, 0.2, 2.4], [r * 0.2, 0.45, 1.5]]) {      // 残影：往来的方向拖两道渐短的银光
-      ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(M.glow, a);
-      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - ux * r * L, d.y - uy * r * L); ctx.stroke();
+  /* 光束（在光点底下：光点盖住光束的根） */
+  if (what === 'beam' && S && S.ph === 'fire' && g.end) {
+    const O = g.orbs[S.k], E = g.end, f = S.pt / B.T.fire, M = F.beam;
+    const env = f < M.rise ? f / M.rise : f > 1 - M.tail ? (1 - f) / M.tail : 1;
+    const w = M.W * s * env * (1 + 0.08 * Math.sin(b.t * 70));
+    for (const [k, c, a] of M.layers) {
+      ctx.lineWidth = w * k; ctx.strokeStyle = rgbaOf(c, a);
+      ctx.beginPath(); ctx.moveTo(O[0], O[1]); ctx.lineTo(E[0], E[1]); ctx.stroke();
     }
-    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(Math.atan2(uy, ux) + Math.sin(d.t * M.spin + d.j * 6) * 0.35);
-    /* 两圆交点（d = off）：外圆上 cos θ = −d / 2r，内圆（圆心 (−d, 0)）上 cos φ = d / 2r。外弧 −θ → θ 过正前方，内弧 φ → −φ 倒着走回来 */
-    const off = r * M.thick, th = Math.acos(-off / (2 * r)), ph = Math.acos(off / (2 * r));
-    ctx.beginPath();
-    ctx.arc(0, 0, r, -th, th);
-    ctx.arc(-off, 0, r, ph, -ph, true);
-    ctx.closePath();
-    ctx.fillStyle = rgbaOf(M.fill, 1); ctx.fill();
-    ctx.lineWidth = Math.max(1.5, r * 0.05); ctx.strokeStyle = rgbaOf(M.edge, 0.7); ctx.stroke();
-    ctx.restore();
+    /* 光束里往下冲的碎光 */
+    const dx = E[0] - O[0], dy = E[1] - O[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+    for (let i = 0; i < M.sparks; i++) {
+      const u = (b.t * 2.6 + i / M.sparks) % 1, o = Math.sin(i * 7.3 + b.t * 9) * w * 0.9, r = (3 + (i % 3) * 1.5) * s;
+      ctx.fillStyle = rgbaOf(F.star.core, 0.9 * env);
+      ctx.beginPath(); ctx.arc(O[0] + dx * u + nx * o, O[1] + dy * u + ny * o, r, 0, 6.283); ctx.fill();
+    }
+    /* 落点一团白光 */
+    const R = w * 2.4, rg = ctx.createRadialGradient(E[0], E[1], 0, E[0], E[1], R);
+    rg.addColorStop(0, rgbaOf(F.star.core, 0.95 * env)); rg.addColorStop(0.4, rgbaOf(F.star.rgb, 0.6 * env)); rg.addColorStop(1, rgbaOf(F.star.rgb, 0));
+    ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(E[0], E[1], R, 0, 6.283); ctx.fill();
   }
+  /* 光点：依次亮起；轮到的那个蓄力时胀大、一圈光环往里收、四周的光往里吸，轰的时候最亮 */
+  const St = F.star;
+  if (what === 'orbs') g.orbs.forEach(([x, y], i) => {
+    const vis = Math.max(0, Math.min(1, (b.t - B.appear[0] - i * B.appear[1]) / 0.2)) * out;
+    if (vis <= 0) return;
+    let c = 0;
+    if (S && S.k === i) c = S.ph === 'charge' ? S.pt / B.T.charge : S.ph === 'fire' ? 1 : Math.max(0, 1 - S.pt / B.T.gap);
+    const R = St.R * s * (1 + St.grow * c) * (1 + 0.06 * Math.sin(b.t * 5 + i * 2));
+    const gl = ctx.createRadialGradient(x, y, 0, x, y, R * 2.8);
+    gl.addColorStop(0, rgbaOf(St.core, 0.95 * vis)); gl.addColorStop(0.3, rgbaOf(St.rgb, 0.55 * vis)); gl.addColorStop(1, rgbaOf(St.rgb, 0));
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(x, y, R * 2.8, 0, 6.283); ctx.fill();
+    /* 十字芒：慢慢转，蓄力时拉长 */
+    const fl = R * St.flare * (1 + c), a0 = b.t * 0.6 + i;
+    ctx.lineWidth = 2.2 * s; ctx.strokeStyle = rgbaOf(St.core, 0.85 * vis);
+    for (let k = 0; k < 2; k++) {
+      const a = a0 + k * Math.PI / 2, cx = Math.cos(a) * fl, cy = Math.sin(a) * fl;
+      ctx.beginPath(); ctx.moveTo(x - cx, y - cy); ctx.lineTo(x + cx, y + cy); ctx.stroke();
+    }
+    ctx.lineWidth = 2 * s; ctx.strokeStyle = rgbaOf(St.edge, 0.55 * vis);
+    ctx.beginPath(); ctx.arc(x, y, R * 0.62, 0, 6.283); ctx.stroke();
+    ctx.fillStyle = rgbaOf(St.core, vis); ctx.beginPath(); ctx.arc(x, y, R * 0.55, 0, 6.283); ctx.fill();
+    if (S && S.k === i && S.ph === 'charge') {
+      ctx.lineWidth = 3 * s; ctx.strokeStyle = rgbaOf(St.rgb, 0.8 * c * vis);
+      ctx.beginPath(); ctx.arc(x, y, R * (3.2 - 2.2 * c), 0, 6.283); ctx.stroke();
+    }
+    if (S) for (const m of S.motes) {
+      if (m.k !== i) continue;
+      const u = m.t / m.life, d = B.mote.R * s * (1 - u);
+      ctx.fillStyle = rgbaOf(St.core, (0.4 + 0.6 * u) * vis);
+      ctx.beginPath(); ctx.arc(x + Math.cos(m.a) * d, y + Math.sin(m.a) * d, (2 + 2 * u) * s, 0, 6.283); ctx.fill();
+    }
+  });
   ctx.restore();
 }
 const CHANGE = {
@@ -1072,13 +1148,18 @@ const CHANGE = {
   whole: { pivot: [370, 409], k: 0.12 },
   spr: { src: 'assets/world/change%n_%k.webp', body: { src: 'up', pivot: [370, 409], k: 1 },
          foot: [280, 900], muzzle: [581, 355], head: [397, 88], chest: [451, 310], halo: [430, 175],   // v14/change/make.py 打印；foot 是裙摆最低点
-         /* rest −0.9：同白娘子（她也悬在左上、掌心朝右下对着男生）；立绘里手腕 → 月牙朝右上（0.74），掌心不是枪管，按典型俯角取 */
+         /* rest −0.9：同白娘子（她也悬在左上、朝右下对着男生）。光束不从掌心出，但身子照样按"掌心 → 落点"轻轻倾（whole.k） */
          rest: -0.9 },
   skins: [1],
   aura: (ctx, b, s, at, probe) => drawGodAura(CHANGE_FX, CHANGE.spr, ctx, b, s, at, probe),
-  /* 光刃：直线（G 0）、每秒 30 颗、每 3 颗画一弯（每秒 10 弯），同法海的咒语 */
-  fluid: { V: 860, G: 0, drag: 0, rate: 30, spread: 0.12, vJit: 0.05, life: 1.3, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
-           draw: (ctx, ps) => { drawFog(CHANGE_FX.mist, CHANGE, ctx, ps); drawCrescents(ctx, ps); } },
+  /* 光束是直线：瞄准按直线反解（G 0，V 用不上）；不喷东西 */
+  fluid: { V: 1, G: 0 },
+  /* orbs：三个光点在贴图上的位置（头顶一道弧：左后、正上、右前；弧心比发髻偏右一点，往男生那边）；appear：第一个几秒亮、之后每隔几秒亮一个（刹停前后依次亮起）；
+     T：蓄力 / 轰 / 换下一个的间隔（秒），三个光点一轮 2.25 秒；drip：轰着的时候每几秒迸一次碎光（onSplash）；
+     mote：蓄力时往光点里吸的光粒（每秒几颗、飞几秒、从多远吸进来） */
+  beam: { orbs: [[290, 110], [470, 50], [650, 110]], appear: [0.55, 0.18], T: { charge: 0.4, fire: 0.3, gap: 0.05 }, drip: 0.06,
+          mote: { rate: 45, life: 0.35, R: 70 },
+          draw: (ctx, b, g, T, what) => drawMoonBeams(ctx, b, g, T, what) },
 };
 const Change = Crew(CHANGE);
 

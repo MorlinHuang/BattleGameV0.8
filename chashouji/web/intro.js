@@ -45,8 +45,9 @@ const IntroVideo = (() => {
        底下月夜云海从左涌进来，肩上的玉兔化作流光跳进云里。box 同白娘子按尾帧反推（G4STAND.change [240, 908, 0.88]，
        尾帧对齐色差 7.3）；近景时她重心在视频宽 54.5%，open 往左 58 像素让她居中，4.4~5.6 秒她飘回左上时移回 box。
        视频由 vframes.py 原片 -s change1_up.webp --fx cloud 出（云海按"不像夜空"认，整条保留；法术潮进画面的帧盖掉再抠一次人物）。 */
-    change: { src: 'assets/video/change_intro_alpha.webm', box: [7.6, 133.5, 973.4, 1297.8], vw: 834, end: { s: 0.754, x: -12, y: -15 }, tide: 953,
-              open: [-50.5, 133.5], move: [4.4, 5.6] },
+    /* 2026-09-29 嫦娥站位下移 70（G4STAND.change 908 → 978，给头顶的月光束光点让出拉力条下的位置）：box / open 的 y 跟着 +70，尾帧照样对齐 */
+    change: { src: 'assets/video/change_intro_alpha.webm', box: [7.6, 203.5, 973.4, 1297.8], vw: 834, end: { s: 0.754, x: -12, y: -15 }, tide: 953,
+              open: [-50.5, 203.5], move: [4.4, 5.6] },
   };
   const POP = 0.35, FADE = 0.45;         // 浮现几秒、结尾淡掉几秒
   /* VP9 透明只有 Chromium 内核认。按 UA 判（Safari 的 canPlayType 也说能放 webm，但透明通道丢掉，变黑底） */

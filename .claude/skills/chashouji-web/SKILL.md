@@ -417,7 +417,9 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 
 ## 法术潮（sea.js，2026-09-28 起）
 - `Tide(C)`：三层（或更多）横向无缝长条，各层反向平移 + 按列起伏 + 上沿甩飞沫（`spray.shape` 可选聊天气泡 'chat' / 碎纸条 'paper'）+ 小兵骑在第 1、2 层。
-- 六片：`Sea`（海）/ `Scroll`（经卷，程序画）/ `TruthTide` / `DemonTide` / `MoonTide` / `SunTide`（v14/tides/make.py：一张生图出三层，中层水平翻；小兵 2×2 一张按连通块切）。
+- 六片：`Sea`（海）/ `Scroll`（经卷，程序画）/ `TruthTide` / `DemonTide` / `SunTide`（v14/tides/make.py：一张生图出三层，中层水平翻；小兵 2×2 一张按连通块切）/ `MoonSky`（嫦娥，不是层层浪：夜空 + 斜着流的银河贴图 + 升起的明月 + 现画的薄纱 + 漂着翻的玉兔，v14/moonsky/make.py；接口跟 Tide 一样）。
+- 两头羽化抽成 `SpanBuf()`（Tide 和 MoonSky 共用）：begin 给离屏画布，end 抠交界再贴回。
+- 嫦娥不喷东西：`cfg.beam`（crew.js beamStep / beamGeo）—— 头顶三个光点轮番「蓄 0.4 → 轰 0.3 → 隔 0.05」，每发开轰时 onHit、轰着每 0.06 秒 onSplash；光束画在她身后、光点画在身前（items 里拆两项）。连拍看光束用 `tools/burst.js ... fire`（等到正在轰才拍）。
   三层浪上沿中位数对齐海（1246 / 1311 / 1366）。
 - main.js `TIDE_OF`（人 → 潮）、`tideSpan()`：左边的从左推进、右边的从右，进度 a/b 取每边最大那片，a+b>1 顶在 `W·a/(a+b)`；前沿甩飞沫；交界 `Clash` 迸两边各自的飞沫（`Tide.dotImg`）。
 - 抠像共用 `v14/tidekit.py`（load 按 alpha 反解幕布色 / solid 补洞 / seam 动态规划找缝）。
