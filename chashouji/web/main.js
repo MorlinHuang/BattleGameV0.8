@@ -275,7 +275,7 @@ function drift(dt) {
 function finish(who) { S.phase = 'over'; S.winner = who; S.vel = 0; S.overT = 0; IntroVideo.stop(); }
 
 /* 送一件礼物。数值走火力，表现走弹幕 —— 两件事同一个入口，但不是同一层。 */
-function giveGift(side, key) {
+function giveGift(side, key, pick) {
   const it = SHOP[key]; if (!it) return;
   const deb = side > 0 ? S.debKA : S.debKB;
   const loser = S.pos > 0 ? -1 : +1;                // 谁正落后（看位置，不看此刻的姿态）
@@ -295,7 +295,7 @@ function giveGift(side, key) {
     const g = GIFT[ITEM_OF[side > 0 ? 'L' : 'R'][it.tier]];
     if (g.style === 'crew') {
       /* 新来的人有出场视频（intro.js，目前只有真相女神）：先放视频、她候场，放完从视频里走出来；续时间不放 */
-      const [m, b] = summonCrew(g.crew);
+      const [m, b] = summonCrew(g.crew, undefined, pick);
       if (b && INTRO_OF.has(m)) IntroVideo.begin(INTRO_OF.get(m), m, b);
     }
     else if (g.style === 'rain') RAIN[g.rain].summon();
@@ -1357,9 +1357,15 @@ const CREW = { buddy: Buddy, bestie: Bestie, g4L: G4L, g4R: G4R };
 const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
 /* 召唤：组（档 4）按 URL ?g4L= / ?g4R= 强制召某一个人（诊断：胶片一个一个单独拍）；单个 Crew 可指定形象 sk（?skin=） */
 /* 返回 [召到的那一份 Crew, 新来的人 b]（续时间 / 叫回时 b 为 undefined） */
-function summonCrew(name, sk) {
+/* pick（调试台「看特效」下拉）：指定召组里第几个；场上是组里别人的话先把那人（连同他正放的出场视频）清掉，
+   不然 CrewGroup 只会给在场那位续时间，选了嫦娥出来的还是白娘子。 */
+function summonCrew(name, sk, pick) {
   const c = CREW[name];
   if (!c.members) return [c, c.summon(sk)];
+  if (pick != null) {
+    for (const m of c.members) if (m !== c.members[pick] && m.active()) { if (IntroVideo.owner() === m) IntroVideo.stop(); m.reset(); }
+    return c.summon(pick);
+  }
   const q = new URLSearchParams(location.search).get(name);
   return c.summon(q == null || q === '' ? undefined : +q);
 }
@@ -3017,6 +3023,35 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     b.onclick = () => {
       if (S.phase === 'idle') startMatch();
       giveGift(+b.dataset.side, b.dataset.shop);
+    };
+  }
+  /* 「看特效」下拉：档 4 一边一组人轮换，想看某一个得一直点到轮上 —— 2026-09-29 用户："现在特效比较多了，我想看哪个
+     要一个个轮有点麻烦，帮我加个下拉窗可以选具体哪种特效来看"。列两边档 1~4 的每一样（档 4 按组里每个人列），
+     选中立刻送一件（跟点按钮同一条路 giveGift，数值照常加），然后回到"选特效"，同一个可以再选一遍。
+     选档 4 的某人时场上是组里别人：先清掉那人（summonCrew pick）。选项由 ITEM_OF / GIFT / STARS 现算，加人自动出现。 */
+  {
+    const sel = document.getElementById('fxpick');
+    const shopOf = (tier) => Object.keys(SHOP).find(k => SHOP[k].tier === tier);
+    const nameOf = (crew) => STARS.find(s => s.crew === crew).name;
+    for (const [side, label] of [[+1, '查岗党'], [-1, '灭迹党']]) {
+      const grp = document.createElement('optgroup'); grp.label = label;
+      ITEM_OF[side > 0 ? 'L' : 'R'].forEach((key, tier) => {
+        if (!key) return;
+        const g = GIFT[key], group = g.style === 'crew' && CREW[g.crew].members;
+        for (const [i, name] of group ? group.map((c, i) => [i, nameOf(c)]) : [[null, g.name]]) {
+          const o = document.createElement('option');
+          o.value = [side, shopOf(tier), i ?? ''].join(':'); o.textContent = `${name} ${'⓪①②③④'[tier]}`;
+          grp.appendChild(o);
+        }
+      });
+      sel.appendChild(grp);
+    }
+    sel.onchange = () => {
+      if (!sel.value) return;
+      const [side, shop, pick] = sel.value.split(':');
+      if (S.phase === 'idle') startMatch();
+      giveGift(+side, shop, pick === '' ? undefined : +pick);
+      sel.value = '';
     };
   }
   /* ?autogift=drop:1:1.5 —— 页面起来 1.5 秒后替 side=1（查岗党）送一件 drop，跟点按钮走同一条路。

@@ -146,5 +146,6 @@ const IntroVideo = (() => {
   }
 
   const playing = () => !!cur && !cur.done;
-  return { init, begin, stop, playing, CLIPS };
+  const owner = () => cur && cur.crew;         // 正在放谁的（调试台换人时要连视频一起收掉）
+  return { init, begin, stop, playing, owner, CLIPS };
 })();

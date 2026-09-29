@@ -52,7 +52,8 @@
   </div>
   <!-- 按钮文字由 main.js 按 ITEM_OF + GIFT.name 覆写成实际飞出来的物品名（左边
        口红/榴莲鞋雨/闺蜜/真相女神，右边香蕉/臭袜子足球/哥们/灭迹恶魔；档 4 两边各是三人一组、
-       同时只一个在场，场上没人时按顺序轮到下一个：左 白娘子/真相女神/嫦娥，右 法海/灭迹恶魔/后羿）。这里写的只是没跑 JS 时
+       同时只一个在场，场上没人时按顺序轮到下一个：左 白娘子/真相女神/嫦娥，右 法海/灭迹恶魔/后羿/绿茶妹妹；
+       想看指定哪个用最下面一行的「看特效」下拉）。这里写的只是没跑 JS 时
        的回退，data-shop 才是真的入口 —— 它指的是平台礼物，数值从那边来。 -->
   <div class="row">
     <span class="side g">查岗党</span>
@@ -74,6 +75,7 @@
     <button id="start">开始对局</button>
     <label>直击力度<select id="pw"><option value="1">点赞级</option><option value="2" selected>普通礼物</option><option value="3">大礼物</option></select></label>
     <label><input id="auto" type="checkbox">自动演示</label>
+    <select id="fxpick" title="选一个直接放（档 4 可指定组里哪个人）"><option value="">看特效…</option></select>
   </div>
   <div class="row" id="devrow"><span id="stat"></span><span id="msg"></span></div>
 </div>
