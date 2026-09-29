@@ -654,7 +654,9 @@ function drawAura(ctx, b, s, at, probe) {
   ctx.restore();
 }
 /* F：配色尺寸表（TRUTH_FX / DEMON_FX），C：角色配置（寿命在 C.fluid / C.exhaust）。真相女神、灭迹恶魔共用这一套画法，只换颜色。 */
-function drawSpray(F, C, ctx, ps, b) {
+/* 雾锥：每颗粒子一团雾（出口 r0 → 飞完 r1，托底一圈深色 + 雾身），刚出口那一小段叠亮芯。
+   真相女神、灭迹恶魔的喷雾就是它；白娘子的水柱、法海的咒语外面也套一层（BAISU_FX.mist / FAHAI_FX.mist，用户："水流和咒语太细太小，参考真相女神的喷雾"） */
+function drawFog(F, C, ctx, ps) {
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
   const us = (d) => Math.min(1, d.t / (d.ex ? C.exhaust.life : C.fluid.life));   // 尾焰按自己的寿命走
   for (const [pad, col, a] of [[5, F.rim, F.a[0]], [0, F.body, F.a[1]]]) {
@@ -672,6 +674,11 @@ function drawSpray(F, C, ctx, ps, b) {
     ctx.fillStyle = rgba(F.core, (1 - u / 0.25) * 0.35);
     ctx.beginPath(); ctx.arc(d.x, d.y, F.r0 * 0.8 + 20 * u, 0, 6.283); ctx.fill();
   }
+}
+function drawSpray(F, C, ctx, ps, b) {
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
+  const us = (d) => Math.min(1, d.t / (d.ex ? C.exhaust.life : C.fluid.life));
+  drawFog(F, C, ctx, ps);
   /* 喷口焰：八角尖星 + 深绿描边，大小随后坐（b.kick）跳 */
   if (b && b.m) {
     const r = F.flare[0] + (F.flare[1] - F.flare[0]) * b.kick, [mx, my] = b.m;
@@ -836,6 +843,9 @@ const rgbaOf = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
      · 松开（b.m 没了）：掌心那头从最新那颗水滴起算 —— 尾巴离开掌心往前飞，贴图只截后面那一段。
    方向：掌心 → 瞄的落点（b.tg）。水滴走的是带重力的弧线，水柱画直线：打到脸上这段只有 0.3~0.4 秒，弧度看不出来。 */
 const JET_BODY = 0.88;                                         // 贴图的这一成长度对准落点（柱身到 0.84，再带一点碎水）
+/* 粗细再乘几倍：贴图里柱身从掌心 30 像素胀到末端 90；原样画时比真相女神的雾锥（直径 60 → 220）细一大圈，
+   用户："水流太细太小，参考真相女神的喷雾"。2.2 倍 ≈ 66 → 200，外面再套一层水雾（BAISU_FX.mist） */
+const JET_W = 2.2;
 function drawJet(ctx, ps, b, hitR) {
   const J = WaterArt.jet;
   if (!J.img || !ps.length) return;
@@ -852,7 +862,7 @@ function drawJet(ctx, ps, b, hitR) {
      柱身正好砸到脸上，水珠冲过去一点盖进水花里 */
   const L = (J.w - J.x0) * JET_BODY, ang = Math.atan2(T[1] - M[1], T[0] - M[0]);
   const k = (b && b.m ? reach : D) / L;                        // 长度方向的缩放：按住时整张缩到当前长度，松开后按全长截
-  const ws = Math.max(0.8, Math.min(1.05, D / L));             // 粗细：离得近细一点，不跟长度一起压扁
+  const ws = JET_W * Math.max(0.8, Math.min(1.05, D / L));     // 粗细：离得近细一点，不跟长度一起压扁
   const i = Math.floor(((b ? b.t : neu.t) / J.loop % 1) * J.n) % J.n;
   const [sx, sy, , sh] = atlasCell(J, J, i);
   const a = tail / k, e = (b && b.m ? J.w - J.x0 : reach / k);
@@ -865,6 +875,8 @@ const BAISU_FX = {
   glow: { R: 380, a: 0.34, rgb: [150, 215, 255], core: [236, 248, 255], breath: [1.6, 0.18] },   // 身后冷光：半径、不透明度、颜色、亮芯、呼吸 [角频率, 幅度]
   motes: { n: 12, R: [170, 330], r: [5, 10], spin: 0.5, edge: [24, 84, 180], fill: [200, 236, 255] },  // 绕身水珠：几颗、绕的半径范围、珠子半径、转速
   orb: { R: 70, rgb: [120, 200, 255] },   // 掌心水球外的光团半径（贴图像素 × s）、颜色；泼的时候（kick）跟着胀一下
+  /* 水柱外面一层水雾（drawFog）：大小同真相女神（30 → 110），深蓝托底 / 浅蓝雾身 / 近白亮芯；单团淡，靠叠 */
+  mist: { r0: 30, r1: 110, rim: [30, 90, 190], body: [160, 220, 255], core: [245, 252, 255], a: [0.15, 0.24], star: 0 },   // 粒子只有女神的 1/3（80 vs 220），单团浓一些
 };
 function drawBaisuAura(ctx, b, s, at, probe) {
   const G = BAISU_FX.glow, M = BAISU_FX.motes, [cx, cy] = at(BAISU.spr.chest);
@@ -914,8 +926,8 @@ const BAISU = {
   /* 在场共 15 秒（用户定）：飞下来 1.0 + 施法 13.5 + 飞走 0.5。续送再加 13.5（crew.js summon 续一段 T.spray）。 */
   T: { enter: 1.0, spray: 13.5, exit: 0.5, fire: 0.3 },
   /* life 0.7：打到脸上 ~0.4 秒，没打中的再飞一小段就散（1.2 时越过男生一路砸到地板上） */
-  fluid: { V: 1150, G: 700, drag: 0.3, rate: 80, spread: 0.05, vJit: 0.06, life: 0.7, miss: 130, radius: 75, snap: 14, hitEvery: 0.3, floor: false,
-           draw: (ctx, ps, b) => drawJet(ctx, ps, b, BAISU.fluid.radius) },
+  fluid: { V: 1150, G: 700, drag: 0.3, rate: 80, spread: 0.12, vJit: 0.06, life: 0.7, miss: 130, radius: 75, snap: 14, hitEvery: 0.3, floor: false,
+           draw: (ctx, ps, b) => { drawFog(BAISU_FX.mist, BAISU, ctx, ps); drawJet(ctx, ps, b, BAISU.fluid.radius); } },
 };
 const Baisu = Crew(BAISU);
 
@@ -1112,7 +1124,10 @@ const FAHAI_FX = {
   rays: { n: 14, R: [150, 420], w: 0.09, spin: 0.12, rgb: [255, 200, 60], a: 0.28 },   // 身后放射金光：几道、从多远到多远、每道张角、转速
   glow: { R: 360, a: 0.3, rgb: [255, 196, 70], core: [255, 244, 200] },               // 身后一团暖光
   orb: { R: 64, rgb: [255, 200, 60] },                                                 // 掌心金光团
-  mantra: { chars: '卍唵嘛呢叭咪吽', size: [24, 50], grow: 0.18, fill: [255, 220, 90], edge: [96, 40, 6], glow: [255, 190, 40] },   // 咒语金字：出手时字号 → 飞 grow 秒后的字号
+  /* 咒语金字：出手时字号 → 飞 grow 秒后的字号；every：每几颗粒子画一个字（其余只当金光雾）。
+     第一版 24 → 50、每秒 10 个字，一串小字 —— 用户："咒语太细太小，参考真相女神的喷雾"：字放到 40 → 90，外面套一层金光雾锥（mist） */
+  mantra: { chars: '卍唵嘛呢叭咪吽', size: [40, 90], grow: 0.22, every: 3, fill: [255, 220, 90], edge: [96, 40, 6], glow: [255, 190, 40] },
+  mist: { r0: 30, r1: 110, rim: [170, 90, 10], body: [255, 214, 100], core: [255, 250, 225], a: [0.2, 0.3], star: 0 },      // 粒子只有女神的 1/7（30 vs 220），单团浓一些
 };
 function drawFahaiAura(ctx, b, s, at, probe) {
   const F = FAHAI_FX, k = Math.min(1, b.t / 0.4), [cx, cy] = at(FAHAI.spr.chest);
@@ -1149,7 +1164,7 @@ function drawMantra(ctx, ps) {
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
   for (const d of ps) {
-    if (d.ex) continue;
+    if (d.ex || d.seq % M.every) continue;
     const e = Math.min(1, d.t / M.grow), sz = M.size[0] + (M.size[1] - M.size[0]) * e;
     const sp = Math.hypot(d.vx, d.vy) || 1, tx = -d.vx / sp, ty = -d.vy / sp;
     const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, sz * 1.1);
@@ -1190,7 +1205,8 @@ const FAHAI = {
   /* 在场共 15 秒（同白娘子）：飞下来 1.0 + 施法 13.5 + 飞走 0.5。续送再加 13.5。 */
   T: { enter: 1.0, spray: 13.5, exit: 0.5, fire: 0.3 },
   /* 咒语：直线（G 0）、不快（V 820，一个字看得清），每秒 10 个；radius 近距命中（同白娘子：从上往下打，越不过落点那一列） */
-  fluid: { V: 820, G: 0, drag: 0, rate: 10, spread: 0.05, vJit: 0.05, life: 1.3, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
-           draw: (ctx, ps) => drawMantra(ctx, ps) },
+  /* rate 30：每 3 颗画一个字（每秒还是 10 个字），另外两颗只当金光雾 —— 雾锥要密才连成一股（真相女神是 220） */
+  fluid: { V: 820, G: 0, drag: 0, rate: 30, spread: 0.12, vJit: 0.05, life: 1.3, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
+           draw: (ctx, ps) => { drawFog(FAHAI_FX.mist, FAHAI, ctx, ps); drawMantra(ctx, ps); } },
 };
 const Fahai = Crew(FAHAI);

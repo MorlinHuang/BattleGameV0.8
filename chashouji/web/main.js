@@ -1123,12 +1123,12 @@ const RECIPE = {
       for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
       for (let i = 0; i < Math.round(3 * s); i++) this.glyph(x, y, 26 + 6 * s, 180, 380);
     },
-    drip(x, y, side) {
+    drip(x, y, side) {                 // 每颗打中的粒子一次；咒语每秒 30 颗（crew.js FAHAI.fluid.rate），各比例按 10 颗时的三分之一
       const k = Math.random();
-      if (k < 0.55) this.glyph(x, y, 24 + Math.random() * 8, 120, 260);
-      else if (k < 0.8) { const a = Math.random() * 6.283, sp = 120 + Math.random() * 180;
+      if (k < 0.18) this.glyph(x, y, 30 + Math.random() * 10, 120, 260);
+      else if (k < 0.27) { const a = Math.random() * 6.283, sp = 120 + Math.random() * 180;
         Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 300, drag: 0.95, life: 0.3, rgb: [255, 206, 70], lw: 2.5 }); }
-      else if (k < 0.84) this.tag(x, y, side);
+      else if (k < 0.28) this.tag(x, y, side);
     },
     arrive(x, y, s) {                   // (x, y) = 腰；飞到位"定"住：一圈金色佛光往外冲 + 几个金字四散 + 小震屏
       Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 220 * s, life: 0.24, rgb: [255, 226, 140], a: 0.75 });
