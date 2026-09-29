@@ -48,6 +48,12 @@ const IntroVideo = (() => {
     /* 2026-09-29 嫦娥站位下移 70（G4STAND.change 908 → 978，给头顶的月光束光点让出拉力条下的位置）：box / open 的 y 跟着 +70，尾帧照样对齐 */
     change: { src: 'assets/video/change_intro_alpha.webm', box: [7.6, 203.5, 973.4, 1297.8], vw: 834, end: { s: 0.754, x: -12, y: -15 }, tide: 953,
               open: [-50.5, 203.5], move: [4.4, 5.6] },
+    /* 绿茶妹妹（2026-09-29）：男女主抢的那部手机亮了，兔耳先探出来、她从屏幕里钻出来 → 贴到镜头前撒娇、瞟姐姐装怕、躲手机后偷笑眨眼
+       → 往后一蹦退到右边定成立绘姿势；底下奶盖泡泡海从右涌进来。制作包 video/sister。
+       box 按尾帧反推（G4STAND.sister [848, 1136, 1.0]，尾帧对齐色差 13.2）。不加 open：开场那部手机在视频宽 45.8%、高 58.8%，
+       按 box 落在画布 (451, 898) —— 正压在游戏里那部手机 (454, 898) 上；近景她重心在 51%（画布 501，只偏中线 21），挪了反而把手机挪开。
+       视频由 vframes.py 原片 -s sister1_up.webp --fx tea 出（浪按"不像夜色"认、只要从右边缘连过来的那片）。 */
+    sister: { src: 'assets/video/sister_intro_alpha.webm', box: [5.4, 134.5, 973.2, 1297.6], vw: 834, end: { s: 0.857, x: 483, y: 15 }, tide: 980 },
   };
   const POP = 0.35, FADE = 0.45;         // 浮现几秒、结尾淡掉几秒
   /* VP9 透明只有 Chromium 内核认。按 UA 判（Safari 的 canPlayType 也说能放 webm，但透明通道丢掉，变黑底） */

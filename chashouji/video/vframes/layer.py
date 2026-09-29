@@ -179,7 +179,12 @@ CLOUD = {
     'spike': 8,                     # 浪身轮廓开运算：比 2·spike 列窄的竖刺削掉
     'feather': 24,                  # 浪身左右两侧横向羽化多少列
     'soft': 3, 'bottom': 0.02,
+    'side': -1,                     # 从哪边涌进来（−1 左 / +1 右）：只要从这一边的边缘连过来的那一片
 }
+# 奶盖泡泡海（2026-09-29 绿茶妹妹）：同云海的认法 —— 背景是很匀的暗粉紫夜色（饱和度 ~0.6、亮度 0.16~0.25），
+# 奶白浅粉的泡沫浪亮（~0.95）、饱和度低（~0.15），"不像夜色"的就是浪；白莲花、奶茶杯、小白兔、爱心骑在浪上，亮，按 bright 往上长。
+# 浪从右边涌进来。
+TEA = {**CLOUD, 'sky_sat': 0.45, 'sky_v': (0.0, 0.34), 'side': +1}
 
 
 def _vsmooth_edge(a, r):
@@ -188,9 +193,8 @@ def _vsmooth_edge(a, r):
     return (p[2 * r + 1:] - p[:-2 * r - 1]) / (2 * r + 1)
 
 
-def cloud_mask(c, m):
-    """RGB（0~1）+ 人物遮罩 → 云海的遮罩（0~1）"""
-    C = CLOUD
+def cloud_mask(c, m, C=CLOUD):
+    """RGB（0~1）+ 人物遮罩 → 云海（C = TEA：奶盖泡泡海）的遮罩（0~1）"""
     h, w = m.shape
     r, g, b = c[..., 0], c[..., 1], c[..., 2]
     mx = c.max(2)
@@ -208,11 +212,11 @@ def cloud_mask(c, m):
     k = C['col']
     tp = np.pad(top, k, mode='edge')
     top = np.median(np.stack([tp[i:i + w] for i in range(2 * k + 1)]), 0)
-    # 从左边涌进来：只要从左边缘连过来的那一片（右下角贴着她衣袖的蓝光不算）
+    # 从哪边涌进来就只要从那边边缘连过来的那一片（嫦娥：右下角贴着她衣袖的蓝光不算）
     has = top < h
-    if not has[0]:
+    if not has[0 if C['side'] < 0 else -1]:
         return np.zeros((h, w), np.float32)
-    top[np.cumprod(has) == 0] = h
+    top[(np.cumprod(has) if C['side'] < 0 else np.cumprod(has[::-1])[::-1]) == 0] = h
     yy = np.arange(h)[:, None]
     body_top = top
     k = C['spike']
@@ -239,7 +243,7 @@ def cloud_mask(c, m):
 
 
 # 底部法术潮：名字 → (遮罩函数, 参数)。vframes.py FX_NAMES 是给人看的名字
-FX = {'sea': (sea_mask, SEA), 'cloud': (cloud_mask, CLOUD)}
+FX = {'sea': (sea_mask, SEA), 'cloud': (cloud_mask, CLOUD), 'tea': (lambda c, m: cloud_mask(c, m, TEA), TEA)}
 
 
 def fx_cover(job):

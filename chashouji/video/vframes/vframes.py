@@ -57,7 +57,7 @@ KEYS = {
 }
 KEY_NAMES = {'green': '绿幕', 'magenta': '品红幕', 'blue': '蓝幕', 'ai': 'AI 抠人物（场景背景）', None: '不抠像'}
 KEY_CHOICES = ('auto', 'none', 'ai', *KEYS)
-FX_NAMES = {'sea': '海浪 + 虾兵蟹将（白娘子）', 'cloud': '月夜云海 + 玉兔金蟾（嫦娥）'}   # 底部法术潮（layer.py FX）
+FX_NAMES = {'sea': '海浪 + 虾兵蟹将（白娘子）', 'cloud': '月夜云海 + 玉兔金蟾（嫦娥）', 'tea': '奶盖泡泡海 + 莲花奶茶兔（绿茶妹妹）'}   # 底部法术潮（layer.py FX）
 
 
 class VFError(Exception):
@@ -635,7 +635,7 @@ def main():
     ap.add_argument('-p', '--preset', default='均衡', choices=list(PRESETS))
     ap.add_argument('-k', '--key', default='auto', choices=list(KEY_CHOICES),
                     help='抠像：auto 自动判断（默认；纯色幕布按颜色抠，场景背景用 AI） / none 不抠 / ai / green / magenta / blue')
-    ap.add_argument('--fx', choices=list(FX_NAMES), help='视频底部带的法术潮（整条保留）：sea = 白娘子的海 + 虾兵蟹将，cloud = 嫦娥的月夜云海 + 玉兔金蟾')
+    ap.add_argument('--fx', choices=list(FX_NAMES), help='视频底部带的法术潮（整条保留）：sea = 白娘子的海 + 虾兵蟹将，cloud = 嫦娥的月夜云海 + 玉兔金蟾，tea = 绿茶妹妹的奶盖泡泡海')
     ap.add_argument('-s', '--standee', help='立绘（透明底 PNG/WebP）：给了就量它在视频最后一帧里的位置')
     a = ap.parse_args()
     out = a.out or os.path.splitext(a.video)[0] + '_vframes'
