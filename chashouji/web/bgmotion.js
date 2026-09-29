@@ -9,7 +9,7 @@
  *      event 写真相框里的人眨眼浅笑：每 PHOTO_GAP 秒演一次，不参与让位（用户："档 4 在场时不影响写真"）。
  *
  * ② 程序光效（assets/world/v15/fx/，位置和贴图由 v14/bg/v15/lights.py 从底图量出来）：
- *      常驻：串灯 / 镜灯顺着灯串慢慢"呼吸"（光晕叠加，灯泡本身在底图里）、蜡烛火苗抖、机箱风扇慢慢换色；
+ *      常驻：串灯 / 镜灯顺着灯串慢慢"呼吸"（光晕叠加，灯泡本身在底图里）、蜡烛火苗抖、机箱风扇慢慢换色、显卡彩虹流光；
  *      联动：送礼时电竞房聊天屏冒一条新消息，旧的往上顶；
  *      偶发（EVENT_GAP 秒一件，同一时刻只一件）：闪电（三扇窗同时白闪两下、窗里各劈一道 + 冷光从窗口洒进屋，霓虹手柄跟着接触不良）、
  *            床上手机亮屏震两下、霓虹手柄自己接触不良一下。
@@ -44,7 +44,7 @@ const BgMotion = (() => {
       return { ...z, v, next: now + rnd(...PHOTO_GAP) };
     });
     if (f) {
-      const srcs = [f.fans.src, f.neon.src, f.phone.off, f.phone.body, f.chat.mask, ...Object.values(f.windows).map(w => w.src)];
+      const srcs = [f.fans.src, f.gpu.src, f.neon.src, f.phone.off, f.phone.body, f.chat.mask, ...Object.values(f.windows).map(w => w.src)];
       await Promise.all(srcs.map(s => image(dir + 'fx/' + s + q).then(im => { img[s] = im; })));
       fx = f; initFx(now);
     }
@@ -96,6 +96,7 @@ const BgMotion = (() => {
     const flash = ev && ev.kind === 'lightning' ? lightning(et) : 0;
     drawBulbs(ctx, x0, W, t, k);
     drawFans(ctx, x0, seen, t, k);
+    drawGpu(ctx, x0, seen, t, k);
     drawNeon(ctx, x0, seen, ev, et);
     drawChat(ctx, x0, seen, now, dt);
     drawPhone(ctx, x0, seen, ev && ev.kind === 'phone' ? et : -1);
@@ -162,6 +163,41 @@ const BgMotion = (() => {
       const r = 34, gr = ctx.createRadialGradient(x0 + cx, cy, 0, x0 + cx, cy, r), a = (0.3 + 0.15 * Math.sin(t * 2.2)) * k;
       gr.addColorStop(0, `hsla(${h},100%,60%,${a.toFixed(3)})`); gr.addColorStop(1, `hsla(${h},100%,60%,0)`);
       ctx.fillStyle = gr; ctx.fillRect(x0 + cx - r, cy - r, r * 2, r * 2);
+    }
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  }
+
+  /* 显卡彩虹流光（用户："和真实炫彩显卡效果类似"）：ARGB 显卡的彩虹波 —— 一整条彩虹沿灯条往一个方向流，
+     2.4 秒流过一圈。三层：显卡那团光换成流动的彩虹色相、灯条本身一道更亮的彩虹线、同色的光洒满机箱侧透玻璃里 */
+  const GPU_PERIOD = 2.4, GPU_SPAN = 40;      // 流一圈几秒、一整条彩虹在画面上铺多宽（像素）
+  function rainbow(c, xa, ya, xb, yb, t, a, l = 55) {
+    const g = c.createLinearGradient(xa, ya, xb, yb), ph = (t / GPU_PERIOD) % 1;
+    for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, `hsla(${((i / 6 - ph) * 360 * (Math.hypot(xb - xa, yb - ya) / GPU_SPAN) + 3600) % 360},100%,${l}%,${a})`);
+    return g;
+  }
+  function drawGpu(ctx, x0, seen, t, k) {
+    const p = fx.gpu, im = img[p.src];
+    if (!seen(p.x, im.width)) return;
+    const gx = x0 + p.x, [[ax, ay], [bx, by]] = p.bar;
+    // ① 那团光：色相换成沿灯条方向流动的彩虹（'hue' 保留原图的明暗结构）
+    const c = buf(im.width, im.height);
+    c.drawImage(im, 0, 0);
+    c.globalCompositeOperation = 'hue'; c.fillStyle = rainbow(c, ax - p.x - 12, 0, bx - p.x + 12, 0, t, 1); c.fillRect(0, 0, im.width, im.height);
+    c.globalCompositeOperation = 'destination-in'; c.drawImage(im, 0, 0);
+    c.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = k; ctx.drawImage(off, gx, p.y);
+    // ② 机箱玻璃里洒一层同色的光（跟着灯条中段此刻的颜色走），③ 灯条本身：宽的光晕 + 细的亮芯
+    ctx.globalCompositeOperation = 'lighter';
+    const [q0, q1, q2, q3] = p.glass, mx = (ax + bx) / 2, my = (ay + by) / 2, hMid = ((0.5 - (t / GPU_PERIOD) % 1) * 360 * ((bx - ax) / GPU_SPAN) + 3600) % 360;
+    ctx.save(); ctx.beginPath(); ctx.rect(x0 + q0, q1, q2 - q0, q3 - q1); ctx.clip();
+    const gr = ctx.createRadialGradient(x0 + mx, my, 0, x0 + mx, my, 48);
+    gr.addColorStop(0, `hsla(${hMid},100%,60%,${(0.5 * k).toFixed(3)})`); gr.addColorStop(1, `hsla(${hMid},100%,60%,0)`);
+    ctx.fillStyle = gr; ctx.fillRect(x0 + q0, q1, q2 - q0, q3 - q1);
+    ctx.restore();
+    ctx.lineCap = 'round';
+    for (const [lw, a, l] of [[7, 0.35, 55], [2.4, 0.95, 68]]) {
+      ctx.strokeStyle = rainbow(ctx, x0 + ax, ay, x0 + bx, by, t, (a * k).toFixed(3), l); ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.moveTo(x0 + ax, ay); ctx.lineTo(x0 + bx, by); ctx.stroke();
     }
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   }
