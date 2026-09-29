@@ -10,7 +10,7 @@
  *
  * ② 程序光效（assets/world/v15/fx/，位置和贴图由 v14/bg/v15/lights.py 从底图量出来）：
  *      常驻：串灯 / 镜灯顺着灯串慢慢"呼吸"（光晕叠加，灯泡本身在底图里）、蜡烛火苗抖、机箱风扇慢慢换色、显卡彩虹流光；
- *      联动：送礼时电竞房聊天屏冒一条新消息，旧的往上顶；
+ *      电竞房三块屏一直在动：中屏聊天自己隔一两秒来一条（送礼再多冒一条）、左屏消息列表刷 + 游戏画面推镜、右屏城市夜景动态壁纸；
  *      偶发（EVENT_GAP 秒一件，同一时刻只一件）：闪电（三扇窗同时白闪两下、窗里各劈一道 + 冷光从窗口洒进屋，霓虹手柄跟着接触不良）、
  *            床上手机亮屏震两下、霓虹手柄自己接触不良一下。
  * 让位（全盘规划.md 第 5 节）：档 3/4 帮手在场时，常驻的退三成（CALM），偶发的不开演；写真、聊天屏照常。
@@ -44,7 +44,7 @@ const BgMotion = (() => {
       return { ...z, v, next: now + rnd(...PHOTO_GAP) };
     });
     if (f) {
-      const srcs = [f.fans.src, f.gpu.src, f.neon.src, f.phone.off, f.phone.body, f.chat.mask, ...Object.values(f.windows).map(w => w.src)];
+      const srcs = [f.fans.src, f.gpu.src, f.neon.src, f.phone.off, f.phone.body, f.chat.mask, f.screens.L.mask, f.screens.L.pix, f.screens.R.mask, f.screens.R.pix, ...Object.values(f.windows).map(w => w.src)];
       await Promise.all(srcs.map(s => image(dir + 'fx/' + s + q).then(im => { img[s] = im; })));
       fx = f; initFx(now);
     }
@@ -68,7 +68,7 @@ const BgMotion = (() => {
   const buf = (w, h) => { if (!off) off = document.createElement('canvas'); off.width = w; off.height = h; const c = off.getContext('2d'); c.clearRect(0, 0, w, h); return c; };
 
   let ev = null, evNext = 0;                // 偶发事件：{kind, t0}
-  const chat = { rows: [], scroll: 0, hi: 0, queue: 0, nextAt: 0 };
+  const chat = { rows: [], scroll: 0, hi: 0, queue: 0, nextAt: 0, autoAt: 0 };
   const CHAT_COLORS = ['rgb(110,205,245)', 'rgb(245,150,115)', 'rgb(245,120,170)', 'rgb(250,200,110)', 'rgb(160,140,255)'];
   const chatRow = () => ({ c: CHAT_COLORS[Math.floor(Math.random() * CHAT_COLORS.length)], n: rnd(12, 24), w: rnd(22, 52) });
   function initFx(now) {
@@ -77,7 +77,9 @@ const BgMotion = (() => {
       .map(c => ({ ...chatRow(), c }));     // 开局跟底图里那几条的头像颜色一样
   }
 
-  /* 送礼 → 聊天屏冒一条。点赞刷得快，排队、最快 0.45 秒一条，最多攒 3 条 */
+  /* 聊天屏自己一直有人说话（每 CHAT_AUTO 秒一条，用户："电脑画面要一直在动，不是只有礼物才动"）；
+     送礼再额外冒一条。点赞刷得快，排队、最快 0.45 秒一条，最多攒 3 条 */
+  const CHAT_AUTO = [1.4, 3.4];
   function chatPush() { chat.queue = Math.min(3, chat.queue + 1); }
 
   /* ---------- 画 ---------- */
@@ -99,6 +101,8 @@ const BgMotion = (() => {
     drawGpu(ctx, x0, seen, t, k);
     drawNeon(ctx, x0, seen, ev, et);
     drawChat(ctx, x0, seen, now, dt);
+    drawScreenL(ctx, x0, seen, now, dt, t);
+    drawScreenR(ctx, x0, seen, now, t);
     drawPhone(ctx, x0, seen, ev && ev.kind === 'phone' ? et : -1);
     if (flash > 0) drawLightning(ctx, x0, W, H, seen, flash);
   }
@@ -217,6 +221,7 @@ const BgMotion = (() => {
   const CHAT_DY = 14;
   function drawChat(ctx, x0, seen, now, dt) {
     const c = fx.chat, [bx0, by0, bx1, by1] = c.box, bw = bx1 - bx0, bh = by1 - by0;
+    if (now >= chat.autoAt) { chat.queue = Math.max(chat.queue, 1); chat.autoAt = now + rnd(...CHAT_AUTO); }
     if (chat.queue > 0 && now >= chat.nextAt) {
       chat.queue--; chat.nextAt = now + 0.45;
       chat.rows.push(chatRow()); if (chat.rows.length > c.rows.length + 1) chat.rows.shift();
@@ -237,6 +242,88 @@ const BgMotion = (() => {
       g.fillStyle = 'rgba(165,188,248,0.85)'; g.fillRect(ax + 8, y + 1, r.w, 2);
     }
     g.globalCompositeOperation = 'destination-in'; g.drawImage(img[c.mask], 0, 0); g.globalCompositeOperation = 'source-over';
+    ctx.drawImage(off, x0 + bx0, by0);
+  }
+
+  /* 左屏：左半是直播间那样一直往上刷的消息列表；右半是月下剑客的游戏画面，像在放过场动画 ——
+     镜头慢慢推拉平移（原画面放大 3~9% 在框里挪）、月光一明一暗、光点往上飘 */
+  const SL = { rows: [], scroll: 0, nextAt: 0, motes: [] };
+  const SL_DY = 10;
+  const slRow = () => ({ c: `hsl(${[350, 20, 300, 200, 45][Math.floor(Math.random() * 5)]},70%,85%)`, n: rnd(8, 16), w: rnd(14, 34) });
+  function drawScreenL(ctx, x0, seen, now, dt, t) {
+    const s = fx.screens.L, [bx0, by0, bx1, by1] = s.box, bw = bx1 - bx0, bh = by1 - by0, L = s.list;
+    if (!SL.rows.length) { SL.rows = L.rows.map(slRow); for (let i = 0; i < 14; i++) SL.motes.push({ u: Math.random(), v: Math.random(), sp: rnd(0.05, 0.12), ph: rnd(0, 6) }); }
+    if (now >= SL.nextAt) { SL.rows.push(slRow()); if (SL.rows.length > L.rows.length + 1) SL.rows.shift(); SL.scroll = 1; SL.nextAt = now + rnd(0.7, 2.0); }
+    SL.scroll = Math.max(0, SL.scroll - dt / 0.22);
+    if (!seen(bx0, bw)) return;
+    const g = buf(bw, bh), ox = -bx0, oy = -by0;
+    g.drawImage(img[s.pix], 0, 0);
+    /* 游戏画面：原图放大后在框里慢慢挪。以框的上沿为锚放大 —— 上沿（便签纸下面那条线）上面是不动的原图，
+       锚在上沿这条线就几乎不动，接缝看不出来（以中心放大时上沿错开 3px，一条硬边） */
+    const [ax0, ay0, ax1, ay1] = s.art, aw = ax1 - ax0, ah = ay1 - ay0;
+    const z = 1.03 + 0.03 * (0.5 - 0.5 * Math.cos(t * Math.PI * 2 / 16)), dx = 0.8 * Math.sin(t * Math.PI * 2 / 11);
+    const cx = ax0 + ox + aw / 2 + dx, aTop = ay0 + oy;
+    g.save(); g.beginPath(); g.rect(ax0 + ox, aTop, aw, ah); g.clip();
+    g.drawImage(img[s.pix], ax0 + ox, aTop, aw, ah, cx - aw * z / 2, aTop, aw * z, ah * z);
+    g.globalCompositeOperation = 'lighter';
+    for (const m of SL.motes) {                                   // 光点：往上飘、左右轻摆、飘到顶从底下再来
+      const v = (m.v - t * m.sp) % 1 + (m.v - t * m.sp < 0 ? 1 : 0), x = ax0 + ox + (m.u * aw + 3 * Math.sin(t * 1.7 + m.ph)), y = ay0 + oy + v * ah;
+      g.fillStyle = `rgba(200,225,255,${(0.55 * Math.sin(v * Math.PI)).toFixed(3)})`; g.fillRect(x, y, 1.4, 1.4);
+    }
+    g.restore();
+    g.globalCompositeOperation = 'lighter';                        // 月光一明一暗（不裁在推镜框里，免得在上沿切出一条边）
+    const [mx, my] = s.moon, mr = 30, ma = 0.16 + 0.14 * (0.5 + 0.5 * Math.sin(t * 1.3));
+    const gr = g.createRadialGradient(mx + ox, my + oy, 0, mx + ox, my + oy, mr);
+    gr.addColorStop(0, `rgba(170,200,255,${ma.toFixed(3)})`); gr.addColorStop(1, 'rgba(170,200,255,0)');
+    g.fillStyle = gr; g.fillRect(mx + ox - mr, my + oy - mr, mr * 2, mr * 2);
+    g.globalCompositeOperation = 'source-over';
+    // 消息列表：重铺面板底色，一行行往上顶
+    const lx = L.x + ox, top = L.rows[0] - 6 + oy, n = SL.rows.length, lastY = L.rows[L.rows.length - 1] + oy;
+    g.fillStyle = `rgb(${L.bg})`; g.fillRect(lx - 6, top, L.x1 - L.x + 6, lastY + 6 - top);
+    g.save(); g.beginPath(); g.rect(lx - 6, top, L.x1 - L.x + 6, lastY + 6 - top); g.clip();
+    const e = SL.scroll * SL.scroll * (3 - 2 * SL.scroll);
+    for (let i = 0; i < n; i++) {
+      const r = SL.rows[i], y = lastY - (n - 1 - i) * SL_DY + e * SL_DY;
+      g.fillStyle = r.c; g.fillRect(lx - 2.5, y - 2.5, 5, 5);
+      g.fillStyle = 'rgba(225,232,255,0.9)'; g.fillRect(lx + 6, y - 3, r.n, 1.6);
+      g.fillStyle = 'rgba(160,178,240,0.8)'; g.fillRect(lx + 6, y + 1, r.w, 1.4);
+    }
+    g.restore();
+    g.globalCompositeOperation = 'destination-in'; g.drawImage(img[s.mask], 0, 0); g.globalCompositeOperation = 'source-over';
+    ctx.drawImage(off, x0 + bx0, by0);
+  }
+
+  /* 右屏：城市夜景动态壁纸 —— 楼里的窗灯一盏盏随机灭了又亮、两道探照灯在楼后来回扫、青色霓虹一亮一暗、
+     天上几颗星闪、隔一阵一架飞机闪着红灯飞过去 */
+  const SR = { off: new Set(), nextAt: 0, stars: [], plane: 0 };
+  function drawScreenR(ctx, x0, seen, now, t) {
+    const s = fx.screens.R, [bx0, by0, bx1, by1] = s.box, bw = bx1 - bx0, bh = by1 - by0;
+    if (!SR.stars.length) for (let i = 0; i < 9; i++) SR.stars.push({ x: rnd(8, bw - 8), y: rnd(8, bh * 0.3), ph: rnd(0, 6), sp: rnd(1.5, 3.5) });
+    if (now >= SR.nextAt) {                                        // 翻一盏：灭着的多了就优先点亮
+      const w = Math.floor(Math.random() * s.wins.length);
+      if (SR.off.has(w)) SR.off.delete(w); else if (SR.off.size < s.wins.length * 0.3) SR.off.add(w);
+      SR.nextAt = now + rnd(0.15, 0.5);
+    }
+    if (!seen(bx0, bw)) return;
+    const g = buf(bw, bh), ox = -bx0, oy = -by0;
+    g.drawImage(img[s.pix], 0, 0);
+    g.globalCompositeOperation = 'lighter';
+    for (const [x, per, amp] of [[bw * 0.28, 7, 0.45], [bw * 0.78, 9.5, 0.4]]) {    // 探照灯：从画面底往上一道光锥，来回摆
+      const ang = -Math.PI / 2 + amp * Math.sin(t * Math.PI * 2 / per), len = bh * 1.1, half = 0.07;
+      const gx = x, gy = bh * 0.95, gr = g.createLinearGradient(gx, gy, gx + Math.cos(ang) * len, gy + Math.sin(ang) * len);
+      gr.addColorStop(0, 'rgba(150,170,255,0.32)'); gr.addColorStop(1, 'rgba(150,170,255,0)');
+      g.fillStyle = gr; g.beginPath(); g.moveTo(gx, gy);
+      g.lineTo(gx + Math.cos(ang - half) * len, gy + Math.sin(ang - half) * len); g.lineTo(gx + Math.cos(ang + half) * len, gy + Math.sin(ang + half) * len); g.fill();
+    }
+    for (const st of SR.stars) { g.fillStyle = `rgba(230,235,255,${(0.25 + 0.6 * (0.5 + 0.5 * Math.sin(t * st.sp + st.ph))).toFixed(3)})`; g.fillRect(st.x, st.y, 1.3, 1.3); }
+    const [cx, cy] = s.glow, ca = 0.25 + 0.4 * (0.5 + 0.5 * Math.sin(t * 2.4)), gr = g.createRadialGradient(cx + ox, cy + oy, 0, cx + ox, cy + oy, 16);
+    gr.addColorStop(0, `rgba(90,230,255,${ca.toFixed(3)})`); gr.addColorStop(1, 'rgba(90,230,255,0)');
+    g.fillStyle = gr; g.fillRect(cx + ox - 16, cy + oy - 16, 32, 32);
+    const pt = (t % 14) / 6;                                         // 飞机：14 秒一趟，6 秒飞过，红灯一秒闪两下
+    if (pt < 1 && Math.sin(t * 12.5) > 0.3) { g.fillStyle = 'rgba(255,90,90,0.95)'; g.fillRect(bw * (1.05 - pt * 1.1), bh * 0.12 + pt * 6, 1.6, 1.6); }
+    g.globalCompositeOperation = 'source-over';
+    for (const w of SR.off) { const p = s.wins[w]; g.fillStyle = `rgb(${p.off})`; g.fillRect(p.x + ox - 2, p.y + oy - 2, 4, 4); }
+    g.globalCompositeOperation = 'destination-in'; g.drawImage(img[s.mask], 0, 0); g.globalCompositeOperation = 'source-over';
     ctx.drawImage(off, x0 + bx0, by0);
   }
 

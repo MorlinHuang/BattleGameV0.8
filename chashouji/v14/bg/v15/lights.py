@@ -30,6 +30,10 @@ NEON = (3050, 352, 3192, 442)
 GPU = {'box': (3148, 566, 3182, 608), 'bar': [(3159.5, 586.5), (3175.5, 589.5)], 'glass': (3151, 540, 3178, 648)}   # 机箱侧透里的显卡：发光一团 + 一道灯条
 WINDOWS = {'girl': (655, 240, 880, 660), 'living': (2400, 255, 2565, 810), 'boy': (3340, 230, 3655, 600)}
 PHONE = (3448, 690, 3532, 722)
+# 电竞房另外两块屏：左屏（左半消息列表 + 右半月下剑客的游戏画面，右下被椅背挡住）、右屏（竖着的城市夜景壁纸）
+SCREEN_L = {'box': (2688, 486, 2864, 594), 'list': {'x': 2722, 'rows': [511, 521, 531, 541, 551, 561, 571, 581], 'bg': [50, 68, 155], 'x1': 2769},
+            'art': (2770, 511, 2858, 592), 'moon': (2808, 518)}   # 推镜区从便签纸下沿起，免得把便签推进屏幕里
+SCREEN_R = {'box': (3018, 474, 3132, 600), 'glow': (3084, 556)}
 CHAT = {'box': (2886, 503, 2992, 592), 'x': 2914, 'rows': [515, 529, 543, 557, 571, 585], 'bg': [50, 77, 198]}
 
 def detect(box, lmin, thmin, amax):
@@ -118,6 +122,31 @@ def build(out):
     m = nd.binary_fill_holes(nd.binary_opening(nd.binary_closing(m, iterations=3), iterations=1))   # 头像是粉的，补上
     save(np.dstack([np.full(m.shape + (3,), 255, np.float32), nd.gaussian_filter(m.astype(np.float32), 0.6) * 255]), f'{out}/chat_mask.png')
     fx['chat'] = {**CHAT, 'box': list(CHAT['box']), 'mask': 'chat_mask.png'}
+
+    # 左右两块屏：屏幕遮罩（蓝色屏幕像素，便签纸、椅背、台灯光不算）+ 画面本身（引擎拿它做推镜、闪灯）
+    def screen_mask(box, name, keep=None):
+        x0, y0, x1, y1 = box; R = W[y0:y1, x0:x1]
+        m = (R[..., 2] > 110) & (R[..., 2] > R[..., 0] + 45)
+        m = nd.binary_fill_holes(nd.binary_opening(nd.binary_closing(m, iterations=3), iterations=1))
+        if keep: m[keep[1] - y0:keep[3] - y0, keep[0] - x0:keep[2] - x0] = True   # 台灯光把列表下半截照成了暖色，按颜色会被扣掉，这块整块是屏
+        save(np.dstack([np.full(m.shape + (3,), 255, np.float32), nd.gaussian_filter(m.astype(np.float32), 0.6) * 255]), f'{out}/{name}')
+        save(R, f'{out}/{name.replace("mask", "pix")}')
+    screen_mask(SCREEN_L['box'], 'scrL_mask.png', (2714, 500, 2770, 590)); screen_mask(SCREEN_R['box'], 'scrR_mask.png')
+    # 右屏壁纸里楼的窗灯（暖色小亮点）：引擎让它们一盏盏随机灭、亮
+    x0, y0, x1, y1 = SCREEN_R['box']; R = W[y0:y1, x0:x1]
+    ls = nd.gaussian_filter(L[y0:y1, x0:x1], 0.6); th = ls - nd.grey_opening(ls, size=(7, 7))
+    warm = (R[..., 0] > R[..., 2] - 10) & (R[..., 0] > 140)
+    lab, n = nd.label((th > 18) & warm)
+    wins = []
+    for i in range(1, n + 1):
+        ys, xs = np.nonzero(lab == i)
+        if len(ys) > 30: continue
+        cx, cy = xs.mean(), ys.mean(); ring = R[max(0, int(cy) - 4):int(cy) + 5, max(0, int(cx) - 4):int(cx) + 5].reshape(-1, 3)
+        dark = ring[ring.sum(1).argsort()[:8]].mean(0)                  # 窗灯灭了是周围楼的颜色
+        wins.append({'x': round(float(cx + x0), 1), 'y': round(float(cy + y0), 1), 'off': [int(v) for v in dark]})
+    fx['screens'] = {'L': {**SCREEN_L, 'box': list(SCREEN_L['box']), 'art': list(SCREEN_L['art']), 'mask': 'scrL_mask.png', 'pix': 'scrL_pix.png'},
+                     'R': {**SCREEN_R, 'box': list(SCREEN_R['box']), 'mask': 'scrR_mask.png', 'pix': 'scrR_pix.png', 'wins': wins}}
+    print('右屏窗灯', len(wins))
 
     json.dump(fx, open(f'{out}/fx.json', 'w'), ensure_ascii=False, indent=1)
     for b in fx['bulbs']: print(b['name'], len(b['pts']))
