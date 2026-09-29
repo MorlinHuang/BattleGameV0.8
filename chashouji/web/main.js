@@ -1067,7 +1067,7 @@ const RECIPE = {
     },
   },
 
-  /* 后羿 → 女生（2026-09-29）：小太阳火球打在身上，炸一团白热火光 + 橙红冲击环 + 一把火星，
+  /* 后羿 → 女生（2026-09-29，第二版）：火箭钉在身上燃爆（每支 drip，每隔一支左右 burst：白热火光 + 橙红冲击环 + 一把火星），
      蹦「射日！」「烈日灼心」「金乌冲！」。 */
   houyi: {
     tint: [255, 214, 170],
@@ -1092,11 +1092,10 @@ const RECIPE = {
       for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
       this.embers(x, y, Math.round(8 * s), 200, 460);
     },
-    drip(x, y, side) {                 // 每颗打中的粒子一次；火球每秒 30 颗，比例同法海
-      const k = Math.random();
-      if (k < 0.1) Particles.spawn({ kind: 'dot', x, y, r: 10, r1: 44, life: 0.16, rgb: [255, 200, 90], a: 0.8 });
-      else if (k < 0.3) this.embers(x, y, 2, 120, 280);
-      else if (k < 0.31) this.tag(x, y, side);
+    drip(x, y, side) {                 // 每支箭打中一次（crew.js HOUYI.bow.cycle 0.28 秒一支）：箭钉进去燃一下 —— 一闪 + 一把火星，偶尔蹦字
+      Particles.spawn({ kind: 'dot', x, y, r: 12, r1: 54, life: 0.18, rgb: [255, 210, 110], a: 0.85 });
+      this.embers(x, y, 4, 140, 320);
+      if (Math.random() < 0.08) this.tag(x, y, side);
     },
     arrive(x, y, s) {                  // 飞到位"定"住：一圈日轮火光往外冲 + 一把火星 + 小震屏
       Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 230 * s, life: 0.24, rgb: [255, 220, 150], a: 0.75 });
@@ -1322,7 +1321,7 @@ const INTRO_OF = new Map([[Truth, 'truth'], [Baisu, 'baisu'], [Change, 'change']
 const RAIN = { durian: DurianRain, sockball: SockRain };
 /* 屏幕底部的法术潮（sea.js）：档 4 每个人一片，跟着自己那个人 —— 在场、还没开始飞走（候场放视频时不算）就推进来，
    飞走就退。续送多待，潮也多待。左边三片从左推进（side −1），右边三片从右（side +1）。 */
-const TIDE_OF = new Map([[Baisu, Sea], [Truth, TruthTide], [Change, MoonSky], [Fahai, Scroll], [Demon, DemonTide], [Houyi, SunTide]]);
+const TIDE_OF = new Map([[Baisu, Sea], [Truth, TruthTide], [Change, MoonSky], [Fahai, Scroll], [Demon, DemonTide], [Houyi, SunSky]]);
 const TIDES_L = [...TIDE_OF.values()].filter(t => t.side < 0), TIDES_R = [...TIDE_OF.values()].filter(t => t.side > 0);
 const casting = (c) => c.peek().some(b => !b.hold && b.t <= c.cfg.T.enter + b.spray);
 /* 两边各从自己那一边横着推进来（2026-09-28 用户："分别从左右进场，这样同时播放"）。每边同时只一个人在场，
@@ -2249,8 +2248,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     fahai:  [930, 975, 1.2],
     /* 灭迹恶魔：角尖 ≈ y 190，喷口 ≈ (473, 598)；右边出画 ~50 像素 */
     demon:  [740, 945, 1.4],
-    /* 后羿：最低点是右脚靴尖。弓梢 ≈ y 190，掌心小太阳 ≈ (420, 530)；披风右边出画 */
-    houyi:  [904, 893, 0.88],
+    /* 后羿（第二版持弓，v14/houyi2）：最低点是右脚靴尖；发尾顶 ≈ y 205，箭台（握弓的拳头）≈ (482, 689)，弓下梢 ≈ (666, 928)；披风右边出画一点。
+       缩放 0.96：实心面积（alpha > 128）对齐嫦娥（28.8 万 × 0.96² ≈ 26.6 万 vs 嫦娥 26.9 万）。 */
+    houyi:  [870, 841, 0.96],
   };
   const g4Perch = (rcp) => () => G4STAND[rcp];
 

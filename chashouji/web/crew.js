@@ -33,7 +33,8 @@ function Crew(cfg) {
   const REST = spr.rest || 0;                    // 贴图里喷口本来的指向（仰角，朝下为负）：真相女神第二版罐子本身就斜朝右下
   const PATH = cfg.path || {};                    // 悬停的人怎么来、怎么走（见 hoverPose）
   const WK = cfg.whole && cfg.whole.k != null ? cfg.whole.k : 1;
-  const BM = cfg.beam || null;                    // 光束（嫦娥）：不喷东西，头顶几个光点轮流蓄力、轰一束直光（beamStep）   // whole：整个人跟瞄准角转几成（白娘子 0.12：身子只轻轻倾，水流照样按完整角度出）
+  const BM = cfg.beam || null;                    // 光束（嫦娥）：不喷东西，头顶几个光点轮流蓄力、轰一束直光（beamStep）
+  const BW = cfg.bow || null;                     // 弓（后羿）：每 BW.cycle 秒放一箭（一颗粒子），弦、搭着的箭、拉弦的手臂跟着 b.bw 动（BW.pose）   // whole：整个人跟瞄准角转几成（白娘子 0.12：身子只轻轻倾，水流照样按完整角度出）
   let img = null, o = {};                       // img[形象]：{ arm, body, lo }（arm 可无）
   const bs = [], ps = [];                        // 在场的人、喷出去的东西（水滴 / 雾团）
 
@@ -275,12 +276,14 @@ function Crew(cfg) {
   function update(dt) {
     for (let i = ps.length - 1; i >= 0; i--) {
       const d = ps[i];
+      if (d.stuck != null) { if ((d.stuck += dt) > F.stick) ps.splice(i, 1); continue; }   // 钉在身上的箭：停 F.stick 秒
       if (F.drag) { const k = Math.exp(-F.drag * dt); d.vx *= k; d.vy *= k; }
       d.vy += F.G * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.t += dt;
       if (d.ex) { if (d.t > cfg.exhaust.life) ps.splice(i, 1); continue; }
       const b = d.b, h = hitTest(d, o.target(d.u));
       if (h) {
-        ps.splice(i, 1);
+        /* F.stick（后羿的箭）：打中了不消失，钉在命中点停一会儿（按飞来的方向画半截），再没掉 */
+        if (F.stick) { d.stuck = 0; d.x = h[0]; d.y = h[1]; } else ps.splice(i, 1);
         o.onSplash(h[0], h[1]);
         if (bs.includes(b) && b.hitCd <= 0) { o.onHit(h[0], h[1], b.first, b); b.first = false; b.hitCd = F.hitEvery; }
       } else if (d.y > o.ground()) { ps.splice(i, 1); if (F.floor) o.onSplash(d.x, o.ground()); }   // 落空的在地上
@@ -353,7 +356,7 @@ function Crew(cfg) {
       if (A) {                                   // 一段段按：每次按下后坐一震；喷的时候上身往前探
         b.kick *= Math.exp(-A.kick[2] * dt);
         b.lean += ((spraying ? 1 : 0) - b.lean) * (1 - Math.exp(-dt * 6));
-        if (spraying && !BM) {                   // 光束的一震跟着每一发（beamStep）
+        if (spraying && !BM && !BW) {            // 光束、弓的一震跟着每一发（beamStep / 放箭那一下）
           const cyc = A.pulse[0] + A.pulse[1];
           if (b.pt === 0 || Math.floor((b.pt + dt) / cyc) > Math.floor(b.pt / cyc)) b.kick = 1;
           b.pt += dt;
@@ -381,11 +384,18 @@ function Crew(cfg) {
         }
       }
       if (BM) { beamStep(b, dt, spraying, u); continue; }
+      /* 弓：b.bw 是离上一次放箭过了几秒。不射的时候（进场、离场）停在满弓（cycle），开射后每 cycle 秒放一箭：
+         攒一颗到 b.emit，下面照常出一颗（沿弓此刻的指向） */
+      if (BW) {
+        if (!spraying) { b.bw = BW.cycle; continue; }
+        if ((b.bw = (b.bw ?? BW.cycle) + dt) < BW.cycle) continue;
+        b.bw -= BW.cycle; b.emit = 1; if (A) b.kick = 1;
+      }
       if (!spraying) continue;
-      if (A && (b.pt % (A.pulse[0] + A.pulse[1])) > A.pulse[0]) { b.emit = 0; continue; }   // 松开那一下
+      if (!BW && A && (b.pt % (A.pulse[0] + A.pulse[1])) > A.pulse[0]) { b.emit = 0; continue; }   // 松开那一下
       /* 喷：从转过之后的喷口，沿喷口方向，速度 V（雾再加一点散角和快慢）。一帧攒够几个就出几个，
          每个按它**实际该出口的时刻**补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩。 */
-      b.emit += dt * F.rate;
+      if (!BW) b.emit += dt * F.rate;
       const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm || cfg.whole ? 1 : 0] + REST;   // 沿喷口此刻真的指向（含后坐）
       while (b.emit >= 1) {
         b.emit -= 1;
@@ -440,8 +450,14 @@ function Crew(cfg) {
     if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q), probe);
     ctx.save();
     spin(spr.body.pivot, bt);
-    if (I.arm) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
+    if (I.arm && !BW) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
     put(I.body);
+    /* 弓（后羿）：拉弦的前臂在身子之上，沿 spr.arm.axis 前后挪（BW.pose 的 hand，贴图像素）；弦和搭着的箭画在最上 */
+    if (I.arm && BW) {
+      const q = BW.pose(b, T, sprayEnd(b));
+      ctx.save(); ctx.translate(spr.arm.axis[0] * q.hand * s, spr.arm.axis[1] * q.hand * s); put(I.arm); ctx.restore();
+      BW.draw(ctx, b, s, (q) => at(p, q), q);
+    }
     ctx.restore();
     if (I.lo) put(I.lo);
     ctx.restore();
@@ -1163,48 +1179,132 @@ const CHANGE = {
 };
 const Change = Crew(CHANGE);
 
-/* ---- ⑨ 后羿（男生档 4，2026-09-29，跟嫦娥对立）----
-   用户选的：掌心打出小太阳火球（不拉弓），底下金红火焰云海、三足金乌在火上飞（sea.js SunTide）。
-   · 立绘 v14/houyi/make.py：红金上古战甲、红披风、背金色长弓，朝左飞，左掌心前悬一颗燃烧的小太阳；火橙外发光烘在贴图里。
-   · 规格照法海：从右上飞下来、在场 15 秒、身子轻轻倾、打女生全身、在男女主身后。
-   · 火球：白热的芯 → 金 → 橙红的一团，拖一截火尾（drawSuns）；外面套一层橙色火光雾锥（HOUYI_FX.mist）。打中迸火星、蹦字（RECIPE.houyi）。 */
+/* ---- ⑨ 后羿（男生档 4，2026-09-29，跟嫦娥对立：日 vs 月）----
+   · 立绘 v14/houyi2/make.py（第二版，持弓拉弦）：红金上古战甲、红披风，朝左下 45° 俯射 —— 左臂斜伸握金色长弓，右手拉到右脸颊。
+     立绘里**没有弦、没有箭**：弦和搭在弦上的箭引擎现画（drawBow），拉弦的右前臂单独一层（spr.arm），沿箭的方向前后挪（BW.pose 的 hand）。
+   · 攻击（2026-09-29 第二版，用户："连续射出箭矢飞向女生，从后羿手中的弓箭射出，所以立绘也需要相应的动作"；射箭选"匀速连射"，
+     立绘选"立绘 + 引擎画弦和箭"）：每 bow.cycle 秒放一箭。一箭的过程（BW.pose，u = 离上一次放箭几秒）：
+       0 放：弦从手指上弹回两梢之间的直线、抖几下（vib），箭飞出去；手往后一甩（recoil）再回来；
+       0.09~0.13 手往前够弦（reach），0.11 起新箭在弦上燃起来（arrow 淡入）、弦被手指捏住；
+       0.13~cycle 拉回满弓。不射的时候（飞进来的路上）停在满弓、箭搭着；飞走的时候弦是松的、没箭。
+     箭：金杆、火焰箭头、红羽，身后拖一道金红火尾（drawArrows）；打中钉在身上 fluid.stick 秒，燃爆火星、蹦字（main.js RECIPE.houyi）。
+     第一版是掌心打小太阳火球 + 火光雾锥（照法海咒语的做法），跟嫦娥的月牙光刃一起被换掉。
+   · 规格照法海：从右上飞下来、在场 15 秒、打女生全身、在男女主身后，底下铺烈日火空（sea.js SunSky）。
+     身子跟瞄准角的 0.6（whole.k，法海 / 嫦娥 0.12）：箭沿弓的指向出去，弓得真的对着女生 —— 只倾一成的话，画着的箭和飞出去的箭差十几度。 */
 const HOUYI_FX = {
   halo: { R: 100, lw: 7, rgb: [255, 170, 40], edge: [150, 40, 10] },                   // 头后一轮日轮
   rays: { n: 16, R: [150, 440], w: 0.08, spin: 0.16, rgb: [255, 150, 40], a: 0.28 },   // 身后放射的日光
   glow: { R: 380, a: 0.32, rgb: [255, 150, 50], core: [255, 236, 190] },
-  orb: { R: 70, rgb: [255, 160, 40] },                                                 // 掌心小太阳的光团
-  /* 火球：芯半径 size[0] → size[1]；every：每几颗粒子画一颗；tail：火尾长（× 半径） */
-  sun: { size: [22, 48], grow: 0.22, every: 3, tail: 3.2, core: [255, 252, 230], mid: [255, 200, 60], out: [255, 90, 20] },
-  mist: { r0: 30, r1: 110, rim: [170, 50, 10], body: [255, 170, 70], core: [255, 244, 210], a: [0.18, 0.28], star: 0 },
+  orb: { R: 34, rgb: [255, 160, 40] },                                                 // 箭台（握弓的拳头）上一团火光：放箭时胀一下
+  string: { lw: 1.8, glow: 5, core: [255, 246, 214], rgb: [255, 190, 80] },            // 弦：芯线宽 + 外一层金光（× s）
+  /* 箭（屏幕像素 × s）：飞着的杆长 L（搭在弦上的按满弓的长度画，见 drawBow）、杆宽 w、箭头长 / 宽、羽长；颜色：杆金、托底深褐、羽红、箭头的火；火尾 tail × L 长，三层（外橙红 → 金 → 白芯） */
+  arrow: { L: 150, w: 3.2, head: [20, 12], fl: 18, shaft: [236, 186, 70], edge: [100, 40, 8], fletch: [220, 46, 20], fire: [255, 150, 40],
+           tail: 1.4, trail: [[12, [255, 90, 20], 0.35], [7, [255, 200, 60], 0.5], [3, [255, 250, 225], 0.8]] },
 };
-function drawSuns(ctx, ps) {
-  const M = HOUYI_FX.sun;
+/* 一支箭：箭头尖在 (x, y)、朝 (ux, uy)、全长 L（屏幕像素），不透明度 a；stuck：钉在身上，箭头那截埋进去（只画后半截） */
+function drawArrow(ctx, x, y, ux, uy, s, L, a, stuck) {
+  const A = HOUYI_FX.arrow, nx = -uy, ny = ux;
+  const bx = x - ux * L, by = y - uy * L, hx = x - ux * A.head[0] * s, hy = y - uy * A.head[0] * s;
+  const from = stuck ? 0.45 : 0;                  // 钉住：箭头和前一截在身子里
+  const sx = x - ux * L * from, sy = y - uy * L * from;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = (A.w + 2.4) * s; ctx.strokeStyle = rgbaOf(A.edge, 0.8 * a);
+  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(stuck ? sx : hx, stuck ? sy : hy); ctx.stroke();
+  ctx.lineWidth = A.w * s; ctx.strokeStyle = rgbaOf(A.shaft, a);
+  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(stuck ? sx : hx, stuck ? sy : hy); ctx.stroke();
+  /* 羽：尾巴上两片，往后张 */
+  const f = A.fl * s;
+  ctx.fillStyle = rgbaOf(A.fletch, a);
+  for (const k of [1, -1]) {
+    ctx.beginPath(); ctx.moveTo(bx + ux * f, by + uy * f); ctx.lineTo(bx + ux * f * 0.2 + nx * k * f * 0.45, by + uy * f * 0.2 + ny * k * f * 0.45);
+    ctx.lineTo(bx - ux * f * 0.15 + nx * k * f * 0.45, by - uy * f * 0.15 + ny * k * f * 0.45); ctx.lineTo(bx, by); ctx.closePath(); ctx.fill();
+  }
+  if (stuck) return;
+  /* 箭头：三角 + 一团火 */
+  const hw = A.head[1] * s / 2;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(hx + nx * hw, hy + ny * hw); ctx.lineTo(hx - nx * hw, hy - ny * hw); ctx.closePath();
+  ctx.fillStyle = rgbaOf([255, 226, 130], a); ctx.fill();
+  ctx.lineWidth = 1.5 * s; ctx.strokeStyle = rgbaOf(A.edge, 0.8 * a); ctx.stroke();
+  const R = 18 * s, g = ctx.createRadialGradient(x, y, 0, x, y, R);
+  g.addColorStop(0, rgbaOf([255, 250, 220], 0.9 * a)); g.addColorStop(0.4, rgbaOf(A.fire, 0.6 * a)); g.addColorStop(1, rgbaOf(A.fire, 0));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.283); ctx.fill();
+}
+/* 飞着的箭（粒子）：先画火尾，再画箭；钉住的只画后半截、最后一段淡掉 */
+function drawArrows(ctx, ps) {
+  const A = HOUYI_FX.arrow, s = HOUYI_S;
   ctx.save();
   ctx.lineCap = 'round';
   for (const d of ps) {
-    if (d.ex || d.seq % M.every) continue;
-    const e = Math.min(1, d.t / M.grow), r = (M.size[0] + (M.size[1] - M.size[0]) * e) * (1 + 0.08 * Math.sin(d.t * 30 + d.j * 9));   // 火苗跳
+    if (d.ex) continue;
     const sp = Math.hypot(d.vx, d.vy) || 1, ux = d.vx / sp, uy = d.vy / sp;
-    /* 火尾：往来的方向三道渐细渐淡（外橙红 → 金 → 白芯） */
-    for (const [w, c, a, L] of [[1.7, M.out, 0.35, 1], [1.1, M.mid, 0.55, 0.75], [0.5, M.core, 0.8, 0.5]]) {
-      ctx.lineWidth = r * w; ctx.strokeStyle = rgbaOf(c, a);
-      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - ux * r * M.tail * L, d.y - uy * r * M.tail * L); ctx.stroke();
+    if (d.stuck != null) { drawArrow(ctx, d.x, d.y, ux, uy, s, A.L * s, 1 - d.stuck / HOUYI.fluid.stick, true); continue; }
+    const TL = A.L * A.tail * s * Math.min(1, d.t / 0.08);   // 刚离弦时火尾还没拖出来
+    for (const [w, c, a] of A.trail) {
+      ctx.lineWidth = w * s; ctx.strokeStyle = rgbaOf(c, a);
+      ctx.beginPath(); ctx.moveTo(d.x - ux * A.head[0] * s, d.y - uy * A.head[0] * s); ctx.lineTo(d.x - ux * TL, d.y - uy * TL); ctx.stroke();
     }
-    const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, r * 1.8);
-    g.addColorStop(0, rgbaOf(M.core, 1)); g.addColorStop(0.3, rgbaOf(M.mid, 1)); g.addColorStop(0.6, rgbaOf(M.out, 0.7)); g.addColorStop(1, rgbaOf(M.out, 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, r * 1.8, 0, 6.283); ctx.fill();
+    drawArrow(ctx, d.x, d.y, ux, uy, s, A.L * s, 1, false);
+  }
+  ctx.restore();
+}
+/* 粒子不带缩放：箭按后羿在屏幕上的缩放画（main.js G4STAND.houyi 第三项，悬停时就是它） */
+const HOUYI_S = 0.96;
+/* 此刻弓的样子（见上面"一箭的过程"）：hand 前臂沿 axis 挪几贴图像素（+ 往后），att 弦被手指捏住几成（0 = 弦是自由的），
+   vib 弦中点横着抖多少（贴图像素），arrow 搭着的箭不透明度 */
+function bowPose(b, T, se) {
+  const W = HOUYI.bow, C = W.cycle;
+  if (b.t > se) return { hand: 0, att: 0, vib: 0, arrow: 0 };
+  const u = b.bw ?? C, e = (v) => v * v * (3 - 2 * v);
+  let hand;
+  if (u < 0.04) hand = W.recoil * u / 0.04;
+  else if (u < 0.09) hand = W.recoil * (1 - (u - 0.04) / 0.05);
+  else if (u < 0.13) hand = -W.reach * (u - 0.09) / 0.04;
+  else hand = -W.reach * (1 - e(Math.min(1, (u - 0.13) / (C - 0.13))));
+  return { hand, att: u < 0.11 ? 0 : Math.min(1, (u - 0.11) / 0.02), vib: W.vib * Math.exp(-u * 25) * Math.sin(u * 140),
+           arrow: u < 0.11 ? 0 : Math.min(1, (u - 0.11) / 0.04) };
+}
+/* 弦：上梢 → 搭箭点 → 下梢；搭箭点捏在手指上时跟着手，放开时回到两梢连线上（跟箭的方向线的交点）再抖。搭着的箭从搭箭点指向箭台、箭头伸出箭台一截 */
+function drawBow(ctx, b, s, at, q) {
+  const sp = HOUYI.spr, F = HOUYI_FX, ax = sp.arm.axis;
+  const T = at(sp.top), B = at(sp.bot), G = at(sp.muzzle), H0 = at(sp.nock);
+  const H = [H0[0] + ax[0] * q.hand * s, H0[1] + ax[1] * q.hand * s];
+  /* 两梢连线跟"箭台 → 手"这条线的交点 = 弦松开时的中点 */
+  const d1 = [B[0] - T[0], B[1] - T[1]], d2 = [H0[0] - G[0], H0[1] - G[1]], den = d1[0] * d2[1] - d1[1] * d2[0];
+  const k = ((G[0] - T[0]) * d2[1] - (G[1] - T[1]) * d2[0]) / den, R = [T[0] + d1[0] * k, T[1] + d1[1] * k];
+  const L1 = Math.hypot(...d1), nx = -d1[1] / L1, ny = d1[0] / L1;
+  const Rv = [R[0] + nx * q.vib * s, R[1] + ny * q.vib * s];
+  const N = [Rv[0] + (H[0] - Rv[0]) * q.att, Rv[1] + (H[1] - Rv[1]) * q.att];
+  ctx.save();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (const [w, c, a] of [[F.string.glow, F.string.rgb, 0.35], [F.string.lw, F.string.core, 0.95]]) {
+    ctx.lineWidth = w * s; ctx.strokeStyle = rgbaOf(c, a);
+    ctx.beginPath(); ctx.moveTo(T[0], T[1]); ctx.lineTo(N[0], N[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
+  }
+  if (q.arrow > 0) {
+    /* 箭尾在搭箭点，箭头伸出箭台 30 像素（× s）：满弓时箭长 ≈ 搭箭点到箭台 + 30，比飞出去的那支（arrow.L）长 —— 飞得快，看不出来 */
+    const dx = G[0] - N[0], dy = G[1] - N[1], L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L, len = L + 30 * s;
+    drawArrow(ctx, N[0] + ux * len, N[1] + uy * len, ux, uy, s, len, q.arrow, false);
   }
   ctx.restore();
 }
 const HOUYI = {
   ...FAHAI,
-  whole: { pivot: [350, 403], k: 0.12 },
-  spr: { src: 'assets/world/houyi%n_%k.webp', body: { src: 'up', pivot: [350, 403], k: 1 },
-         foot: [592, 853], muzzle: [89, 448], head: [296, 169], chest: [345, 331], halo: [300, 230],   // v14/houyi/make.py 打印；foot 是右脚靴尖
-         rest: -1.15 },                          // 同法海：悬在右上、掌心朝左下对着女生
-  skins: [1],
+  whole: { pivot: [336, 478], k: 0.6 },
+  spr: { src: 'assets/world/houyi%n_%k.webp', body: { src: 'up', pivot: [336, 478], k: 1 },
+         /* 拉弦的右前臂：单独一层（v14/houyi2/make.py），沿 axis（箭台 → 搭箭点，= 往后拉的方向）前后挪 */
+         arm: { src: 'arm', axis: [0.661, -0.751] },
+         /* v14/houyi2/make.py 打印；foot 是右脚靴尖，muzzle 是箭台（握弓的拳头上沿），nock 满弓时捏弦的指尖，top / bot 弓两梢挂弦处 */
+         foot: [531, 696], muzzle: [127, 538], nock: [290, 352], top: [60, 276], bot: [319, 787],
+         head: [252, 258], chest: [328, 427], halo: [243, 310],
+         rest: -0.849 },                         // 贴图里箭的指向（搭箭点 → 箭台）：朝左下 49°
+  skins: [2],
   aura: (ctx, b, s, at, probe) => drawGodAura(HOUYI_FX, HOUYI.spr, ctx, b, s, at, probe),
-  fluid: { V: 860, G: 0, drag: 0, rate: 30, spread: 0.12, vJit: 0.05, life: 1.3, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
-           draw: (ctx, ps) => { drawFog(HOUYI_FX.mist, HOUYI, ctx, ps); drawSuns(ctx, ps); } },
+  aim: { lo: -0.45, hi: 0.35, rate: 1.6, follow: 8, stiff: 40 },
+  /* 箭：V 1300、带一点下坠（G 300），每 bow.cycle 秒一支（rate 只给放箭那一下补飞用，见 Crew update）；
+     radius 近距命中（同法海）；stick 打中后钉住几秒；hitEvery 0.5：大约每隔一支一次整套命中反馈（impact：震屏、顿帧、冲击环），每支都有的是 drip */
+  fluid: { V: 1300, G: 300, drag: 0, rate: 30, spread: 0.03, vJit: 0.03, life: 1.2, miss: 110, radius: 60, snap: 14, hitEvery: 0.5, stick: 0.15, floor: false,
+           draw: (ctx, ps) => drawArrows(ctx, ps) },
+  /* cycle：两箭间隔（每秒 3.6 支）；recoil / reach：放箭后手往后甩、往前够弦的距离（贴图像素）；vib：弦抖的幅度 */
+  bow: { cycle: 0.28, recoil: 16, reach: 26, vib: 7, pose: (b, T, se) => bowPose(b, T, se), draw: (ctx, b, s, at, q) => drawBow(ctx, b, s, at, q) },
 };
 const Houyi = Crew(HOUYI);

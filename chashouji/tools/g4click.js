@@ -14,7 +14,7 @@ const { chromium } = require('/home/op/shots/node_modules/playwright-core');
   await p.waitForFunction(() => [...document.querySelectorAll('[data-shop]')].some(x => x.textContent.startsWith('灭迹恶魔')), null, { timeout: 60000 });
   /* B 白娘子 / T 真相女神 / C 嫦娥；~ 海、g 真相云海、m 月夜银云海（有进度就记） */
   const who = () => p.evaluate(() => (Baisu.active() ? 'B' : '') + (Truth.active() ? 'T' : '') + (Change.active() ? 'C' : '')
-    + (Sea.active() ? '~' : '') + (TruthTide.active() ? 'g' : '') + (MoonTide.active() ? 'm' : ''));
+    + (Sea.active() ? '~' : '') + (TruthTide.active() ? 'g' : '') + (MoonSky.active() ? 'm' : ''));
   const click = () => p.evaluate(() => [...document.querySelectorAll('[data-shop]')].find(x => x.textContent.startsWith('真相女神')).click());
   for (const [name, n] of [['第一次', 19], ['第二次', 19], ['第三次', 19]]) {
     await click();
