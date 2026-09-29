@@ -1069,6 +1069,53 @@ const RECIPE = {
 
   /* 后羿 → 女生（2026-09-29，第二版）：火箭钉在身上燃爆（每支 drip，每隔一支左右 burst：白热火光 + 橙红冲击环 + 一把火星），
      蹦「射日！」「烈日灼心」「金乌冲！」。 */
+  /* 绿茶妹妹 → 女生（2026-09-29）：茶言茶语的聊天气泡打在脸上，迸一团粉白 + 深玫红托底的环 + 一把粉色小爱心，
+     蹦「茶言茶语」「姐姐好凶」「委屈巴巴」。配色：粉在浅墙上会化掉，托底用深玫红（实体靠轮廓）。
+     pop：她从手机里蹦出来那一下，手机那里迸一圈粉光 + 几颗爱心（crew.js summon → o.onPop）。 */
+  sister: {
+    tint: [255, 190, 220],
+    tags: ['茶言茶语', '姐姐好凶', '委屈巴巴'],
+    tag(x, y, side) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
+      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
+                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [236, 90, 150], edge: [110, 20, 60], lw: 3,
+                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
+    },
+    heart(x, y, sz, sp0, sp1) {        // 一颗小爱心飞散（fx.js glyph：用"♥"字形画）
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, sp = sp0 + Math.random() * (sp1 - sp0);
+      Particles.spawn({ kind: 'glyph', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 260, drag: 0.94,
+                        life: 0.6 + Math.random() * 0.3, r: sz * 0.6, r1: sz, rot: (Math.random() - 0.5) * 0.6, vrot: (Math.random() - 0.5) * 3,
+                        rgb: [255, 120, 175], edge: [120, 20, 70], lw: Math.max(2, sz * 0.06), text: '♥' });
+    },
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 90 * s, life: 0.2, rgb: [255, 236, 246], a: 0.85 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 130 * s, life: 0.36, rgb: [120, 20, 70], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 126 * s, life: 0.36, rgb: [255, 150, 200], lw: 3.5 * s });
+      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
+      for (let i = 0; i < Math.round(4 * s); i++) this.heart(x, y, 26 + 8 * s, 180, 380);
+    },
+    drip(x, y, side) {                 // 每个打中的粒子一次（气泡每秒 15 颗，crew.js SISTER.fluid.rate）
+      const k = Math.random();
+      if (k < 0.15) this.heart(x, y, 22 + Math.random() * 10, 120, 260);
+      else if (k < 0.3) { const a = Math.random() * 6.283, sp = 120 + Math.random() * 180;
+        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 200, drag: 0.95, life: 0.35, rgb: [255, 170, 210], lw: 2.5 }); }
+      else if (k < 0.31) this.tag(x, y, side);
+    },
+    arrive(x, y, s) {                  // (x, y) = 腰；蹦到位"定"住：一圈粉光环往外冲 + 几颗爱心四散 + 小震屏
+      Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 200 * s, life: 0.24, rgb: [255, 220, 238], a: 0.7 });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 360 * s, life: 0.42, rgb: [120, 20, 70], lw: 10 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 352 * s, life: 0.42, rgb: [255, 160, 205], lw: 5 * s });
+      for (let i = 0; i < 8; i++) this.heart(x, y, 34, 300, 560);
+      Particles.addShake(5);
+    },
+    pop(x, y) {                        // 从手机里蹦出来：手机那里一闪 + 一圈粉光 + 爱心往上蹦
+      Particles.spawn({ kind: 'dot', x, y, r: 20, r1: 150, life: 0.22, rgb: [255, 240, 248], a: 0.9 });
+      Particles.spawn({ kind: 'ring', x, y, r: 16, r1: 200, life: 0.36, rgb: [120, 20, 70], lw: 7 });
+      Particles.spawn({ kind: 'ring', x, y, r: 16, r1: 194, life: 0.36, rgb: [255, 160, 205], lw: 3.5 });
+      for (let i = 0; i < 6; i++) this.heart(x, y, 28, 260, 480);
+    },
+  },
+
   houyi: {
     tint: [255, 214, 170],
     tags: ['射日！', '烈日灼心', '金乌冲！'],
@@ -1305,7 +1352,7 @@ const SHOP = {
 /* 三对一对一对立，按对排：白娘子 vs 法海 → 真相女神 vs 灭迹恶魔 → 嫦娥 vs 后羿（2026-09-29 用户定的顺序；
    同日删掉黑蛛女特工、内裤外穿侠、二郎·打码神，加嫦娥、后羿） */
 const G4L = CrewGroup([Baisu, Truth, Change]);   // 查岗党：白娘子 / 真相女神 / 嫦娥
-const G4R = CrewGroup([Fahai, Demon, Houyi]);    // 灭迹党：法海 / 灭迹恶魔 / 后羿
+const G4R = CrewGroup([Fahai, Demon, Houyi, Sister]);    // 灭迹党：法海 / 灭迹恶魔 / 后羿 / 绿茶妹妹
 const CREW = { buddy: Buddy, bestie: Bestie, g4L: G4L, g4R: G4R };
 const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
 /* 召唤：组（档 4）按 URL ?g4L= / ?g4R= 强制召某一个人（诊断：胶片一个一个单独拍）；单个 Crew 可指定形象 sk（?skin=） */
@@ -2251,6 +2298,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* 后羿（第二版持弓，v14/houyi2）：最低点是右脚靴尖；发尾顶 ≈ y 205，箭台（握弓的拳头）≈ (482, 689)，弓下梢 ≈ (666, 928)；披风右边出画一点。
        缩放 0.96：实心面积（alpha > 128）对齐嫦娥（28.8 万 × 0.96² ≈ 26.6 万 vs 嫦娥 26.9 万）。 */
     houyi:  [870, 841, 0.96],
+    /* 绿茶妹妹（2026-09-29）：最低点是后面那只靴底；兔耳尖 ≈ y 200，举着的手机 ≈ (456, 462)，一整个人在 x 440~940（右边不出画）。
+       缩放 1.0：剪影外框 516×788 ≈ 40.7 万（嫦娥 569×859 × 0.88² ≈ 37.9 万、后羿 610×818 × 0.96² ≈ 46.0 万之间）。
+       她是从男女主抢的那部手机里蹦上来的（crew.js SISTER.path.pop），腿在男生头顶上方、在男女主身后。 */
+    sister: [900, 974, 1.0],
   };
   const g4Perch = (rcp) => () => G4STAND[rcp];
 
@@ -2269,6 +2320,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     perch: g4Perch(rcp),
     target: BODY_AIM.has(rcp) ? bodyTarget(side === 'L' ? 'topB' : 'top') : side === 'L' ? faceTarget('b', -1) : faceTarget('a', +1),
     front: () => null,
+    origin: phonePos, onPop: (x, y) => RECIPE[rcp].pop && RECIPE[rcp].pop(x, y),   // 从手机里蹦出来的（crew.js path.pop）用
     onArrive: (x, y, s) => RECIPE[rcp].arrive(x, y, s),
     onSplash: (x, y) => RECIPE[rcp].drip(x, y, side === 'L' ? -1 : +1),
     onHit: (x, y, first) => impact(side === 'L' ? -1 : +1, y, first ? GIFT[gift].power : 1, RECIPE[rcp], x),
@@ -2279,6 +2331,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   g4Init(Fahai, 'R', 'fahai', 'demon');
   g4Init(Demon, 'R', 'demon', 'demon');
   g4Init(Houyi, 'R', 'houyi', 'demon');
+  g4Init(Sister, 'R', 'sister', 'demon');
 
   /* 长卷背景与姿势贴图，都由 v14/build.py 生成。world.json 是它们的说明书：
      每间房多宽、客厅正中在哪、每张贴图的锚点和手机位置。 */
@@ -2420,6 +2473,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     { crew: Fahai,  name: '法海',         from: -1, fill: 'rgba(40,14,4,0.66)',  bar: 'rgb(255,196,60)', edge: 'rgb(120,40,10)',  text: 'rgb(255,240,190)' },
     { crew: Demon,  name: '灭迹恶魔',     from: -1, fill: 'rgba(20,6,28,0.66)',  bar: 'rgb(200,90,240)', edge: 'rgb(60,10,70)',   text: 'rgb(246,200,255)' },
     { crew: Houyi,  name: '后羿',         from: -1, fill: 'rgba(48,10,4,0.66)',  bar: 'rgb(255,140,40)', edge: 'rgb(130,30,6)',   text: 'rgb(255,236,200)' },
+    { crew: Sister, name: '绿茶妹妹',     from: -1, fill: 'rgba(60,10,34,0.64)', bar: 'rgb(255,150,200)', edge: 'rgb(120,20,70)',  text: 'rgb(255,236,246)' },
   ];
   const introT = (st) => { const b = st.crew.peek()[0]; return b && !b.hold ? b.t : 1e9; };   // 候场（出场视频放着）不算出场
   /* 名字条的计时：出场从 delay 起算；在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */

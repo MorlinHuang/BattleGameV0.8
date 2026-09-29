@@ -104,6 +104,7 @@ function Crew(cfg) {
                 r: pickR(), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
                 pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0,
                 hold: false, from: null };
+    if (PATH.pop && o.origin) { b.pop = o.origin(); if (o.onPop) o.onPop(b.pop[0], b.pop[1]); }   // 从手机里蹦出来（绿茶妹妹）
     bs.push(b);
     bs.sort((a, b) => a.s - b.s);          // 远的先画
     return b;                              // 新来的人（续时间 / 叫回的返回 undefined）：main.js 据此决定要不要先放出场视频
@@ -127,6 +128,12 @@ function Crew(cfg) {
     if (t < T.enter) {
       const e = easeOut(t / T.enter);
       if (b.from) { const [fx, fy, fs] = b.from; return [fx + (hx - fx) * e, fy + (hy - fy) * e, fs + (s - fs) * e]; }   // 从出场视频里走出来
+      /* 从手机里蹦出来（PATH.pop）：脚底从手机那一点起跳，走一道往上拱的弧线落到悬停点，人从 pop.s0 倍长到原大。
+         横向、纵向按 easeOut 走，弧线另外加 h·sin(πu)（u 是线性时间，最高点在正中）；缩放比位移先长满（0.6 的时间） */
+      if (b.pop && PATH.pop) {
+        const P = PATH.pop, u = t / T.enter, [fx, fy] = b.pop, g = easeOut(Math.min(1, u / 0.6));
+        return [fx + (hx - fx) * e, fy + (hy - fy) * e - P.h * s * Math.sin(Math.PI * u), s * (P.s0 + (1 - P.s0) * g)];
+      }
       const [fx, fy] = PATH.from ? PATH.from(s, hx, hy) : [hx, top];
       return [fx + (hx - fx) * e, fy + (hy - fy) * e, s];
     }
@@ -1308,3 +1315,95 @@ const HOUYI = {
   bow: { cycle: 0.28, recoil: 16, reach: 26, vib: 7, pose: (b, T, se) => bowPose(b, T, se), draw: (ctx, b, s, at, q) => drawBow(ctx, b, s, at, q) },
 };
 const Houyi = Crew(HOUYI);
+
+/* ---- ⑨ 绿茶妹妹（男生档 4 第四人，2026-09-29）----
+   用户："男生这边的召唤礼物增加一个，逻辑是从手机里跳出一个妹妹，疑似聊天列表的一个暧昧对象，然后抱怨说姐姐要查手机还脾气大啥的，
+   碎碎念蛐蛐对面女生，话语攻击，绿茶角色"；四个设计方向里选了兔耳学妹："有兔耳朵的妹妹，很有绿茶的味道"，"做成男生灭迹恶魔挡的一个礼物"。
+   · 立绘 v14/sister/make.py：奶白一字肩毛衣裙、白毛绒兔耳发箍、灰过膝袜、毛绒靴，左眼下美人痣；悬空侧身朝左，
+     右手举粉色手机屏幕朝左，左手手背掩嘴偷偷嘀咕。粉白外发光烘在贴图里。
+   · 出场：从男女主抢的那部手机里蹦出来（path.pop：脚底从手机起跳、一道弧线落到悬停点，人从 0.15 倍长到原大，手机那里迸一圈粉光 main.js RECIPE.sister.pop）。
+   · 攻击「茶言茶语」：手机里往女生脸上飞一串聊天气泡，气泡里是她的碎碎念（SISTER_FX.chat.lines），气泡之间夹着粉色小爱心（drawChatter）；
+     打中迸粉色爱心、蹦字（main.js RECIPE.sister）。规格同法海：在场 15 秒、whole.k 0.12、在男女主身后，底下铺绿茶白莲海（sea.js TeaTide）。 */
+const SISTER_FX = {
+  glow: { R: 330, a: 0.26, rgb: [255, 150, 200], core: [255, 236, 246] },    // 身后一团粉光
+  screen: { R: 46, rgb: [255, 170, 215] },                                    // 手机屏幕亮着的光（说一句胀一下）
+  /* 聊天气泡：出手时 size[0] → 飞 grow 秒后 size[1]（字号，像素 × 她的缩放以外的屏幕像素）；every：每几颗粒子画一个气泡（其余画小爱心）。
+     白底粉边、深粉字、尾巴朝她（往来的方向），字从底图上跳出来靠白底 + 粉色描边，不靠发光 */
+  chat: { size: [16, 30], grow: 0.25, every: 3, fill: [255, 255, 255], edge: [255, 110, 170], ink: [196, 30, 110], heart: [255, 120, 175],
+          lines: ['姐姐好凶哦', '哥哥别怕~', '又查手机呀', '我好怕怕', '姐姐生气啦?', '人家只是妹妹', '哥哥手机好看', '别凶哥哥嘛',
+                  '我走就是了~', '姐姐不累吗', '好可怕哦', '哥哥最好了'] },
+};
+function drawSisterAura(ctx, b, s, at, probe) {
+  const F = SISTER_FX, k = Math.min(1, b.t / 0.4);
+  ctx.save();
+  if (!probe) {
+    const G = F.glow, [cx, cy] = at(SISTER.spr.chest), g = ctx.createRadialGradient(cx, cy, 0, cx, cy, G.R * s);
+    g.addColorStop(0, rgbaOf(G.core, G.a * k)); g.addColorStop(0.45, rgbaOf(G.rgb, G.a * 0.5 * k)); g.addColorStop(1, rgbaOf(G.rgb, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, G.R * s, 0, 6.283); ctx.fill();
+  }
+  const O = F.screen, [ox, oy] = at(SISTER.spr.muzzle), r = O.R * s * (1 + 0.3 * b.kick + 0.08 * Math.sin(b.t * 6));
+  const og = ctx.createRadialGradient(ox, oy, 0, ox, oy, r);
+  og.addColorStop(0, rgbaOf([255, 255, 255], 0.9 * k)); og.addColorStop(0.4, rgbaOf(O.rgb, 0.55 * k)); og.addColorStop(1, rgbaOf(O.rgb, 0));
+  ctx.fillStyle = og; ctx.beginPath(); ctx.arc(ox, oy, r, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+function heartPath(ctx, x, y, r) {          // 爱心：尖朝下，(x, y) 是中心，r 约等于半宽
+  ctx.beginPath();
+  ctx.moveTo(x, y + r * 0.9);
+  ctx.bezierCurveTo(x - r * 1.3, y + r * 0.1, x - r * 0.7, y - r * 1.0, x, y - r * 0.35);
+  ctx.bezierCurveTo(x + r * 0.7, y - r * 1.0, x + r * 1.3, y + r * 0.1, x, y + r * 0.9);
+  ctx.closePath();
+}
+function drawChatter(ctx, ps) {
+  const C = SISTER_FX.chat;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  for (const d of ps) {
+    if (d.ex) continue;
+    const e = Math.min(1, d.t / C.grow), fade = Math.min(1, (SISTER.fluid.life - d.t) / 0.2);
+    if (d.seq % C.every) {                  // 小爱心：往下飘、一闪一闪
+      const r = (7 + 5 * d.j) * (0.5 + 0.5 * e);
+      ctx.globalAlpha = Math.max(0, fade) * (0.6 + 0.4 * Math.sin(d.t * 12 + d.j * 9));
+      heartPath(ctx, d.x, d.y, r); ctx.fillStyle = rgbaOf(C.heart, 1); ctx.fill();
+      continue;
+    }
+    const sz = C.size[0] + (C.size[1] - C.size[0]) * e;
+    const line = C.lines[((d.seq / C.every | 0) % C.lines.length + C.lines.length) % C.lines.length];
+    ctx.font = `800 ${sz.toFixed(1)}px "PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif`;
+    const w = ctx.measureText(line).width + sz * 1.1, h = sz * 1.7, x = d.x - w / 2, y = d.y - h / 2, r = h / 2;
+    const sp = Math.hypot(d.vx, d.vy) || 1, tx = -d.vx / sp;          // 尾巴朝她（往来的方向）那一侧
+    ctx.globalAlpha = Math.max(0, fade);
+    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(Math.sin(d.t * 4 + d.j * 6) * 0.08); ctx.translate(-d.x, -d.y);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(x + r, y + h); ctx.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
+    const bx = d.x + tx * w * 0.32, by = y + h;                      // 尾巴：气泡下沿靠她那一侧
+    ctx.moveTo(bx - sz * 0.35, by - 1); ctx.lineTo(bx + tx * sz * 0.5, by + sz * 0.55); ctx.lineTo(bx + sz * 0.35, by - 1);
+    ctx.lineWidth = Math.max(2, sz * 0.16); ctx.strokeStyle = rgbaOf(C.edge, 1); ctx.stroke();
+    ctx.fillStyle = rgbaOf(C.fill, 0.96); ctx.fill();
+    ctx.fillStyle = rgbaOf(C.ink, 1); ctx.fillText(line, d.x, d.y + 1);
+    heartPath(ctx, x + w - r * 0.35, y + r * 0.1, sz * 0.32); ctx.fillStyle = rgbaOf(C.heart, 1); ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+const SISTER = {
+  ...FAHAI,
+  whole: { pivot: [280, 453], k: 0.12 },
+  spr: { src: 'assets/world/sister%n_%k.webp', body: { src: 'up', pivot: [280, 453], k: 1 },
+         foot: [520, 825], muzzle: [76, 313], head: [154, 51], chest: [244, 345], face: [199, 213],   // v14/sister/make.py 打印；foot 是后面那只靴底
+         /* 手机屏幕在贴图里朝左上（rest 1.4），但它不是枪管：rest 取典型俯角（同法海 −1.15，悬在右上、女生的脸在左下） */
+         rest: -1.15 },
+  aura: (ctx, b, s, at, probe) => drawSisterAura(ctx, b, s, at, probe),
+  aim: { lo: -0.4, hi: 0.45, rate: 1.6, follow: 8, stiff: 40 },
+  sweep: { a: [0.15, 0.08], w: [0.6, 1.5] },    // 打脸（同恶魔），扫得比打全身小
+  /* 出场：从手机里蹦出来（crew.js hoverPose b.pop）：弧线拱起 h × 缩放、人从 0.15 倍长大；离场往右上飞走 */
+  path: { pop: { h: 260, s0: 0.15 }, to: (s, x, y) => [x + 800 * s, y - 800 * s], rollOut: 0.15 },
+  anim: { pulse: [1.1, 0.35], kick: [0, 0.03, 6], lean: 0.02, bob: [8, 1.5] },
+  T: { enter: 0.9, spray: 13.6, exit: 0.5, fire: 0.3 },
+  /* 气泡：直线、慢（V 560，一句话飞 1.6 秒看得清），每秒 15 颗、每 3 颗一个气泡 = 每秒 5 句 */
+  fluid: { V: 560, G: 0, drag: 0, rate: 15, spread: 0.14, vJit: 0.05, life: 1.6, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
+           draw: (ctx, ps) => drawChatter(ctx, ps) },
+};
+const Sister = Crew(SISTER);
