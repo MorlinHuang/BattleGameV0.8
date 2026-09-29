@@ -23,6 +23,7 @@ PAD = 44                                   # 输出贴图四周给外发光留�
 def cut(src, screen, key, erase=(), spill='edge'):
     """原图 → (rgb float32, alpha 0~1)。去溢色默认只动半透明过渡带（不透明的像素本来的颜色不动）；
     spill='all'：整张都去 —— 角色身上有透着幕布的薄纱（白娘子的披帛）时用：纱整块都被幕布染色，只去边的话纱是粉紫的。
+    spill='decyan'（绿幕）：整张去溢色 + 压青 —— 纱被画成偏青时（嫦娥）用；角色身上不能有青绿。
     这种角色身上本来就不能有幕布那个色相（白娘子一身白 + 冰蓝，品红度 ≈ 0）。
     erase：[(x0, y0, x1, y1), ...] 原图像素，这些框里一律抠掉（画进原图、但运行时另外画的东西，如黑蛛女特工手上往上的丝）。"""
     a = np.array(Image.open(src).convert('RGB')).astype(np.int16)
@@ -42,6 +43,11 @@ def cut(src, screen, key, erase=(), spill='edge'):
     edge = al < 0.99 if spill == 'edge' else np.ones_like(al, bool)
     if screen == 'green':
         rgb[..., 1] = np.where(edge, np.minimum(rgb[..., 1], np.maximum(rgb[..., 0], rgb[..., 2])), rgb[..., 1])
+        if spill == 'decyan':
+            # 绿比红高的部分只留三成：纱被生图画成了偏青（绿幕反光画进了颜色里，不是半透明混出来的，按 alpha 反解救不回来 ——
+            # 试过，反解还把月牙的光晕解成了粉色）。她身上的白、淡紫、肤色都是 G ≤ R，不受影响；冰蓝会偏一点紫
+            r = rgb[..., 0]
+            rgb[..., 1] = np.where(rgb[..., 1] > r, r + (rgb[..., 1] - r) * 0.3, rgb[..., 1])
     else:
         sp = np.clip(np.minimum(rgb[..., 0], rgb[..., 2]) - rgb[..., 1], 0, None) * edge
         rgb[..., 0] -= sp; rgb[..., 2] -= sp

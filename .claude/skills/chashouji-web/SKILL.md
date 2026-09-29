@@ -249,8 +249,8 @@ assets/ui/win_b2.webp  灭迹党胜·命中（怼到她面前）
 | `?bench=1&benchframes=N&benchrate=M` | 连点压测 |
 | `?benchoff=ammo\|part\|both` | 关掉某层做差值分账 |
 | `?skin=0\|1\|2` | 配 crew 类礼物（`ammogift=bestie/buddy/truth`）：强制出第几个形象（cfg.skins 下标，越界夹两头），不给挑空着的 |
-| `?crewlog=1` | 胶片模式下每格往控制台打档 4 在场的人的 aim / want / 落点 / 喷口，和两个外框：**solid**（alpha>200，最高点、中线余量按它）、**glow**（alpha>32，含外发光，最低点按它）。离屏真画一遍扫像素（crew.js `measure`，`MEASURE` 阈值表），只量"人"：不画女神光芒、恶魔烟雾裂光、黑蛛女的丝（drawOne 的 `probe`） |
-| `?g4L=0\|1\|2` `?g4R=0\|1\|2\|3` | 档 4 场上没人时强制召组里第几个人（左：白娘子/真相女神/黑蛛女特工；右：法海/灭迹恶魔/内裤外穿侠/二郎·打码神），有人在场照样只续。胶片和真实送礼都认 |
+| `?crewlog=1` | 胶片模式下每格往控制台打档 4 在场的人的 aim / want / 落点 / 喷口，和两个外框：**solid**（alpha>200，最高点、中线余量按它）、**glow**（alpha>32，含外发光，最低点按它）。离屏真画一遍扫像素（crew.js `measure`，`MEASURE` 阈值表），只量"人"：不画女神光芒、恶魔烟雾裂光、仙佛身后的光（drawOne 的 `probe`） |
+| `?g4L=0\|1\|2` `?g4R=0\|1\|2` | 档 4 场上没人时强制召组里第几个人（左：白娘子/真相女神/嫦娥；右：法海/灭迹恶魔/后羿），有人在场照样只续。胶片和真实送礼都认。真页面测一对：`tools/pairclick.js` |
 | `?ammogift2=<礼物>` | 同一条胶片再叫另一边的帮手：两边各一人 `ammogift=truth&ammogift2=demon` |
 | `?buddygap=<秒>` `?ammoskip=<秒>` | 胶片里第 k 个人在 k×gap 秒叫；第一格前先快进（注意顿帧会冻住帮手的时钟，按墙钟对不齐） |
 | `&liveN=<次数>` | `liveEvery` 每边最多送几次（档 4：第 1 次召人，之后在场只续时间 ×N）。live 模式送礼参数是商店 id：`liveGA=drop` |
@@ -395,19 +395,29 @@ timeout 150 scp -q assets/world/* kf-deployment:/home/op/chashouji/web/assets/wo
 - **女生倒地**（`girlDown()` = 帧名 bF/bL 开头）：`girlTarget` 沿身体从头到脚取上沿上的点（`girlTop(x)` 查 world.json `edge.top`，build.py 按列量的女生上沿），返回第三项 `'top'`；buddy.js 每人每 `ZONE.every` 秒随机挑一个部位（u∈`ZONE.lo~hi`，背/屁股/腿）小幅扫；碰撞按"落到这一列上沿以下"，**不看前沿**（横躺时每行前沿都是手臂和头，浇背的水会全碎在头上）。落空的水在地板上溅开。出水按每滴实际出枪时刻补飞（掉帧不起疙瘩）；画线补一段枪口→最新一滴。扫动 `SWEEP=[1.2,2.8]` rad/s —— 快了（2.3/5.3）前后水滴落点差太远折成"7"。瞄点 u 从脸到大腿上段（`sp[1]-0.35h`）。水柱画法 `WATER`（crew.js）：出口细 w0 7 → 飞 0.3s 长到 w1 20、越飞越透；0.14s 后每滴 16% 概率在身后断开，断处画水珠；高光贴上沿、每 7 段亮 4 段；两侧甩水沫。第一版三遍等粗描线 26/19/6 + 连续白芯 = 光柱。连线按人找上一滴（几个人的水滴在 drops 里交错）。
 - 看效果：`?ammostrip=6&ammoms=450&ammogift=buddy&buddyn=3`（buddyn 一次叫几个；可加 `pos=-29` 看女生趴地）。
 
-## 档 4 每边一组三人、同时只一个在场（2026-09-28；规格 `shots/review/trio/trio_spec.md`，同日用户看完三人同屏改成一次一个）
-- 左 `G4L = CrewGroup([Truth, Moon, Widow])`、右 `G4R = CrewGroup([Demon, Briefs, Erlang])`，`GIFT.truth/demon.crew = 'g4L'/'g4R'`，`summonCrew()` 统一分发。
-  每人一份 Crew（武器各异不能走 skins），max 1。`CrewGroup.summon`：有人在场（含离场途中）→ 给他 summon（= renew 续 T.spray、名字条 ×N，离场的被叫回来），**不换人**；
-  场上没人 → 按成员顺序轮到下一个（从 0 号起：第一次是女神/恶魔）。`reset()` 连轮换顺序归零（startMatch 走 `Object.values(CREW)`）。`CREWS` 是每帧 update/items 的全部帮手。
-- **用户原话**："三个女神太多了，每个都显得特别小，还是改一个，放大一些"。三人斜线三槽（s 0.55~0.66）、Hermite 换槽、1/√n 减量、b.born 都已删掉。
-- **站位**（main.js `G4STAND`）：每人一个靴底点 `[x, y]`，缩放 = `G4STAND.H[side] / spr.tall`（spr.tall：贴图里发顶/角/发冠 → 靴底，不含举起的武器、手、祥云），同一边三个人一样高。
-  H：女生侧 534（女神原来 538，那时光环在晃到最高 + p5 前倾时顶到 y187，缩 0.7% 才进 190）、男生侧 488（恶魔原来 486；二郎 p95 时刀尖 ~192、靴尖外发光 ~748 顶着）。两边不一样高是因为男主头顶高 30（下沿 750 vs 780）。
-  约束实测（crew.js `measure`，p5/50/95，晃到最高/最低两个相位）：女生侧 glow 最低 < 780、男生侧 ≤ 750；solid 最高 ≥ 190；中线女生侧 solid 最右 ~400、男生侧最左 ~530。
-- **举过头顶的手、脚下蓬松祥云**会让同样身高的人最高/最低点多出一截，只能比别人矮：黑蛛女、二郎为此各重出一版立绘（`src2.png`：图生图只改手 / 云）。新立绘出图前先想这一条。
-- **进出场路径** `cfg.path`：`from(s,hx,hy)` / `to(s,x,y)` / `roll0` / `spin`（圈）/ `rollOut` / `swing`（悬着时绕 `path.pivot` 摆）。不给就是女神那套（正上方冲下、往上冲走）。
-- **附属画**：`cfg.extra(ctx, b, s, carry, 'back'|'fore', xi, probe)` 画在屏幕坐标、不跟人倾（黑蛛女的丝、哮天犬绕 `spr.cloud` 转）；`cfg.xtra` 额外贴图（dog1_up.webp）。`spr.eyes` 射线从几只眼睛出（`b.eyes`）。
-- **别让人为了瞄准大倾**：射线出眼睛，`rest` 直接取典型俯角 −0.95、aim ±0.3；蛛网是**抛**的（V 1000 / G 2200），把落差交给重力。第一版三个人都斜成 40°。
-- 命中字 `tagsOf(s)`（重击 2 条、轻补两成 1 条）、`TAG.rise/drag` 从脸上方冒出往上飘走（原来停在脸前一秒，一摞字盖住脸）。
-- 名字条：`STARS` 按成员给名字和颜色；每边最多一条；两边同时各一条时后出来的往上挪 `INTRO.stack`。
-- 新配方 `RECIPE.moon/widow/briefs/erlang`；fx.js 新 kind `web`（蛛网+定位图钉）、`mosaic`（灰黑方块硬边，p.h 秒后散开）、`moon`（月牙）；实体 kind 统一在 `SOLID`。
-- 立绘管线 `v14/crewart.py`（抠像/去溢色/edge_extend/缩放/烘三层光，打印"轮廓内部被键吃掉的像素"自检；`erase` 抠掉画进原图但运行时另画的东西，如丝），每人 `v14/<moon|widow|briefs|erlang>/make.py`。内裤侠的提示词写"复古披风英雄/内裤外穿"会被生图拒，按"自制英雄服的壮汉"描述才出图。
+## 档 4 每边三人、同时只一个在场（2026-09-28 起；2026-09-29 定成三对对立）
+- 左 `G4L = CrewGroup([Baisu, Truth, Change])`、右 `G4R = CrewGroup([Fahai, Demon, Houyi])`：白娘子 vs 法海 → 真相女神 vs 灭迹恶魔 → 嫦娥 vs 后羿（用户定的顺序）。
+  `GIFT.truth/demon.crew = 'g4L'/'g4R'`，`summonCrew()` 统一分发；按钮名仍是「真相女神 ④ / 灭迹恶魔 ④」。黑蛛女特工、内裤外穿侠、二郎·打码神 2026-09-29 用户要求删掉（连同 cfg.extra/xtra/path.swing/spr.eyes 钩子、fx.js web/mosaic）。
+  每人一份 Crew（武器各异不能走 skins），max 1。`CrewGroup.summon`：有人在场（含离场途中）→ renew 续时间、名字条 ×N，**不换人**；场上没人 → 按成员顺序轮到下一个。`reset()` 连轮换顺序归零。
+- **每人在场 15 秒**、底下铺自己的法术潮（sea.js，见下一节）；真相女神、恶魔 2026-09-29 从 2.8 秒延长（impact 只动画面，数值只在送礼那一刻加）。
+- **层级**：六人都在男女主**身后**（`renderActors` 的 `BEHIND`）；潮在男女主之上。出场压暗：先压背景和哥们闺蜜 → 画档 4 的人 → 主角画进离屏 `actorBuf` 用 `source-atop` 压暗再贴。
+- **站位与大小**（main.js `G4STAND[配方名] = [靴底x, 靴底y, 缩放]`）：**按整个人的面积对齐**（用户对法海"面积非常小"）—— 剪影外框 × s² 都在 45~55 万像素：
+  白娘子 1.005、法海 1.2、真相女神 1.35、恶魔 1.4、嫦娥 1.0、后羿 1.0。最高点顶到 y≈190（拉力条下沿）。原来"同一边一样高"（spr.tall）已删：广袖、披帛铺开的人同高时看着大一圈，脸一样大也不行。
+  真相女神的出场视频尾帧里是 0.94 倍，现身后 `hoverPose` 的 `b.from` 边滑边放大到 1.35。
+- **打全身** `BODY_AIM`（白娘子、法海、嫦娥、后羿）：`spreadAt` 按行取前沿，横躺退回上沿；真相女神、恶魔仍瞄脸。
+- **法术样式**：雾锥 `drawFog`（真相女神那套，其余四人外面也套一层 `*_FX.mist`，用户："参考真相女神的喷雾"）；
+  白娘子水柱 `drawJet`（JET_W 2.2，贴图无描边 + 边缘羽化）、法海金字 `drawMantra`、嫦娥月牙 `drawCrescents`（两个等大圆错开 thick·r，中间厚 0.4r；第一版挖得太浅读成一摞白圆盘）、
+  后羿火球 `drawSuns`。后三者每秒 30 颗粒子、每 3 颗画一个（`every`），其余只当雾；配方 drip 的比例按 30 颗/秒折算。
+  仙佛的光 `drawGodAura(FX, spr)`（法海、嫦娥、后羿共用：暖光 + 放射光 + 头后光轮 + 掌心光团）。
+- **进出场路径** `cfg.path`：`from(s,hx,hy)` / `to(s,x,y)` / `roll0` / `spin`（圈）/ `rollOut`。不给就是女神那套（正上方冲下、往上冲走）。
+- 命中字 `tagsOf(s)`（重击 2 条、轻补两成 1 条）、`TAG.rise/drag` 从脸上方冒出往上飘走。名字条 `STARS` 按成员给名字和颜色。
+- 配方 `RECIPE.baisu/truth/change/fahai/demon/houyi`；嫦娥迸的小月牙用 fx.js `glyph` 画「☾」。
+- 立绘管线 `v14/crewart.py`（抠像/去溢色/edge_extend/缩放/烘三层光，打印"轮廓内部被键吃掉的像素"自检），每人 `v14/<名>/make.py`。
+  淡紫薄纱（嫦娥）别用品红幕（跟幕布同色相抠不开），用绿幕 + `spill='decyan'`（生图会把绿幕反光画进纱里，按 alpha 反解救不回来还把月光解成粉色）。
+
+## 法术潮（sea.js，2026-09-28 起）
+- `Tide(C)`：三层（或更多）横向无缝长条，各层反向平移 + 按列起伏 + 上沿甩飞沫（`spray.shape` 可选聊天气泡 'chat' / 碎纸条 'paper'）+ 小兵骑在第 1、2 层。
+- 六片：`Sea`（海）/ `Scroll`（经卷，程序画）/ `TruthTide` / `DemonTide` / `MoonTide` / `SunTide`（v14/tides/make.py：一张生图出三层，中层水平翻；小兵 2×2 一张按连通块切）。
+  三层浪上沿中位数对齐海（1246 / 1311 / 1366）。
+- main.js `TIDE_OF`（人 → 潮）、`tideSpan()`：左边的从左推进、右边的从右，进度 a/b 取每边最大那片，a+b>1 顶在 `W·a/(a+b)`；前沿甩飞沫；交界 `Clash` 迸两边各自的飞沫（`Tide.dotImg`）。
+- 抠像共用 `v14/tidekit.py`（load 按 alpha 反解幕布色 / solid 补洞 / seam 动态规划找缝）。

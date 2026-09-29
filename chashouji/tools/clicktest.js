@@ -6,7 +6,9 @@ const { chromium } = require('/home/op/shots/node_modules/playwright-core');
   const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--enable-unsafe-swiftshader'] });
   const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
   await p.goto('http://127.0.0.1:40235/index.html?v=' + Date.now());
-  await p.waitForTimeout(4000);
+  /* 等 JS 初始化完：右边档 4 按钮的文字是 JS 改的（HTML 里写的是"相框 ④"），改名和挂 onclick 在同一个循环里（main.js 末尾）。
+     不能按秒等：左边档 4 按钮 HTML 里就叫"真相女神 ④"，初始化没完就点得到、点了没反应；2026-09-29 加了潮贴图后初始化要 ~4 秒 */
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-shop]')].some(x => x.textContent.startsWith('灭迹恶魔')), null, { timeout: 60000 });
   for (const name of ['哥们', '闺蜜', '榴莲鞋雨', '臭袜子足球', '口红', '香蕉']) {
     await p.evaluate((n) => [...document.querySelectorAll('[data-shop]')].find(x => x.textContent.startsWith(n)).click(), name);
     const seq = [];

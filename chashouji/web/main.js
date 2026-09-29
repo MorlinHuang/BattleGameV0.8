@@ -319,7 +319,7 @@ function startMatch() {
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
   stains.length = 0;
-  for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); Sea.reset(); Scroll.reset(); Clash.reset(); Foam.reset();
+  for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); for (const t of TIDE_OF.values()) t.reset(); Clash.reset(); Foam.reset();
   IntroVideo.stop();
   S.auto = false;
   Ammo.clear(); Particles.clear();
@@ -984,120 +984,8 @@ const RECIPE = {
     },
   },
 
-  /* 黑蛛女特工 → 男生的脸：蛛网贴在脸上停一会儿（fx.js kind 'web'，暗红描边白芯 + 红色定位图钉），网张开时一圈红光。 */
-  widow: {
-    tint: [255, 196, 196],
-    tags: ['已定位', '行踪已锁定', '天网恢恢'],
-    tag(x, y, side) {
-      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
-      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
-                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [196, 36, 56], edge: [80, 10, 20], lw: 3,
-                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
-    },
-    web(x, y, r1, life) {
-      Particles.spawn({ kind: 'web', x, y, r: 12, r1, life, rot: Math.random() * 6, rgb: [255, 255, 255], edge: [120, 20, 30], lw: 2.5, drag: 1 });
-      Particles.spawn({ kind: 'ring', x, y, r: 10, r1: r1 * 1.35, life: 0.3, rgb: [230, 40, 60], lw: 6 });
-    },
-    burst(x, y, side, s) {
-      this.web(x, y, 40 * s, 1.5);
-      Particles.spawn({ kind: 'dot', x, y, r: 14 * s, r1: 60 * s, life: 0.16, rgb: [255, 120, 130], a: 0.7 });
-      Particles.spawn({ kind: 'ring', x, y, r: 20 * s, r1: 150 * s, life: 0.4, rgb: [120, 20, 30], lw: 6 * s });
-      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
-    },
-    drip(x, y, side) {                  // 每发网弹打到脸上都张一张小网（每秒 ~2 发，不用限流）
-      this.web(x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 30, 58 + Math.random() * 16, 1.1);
-      if (Math.random() < 0.2) this.tag(x, y, side);
-    },
-    arrive(x, y, s) {                   // 顺着丝降下来，停住时轻：一圈暗红环 + 小震
-      Particles.spawn({ kind: 'ring', x, y: y + 300 * s, r: 30 * s, r1: 180 * s, life: 0.3, rgb: [200, 40, 60], lw: 5 * s });
-      Particles.addShake(3);
-    },
-  },
-
-  /* 内裤外穿侠 → 女生脸前的手机和气泡：射线把聊天记录烧成灰。蹦「已粉碎」「永久删除」，飘出烧焦的气泡碎片（灰聊天框、黑碎片、火星）。 */
-  briefs: {
-    tint: [255, 206, 160],
-    tags: ['已粉碎', '永久删除'],
-    tag(x, y, side) {
-      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
-      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
-                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [210, 50, 30], edge: [110, 20, 10], lw: 3,
-                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
-    },
-    ash(x, y, side, big) {              // 烧焦的气泡：灰框黑点往下掉；黑碎片带火星色描边
-      if (big) Particles.spawn({ kind: 'chat', x, y, vx: -side * (60 + Math.random() * 120), vy: -120 - Math.random() * 100, g: 420, drag: 0.96,
-                                 life: 0.9, r: 14, r1: 20, rgb: [120, 116, 110], edge: [40, 24, 16], lw: 3 });
-      Particles.spawn({ kind: 'chip', x, y, vx: (Math.random() - 0.5) * 320, vy: -80 - Math.random() * 200, g: 700, drag: 0.97,
-                        life: 0.7, w: 10 + Math.random() * 8, h: 6 + Math.random() * 5, rot: Math.random() * 6, vrot: 9,
-                        rgb: [44, 34, 30], edge: [255, 110, 30], lw: 2 });
-    },
-    burst(x, y, side, s) {
-      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 80 * s, life: 0.18, rgb: EMBER, a: 0.85 });
-      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 120 * s, life: 0.32, rgb: [110, 20, 10], lw: 7 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.32, rgb: [255, 60, 30], lw: 3.5 * s });
-      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
-      for (let i = 0; i < Math.round(3 * s); i++) this.ash(x, y, side, i % 2 === 0);
-      for (let i = 0; i < Math.round(5 * s); i++) {
-        const a = Math.random() * 6.283, sp = 200 + Math.random() * 300;
-        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 400, drag: 0.95, life: 0.35, rgb: EMBER, lw: 3 });
-      }
-    },
-    drip(x, y, side) {                  // 射线每秒 ~70 颗打到：三成出火星、一成出碎片、少量烧焦气泡和字
-      const k = Math.random();
-      if (k < 0.3) { const a = Math.random() * 6.283, sp = 150 + Math.random() * 200;
-        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, g: 400, drag: 0.95, life: 0.3, rgb: EMBER, lw: 2.5 }); }
-      else if (k < 0.4) this.ash(x, y, side, k < 0.33);
-      else if (k < 0.405) this.tag(x, y, side);
-    },
-    arrive(x, y, s) {                   // 横着飞进来刹停：一圈白 + 红的气浪、震屏
-      Particles.spawn({ kind: 'ring', x, y, r: 30 * s, r1: 240 * s, life: 0.32, rgb: [110, 20, 10], lw: 8 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 30 * s, r1: 234 * s, life: 0.32, rgb: [255, 236, 200], lw: 4 * s });
-      Particles.addShake(7);
-    },
-  },
-
-  /* 二郎·打码神 → 女生的脸和手机：命中区域铺一块马赛克（fx.js kind 'mosaic'，灰黑方块、硬边，0.6 秒后散开），蹦「已打码」。 */
-  erlang: {
-    tint: [226, 226, 232],
-    tags: ['已打码', '此内容不可见'],
-    tag(x, y, side) {
-      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
-      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
-                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [60, 60, 70], edge: [120, 80, 10], lw: 3,
-                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
-    },
-    MOSAIC: { hold: 0.6, cell: 14 },   // 盖住不动几秒、方块边长
-    mosaic(x, y, r, life) {
-      Particles.spawn({ kind: 'mosaic', x: x + (Math.random() - 0.5) * 16, y: y + (Math.random() - 0.5) * 16, r, w: this.MOSAIC.cell, h: this.MOSAIC.hold, life, drag: 1 });
-    },
-    burst(x, y, side, s) {
-      this.mosaic(x, y, 20 * s, 1.1);            // 半径 ~56：盖住脸，手机和身子还露着（F2）
-      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 120 * s, life: 0.32, rgb: [120, 80, 10], lw: 7 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 116 * s, life: 0.32, rgb: [255, 200, 60], lw: 3.5 * s });
-      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
-    },
-    drip(x, y, side) {                  // 金光每秒 ~60 颗打到：二十分之一铺一小块马赛克（场上约 3 块）、少量金星
-      const k = Math.random();
-      if (k < 0.05) this.mosaic(x, y, 38, 1.0);
-      else if (k < 0.2) { const a = Math.random() * 6.283, sp = 120 + Math.random() * 180;
-        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 300, drag: 0.95, life: 0.3, rgb: [255, 200, 60], lw: 2.5 }); }
-      else if (k < 0.206) this.tag(x, y, side);
-    },
-    arrive(x, y, s) {                   // 踩云降下来：脚下一圈白云团 + 金环
-      const cy = y + 340 * s;
-      for (let i = 0; i < 8; i++) {
-        const a = i / 8 * 6.283;
-        Particles.spawn({ kind: 'soft', x, y: cy, vx: Math.cos(a) * 260, vy: Math.sin(a) * 60, drag: 0.9, g: 0,
-                          r: 20, r1: 46, life: 0.55, rgb: [240, 246, 255], a: 0.8 });
-      }
-      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 240 * s, life: 0.36, rgb: [120, 80, 10], lw: 8 * s });
-      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 234 * s, life: 0.36, rgb: [255, 200, 60], lw: 4 * s });
-      Particles.addShake(5);
-    },
-  },
-
   /* 法海 → 女生（2026-09-28，跟白娘子对立）：金光咒语打在她身上，**迸出金字**（fx.js kind 'glyph'：卍、唵、嘛、呢、叭、咪、吽）
-     + 一圈金色佛光环（深褐托底、金芯，同二郎的金环配色），蹦「收！」「回头是岸」「大威天龙」。
+     + 一圈金色佛光环（深褐托底、金芯），蹦「收！」「回头是岸」「大威天龙」。
      咒语一发一发的（FAHAI.fluid rate 7），每发都走 drip：多半迸一个小金字，少量金星。 */
   fahai: {
     tint: [255, 236, 190],
@@ -1135,6 +1023,86 @@ const RECIPE = {
       Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [120, 60, 10], lw: 10 * s });
       Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [255, 214, 90], lw: 5 * s });
       for (let i = 0; i < 8; i++) this.glyph(x, y, 34, 300, 560);
+      Particles.addShake(6);
+    },
+  },
+
+  /* 嫦娥 → 男生（2026-09-29，跟后羿对立：月 vs 日）：月牙光刃打在身上，迸一圈银白月光环 + 碎银光点 + 两三弯小月牙飞散，
+     蹦「月照现形！」「广寒一击」「玉兔来也」。配色：银白在浅墙上会化掉，托底用靛蓝（实体靠轮廓）。 */
+  change: {
+    tint: [214, 226, 255],
+    tags: ['月照现形！', '广寒一击', '玉兔来也'],
+    tag(x, y, side) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
+      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
+                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [90, 110, 200], edge: [30, 36, 100], lw: 3,
+                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
+    },
+    moon(x, y, sz, sp0, sp1) {        // 一弯小月牙飞散（fx.js glyph：用"☾"字形画，描边细）
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, sp = sp0 + Math.random() * (sp1 - sp0);
+      Particles.spawn({ kind: 'glyph', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 260, drag: 0.94,
+                        life: 0.6 + Math.random() * 0.3, r: sz * 0.6, r1: sz, rot: (Math.random() - 0.5) * 0.6, vrot: (Math.random() - 0.5) * 4,
+                        rgb: [246, 250, 255], edge: [70, 90, 170], lw: Math.max(2, sz * 0.06), text: '☾' });
+    },
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 90 * s, life: 0.2, rgb: [230, 238, 255], a: 0.85 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 130 * s, life: 0.36, rgb: [40, 50, 130], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 126 * s, life: 0.36, rgb: [220, 230, 255], lw: 3.5 * s });
+      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
+      for (let i = 0; i < Math.round(3 * s); i++) this.moon(x, y, 30 + 8 * s, 180, 380);
+    },
+    drip(x, y, side) {                 // 每颗打中的粒子一次；光刃每秒 30 颗（crew.js CHANGE.fluid.rate），比例同法海
+      const k = Math.random();
+      if (k < 0.12) this.moon(x, y, 30 + Math.random() * 10, 120, 260);
+      else if (k < 0.27) { const a = Math.random() * 6.283, sp = 120 + Math.random() * 180;
+        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 200, drag: 0.95, life: 0.35, rgb: [200, 215, 255], lw: 2.5 }); }
+      else if (k < 0.28) this.tag(x, y, side);
+    },
+    arrive(x, y, s) {                  // (x, y) = 腰；飞到位"定"住：一圈银白月光环往外冲 + 几弯月牙四散 + 小震屏
+      Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 220 * s, life: 0.24, rgb: [220, 230, 255], a: 0.7 });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [40, 50, 130], lw: 10 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [214, 226, 255], lw: 5 * s });
+      for (let i = 0; i < 8; i++) this.moon(x, y, 36, 300, 560);
+      Particles.addShake(6);
+    },
+  },
+
+  /* 后羿 → 女生（2026-09-29）：小太阳火球打在身上，炸一团白热火光 + 橙红冲击环 + 一把火星，
+     蹦「射日！」「烈日灼心」「金乌冲！」。 */
+  houyi: {
+    tint: [255, 214, 170],
+    tags: ['射日！', '烈日灼心', '金乌冲！'],
+    tag(x, y, side) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 150 + Math.random() * 110;
+      Particles.spawn({ kind: 'tag', x, y: y - TAG.rise, vx: Math.cos(a) * sp - side * 50, vy: Math.sin(a) * sp, g: -30, drag: TAG.drag,
+                        life: 1.1 + Math.random() * 0.3, r: 20, r1: 30, rgb: [230, 90, 20], edge: [110, 30, 6], lw: 3,
+                        text: this.tags[Math.floor(Math.random() * this.tags.length)] });
+    },
+    embers(x, y, n, sp0, sp1) {
+      for (let i = 0; i < n; i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 3.4, sp = sp0 + Math.random() * (sp1 - sp0);
+        Particles.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 320, drag: 0.95, life: 0.3 + Math.random() * 0.25,
+                          rgb: Math.random() < 0.5 ? [255, 210, 80] : [255, 110, 30], lw: 3 });
+      }
+    },
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 20 * s, r1: 100 * s, life: 0.22, rgb: [255, 236, 170], a: 0.9 });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 136 * s, life: 0.36, rgb: [130, 30, 6], lw: 7 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 130 * s, life: 0.36, rgb: [255, 160, 40], lw: 3.5 * s });
+      for (let i = tagsOf(s); i > 0; i--) this.tag(x, y, side);
+      this.embers(x, y, Math.round(8 * s), 200, 460);
+    },
+    drip(x, y, side) {                 // 每颗打中的粒子一次；火球每秒 30 颗，比例同法海
+      const k = Math.random();
+      if (k < 0.1) Particles.spawn({ kind: 'dot', x, y, r: 10, r1: 44, life: 0.16, rgb: [255, 200, 90], a: 0.8 });
+      else if (k < 0.3) this.embers(x, y, 2, 120, 280);
+      else if (k < 0.31) this.tag(x, y, side);
+    },
+    arrive(x, y, s) {                  // 飞到位"定"住：一圈日轮火光往外冲 + 一把火星 + 小震屏
+      Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 230 * s, life: 0.24, rgb: [255, 220, 150], a: 0.75 });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 390 * s, life: 0.42, rgb: [130, 30, 6], lw: 10 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 382 * s, life: 0.42, rgb: [255, 170, 50], lw: 5 * s });
+      this.embers(x, y, 16, 300, 620);
       Particles.addShake(6);
     },
   },
@@ -1335,8 +1303,10 @@ const SHOP = {
    场上没人时送 = 按下面的顺序轮到下一个（第一次是白娘子 / 法海）；有人在场再送 = 给他 / 她续一段、名字条重播「×N」，不换人
    （crew.js CrewGroup）。成员顺序也是 ?g4L= / ?g4R= 的下标。
    女生侧白娘子打头（2026-09-28 用户："女神第一个出白娘子"）。 */
-const G4L = CrewGroup([Baisu, Truth, Widow]);    // 查岗党：白娘子（替掉月亮查岗使）/ 真相女神 / 黑蛛女特工
-const G4R = CrewGroup([Fahai, Demon, Briefs, Erlang]);  // 灭迹党：法海（2026-09-28 加，跟白娘子对立，打头）/ 灭迹恶魔 / 内裤外穿侠 / 二郎·打码神
+/* 三对一对一对立，按对排：白娘子 vs 法海 → 真相女神 vs 灭迹恶魔 → 嫦娥 vs 后羿（2026-09-29 用户定的顺序；
+   同日删掉黑蛛女特工、内裤外穿侠、二郎·打码神，加嫦娥、后羿） */
+const G4L = CrewGroup([Baisu, Truth, Change]);   // 查岗党：白娘子 / 真相女神 / 嫦娥
+const G4R = CrewGroup([Fahai, Demon, Houyi]);    // 灭迹党：法海 / 灭迹恶魔 / 后羿
 const CREW = { buddy: Buddy, bestie: Bestie, g4L: G4L, g4R: G4R };
 const CREWS = [Buddy, Bestie, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
 /* 召唤：组（档 4）按 URL ?g4L= / ?g4R= 强制召某一个人（诊断：胶片一个一个单独拍）；单个 Crew 可指定形象 sk（?skin=） */
@@ -1350,25 +1320,34 @@ function summonCrew(name, sk) {
 /* 有出场视频的人 → intro.js CLIPS 的键 */
 const INTRO_OF = new Map([[Truth, 'truth']]);
 const RAIN = { durian: DurianRain, sockball: SockRain };
-/* 屏幕底部的法术潮（sea.js）：白娘子的海水、法海的金光经卷，各跟着自己那个人 —— 在场、还没开始飞走（候场放视频时不算）就涨，
-   飞走就退。续送多待，潮也多待。 */
+/* 屏幕底部的法术潮（sea.js）：档 4 每个人一片，跟着自己那个人 —— 在场、还没开始飞走（候场放视频时不算）就推进来，
+   飞走就退。续送多待，潮也多待。左边三片从左推进（side −1），右边三片从右（side +1）。 */
+const TIDE_OF = new Map([[Baisu, Sea], [Truth, TruthTide], [Change, MoonTide], [Fahai, Scroll], [Demon, DemonTide], [Houyi, SunTide]]);
+const TIDES_L = [...TIDE_OF.values()].filter(t => t.side < 0), TIDES_R = [...TIDE_OF.values()].filter(t => t.side > 0);
 const casting = (c) => c.peek().some(b => !b.hold && b.t <= c.cfg.T.enter + b.spray);
-/* 两片潮各从自己那一边横着推进来（海从左、经卷从右，2026-09-28 用户："分别从左右进场，这样同时播放"）：
-   进度 a、b（0~1）→ 海占 [0, W·a)、经卷占 [W·(1 − b), W)。两片加起来超过一屏（a + b > 1）就顶在一起，
-   分界按两边进度的比例 W·a / (a + b) —— a + b = 1 那一刻正好是两道前沿碰上的地方，之后谁推得多谁占得多，只有一片时它铺满全宽。
-   返回 { sea: [x0, x1], scroll: [x0, x1], meet（顶在一起时的分界 x，否则 null） } */
+/* 两边各从自己那一边横着推进来（2026-09-28 用户："分别从左右进场，这样同时播放"）。每边同时只一个人在场，
+   但前一个人的潮退场（fall 1.4 秒）时下一个人可能已经来了，所以一边可能两片同时有进度：
+   这一边的进度 a / b 取最大的那片。a + b ≤ 1：每片各占自己推到的地方（左 [0, W·lv)、右 [W·(1 − lv), W)）；
+   a + b > 1 就顶在一起，分界 W·a / (a + b) —— a + b = 1 那一刻正好是两道前沿碰上的地方，之后谁推得多谁占得多；只有一边时铺满全宽。
+   返回 { span(t)：这片潮画 [x0, x1)，meet：顶在一起时的分界 x（否则 null），L / R：两边进度最大的那片 } */
 function tideSpan() {
-  const a = Sea.level(), b = Scroll.level();
-  if (a + b <= 1) return { sea: [0, W * a], scroll: [W * (1 - b), W], meet: null };
-  const x = W * a / (a + b);
-  return { sea: [0, x], scroll: [x, W], meet: x };
+  const top = (ts) => ts.reduce((m, t) => t.level() > m.level() ? t : m);
+  const L = top(TIDES_L), R = top(TIDES_R), a = L.level(), b = R.level();
+  const meet = a + b > 1 ? W * a / (a + b) : null;
+  const span = (t) => t.side < 0 ? [0, meet == null ? W * t.level() : Math.min(W * t.level(), meet)]
+                                 : [meet == null ? W * (1 - t.level()) : Math.max(W * (1 - t.level()), meet), W];
+  return { span, meet, L, R };
 }
 function tideUpdate(dt) {
-  /* 前沿（甩浪头飞沫 / 金光点的地方）：没顶在一起、也没推满的那一头 */
-  const sp = tideSpan(), fr = (x) => sp.meet == null && x > 0 && x < W ? x : null;
-  Sea.update(dt, casting(Baisu), fr(sp.sea[1])); Scroll.update(dt, casting(Fahai), fr(sp.scroll[0])); Foam.update(dt);
+  /* 前沿（甩浪头飞沫的地方）：还没推满、也没顶到对面的那一头 */
+  const sp = tideSpan();
+  for (const [c, t] of TIDE_OF) {
+    const [x0, x1] = sp.span(t), x = t.side < 0 ? x1 : x0;
+    t.update(dt, casting(c), x > 0 && x < W && x !== sp.meet ? x : null);
+  }
+  Foam.update(dt);
   const x = sp.meet ?? W / 2;
-  Clash.update(dt, x, Math.min(Sea.edgeY(x), Scroll.edgeY(x)), sp.meet == null ? 0 : Math.min(Sea.level(), Scroll.level()));
+  Clash.update(dt, x, Math.min(sp.L.edgeY(x), sp.R.edgeY(x)), sp.meet == null ? 0 : Math.min(sp.L.level(), sp.R.level()), sp.L, sp.R);
 }
 /* ?crewlog=1（胶片每格一行）：档 4 在场的人瞄准角 / 目标 / 喷口，和 crew.js measure 的两个外框
    solid（最高点、中线余量按它）/ glow（含外发光，最低点按它），屏幕像素 x0,y0,x1,y1 */
@@ -1463,7 +1442,7 @@ const GIFT = {
   /* 真相女神（2026-09-27 替换戒指盒，戒指盒那行留着当备选）：扛巨型「真相喷雾」从天上冲下来悬在女主左上方，
      朝男生的脸喷 2.8 秒（crew.js TRUTH）。第一下档 4、之后每 0.25 秒轻补。档 4 原来靠 exec 的全场预警 + 1.8 倍体积
      读出"贵"，她换成出场 1.4 秒全场压暗 + 名字条（truthIntro）。 */
-  /* 2026-09-28 扩成一组三人（crew 'g4L'）：真相女神 / 白娘子（原月亮查岗使）/ 黑蛛女特工，同时只一个在场、轮换（CrewGroup）；
+  /* 2026-09-28 扩成一组三人（crew 'g4L'）：白娘子 / 真相女神 / 嫦娥（2026-09-29 替掉黑蛛女特工），同时只一个在场、轮换（CrewGroup）；
      名字条按成员各自取（STARS）。这里的 name 只是礼物按钮上的名字。 */
   truth:   { name: '真相女神', from: +1, style: 'crew',  crew: 'g4L',  power: 4, recipe: 'truth', push: 600 },
   // 灭迹党（男方，在右，from=-1）
@@ -1482,7 +1461,7 @@ const GIFT = {
   buddy:   { name: '哥们',   from: -1, style: 'crew',   crew: 'buddy',  power: 3, recipe: 'water',  push: 230 },
   /* 灭迹恶魔（2026-09-27 替换相框）：对应女生的真相女神 —— 悬在右上朝女生的脸喷"撤回烟雾"（crew.js DEMON），
      打中蹦「已撤回」「记录已清空」。出场同女神：全场压暗 + 名字条（从右边滑进来）。相框那行留着当备选。 */
-  /* 2026-09-28 扩成一组三人（crew 'g4R'）：灭迹恶魔 / 内裤外穿侠 / 二郎·打码神，同 g4L 轮换 */
+  /* 2026-09-28 扩成一组三人（crew 'g4R'）：法海 / 灭迹恶魔 / 后羿（2026-09-29 替掉内裤外穿侠、二郎·打码神），同 g4L 轮换 */
   demon:   { name: '灭迹恶魔', from: -1, style: 'crew',  crew: 'g4R',  power: 4, recipe: 'demon', push: 600 },
   photo:   { name: '相框',   from: -1, style: 'heavy',  item: 'photo',   r: 68,       spin: 6.7, power: 4, recipe: 'memory',  push: 600 },
 };
@@ -2218,7 +2197,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* 天上掉东西（rain.js）：target(u) = 挨砸那个人身上第 u 那一列的上沿（bodyAt，跪下、被拖倒都跟着走），
      top(x) = 这一列的上沿（落到这里就算砸中）。砸中按礼物分量 power 爆（重的档 2、轻的档 1），爆点颜色跟着东西走。
      榴莲鞋雨（查岗党档 2）砸男生：榴莲白、鞋红 / 粉 / 黑。臭袜子足球（灭迹党档 2）砸女生：足球黑白、袜子灰绿臭气。 */
-  Sea.init(W, H); Scroll.init(W, H);
+  for (const t of TIDE_OF.values()) t.init(W, H);
   DurianRain.init({
     target: (u) => bodyAt('topB', u), top: (x) => topAt('topB', x),
     onHit: (kind, col, x, y, power) => impact(-1, y, power, kind === 'durian' ? RECIPE.durian : HEEL_RECIPE[col], x),
@@ -2243,74 +2222,58 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     onHit: (x, y, first) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE.pepper, x),
   });
 
-  /* ---- 档 4 的站位（2026-09-28 改成每边同时一人：用户看完三人同屏"三个女神太多了，每个都显得特别小，还是改一个，放大一些"） ----
-     每边同一时间只有一个人（crew.js CrewGroup 轮换），六个人各有一个大站位：她 / 他悬停时靴底（没倾之前）停在 G4STAND[配方名]，
-     缩放 = 这一边的身高 H ÷ 贴图里的身高 spr.tall —— 同一边三个人一样高（用户："六人的视觉大小要一致，以身高为准"）。
-     硬约束（crew.js measure 实测，含悬停上下晃、瞄准前后倾，p = 5 / 50 / 95 都量）：
-       最低点（含外发光）：女生侧 < y780（女主站着时头顶最高到 y810），男生侧 ≤ y750（男主站着时头顶更高，到 y781）；
-       最高点（光环、角、发丝、武器尖）≥ y190（拉力条下沿）；两边同时在场时女生侧最右 < 男生侧最左（中线不重叠）。
-     两边的 H 不一样：上下能用的高度女生侧 590、男生侧 560（男主头顶高 30），各自取"最紧的那个人正好顶到上下沿"。
-     女生侧 534：女神原来 538（s 0.95），那时晃到最高、p5 前倾时光环顶到 y187，压了拉力条 3 像素 —— 缩 0.7% 才进 190，没有余地再大；
-     男生侧 488（恶魔原来 486）：二郎顶着（p95 时三尖刀尖 ~192、靴尖外发光 ~748，上下各留 2 像素）。男生侧也放到 538 会压住男主的头 / 拉力条；
-     女生侧降到 488 就得把女神再缩小 9%（用户要的是放大）。
-     黑蛛女特工、二郎的立绘为此各重出了一版（src2：手放到肩前、祥云压扁），见 v14/widow、v14/erlang 的 make.py。
-     横向：每个人按原来女神 / 恶魔大站位的外框中线（女生侧 x≈220、男生侧 x≈766）摆，靴底 x 由各自贴图的外框中线换算。
+  /* ---- 档 4 的站位 ----
+     每边同一时间只有一个人（crew.js CrewGroup 轮换），六个人各有一个大站位：悬停时靴底（没倾之前）停在 G4STAND[配方名] 的 (x, y)，
+     第三项是屏幕上的缩放（贴图像素 × s = 屏幕像素）。
+     大小按**整个人的面积**对齐（2026-09-28 用户对法海："面积非常小，修正法海大小"；2026-09-29："把真相女神和恶魔放大到和白娘子法海一样"）：
+     剪影外框（去掉贴图四周 44 像素的外发光留边）× s² 都在 45~55 万像素 —— 白娘子 737×711 × 1.0、法海 512×676 × 1.2、
+     真相女神 338×566 × 1.35、灭迹恶魔 349×513 × 1.4、嫦娥 569×859 × 1.0、后羿 610×818 × 1.0。
+     （原来按"同一边一样高"定缩放 —— 用户第一次说"六人的视觉大小要一致，以身高为准"；白娘子、法海之后改看面积：
+     广袖、披帛、袈裟铺开的人同样高时看着大一圈。）
+     上沿：最高点（光环、发髻、弓梢）顶到 y ≈ 190（拉力条下沿）；下半身在男女主身后（main.js renderActors BEHIND），被主角挡住。
+     横向：女生侧的人往左出画一点（披帛 / 裙摆 / 广袖），男生侧往右出画一点（袈裟 / 披风），伸出去施法的手在中间。
      onArrive：冲下来刹停那一刻，脚下炸一圈冲击环 + 星星 + 小震屏（不给反馈读成飘下来的）。 */
   const G4STAND = {
-    H: { L: 534, R: 488 },                       // 两边各自的身高（屏幕像素，发顶 → 靴底）
-    truth:  [170, 741],  widow:  [172, 739],
-    /* 白娘子：第三项是在这一边身高上再乘几倍（用户："比现在的女神再大 30%"）。她没有脚，靴底点是裙摆最低那一角（在身子左下），
-       放在女主头顶左边（x 110）：裙摆最低处落在女主头发左外侧，往右裙摆一路收上去，到女主头顶上方已高出 ~60 像素；
-       往左的披帛尾巴（~190 像素）出画 —— 她是从左上飞进来的。 */
-    baisu:  [110, 886, 1.3],
-    demon:  [791, 712],  briefs: [783, 707],  erlang: [788, 701],
-    /* 法海：最低点是右脚草鞋（在身子右下）。大小按整个人的面积跟白娘子对齐（2026-09-28 用户两次："法海比白娘子小一圈"、
-       "法海的面积非常小，修正法海大小"）：两张立绘的脸一样大（眉 → 下巴 42 / 43 像素），但白娘子广袖、披帛铺开有 825×799，
-       法海收着只有 600×764 —— 同缩放下他整个人小一圈。按面积比 √(825·799 ÷ 600·764) ≈ 1.2 放大：缩放 1.2（这一边身高 488 × 1.554 ÷ 632）。
-       站位：头后光轮顶 ≈ y 173（压到拉力条下沿一点，光轮是虚的）、光头顶 ≈ y 209；伸出去的左掌 ≈ (439, 320)，
-       比白娘子掌心的水球（≈ 500, 580）高一大截；靴底 (930, 975) 在男主右边、身后（BEHIND），袈裟右边出画 ~100 像素（同白娘子的披帛）。 */
-    fahai:  [930, 975, 1.554],
+    /* 白娘子：没有脚，靴底点是裙摆最低那一角（在身子左下），放在女主头顶左边；往左的披帛尾巴出画 —— 她是从左上飞进来的。 */
+    baisu:  [110, 886, 1.005],
+    /* 真相女神：光环顶 ≈ y 190，罐口 ≈ (480, 593)；左边出画 ~20 像素。出场视频尾帧里她是 0.94 倍，现身后边滑进悬停位边放大（crew.js hoverPose b.from） */
+    truth:  [196, 963, 1.35],
+    /* 嫦娥：发髻顶 ≈ y 200，掌心月牙 ≈ (541, 467)；披帛往左出画 */
+    change: [240, 1012, 1.0],
+    /* 法海：最低点是右脚草鞋。光轮顶 ≈ y 173（压到拉力条下沿一点，光轮是虚的），伸出去的左掌 ≈ (439, 320)，袈裟右边出画 ~100 像素 */
+    fahai:  [930, 975, 1.2],
+    /* 灭迹恶魔：角尖 ≈ y 190，喷口 ≈ (473, 598)；右边出画 ~50 像素 */
+    demon:  [740, 945, 1.4],
+    /* 后羿：最低点是右脚靴尖。弓梢 ≈ y 190，掌心小太阳 ≈ (401, 586)；披风右边出画 */
+    houyi:  [904, 991, 1.0],
   };
-  const g4Perch = (rcp, side, crew) => (b) => { const [x, y, k = 1] = G4STAND[rcp]; return [x, y, G4STAND.H[side] * k / crew.cfg.spr.tall]; };
+  const g4Perch = (rcp) => () => G4STAND[rcp];
 
-  /* 六个人的公共接线：女生侧瞄男生的脸、男生侧瞄女生的脸，落点同平衡车闺蜜（脸的中上部，u 在上下乱晃）；
-     front null：没打中脸的就散掉，不在身体轮廓上爆。onArrive / onSplash / onHit 走各自的配方（RECIPE.truth / baisu / widow /
-     demon / briefs / erlang），第一下按档 4 力度打（续送那一下也是，crew.js renew）。 */
+  /* 六个人的公共接线：真相女神、灭迹恶魔瞄对方的脸（落点同平衡车闺蜜：脸的中上部，u 在上下乱晃），另外四个打全身；
+     front null：没打中的就散掉，不在身体轮廓上爆。onArrive / onSplash / onHit 走各自的配方（RECIPE.<配方名>），
+     第一下按档 4 力度打（续送那一下也是，crew.js renew）。 */
   const faceTarget = (who, dir) => (u) => { const f = faceOf(who); return f && [f[0] + dir * 0.3 * f[2], f[1] + (u * 0.6 - 0.55) * f[2]]; };
-  /* 白娘子、法海打全身（2026-09-28 用户："白娘子洒出的水流可以往男生身上各处洒，不用只洒头"）：
-     u 从头到脚取对方身上的一点（spreadAt），往身子里收 BODY_IN 像素 —— 正打在轮廓上的话，一半水从边上擦过去。
-     瞄准时 u 按 cfg.sweep 慢慢来回扫（BAISU / FAHAI 的 sweep 扫满 0~1）。 */
+  /* 打全身（2026-09-28 用户："白娘子洒出的水流可以往男生身上各处洒，不用只洒头"；嫦娥、后羿同规格）：
+     u 从头到脚取对方身上的一点（spreadAt），往身子里收 BODY_IN 像素 —— 正打在轮廓上的话，一半从边上擦过去。
+     瞄准时 u 按 cfg.sweep 慢慢来回扫（sweep 扫满 0~1）。 */
   const BODY_IN = 24;
   const bodyTarget = (who) => (u) => spreadAt(who, u, BODY_IN);
-  const BODY_AIM = new Set(['baisu', 'fahai']);
-  const g4Init = (crew, side, rcp, gift, extraHit) => crew.init({
+  const BODY_AIM = new Set(['baisu', 'fahai', 'change', 'houyi']);
+  const g4Init = (crew, side, rcp, gift) => crew.init({
     W, ground: () => GROUND + FX.bob, horizon,
-    perch: g4Perch(rcp, side, crew),
+    perch: g4Perch(rcp),
     target: BODY_AIM.has(rcp) ? bodyTarget(side === 'L' ? 'topB' : 'top') : side === 'L' ? faceTarget('b', -1) : faceTarget('a', +1),
     front: () => null,
     onArrive: (x, y, s) => RECIPE[rcp].arrive(x, y, s),
     onSplash: (x, y) => RECIPE[rcp].drip(x, y, side === 'L' ? -1 : +1),
-    onHit: (x, y, first, b) => {
-      impact(side === 'L' ? -1 : +1, y, first ? GIFT[gift].power : 1, RECIPE[rcp], x);
-      if (extraHit) extraHit(x, y, b);
-    },
+    onHit: (x, y, first) => impact(side === 'L' ? -1 : +1, y, first ? GIFT[gift].power : 1, RECIPE[rcp], x),
   });
-  g4Init(Truth, 'L', 'truth', 'truth');
   g4Init(Baisu, 'L', 'baisu', 'truth');
-  g4Init(Widow, 'L', 'widow', 'truth');
+  g4Init(Truth, 'L', 'truth', 'truth');
+  g4Init(Change, 'L', 'change', 'truth');
   g4Init(Fahai, 'R', 'fahai', 'demon');
   g4Init(Demon, 'R', 'demon', 'demon');
-  g4Init(Briefs, 'R', 'briefs', 'demon');
-  /* 二郎打中时：一个聊天气泡从女生脸上飞向哮天犬的嘴（DOG_EAT.fly 秒），到嘴那一刻狗往上扑一口吃掉（crew.js dogPose 读 b.dogEat）。
-     "狗把聊天记录吃了"。狗绕着云跑、嘴在动，气泡按出手那一刻的嘴位置飞，差的那点被狗扑起来的那一下盖住。 */
-  const DOG_EAT = { fly: 0.55, every: 0.9 };      // 飞多久、最多多久吃一个（每 0.3 秒一次命中都送一个的话狗一直在跳）
-  g4Init(Erlang, 'R', 'erlang', 'demon', (x, y, b) => {
-    if (!b || !b.dogMouth || (b.dogEat != null && b.t - b.dogEat < DOG_EAT.every)) return;
-    const [mx, my] = b.dogMouth, T = DOG_EAT.fly;
-    Particles.spawn({ kind: 'chat', x, y, vx: (mx - x) / T, vy: (my - y) / T, g: 0, drag: 1, life: T + 0.02,
-                      r: 20, r1: 16, rgb: [255, 255, 255], edge: [120, 80, 10], lw: 3 });
-    b.dogEat = b.t + T - 0.35 / 2;               // 扑到最高点（咬合）正好在气泡到嘴时（DOG.eatT 0.35）
-  });
+  g4Init(Houyi, 'R', 'houyi', 'demon');
 
   /* 长卷背景与姿势贴图，都由 v14/build.py 生成。world.json 是它们的说明书：
      每间房多宽、客厅正中在哪、每张贴图的锚点和手机位置。 */
@@ -2338,8 +2301,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Bestie.load(Q0.get('v'), noSpr),
     ...[...G4L.members, ...G4R.members].map(c => c.load(Q0.get('v'), noSpr)),
     DurianRain.load(Q0.get('v'), noSpr),
-    Sea.load(Q0.get('v'), noSpr),
-    Scroll.load(Q0.get('v'), noSpr),
+    ...[...TIDE_OF.values()].map(t => t.load(Q0.get('v'), noSpr)),
     WaterArt.load(Q0.get('v'), noSpr),
     SockRain.load(Q0.get('v'), noSpr),
   ]);
@@ -2449,11 +2411,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   const STARS = [
     { crew: Truth,  name: '真相女神',     from: +1, fill: 'rgba(8,20,10,0.62)',  bar: 'rgb(156,238,96)', edge: 'rgb(20,70,30)',   text: 'rgb(214,255,150)' },
     { crew: Baisu,  name: '白娘子',       from: +1, fill: 'rgba(8,22,48,0.62)',  bar: 'rgb(120,200,255)', edge: 'rgb(16,56,130)',  text: 'rgb(236,248,255)' },
-    { crew: Widow,  name: '黑蛛女特工',   from: +1, fill: 'rgba(24,4,8,0.66)',   bar: 'rgb(200,40,60)',  edge: 'rgb(90,10,20)',   text: 'rgb(255,190,196)' },
+    { crew: Change, name: '嫦娥',         from: +1, fill: 'rgba(14,18,48,0.64)', bar: 'rgb(200,214,255)', edge: 'rgb(40,50,120)',  text: 'rgb(240,244,255)' },
     { crew: Fahai,  name: '法海',         from: -1, fill: 'rgba(40,14,4,0.66)',  bar: 'rgb(255,196,60)', edge: 'rgb(120,40,10)',  text: 'rgb(255,240,190)' },
     { crew: Demon,  name: '灭迹恶魔',     from: -1, fill: 'rgba(20,6,28,0.66)',  bar: 'rgb(200,90,240)', edge: 'rgb(60,10,70)',   text: 'rgb(246,200,255)' },
-    { crew: Briefs, name: '内裤外穿侠',   from: -1, fill: 'rgba(10,16,48,0.66)', bar: 'rgb(220,40,40)',  edge: 'rgb(20,30,110)',  text: 'rgb(255,255,255)' },
-    { crew: Erlang, name: '二郎·打码神', from: -1, fill: 'rgba(12,18,40,0.66)', bar: 'rgb(230,180,60)', edge: 'rgb(255,236,170)', text: 'rgb(20,34,90)' },
+    { crew: Houyi,  name: '后羿',         from: -1, fill: 'rgba(48,10,4,0.66)',  bar: 'rgb(255,140,40)', edge: 'rgb(130,30,6)',   text: 'rgb(255,236,200)' },
   ];
   const introT = (st) => { const b = st.crew.peek()[0]; return b && !b.hold ? b.t : 1e9; };   // 候场（出场视频放着）不算出场
   /* 名字条的计时：出场从 delay 起算；在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */
@@ -2502,21 +2463,20 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     c.restore();
   }
 
-  const BEHIND = new Set([Baisu, Fahai]);
+  const BEHIND = new Set([...G4L.members, ...G4R.members]);
   let actorBuf = null;
   function renderActors() {
     const ox = Particles.off.x, oy = Particles.off.y;
     cctx.clearRect(0, 0, W, H);
     cctx.save(); cctx.translate(ox, oy);
     /* 哥们在男生斜后方、闺蜜在女生斜后方：连同各自喷的水 / 雾按远近排好，全在主角之前画，被主角挡住（crew.js items） */
-    /* 站在主角前面的帮手（真相喷雾，front）画在主角和污渍之后 */
-    /* 白娘子、法海（BEHIND）在男女主身后：两个大仙悬在两人上方，用户："法海和白娘子在男女主的下层"。
+    /* 档 4 六个人（BEHIND）在男女主身后：大仙悬在两人上方，用户："法海和白娘子在男女主的下层"（2026-09-29 真相女神、灭迹恶魔放大后同样）。
        水柱 / 金字从主角身后穿过去，被身子挡住的那一截读成打中了（同哥们、闺蜜）；爆的泡沫、金字在特效层，照样盖在人身上 */
     const crew = CREWS.flatMap(c => c.items().map(it => ({ ...it, behind: BEHIND.has(c) }))).sort((a, b) => a.s - b.s);
-    /* 档 4 出场压暗：主角和背景暗下去，出场的她 / 他是亮的。站在主角前面的（真相女神那几个）画在压暗之后；
-       白娘子、法海在主角身后，只能反过来 —— 先压背景和哥们闺蜜，再画他们，主角单独画进离屏画布压暗了再贴上来 */
+    /* 档 4 出场压暗：主角和背景暗下去，出场的她 / 他是亮的。他们在主角身后，所以先压背景和哥们闺蜜，再画他们，
+       主角单独画进离屏画布压暗了再贴上来 */
     const dim = introDim();
-    for (const it of crew) if (!it.front && !it.behind) it.draw(cctx);
+    for (const it of crew) if (!it.behind) it.draw(cctx);
     if (dim > 0) drawIntroDim(cctx, dim);
     for (const it of crew) if (it.behind) it.draw(cctx);
     let ac = cctx;
@@ -2532,10 +2492,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       drawIntroDim(ac, dim, 'source-atop');
       cctx.save(); cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.drawImage(actorBuf, 0, 0); cctx.restore();
     }
-    /* 白娘子的海水 / 法海的经卷：盖在男女主之上（用户："水面和卷轴是在男女主的上层"），漫过两人的脚和小腿 */
+    /* 法术潮：盖在男女主之上（用户："水面和卷轴是在男女主的上层"），漫过两人的脚和小腿 */
     const sp = tideSpan();
-    Sea.draw(cctx, ...sp.sea); Scroll.draw(cctx, ...sp.scroll); Clash.draw(cctx);
-    for (const it of crew) if (it.front) it.draw(cctx);
+    for (const t of TIDE_OF.values()) t.draw(cctx, ...sp.span(t));
+    Clash.draw(cctx);
     cctx.restore();
   }
 

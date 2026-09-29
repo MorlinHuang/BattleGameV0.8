@@ -33,7 +33,7 @@ function Crew(cfg) {
   const REST = spr.rest || 0;                    // 贴图里喷口本来的指向（仰角，朝下为负）：真相女神第二版罐子本身就斜朝右下
   const PATH = cfg.path || {};                    // 悬停的人怎么来、怎么走（见 hoverPose）
   const WK = cfg.whole && cfg.whole.k != null ? cfg.whole.k : 1;   // whole：整个人跟瞄准角转几成（白娘子 0.12：身子只轻轻倾，水流照样按完整角度出）
-  let img = null, xi = {}, o = {};               // img[形象]：{ arm, body, lo }（arm 可无）；xi：cfg.xtra 的附属贴图（哮天犬）
+  let img = null, o = {};                       // img[形象]：{ arm, body, lo }（arm 可无）
   const bs = [], ps = [];                        // 在场的人、喷出去的东西（水滴 / 雾团）
 
   function init(opt) { o = opt; }
@@ -47,13 +47,8 @@ function Crew(cfg) {
       i.src = src + (v ? '?v=' + encodeURIComponent(v) : '');
     });
     const ks = ['arm', 'body', 'lo'].filter(k => spr[k]), src = (k, n) => spr.src.replace('%n', n).replace('%k', spr[k].src);
-    const xs = Object.entries(cfg.xtra || {});
-    return Promise.all([...cfg.skins.map(n => Promise.all(ks.map(k => one(src(k, n))))), Promise.all(xs.map(([, f]) => one(f)))]).then((all) => {
-      const xim = all.pop(), sets = all;
-      if (sets.every(ims => ims.every(Boolean)) && xim.every(Boolean)) {
-        img = sets.map(ims => { const s = {}; ks.forEach((k, i) => { s[k] = ims[i]; }); return s; });
-        xs.forEach(([k], i) => { xi[k] = xim[i]; });
-      }
+    return Promise.all(cfg.skins.map(n => Promise.all(ks.map(k => one(src(k, n)))))).then((sets) => {
+      if (sets.every(ims => ims.every(Boolean))) img = sets.map(ims => { const s = {}; ks.forEach((k, i) => { s[k] = ims[i]; }); return s; });
       return !!img;
     });
   }
@@ -121,7 +116,7 @@ function Crew(cfg) {
      （main.js G4STAND：每边同时一人，六个人各有一个大站位，缩放按身高统一，不用召唤时抽的 b.s）。
      来：从 PATH.from(s, hx, hy) 给的画外那一点冲过来，按 easeOut 减速刹停（不给就从正上方画外冲下来 —— 女神 / 恶魔）；
      走：朝 PATH.to(s, x, y) 加速离开（u²，不给就原地往上冲出画面）。悬着的时候慢慢晃一个横 8 字 + 上下浮（anim.bob）。
-     进出场时整个人另外转多少（roll：内裤侠横着飞进来、白娘子前倾着飞下来）见 rollOf。 */
+     进出场时整个人另外转多少（roll：白娘子、法海前倾着飞下来）见 rollOf。 */
   function hoverPose(b) {
     const [hx, hy, s] = o.perch(b), t = b.t, se = sprayEnd(b);
     const top = -(spr.foot[1] - spr.muzzle[1] + 120) * s;             // 脚底在这，整个人（含翘起的罐子）都在画外
@@ -150,14 +145,13 @@ function Crew(cfg) {
     return [x, y, s];
   }
   /* 进出场时整个人额外转的角（canvas 顺时针为正），绕 PATH.pivot（贴图点，不给就是 whole.pivot）：
-     来的时候从 roll0 + spin 圈转回 0（easeOut，跟位移同步刹住）；走的时候从 0 转到 rollOut（u²）；
-     悬着时 swing = [幅度, 角频率] 轻轻摆（黑蛛女特工吊在丝上，绕抓丝的手摆）。只管画，喷口 / 瞄准不吃它 ——
+     来的时候从 roll0 + spin 圈转回 0（easeOut，跟位移同步刹住）；走的时候从 0 转到 rollOut（u²）。只管画，喷口 / 瞄准不吃它 ——
      转的时候都还没开火。 */
   function rollOf(b) {
     const t = b.t, se = sprayEnd(b);
     if (t < T.enter) return ((PATH.roll0 || 0) + (PATH.spin || 0) * 6.2832) * (1 - easeOut(t / T.enter));
     if (t > se) return (PATH.rollOut || 0) * Math.min(1, (t - se) / T.exit) ** 2;
-    return PATH.swing ? PATH.swing[0] * Math.sin((t - T.enter) * PATH.swing[1] + b.ph) * Math.min(1, (t - T.enter) / 0.4) : 0;
+    return 0;
   }
 
   /* 此刻人站在哪（脚下滑板/平衡车底边中点的屏幕坐标）和缩放。
@@ -322,7 +316,7 @@ function Crew(cfg) {
         b.aim += b.av * dt;
       } else b.aim += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.aim));
       b.want = want;
-      b.m = null; b.eyes = null;
+      b.m = null;
       const spraying = b.t >= T.enter + (T.fire || 0) && b.t <= se && tg;   // T.fire：刹停之后隔一拍再开火
       if (A) {                                   // 一段段按：每次按下后坐一震；喷的时候上身往前探
         b.kick *= Math.exp(-A.kick[2] * dt);
@@ -360,7 +354,6 @@ function Crew(cfg) {
          每个按它**实际该出口的时刻**补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩。 */
       b.emit += dt * F.rate;
       const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm || cfg.whole ? 1 : 0] + REST;   // 沿喷口此刻真的指向（含后坐）
-      if (spr.eyes) b.eyes = spr.eyes.map(q => carried(p, q, b.aim, b));   // 射线从几只眼睛各出一道（内裤外穿侠两只、二郎一只天眼）
       while (b.emit >= 1) {
         b.emit -= 1;
         const age = b.emit / F.rate, a = dir + (Math.random() - 0.5) * 2 * F.spread;
@@ -382,14 +375,13 @@ function Crew(cfg) {
     if (!img) return [];
     const out = [], groups = new Map();
     for (const d of ps) { const g = groups.get(d.b); g ? g.push(d) : groups.set(d.b, [d]); }
-    const front = !!cfg.front;                   // 站在主角前面（真相喷雾）：main.js 把它们挪到主角之后画
     /* 悬停的人按此刻 pose 的缩放排（缩放由 o.perch 给，main.js G4STAND，不是召唤时抽的 b.s），站地的按召唤时定的远近 */
     const sOf = (b) => cfg.move === 'hover' && bs.includes(b) ? pose(b)[2] : b.s;
-    for (const b of bs) if (!b.hold) out.push({ s: sOf(b), front, draw: (ctx) => drawOne(ctx, b) });
+    for (const b of bs) if (!b.hold) out.push({ s: sOf(b), draw: (ctx) => drawOne(ctx, b) });
     /* 人已离场、水还在飞的，按原来那个人的远近画 */
     /* cfg.over（白娘子、法海）：放出去的东西画在所有帮手之上 —— 两人一左一右同时在场，法海的金字从白娘子半透明的广袖后面飞过去，
        被袖子蒙成一层白雾，读成"字在她身后"而不是"打向女生" */
-    for (const [b, g] of groups) out.push({ s: sOf(b) + (cfg.over ? 100 : 1e-6), front, draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
+    for (const [b, g] of groups) out.push({ s: sOf(b) + (cfg.over ? 100 : 1e-6), draw: (ctx) => F.draw(ctx, g, bs.includes(b) ? b : null) });
     return out;
   }
 
@@ -401,13 +393,8 @@ function Crew(cfg) {
     const I = img[b.skin], put = (im) => ctx.drawImage(im, X, Y, im.width * s, im.height * s);
     const spin = (q, th) => { const [cx, cy] = at(p, q); ctx.translate(cx, cy); ctx.rotate(-face * th); ctx.translate(-cx, -cy); };
     const rl = cfg.move === 'hover' ? rollOf(b) : 0;
-    /* cfg.extra（可无）：画在屏幕坐标里、不跟着人倾的东西（黑蛛女特工的丝、哮天犬）。carry(q) 给贴图点转过之后的屏幕位置
-       （不含进出场的 roll —— 丝绕抓丝的手摆，手本身不动）。先画 'back' 层，人画完再画 'fore' 层。
-       probe：measure 量范围时画的那一遍 —— 只画"人"：贴图 + 光环 / 角光 / 天眼 / 狗，不画身后的放射特效
-       （女神的光芒、恶魔的烟雾和裂光）和黑蛛女特工的丝。那几样跟喷雾一样是特效层，可以伸进 HUD 底下（HUD 画在它们之上，
-       恶魔的裂光 18c00c6 起就伸到 y≈110）；丝本来就从画面顶挂下来。 */
-    const carry = (q) => cfg.whole ? carried(p, q, b.aim, b) : at(p, q);
-    if (cfg.extra) cfg.extra(ctx, b, s, carry, 'back', xi, probe);
+    /* probe：measure 量范围时画的那一遍 —— 只画"人"：贴图 + 光环 / 角光，不画身后的放射特效（女神的光芒、恶魔的烟雾和裂光）。
+       那几样跟喷雾一样是特效层，可以伸进 HUD 底下（HUD 画在它们之上，恶魔的裂光 18c00c6 起就伸到 y≈110）。 */
     ctx.save();
     if (rl) { const [cx, cy] = at(p, PATH.pivot || cfg.whole.pivot); ctx.translate(cx, cy); ctx.rotate(rl); ctx.translate(-cx, -cy); }
     if (cfg.whole) spin(cfg.whole.pivot, b.aim * WK);  // 悬空：整个人先绕重心转（WK 成），上身再在这个基础上吃后坐
@@ -419,7 +406,6 @@ function Crew(cfg) {
     ctx.restore();
     if (I.lo) put(I.lo);
     ctx.restore();
-    if (cfg.extra) cfg.extra(ctx, b, s, carry, 'fore', xi, probe);
   }
 
   const active = () => bs.length > 0;
@@ -430,7 +416,7 @@ function Crew(cfg) {
   /* 诊断（?crewlog=1）：这个人此刻画出来的范围，两个阈值各一个外框 [x0, y0, x1, y1]（屏幕像素）：
      solid（alpha > MEASURE.solid）：剪影 + 贴着轮廓的那圈亮边 —— 最高点（光环、角、发丝）、中线余量按它；
      glow（alpha > MEASURE.glow）：连外发光看得见的那圈 —— 最低点按它（用户定的：最低点含外发光）。
-     在离屏画布上真画一遍再扫像素 —— 按贴图外框算的话，斜着的人外框角远大于剪影。黑蛛女特工的丝不画（probe）。 */
+     在离屏画布上真画一遍再扫像素 —— 按贴图外框算的话，斜着的人外框角远大于剪影。 */
   let mc = null;
   function measure(b) {
     if (!img) return null;
@@ -727,10 +713,11 @@ function drawSpray(F, C, ctx, ps, b) {
      雾量比平衡车闺蜜大得多：雾团多（rate 220）、胀得大（TRUTH_FX.r1 110）、飞得远（life 1.15）。
      出口慢（fluid.V 650，平衡车 1100）：喷口离男生脸只有 ~110 像素，V 1250 时 0.09 秒就到脸上，路上只剩两三团，
      看不到"一股雾冲出去"；减半后路上的雾团翻倍、连成一个锥。
-   · front：画在两个主角之前（她在半空、离镜头近，雾从她身前喷出去）。 */
+   · 层级：2026-09-29 起在两个主角身后（main.js renderActors）：放大到跟白娘子、法海一样大之后，画在主角之前会把女主整个人盖住；
+     档 4 六个人都一样（用户："法海和白娘子在男女主的下层"）。 */
 const TRUTH = {
   face: +1,
-  move: 'hover', front: true,
+  move: 'hover',
   /* 第二版立绘（2026-09-27，v14/truth/make2.py）：竖直悬浮、罐子夹在腰侧本来就斜朝右下（rest −0.505 rad ≈ 29°），
      单层（没有 lo）、三层金色外发光烘在贴图里。整个人绕腰胯（whole.pivot，重心附近）小幅前后倾着瞄：
      倾的时候头和脚一左一右摆、人留在画内；瞄准用二分反解（update）。量点都是贴图像素，由 make2.py 打印。
@@ -738,15 +725,15 @@ const TRUTH = {
   whole: { pivot: [168, 281] },
   exhaust: { at: [119, 195], rate: 40, V: 420, spread: 0.18, life: 0.4, gap: 14 },   // 罐尾（贴图像素）、每秒几团、出口速度、散角、寿命、人动时两团最多隔几像素
   spr: { src: 'assets/world/truth%n_%k.webp', body: { src: 'up', pivot: [168, 281], k: 1 },
-         foot: [160, 608], muzzle: [370, 334], rest: -0.505, head: [211, 78], chest: [194, 185], tall: 567 },
+         foot: [160, 608], muzzle: [370, 334], rest: -0.505, head: [211, 78], chest: [194, 185] },
   skins: [2],
   aura: (ctx, b, s, at, probe) => drawAura(ctx, b, s, at, probe),
   anim: { pulse: [0.7, 0.16], kick: [0, 0.06, 9], lean: 0.03, bob: [5, 2.2] },
-  T: { enter: 0.55, spray: 2.8, exit: 0.45, fire: 0.18 },   // fire：刹停后隔多久开喷（先"嘭"地停住，再"呲——"）
+  /* 在场 15 秒（2026-09-29，原来喷 2.8 秒）：跟白娘子、法海一样，底下铺一片自己的法术潮（sea.js TruthTide / DemonTide），
+     潮推进来要 1.4 秒，只待 3.8 秒的话潮刚铺满就退。喷的时长只管画面，数值只在送礼那一刻加（main.js impact 只动画面）。 */
+  T: { enter: 0.55, spray: 14.0, exit: 0.45, fire: 0.18 },   // fire：刹停后隔多久开喷（先"嘭"地停住，再"呲——"）
   max: 1, gap: 0.3,
-  rows: [[0.94, 0.96]],                   // 悬停的人不用它的缩放（main.js G4STAND 按 spr.tall 定），summon 要一排才留着
-  /* spr.tall：贴图里的身高（发顶 / 角 / 发冠最高点 → 靴底，不含举起的武器、手、祥云），六个人各量各的（v14/<名>/make.py 的量点）。
-     main.js 按它把同一边的三个人放成一样高（用户："六人的视觉大小要一致，以身高为准"）。 */
+  rows: [[0.94, 0.96]],                   // 悬停的人不用它的缩放（main.js G4STAND 直接给），summon 要一排才留着
   aim: { lo: -0.6, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },    // 前后倾的范围：罐子本来就朝下，站着的男生只要小倾；stiff 见 update 临界阻尼
   sweep: { a: [0.25, 0.12], w: [1.2, 2.9] },
   zone: null,
@@ -811,16 +798,17 @@ const DEMON = {
   whole: { pivot: [216, 258] },
   exhaust: { ...TRUTH.exhaust, at: [287, 179] },
   spr: { src: 'assets/world/demon%n_%k.webp', body: { src: 'up', pivot: [216, 258], k: 1 },
-         foot: [244, 555], muzzle: [53, 305], rest: -0.497, head: [204, 59], chest: [202, 152], tall: 512 },
+         foot: [244, 555], muzzle: [53, 305], rest: -0.497, head: [204, 59], chest: [202, 152] },
   skins: [1],
   aura: (ctx, b, s, at, probe) => drawDemonAura(ctx, b, s, at, probe),
   fluid: { ...TRUTH.fluid, draw: (ctx, ps, b) => drawSpray(DEMON_FX, DEMON, ctx, ps, b) },
 };
 const Demon = Crew(DEMON);
 
-/* ======== 档 4 每边一组三人（2026-09-28，规格 shots/review/trio/trio_spec.md；同日改成同时只一个在场、轮换，见 CrewGroup）========
-   女生侧：真相女神 + 白娘子（2026-09-28 替掉月亮查岗使）+ 黑蛛女特工；男生侧：法海（同日加，跟白娘子对立）+ 灭迹恶魔 + 内裤外穿侠 + 二郎·打码神。
-   每个人的武器都不一样（雾 / 大水流 / 蛛网 / 射线 / 天眼 + 马赛克），不能走 skins 换皮（skins 要同一个裁边框、同一套 foot / muzzle），
+/* ======== 档 4 每边一组三人（2026-09-28 起；同时只一个在场、轮换，见 CrewGroup）========
+   三对，一对一对立：白娘子 vs 法海、真相女神 vs 灭迹恶魔、嫦娥 vs 后羿（2026-09-29 用户："删掉黑寡妇、超人、杨戬，新增一对嫦娥 vs 后羿，
+   主题为月和日，制作规格和白娘子法海一致"）。每个人在场 15 秒，底下各铺一片自己的法术潮（sea.js）。
+   每个人的武器都不一样（大水流 / 金字 / 雾 / 月牙 / 火球），不能走 skins 换皮（skins 要同一个裁边框、同一套 foot / muzzle），
    所以每人一份 Crew 配置，照 TRUTH / DEMON 的写法（悬停、whole 整个人小幅前后倾、二分反解瞄准），每边一个 CrewGroup（main.js），站位 main.js G4STAND。
    立绘 v14/<名>/make.py（共用 v14/crewart.py），量点都是它打印的贴图像素。
    配色按明亮底图的规矩（chashouji-fx）：发光靠色相、实体靠暖黑描边 WARM_INK。 */
@@ -908,10 +896,9 @@ const BAISU = {
   ...TRUTH,
   whole: { pivot: [534, 324], k: 0.12 },        // 身子只跟瞄准角的 12%（见上）
   over: true,                                   // 水柱画在所有帮手之上（crew.js items）
-  front: false,                                 // 在男女主身后（TRUTH 是 front）：用户"法海和白娘子在男女主的下层"，main.js renderActors
   exhaust: null,                                // 仙人本来就会飞，没有尾焰
   spr: { src: 'assets/world/baisu%n_%k.webp', body: { src: 'up', pivot: [534, 324], k: 1 },
-         foot: [343, 751], muzzle: [732, 447], rest: -0.9, head: [516, 60], chest: [546, 264], tall: 691 },   // v14/baisu/make.py 打印；foot 是裙摆最低那一角
+         foot: [343, 751], muzzle: [732, 447], rest: -0.9, head: [516, 60], chest: [546, 264] },   // v14/baisu/make.py 打印；foot 是裙摆最低那一角
   skins: [1],
   aura: (ctx, b, s, at, probe) => drawBaisuAura(ctx, b, s, at, probe),
   /* rest -0.9：掌心 → 男生的脸大约朝右下 50°~70°（她悬在左上、男生在右下）；立绘里手腕 → 水球是 −0.70。
@@ -931,185 +918,6 @@ const BAISU = {
 };
 const Baisu = Crew(BAISU);
 
-/* ---- ③ 黑蛛女特工（黑寡妇底子）：吊着一根丝从天花板降下来，腕部钩索装置朝右下射一张蛛网 ----
-   不是雾：一发一发的网弹（anim.pulse 每按一下出一发），飞的时候拖一根丝连回腕口；打中了在男生脸上张开一张网
-   （fx.js kind 'web'，贴在脸上停一会儿），网上挂红色定位图钉。白丝在浅色底图上会消失：丝一律暗红描边 + 白芯。 */
-const WIDOW_FX = { edge: [120, 20, 30], core: [255, 255, 255], ball: 15 };
-function drawWebShots(ctx, ps, b) {
-  const F = WIDOW_FX;
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (const d of ps) {
-    if (d.ex) continue;
-    if (b) {                                      // 丝：腕口 → 这发网弹（腕口按此刻姿态算，人离场了就不画丝）
-      const m = b.wrist;
-      if (m) for (const [w, c] of [[5, F.edge], [2, F.core]]) {
-        ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(c, 1);
-        ctx.beginPath(); ctx.moveTo(m[0], m[1]); ctx.lineTo(d.x, d.y); ctx.stroke();
-      }
-    }
-    const r = F.ball * (0.7 + Math.min(1, d.t / 0.15) * 0.3);   // 飞行中的网弹：一团收拢的小网
-    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.t * 9);
-    ctx.beginPath();
-    for (let i = 0; i < 6; i++) { const a = i * 1.047; ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
-    for (let i = 0; i <= 6; i++) { const a = i * 1.047, rr = r * 0.6; i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(rr, 0); }
-    ctx.lineWidth = 6; ctx.strokeStyle = rgbaOf(F.edge, 1); ctx.stroke();
-    ctx.lineWidth = 2.5; ctx.strokeStyle = rgbaOf(F.core, 1); ctx.stroke();
-    ctx.restore();
-  }
-}
-/* 吊着她的那根丝：从抓丝的手连到画面顶（一直往上出画），跟女神的尾焰是同一个作用 —— "为什么她能悬着" */
-function drawWidowRope(ctx, b, s, carry, layer, probe) {
-  if (layer !== 'back' || probe) return;
-  const F = WIDOW_FX, [hx, hy] = carry(WIDOW.spr.hand);
-  b.wrist = carry(WIDOW.spr.muzzle);             // 网弹的丝从腕口出（drawWebShots 读）
-  ctx.save(); ctx.lineCap = 'round';
-  for (const [w, c] of [[6, F.edge], [2.5, F.core]]) {
-    ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(c, 1);
-    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx, -40); ctx.stroke();   // 摆动绕的就是这只手，丝始终竖直
-  }
-  ctx.restore();
-}
-const WIDOW = {
-  ...TRUTH,
-  whole: { pivot: [115, 245] },
-  exhaust: null,
-  spr: { src: 'assets/world/widow%n_%k.webp', body: { src: 'up', pivot: [115, 245], k: 1 },
-         foot: [111, 612], muzzle: [272, 226], rest: -0.536, hand: [74, 92], head: [111, 47], chest: [124, 160], tall: 569 },   // v14/widow/make.py 打印（src2）
-  skins: [1],
-  aura: null,
-  extra: (ctx, b, s, carry, layer, xi, probe) => drawWidowRope(ctx, b, s, carry, layer, probe),
-  /* 出场：从正上方画外顺着丝降下来（身体始终竖直、不倒挂）；离场收丝往上拉走。悬着时绕抓丝的手轻轻摆 */
-  path: { pivot: [74, 92], swing: [0.035, 1.7] },
-  anim: { pulse: [0.12, 0.42], kick: [0, 0.07, 10], lean: 0.02, bob: [3, 1.6] },
-  T: { enter: 0.7, spray: 2.8, exit: 0.5, fire: 0.18 },
-  /* 网弹：每按一下出 1 发（pulse 0.12 秒 × rate 10 ≈ 1.2）；打中了 main.js 在脸上张网。
-     **抛出去的，不是直射**：V 1000、G 2200，沿腕口 27° 往右下出手、半秒落到男生脸上。直射（G 120）的话要从她的腕口打到下方的脸
-     得往下 ~50°，整个人要前倾 0.4~0.7 rad（第一版实测吊在丝上斜成 40°）；抛物线把这段落差交给重力，人只需小幅倾。 */
-  fluid: { V: 1000, G: 2200, drag: 0, rate: 10, spread: 0.02, vJit: 0, life: 0.9, miss: 90, snap: 10, hitEvery: 0.25, floor: false,
-           draw: drawWebShots },
-};
-const Widow = Crew(WIDOW);
-
-/* ---- ⑤ 内裤外穿侠（超人底子）：两只眼睛射出两道红橙色射线，直线、硬，跟恶魔的软雾一粗一细好分辨 ----
-   射线由运行时从贴图的两个眼睛点（spr.eyes）画：每道都是一串 G 0 的高速粒子连成的折线（粒子负责命中判定），
-   芯 EMBER、外层红橙、描边暗红 —— 这张底图上最显眼的色相。 */
-const BEAM_BRIEFS = { w: 9, edge: [110, 20, 10], outer: [255, 60, 30], core: [255, 156, 38], hot: [255, 236, 190] };
-const BEAM_ERLANG = { w: 15, edge: [120, 80, 10], outer: [255, 200, 60], core: [255, 236, 150], hot: [255, 252, 230] };
-/* 一个人的射线：粒子按出口顺序连成一串（seq 断开的地方 = 松开那一下，射线断开），每只眼睛各画一道（眼睛相对喷口平移） */
-function drawBeams(B, ctx, ps, b) {
-  if (!b || !b.eyes || !b.m) return;              // 只在按住射的那几帧有；松开时整道消失（射线不是飘出去的东西）
-  const run = [];
-  for (let i = ps.length - 1; i >= 0; i--) {     // 从最新一颗往回，接到 seq 断开为止
-    if (run.length && ps[i].seq !== run[run.length - 1].seq - 1) break;
-    run.push(ps[i]);
-  }
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (const e of b.eyes) {
-    const ox = e[0] - b.m[0], oy = e[1] - b.m[1];
-    const line = () => { ctx.beginPath(); ctx.moveTo(e[0], e[1]); for (const d of run) ctx.lineTo(d.x + ox, d.y + oy); };
-    for (const [w, c, a] of [[B.w + 8, B.edge, 0.9], [B.w + 3, B.outer, 1], [B.w * 0.45, B.core, 1]]) {
-      line(); ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(c, a); ctx.stroke();
-    }
-    ctx.fillStyle = rgbaOf(B.hot, 1); ctx.strokeStyle = rgbaOf(B.outer, 1); ctx.lineWidth = 3;   // 眼睛上一个小亮点
-    ctx.beginPath(); ctx.arc(e[0], e[1], B.w * 0.7, 0, 6.283); ctx.fill(); ctx.stroke();
-  }
-}
-/* 横着飞进来时身后拖的速度线：画在他身后、跟着他转（进场他是横着的，身体坐标里"脚那头"就是身后） */
-function drawBriefsAura(ctx, b, s, at) {
-  const u = b.t / BRIEFS.T.enter;
-  if (u >= 1) return;
-  const [fx, fy] = at(BRIEFS.spr.foot), [cx] = at(BRIEFS.spr.chest), a = 1 - u;
-  ctx.save(); ctx.lineCap = 'round';
-  for (let i = 0; i < 6; i++) {
-    const x = cx + (i - 2.5) * 55 * s, y0 = fy - 260 * s + (i % 2) * 60 * s, len = (220 + (i * 37) % 90) * s;
-    for (const [w, c] of [[9, WARM_INK], [4, [255, 255, 255]]]) {
-      ctx.lineWidth = w * s; ctx.strokeStyle = rgbaOf(c, 0.85 * a);
-      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + len); ctx.stroke();
-    }
-  }
-  ctx.restore();
-}
-const BRIEFS = {
-  ...DEMON,
-  whole: { pivot: [225, 272] },
-  exhaust: null,
-  spr: { src: 'assets/world/briefs%n_%k.webp', body: { src: 'up', pivot: [225, 272], k: 1 },
-         foot: [256, 603], muzzle: [190, 88], eyes: [[180, 89], [199, 86]], head: [202, 48], chest: [239, 189],
-         /* 射线出眼睛，眼睛不是一根有朝向的枪管：rest 直接取"从头顶的站位看女生脸"的典型俯角（~55°），
-            人只为了跟着脸上下扫而小幅倾（aim ±0.3）。第一版 rest −0.5（眼神的画法）要整个人前倾 0.6 rad 才够得着，斜成 40°。 */
-         rest: -0.95, tall: 563 },
-  aim: { lo: -0.35, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },
-  skins: [1],
-  aura: (ctx, b, s, at) => drawBriefsAura(ctx, b, s, at),
-  /* 出场：从右边画外横着飞进来（一拳朝前 = 头朝左，roll0 −1.45 rad），刹停后竖起来；离场时一拳朝上冲出画面（转 +1.3 往上飞） */
-  path: { from: (s, hx, hy) => [hx + 760, hy - 180 * s], roll0: -1.45, to: (s, x, y) => [x - 80, y - 1200 * s], rollOut: 1.3 },
-  anim: { pulse: [0.55, 0.2], kick: [0, 0.03, 9], lean: 0.02, bob: [5, 2.0] },
-  T: { enter: 0.55, spray: 2.8, exit: 0.45, fire: 0.18 },
-  /* 射线：极快（V 2600）、无重力、无散角 → 一条直线；miss 60（射线细，判定比雾窄） */
-  fluid: { V: 2600, G: 0, drag: 0, rate: 70, spread: 0, vJit: 0, life: 0.5, miss: 60, snap: 12, hitEvery: 0.25, floor: false,
-           draw: (ctx, ps, b) => drawBeams(BEAM_BRIEFS, ctx, ps, b) },
-};
-const Briefs = Crew(BRIEFS);
-
-/* ---- ⑥ 二郎·打码神（杨戬底子）：天眼一开射出一道金色竖光，打中的地方铺一块马赛克（main.js RECIPE.erlang）----
-   天眼：立绘里那只竖眼很小，运行时在 eye 点上画一只随喷射睁开的金色竖眼（spraying 时 b.lean 从 0 长到 1）。
-   哮天犬（cfg.xtra.dog）：圆滚滚的柴犬在祥云边上绕圈，二郎打中时 main.js 让一个聊天气泡飞向它嘴里（dogEat），到嘴时它扑起来一口吃掉。 */
-function drawErlangAura(ctx, b, s, at) {
-  const [ex, ey] = at(ERLANG.spr.eye), o = Math.max(0.15, b.lean);   // 睁开程度
-  ctx.save();
-  ctx.fillStyle = rgbaOf([255, 200, 60], 0.35 * o); ctx.beginPath(); ctx.arc(ex, ey, 26 * s, 0, 6.283); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(ex, ey, 5 * s, 13 * s * o, 0, 0, 6.283);
-  ctx.fillStyle = rgbaOf([255, 236, 150], 1); ctx.fill(); ctx.lineWidth = 2.5 * s; ctx.strokeStyle = rgbaOf([120, 80, 10], 1); ctx.stroke();
-  ctx.fillStyle = rgbaOf([90, 40, 10], 1); ctx.beginPath(); ctx.ellipse(ex, ey, 2 * s, 5 * s * o, 0, 0, 6.283); ctx.fill();
-  ctx.restore();
-}
-const DOG = { R: 120, H: 16, w: 1.6, lift: 34, k: 0.9, eatT: 0.35, hop: 60 };   // 绕云半径、上下半轴、角速度、脚离云底多高、缩放（×s）、扑咬多久、扑多高
-/* 狗此刻在哪、朝哪：绕着祥云（spr.cloud：扁云底边正中）转圈（椭圆轨道，远半圈画在他身后），b.dogEat 到点时往上扑一下 */
-function dogPose(b, s, carry) {
-  const [fx, fy] = carry(ERLANG.spr.cloud), a = b.t * DOG.w + b.ph;
-  const x = fx + Math.cos(a) * DOG.R * s, back = Math.sin(a) < 0;
-  let y = fy - DOG.lift * s + Math.sin(a) * DOG.H * s;
-  const eu = b.dogEat != null ? (b.t - b.dogEat) / DOG.eatT : -1;
-  if (eu >= 0 && eu <= 1) y -= Math.sin(Math.PI * eu) * DOG.hop * s;
-  return { x, y, back, left: -Math.sin(a) < 0, eu };
-}
-function drawDog(ctx, b, s, carry, layer, xi) {
-  const im = xi.dog;
-  if (!im) return;
-  const d = dogPose(b, s, carry);
-  const k = DOG.k * s * (d.eu >= 0 && d.eu <= 1 ? 1 + 0.12 * Math.sin(Math.PI * d.eu) : 1), w = im.width * k, h = im.height * k;
-  const [mx, my] = ERLANG.dog.foot;              // 贴图里狗脚底（make.py 打印），对到轨道点
-  const [qx, qy] = ERLANG.dog.mouth;
-  if (layer === 'back') b.dogMouth = [d.x + (qx - mx) * k * (d.left ? 1 : -1), d.y + (qy - my) * k];   // main.js 让气泡飞向这里
-  if ((layer === 'back') !== d.back) return;
-  ctx.save(); ctx.translate(d.x, d.y);
-  if (!d.left) ctx.scale(-1, 1);                // 贴图朝左；往右跑时翻过来
-  ctx.drawImage(im, -mx * k, -my * k, w, h);
-  ctx.restore();
-}
-const ERLANG = {
-  ...DEMON,
-  whole: { pivot: [181, 265] },
-  exhaust: null,
-  spr: { src: 'assets/world/erlang%n_%k.webp', body: { src: 'up', pivot: [181, 265], k: 1 },   // v14/erlang/make.py 打印（src2）
-         foot: [254, 618], cloud: [205, 608], muzzle: [166, 117], eye: [166, 117], eyes: [[166, 117]], head: [181, 56], chest: [185, 200], tall: 565,
-         rest: -0.95 },                         // 天眼同内裤外穿侠：rest 取典型俯角，人只小幅倾
-  aim: { lo: -0.35, hi: 0.3, rate: 1.6, follow: 8, stiff: 40 },
-  dog: { mouth: [55, 104], foot: [120, 184] },  // 哮天犬贴图量点（v14/erlang/make.py 打印）
-  xtra: { dog: 'assets/world/dog1_up.webp' },
-  skins: [1],
-  aura: (ctx, b, s, at) => drawErlangAura(ctx, b, s, at),
-  extra: (ctx, b, s, carry, layer, xi) => drawDog(ctx, b, s, carry, layer, xi),
-  /* 出场：脚踩祥云从右上画外斜着降下来；云留在脚下当悬停的理由 */
-  path: { from: (s, hx, hy) => [hx + 420, hy - 760 * s] },
-  anim: { pulse: [0.6, 0.25], kick: [0, 0.03, 9], lean: 0.02, bob: [4, 1.8] },
-  T: { enter: 0.65, spray: 2.8, exit: 0.45, fire: 0.18 },
-  fluid: { V: 2200, G: 0, drag: 0, rate: 60, spread: 0, vJit: 0, life: 0.55, miss: 80, snap: 12, hitEvery: 0.3, floor: false,
-           draw: (ctx, ps, b) => drawBeams(BEAM_ERLANG, ctx, ps, b) },
-};
-const Erlang = Crew(ERLANG);
-
-
 /* ---- ⑦ 法海（男生档 4，2026-09-28，跟白娘子对立）----
    用户："给男生那边做个法海，与白娘子对立，在男生那边。法海可以向女神发送各种金光咒语，周身也是金光自发光。
           同样也需要跟白娘子海面的动效，可能是在金光虚化的佛经卷轴，也会和海平面一样波动，虾兵蟹将可以对应神兽小佛"。
@@ -1117,7 +925,7 @@ const Erlang = Crew(ERLANG);
    立绘 v14/fahai/make.py：原创脸，光头戒疤、黄僧袍红金袈裟、托金钵，左掌朝女生伸出（掌心一团金光）—— 咒语从掌心出（muzzle）。
    · 咒语：一个个金字（卍 唵 嘛 呢 叭 咪 吽 轮着来）从掌心直直打出去（G 0），打在女生身上迸成更多金字（main.js RECIPE.fahai）；
      一段"念"（pulse 1.1 秒）停一下（0.35），跟白娘子一样只让身子跟瞄准角的一小份（whole.k），咒语按完整角度出。
-   · 自发光：三层金色外发光烘在贴图里（make.py），运行时身后再加一圈慢慢转的佛光（放射金光 + 头后光轮）、掌心金光团（drawFahaiAura）。
+   · 自发光：三层金色外发光烘在贴图里（make.py），运行时身后再加一圈慢慢转的佛光（放射金光 + 头后光轮）、掌心金光团（drawGodAura）。
    · 打全身：同白娘子，落点从她身上一头扫到另一头（main.js bodyTarget）。 */
 const FAHAI_FX = {
   halo: { at: 'head', R: 92, lw: 7, rgb: [255, 206, 70], edge: [140, 70, 10] },       // 头后光轮：半径（贴图像素 × s）、线宽、金、深褐托底
@@ -1131,8 +939,9 @@ const FAHAI_FX = {
   mantra: { chars: '卍唵嘛呢叭咪吽', size: [40, 90], grow: 0.22, every: 3, lw: 0.06, fill: [255, 220, 90], edge: [96, 40, 6], glow: [255, 190, 40] },
   mist: { r0: 30, r1: 110, rim: [170, 90, 10], body: [255, 214, 100], core: [255, 250, 225], a: [0.2, 0.3], star: 0 },      // 粒子只有女神的 1/7（30 vs 220），单团浓一些
 };
-function drawFahaiAura(ctx, b, s, at, probe) {
-  const F = FAHAI_FX, k = Math.min(1, b.t / 0.4), [cx, cy] = at(FAHAI.spr.chest);
+/* 仙佛的光（法海、嫦娥、后羿共用，F 换颜色，spr 给 chest / halo / muzzle 三个贴图点）：身后一团暖光 + 慢慢转的放射光 + 头后光轮 + 掌心光团 */
+function drawGodAura(F, spr, ctx, b, s, at, probe) {
+  const k = Math.min(1, b.t / 0.4), [cx, cy] = at(spr.chest);
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
   ctx.save();
   if (!probe) {                                                  // measure 不量身后的光（特效层，同女神的光芒）
@@ -1150,11 +959,11 @@ function drawFahaiAura(ctx, b, s, at, probe) {
     }
   }
   /* 头后光轮：算"人"的一部分（measure 量它） */
-  const H = F.halo, [hx, hy] = at(FAHAI.spr.halo), hr = H.R * s;
+  const H = F.halo, [hx, hy] = at(spr.halo), hr = H.R * s;
   ctx.lineWidth = (H.lw + 4) * s; ctx.strokeStyle = rgba(H.edge, 0.55 * k); ctx.beginPath(); ctx.arc(hx, hy, hr, 0, 6.283); ctx.stroke();
   ctx.lineWidth = H.lw * s; ctx.strokeStyle = rgba(H.rgb, 0.9 * k); ctx.beginPath(); ctx.arc(hx, hy, hr, 0, 6.283); ctx.stroke();
   /* 掌心金光团：念的时候（kick）胀一下 */
-  const O = F.orb, [ox, oy] = at(FAHAI.spr.muzzle), orR = O.R * s * (1 + 0.3 * b.kick + 0.08 * Math.sin(b.t * 6));
+  const O = F.orb, [ox, oy] = at(spr.muzzle), orR = O.R * s * (1 + 0.3 * b.kick + 0.08 * Math.sin(b.t * 6));
   const og = ctx.createRadialGradient(ox, oy, 0, ox, oy, orR);
   og.addColorStop(0, rgba([255, 255, 240], 0.95 * k)); og.addColorStop(0.35, rgba(O.rgb, 0.6 * k)); og.addColorStop(1, rgba(O.rgb, 0));
   ctx.fillStyle = og; ctx.beginPath(); ctx.arc(ox, oy, orR, 0, 6.283); ctx.fill();
@@ -1191,14 +1000,13 @@ const FAHAI = {
   whole: { pivot: [292, 310], k: 0.12 },        // 身子只跟瞄准角的 12%（同白娘子：大袖子、袈裟往右上飘一大片，整个人倾会甩出画）
   exhaust: null,                                // 仙佛本来就会飞，没有尾焰
   over: true,                                   // 咒语画在所有帮手之上（crew.js items）
-  front: false,                                 // 在男女主身后（同白娘子）
   spr: { src: 'assets/world/fahai%n_%k.webp', body: { src: 'up', pivot: [292, 310], k: 1 },
-         foot: [486, 716], muzzle: [77, 170], head: [262, 84], chest: [269, 250], halo: [262, 140], tall: 632,   // v14/fahai/make.py 打印；foot 是右脚草鞋底
+         foot: [486, 716], muzzle: [77, 170], head: [262, 84], chest: [269, 250], halo: [262, 140],   // v14/fahai/make.py 打印；foot 是右脚草鞋底
          /* rest −1.15：掌心 → 女生身上大约朝左下 55°~75°（他悬在右上、女生在左下）。掌心不是枪管，rest 直接取典型俯角；
             瞄准角 −0.4 ~ +0.45 在它上下，咒语方向落在 −1.55 ~ −0.7，女生站着、倒地都够得着 */
          rest: -1.15 },
   skins: [1],
-  aura: (ctx, b, s, at, probe) => drawFahaiAura(ctx, b, s, at, probe),
+  aura: (ctx, b, s, at, probe) => drawGodAura(FAHAI_FX, FAHAI.spr, ctx, b, s, at, probe),
   aim: { lo: -0.4, hi: 0.45, rate: 1.6, follow: 8, stiff: 40 },
   sweep: { a: [0.4, 0.15], w: [0.6, 1.5] },      // 打全身，同白娘子
   /* 出场：从右上画外斜着飞下来（带一点前倾 roll0，刹停时回正）；离场原路往右上飞走 */
@@ -1212,3 +1020,110 @@ const FAHAI = {
            draw: (ctx, ps) => { drawFog(FAHAI_FX.mist, FAHAI, ctx, ps); drawMantra(ctx, ps); } },
 };
 const Fahai = Crew(FAHAI);
+
+/* ---- ⑧ 嫦娥（女生档 4，2026-09-29，跟后羿对立：月 vs 日）----
+   用户："新增一对人物，嫦娥 vs 后羿，主题为月和日。制作规格和白娘子法海一致"；打的是"月光 + 玉兔"。
+   · 立绘 v14/change/make.py：月白浅紫广袖、飞天髻月牙发饰、长披帛，朝右飞，右掌心上方悬一弯银白月牙（光刃从这出）；银蓝外发光烘在贴图里。
+   · 规格照白娘子：从左上飞下来、在场 15 秒、whole.k 0.12 身子只轻轻倾、打男生全身（main.js BODY_AIM）、在男女主身后，
+     底下铺月夜银云海（sea.js MoonTide，玉兔、金蟾在云上跑）。
+   · 光刃：一弯弯银白月牙往男生飞（drawCrescents），刃口朝前、边飞边转；外面套一层银蓝雾锥（CHANGE_FX.mist，同法海的金光雾）。
+     打中迸银光、蹦字（main.js RECIPE.change）。 */
+const CHANGE_FX = {
+  halo: { R: 96, lw: 6, rgb: [226, 236, 255], edge: [70, 90, 160] },                   // 头后一轮满月光环
+  rays: { n: 12, R: [150, 400], w: 0.08, spin: -0.1, rgb: [190, 210, 255], a: 0.24 },  // 身后放射的月光
+  glow: { R: 360, a: 0.3, rgb: [170, 196, 255], core: [245, 248, 255] },
+  orb: { R: 60, rgb: [200, 220, 255] },                                                // 掌心月牙的光团
+  /* 月牙光刃：出手 size[0] → 飞 grow 秒后 size[1]（外圆半径）；every：每几颗粒子画一弯（其余只当雾）；spin：边飞边转（rad/s） */
+  /* thick：月牙中间多厚（× 半径）。第一版 30 → 70、内弧只挖掉一小块（中间厚 0.56 倍半径），一串飞过去读成一摞白圆盘 */
+  blade: { size: [24, 52], grow: 0.22, every: 3, spin: 5, thick: 0.4, fill: [246, 250, 255], edge: [90, 110, 190], glow: [170, 200, 255] },
+  mist: { r0: 30, r1: 110, rim: [70, 90, 170], body: [200, 216, 255], core: [250, 252, 255], a: [0.18, 0.28], star: 0 },
+};
+/* 一弯月牙：半径 r 的圆减去往后挪 d 的等大圆（中间厚 d、两头收成尖，凸的一边朝飞的方向），身后一团银光、拖一截残影 */
+function drawCrescents(ctx, ps) {
+  const M = CHANGE_FX.blade;
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const d of ps) {
+    if (d.ex || d.seq % M.every) continue;
+    const e = Math.min(1, d.t / M.grow), r = M.size[0] + (M.size[1] - M.size[0]) * e;
+    const sp = Math.hypot(d.vx, d.vy) || 1, ux = d.vx / sp, uy = d.vy / sp;
+    const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, r * 1.3);
+    g.addColorStop(0, rgbaOf(M.glow, 0.6)); g.addColorStop(1, rgbaOf(M.glow, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, r * 1.3, 0, 6.283); ctx.fill();
+    for (const [w, a, L] of [[r * 0.5, 0.2, 2.4], [r * 0.2, 0.45, 1.5]]) {      // 残影：往来的方向拖两道渐短的银光
+      ctx.lineWidth = w; ctx.strokeStyle = rgbaOf(M.glow, a);
+      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - ux * r * L, d.y - uy * r * L); ctx.stroke();
+    }
+    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(Math.atan2(uy, ux) + Math.sin(d.t * M.spin + d.j * 6) * 0.35);
+    /* 两圆交点（d = off）：外圆上 cos θ = −d / 2r，内圆（圆心 (−d, 0)）上 cos φ = d / 2r。外弧 −θ → θ 过正前方，内弧 φ → −φ 倒着走回来 */
+    const off = r * M.thick, th = Math.acos(-off / (2 * r)), ph = Math.acos(off / (2 * r));
+    ctx.beginPath();
+    ctx.arc(0, 0, r, -th, th);
+    ctx.arc(-off, 0, r, ph, -ph, true);
+    ctx.closePath();
+    ctx.fillStyle = rgbaOf(M.fill, 1); ctx.fill();
+    ctx.lineWidth = Math.max(1.5, r * 0.05); ctx.strokeStyle = rgbaOf(M.edge, 0.7); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+const CHANGE = {
+  ...BAISU,
+  whole: { pivot: [370, 409], k: 0.12 },
+  spr: { src: 'assets/world/change%n_%k.webp', body: { src: 'up', pivot: [370, 409], k: 1 },
+         foot: [280, 900], muzzle: [581, 355], head: [397, 88], chest: [451, 310], halo: [430, 175],   // v14/change/make.py 打印；foot 是裙摆最低点
+         /* rest −0.9：同白娘子（她也悬在左上、掌心朝右下对着男生）；立绘里手腕 → 月牙朝右上（0.74），掌心不是枪管，按典型俯角取 */
+         rest: -0.9 },
+  skins: [1],
+  aura: (ctx, b, s, at, probe) => drawGodAura(CHANGE_FX, CHANGE.spr, ctx, b, s, at, probe),
+  /* 光刃：直线（G 0）、每秒 30 颗、每 3 颗画一弯（每秒 10 弯），同法海的咒语 */
+  fluid: { V: 860, G: 0, drag: 0, rate: 30, spread: 0.12, vJit: 0.05, life: 1.3, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
+           draw: (ctx, ps) => { drawFog(CHANGE_FX.mist, CHANGE, ctx, ps); drawCrescents(ctx, ps); } },
+};
+const Change = Crew(CHANGE);
+
+/* ---- ⑨ 后羿（男生档 4，2026-09-29，跟嫦娥对立）----
+   用户选的：掌心打出小太阳火球（不拉弓），底下金红火焰云海、三足金乌在火上飞（sea.js SunTide）。
+   · 立绘 v14/houyi/make.py：红金上古战甲、红披风、背金色长弓，朝左飞，左掌心前悬一颗燃烧的小太阳；火橙外发光烘在贴图里。
+   · 规格照法海：从右上飞下来、在场 15 秒、身子轻轻倾、打女生全身、在男女主身后。
+   · 火球：白热的芯 → 金 → 橙红的一团，拖一截火尾（drawSuns）；外面套一层橙色火光雾锥（HOUYI_FX.mist）。打中迸火星、蹦字（RECIPE.houyi）。 */
+const HOUYI_FX = {
+  halo: { R: 100, lw: 7, rgb: [255, 170, 40], edge: [150, 40, 10] },                   // 头后一轮日轮
+  rays: { n: 16, R: [150, 440], w: 0.08, spin: 0.16, rgb: [255, 150, 40], a: 0.28 },   // 身后放射的日光
+  glow: { R: 380, a: 0.32, rgb: [255, 150, 50], core: [255, 236, 190] },
+  orb: { R: 70, rgb: [255, 160, 40] },                                                 // 掌心小太阳的光团
+  /* 火球：芯半径 size[0] → size[1]；every：每几颗粒子画一颗；tail：火尾长（× 半径） */
+  sun: { size: [22, 48], grow: 0.22, every: 3, tail: 3.2, core: [255, 252, 230], mid: [255, 200, 60], out: [255, 90, 20] },
+  mist: { r0: 30, r1: 110, rim: [170, 50, 10], body: [255, 170, 70], core: [255, 244, 210], a: [0.18, 0.28], star: 0 },
+};
+function drawSuns(ctx, ps) {
+  const M = HOUYI_FX.sun;
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const d of ps) {
+    if (d.ex || d.seq % M.every) continue;
+    const e = Math.min(1, d.t / M.grow), r = (M.size[0] + (M.size[1] - M.size[0]) * e) * (1 + 0.08 * Math.sin(d.t * 30 + d.j * 9));   // 火苗跳
+    const sp = Math.hypot(d.vx, d.vy) || 1, ux = d.vx / sp, uy = d.vy / sp;
+    /* 火尾：往来的方向三道渐细渐淡（外橙红 → 金 → 白芯） */
+    for (const [w, c, a, L] of [[1.7, M.out, 0.35, 1], [1.1, M.mid, 0.55, 0.75], [0.5, M.core, 0.8, 0.5]]) {
+      ctx.lineWidth = r * w; ctx.strokeStyle = rgbaOf(c, a);
+      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - ux * r * M.tail * L, d.y - uy * r * M.tail * L); ctx.stroke();
+    }
+    const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, r * 1.8);
+    g.addColorStop(0, rgbaOf(M.core, 1)); g.addColorStop(0.3, rgbaOf(M.mid, 1)); g.addColorStop(0.6, rgbaOf(M.out, 0.7)); g.addColorStop(1, rgbaOf(M.out, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, r * 1.8, 0, 6.283); ctx.fill();
+  }
+  ctx.restore();
+}
+const HOUYI = {
+  ...FAHAI,
+  whole: { pivot: [350, 403], k: 0.12 },
+  spr: { src: 'assets/world/houyi%n_%k.webp', body: { src: 'up', pivot: [350, 403], k: 1 },
+         foot: [592, 853], muzzle: [89, 448], head: [296, 169], chest: [345, 331], halo: [300, 230],   // v14/houyi/make.py 打印；foot 是右脚靴尖
+         rest: -1.15 },                          // 同法海：悬在右上、掌心朝左下对着女生
+  skins: [1],
+  aura: (ctx, b, s, at, probe) => drawGodAura(HOUYI_FX, HOUYI.spr, ctx, b, s, at, probe),
+  fluid: { V: 860, G: 0, drag: 0, rate: 30, spread: 0.12, vJit: 0.05, life: 1.3, miss: 110, radius: 70, snap: 14, hitEvery: 0.3, floor: false,
+           draw: (ctx, ps) => { drawFog(HOUYI_FX.mist, HOUYI, ctx, ps); drawSuns(ctx, ps); } },
+};
+const Houyi = Crew(HOUYI);

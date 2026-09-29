@@ -1,4 +1,7 @@
-/* sea.js —— 档 4 两位神仙铺在屏幕底部的"法术潮"（2026-09-28）+ 白娘子的掌心水柱贴图 WaterArt、命中的爆水泡沫 Foam。
+/* sea.js —— 档 4 六个人各自铺在屏幕底部的"法术潮"（2026-09-28 起）+ 白娘子的掌心水柱贴图 WaterArt、命中的爆水泡沫 Foam。
+ *
+ * 六片：白娘子 海 Sea / 法海 经卷 Scroll（下面细说）；2026-09-29 加真相女神 真相云海 TruthTide / 灭迹恶魔 碎纸黑烟 DemonTide /
+ * 嫦娥 月夜银云海 MoonTide / 后羿 太阳火云海 SunTide（文件末尾，贴图 v14/tides/make.py）。左边三片从左推进、右边三片从右。
  *
  * 白娘子（女生侧）→ 海水 Sea。用户："整个屏幕的底部，从下边缘到男女生下方，用海水汹涌填充（代表白娘子的水法术），
  *   海水也需要持续的动画，海里可以有些虾兵蟹将。白娘子持续 15s，海水也一样。当白娘子消失的时候，海水也消散。"
@@ -8,7 +11,7 @@
  *   虾兵蟹将可以对应神兽小佛"。三条金色《心经》卷轴（v14/scroll/make.py 程序画的，经文是真字）一层层起伏，
  *   底下一片金色光雾，卷轴上骑着神兽小佛（v14/scroll/beasts.py：小沙弥、麒麟崽、小石狮、小白象）。
  *
- * 两样是同一套东西（Tide）：三层横向无缝长条贴图，
+ * 六片都是同一套东西（Tide）：三层横向无缝长条贴图，
  *   · 各层往相反方向平移（远慢近快，远近错开不是整块挪）；
  *   · 按列上下起伏（每 SL 像素一条竖条各自上下挪：一道道涌浪从画面里走过去，卷轴像绸带一样飘）；
  *   · 浪尖 / 卷轴上沿随机甩出东西（海：白色飞沫往上溅、落回去；经卷：金色光点往上飘）；
@@ -19,7 +22,7 @@
  * 进场是横着推进来的（2026-09-28 用户："水面和卷轴改成分别从左右进场，这样同时播放"）：海从左边屏幕外推进来、经卷从右边，
  *   lv 是推进了几成（main.js tideSpan 换成这一片占的 [x0, x1)），前沿一路甩飞沫 / 金光点（update 的 front）；退场原路退回去。
  *   第一版是整片从屏幕下沿涌上来，两片同时在场只能一起涨、一起落，看不出是两股法力各从一边压过来。
- * 两个人同时在场：各推到两边进度的分界（左海右经），交界处水花和金光对撞（Clash）。
+ * 两边同时有人：各推到两边进度的分界，交界处两边的飞沫对撞（Clash）。
  *
  * 层级（main.js renderActors）：画在男女主之上（用户："水面和卷轴是在男女主的上层"）—— 潮漫过两人的脚和小腿。
  * 层数不定（C.layers 远 → 近，最后一层最近、最低）：经卷为了铺满到屏幕下沿比海多两条。
@@ -126,7 +129,8 @@ const Foam = (() => {
    layers：远 → 近（层数不定，小兵骑在第 1、2 层），每层 { src, w, h（贴图尺寸，make.py 打印）, y（贴图上沿在 top 下多少）, v（平移，像素/秒，正 = 往右）,
            swell [起伏幅度, 涌浪长, 走速]（按列起伏）, bob [幅度, 角频率]（整层上下晃） }；
    haze（可无）：画在三层之下的一片竖向渐变 [颜色, 上沿不透明度, 下沿不透明度]，从 top + haze[3] 到屏幕下沿；
-   spray：上沿甩出的东西 { every（多久试一次）, crest（上沿最高那几成才甩）, V, spread, G（正 = 往下掉，负 = 往上飘）, life, r, a, dot（软点三色）, layers（哪几层甩）}；
+   spray：上沿甩出的东西 { every（多久试一次）, crest（上沿最高那几成才甩）, V, spread, G（正 = 往下掉，负 = 往上飘）, life, r, a, dot（软点三色）, layers（哪几层甩），
+          shape（可无）：[形状, 占几成, 大小倍数, ...颜色] —— 'chat' 聊天气泡 [.., 填色, 描边]、'paper' 碎纸条 [.., 纸色]，其余几成照样是软点 }；
    kinds：小兵贴图、走速；dir：小兵往哪走（+1 右 / −1 左，贴图朝向要跟它一致）；mobs：开场位置；sink：贴图下沿压到上沿以下几成；
    hop：蹦起来 { every, T, h, splash（落回去甩几颗）}。 */
 function Tide(C) {
@@ -193,7 +197,7 @@ function Tide(C) {
     for (let i = 0; i < n; i++) {
       const a = -Math.PI / 2 + (Math.random() - 0.5) * S.spread * (up ? 1.6 : 1) + (up ? 0 : Math.sign(C.layers[k].v) * 0.35);
       const v = S.V[0] + Math.random() * (S.V[1] - S.V[0]);
-      sprays.push({ k, x, y, vx: Math.cos(a) * v + C.layers[k].v, vy: Math.sin(a) * v, t: 0,
+      sprays.push({ k, x, y, vx: Math.cos(a) * v + C.layers[k].v, vy: Math.sin(a) * v, t: 0, j: Math.random(), vr: (Math.random() - 0.5) * 12,
                     life: S.life[0] + Math.random() * (S.life[1] - S.life[0]),
                     r: (S.r[0] + Math.random() * (S.r[1] - S.r[0])) * (k === 1 ? 0.8 : 1) });
     }
@@ -246,13 +250,23 @@ function Tide(C) {
     }
   }
 
+  /* 有形状的飞沫：真相云海往上冒聊天气泡（被翻出来的聊天记录）、灭迹黑烟里翻飞碎纸条（被撕掉的证据） */
+  function drawShape(ctx, p, r) {
+    const [kind, , , c0, c1] = S.shape;
+    ctx.save(); ctx.translate(p.x, p.y);
+    if (kind === 'chat') { ctx.rotate(Math.sin(p.t * 3 + p.j * 20) * 0.2); drawChatIcon(ctx, r, c0, c1, 2, c1); }
+    else { ctx.rotate(p.vr * p.t + p.j * 6); ctx.fillStyle = c0; ctx.fillRect(-r, -r * 0.3, 2 * r, r * 0.6); }
+    ctx.restore();
+  }
+
   function drawSprays(ctx, k) {
     for (const p of sprays) {
       if (p.k !== k) continue;
       const u = p.t / p.life;
       ctx.globalAlpha = S.a * (u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85);
       const r = p.r * (1 + 0.6 * u);                 // 越飞越散
-      ctx.drawImage(dot, p.x - r, p.y - r, 2 * r, 2 * r);
+      if (S.shape && p.j < S.shape[1]) drawShape(ctx, p, r * S.shape[2]);
+      else ctx.drawImage(dot, p.x - r, p.y - r, 2 * r, 2 * r);
     }
     ctx.globalAlpha = 1;
   }
@@ -314,9 +328,10 @@ function Tide(C) {
 
   const active = () => lv > 0;
   const level = () => ease(lv);
+  const dotImg = () => dot;              // 交界对撞（Clash）用这片潮自己的飞沫颜色
   /* 上沿（给交界处的对撞找高度）：最远那层在 x 处的上沿 */
   const edgeY = (x) => C.layers[0].top ? surfY(0, x) : H;
-  return { init, load, update, draw, reset, active, level, edgeY };
+  return { init, load, update, draw, reset, active, level, edgeY, dotImg, side: C.side };
 }
 
 /* ---- 白娘子的海 ----
@@ -383,14 +398,14 @@ const Scroll = Tide({
   hop: { every: [2.0, 3.6], T: 0.7, h: 80, splash: 14 },
 });
 
-/* 两片潮同时在场：交界处（main.js tideSplit）一直往上迸水花和金光，读成两股法力顶在一起。
-   update 给交界 x 和两边的强度 k（两边水位的较小者：只有一边时 0，不迸）。 */
+/* 两片潮同时在场：交界处（main.js tideSpan）一直往上迸两边各自的飞沫（水花和金光、月光和火星……），读成两股法力顶在一起。
+   update 给交界 x、高度 y、强度 k（两边进度的较小者；没顶在一起时 0，不迸）、左右两片潮（取它们的飞沫贴图，Tide.dotImg）。 */
 const Clash = (() => {
   const E = { rate: 90, V: [220, 560], G: 900, life: [0.45, 0.9], r: [4, 10] };   // 每秒几颗、初速、重力、寿命、大小
   const list = [];
-  let acc = 0, dots = null;
+  let acc = 0;
   return {
-    update(dt, x, y, k) {
+    update(dt, x, y, k, L, R) {
       for (let i = list.length - 1; i >= 0; i--) {
         const p = list[i];
         p.vy += E.G * dt; p.x += p.vx * dt; p.y += p.vy * dt;
@@ -398,23 +413,89 @@ const Clash = (() => {
       }
       if (k <= 0) { acc = 0; return; }
       for (acc += dt * E.rate * k; acc >= 1; acc -= 1) {
-        const gold = Math.random() < 0.5, a = -Math.PI / 2 + (gold ? 0.5 : -0.5) * Math.random();   // 金光往右（法海那边）偏、水往左偏
+        const right = Math.random() < 0.5, a = -Math.PI / 2 + (right ? 0.5 : -0.5) * Math.random();   // 右边那片的往右偏、左边的往左偏
         const v = E.V[0] + Math.random() * (E.V[1] - E.V[0]);
-        list.push({ gold, x: x + (Math.random() - 0.5) * 16, y: y + Math.random() * 40, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0,
+        list.push({ img: (right ? R : L).dotImg(), x: x + (Math.random() - 0.5) * 16, y: y + Math.random() * 40, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0,
                     life: E.life[0] + Math.random() * (E.life[1] - E.life[0]), r: E.r[0] + Math.random() * (E.r[1] - E.r[0]) });
       }
     },
     draw(ctx) {
       if (!list.length) return;
-      if (!dots) dots = [softDot('rgba(255,255,255,1)', 'rgba(225,244,255,0.9)', 'rgba(120,190,250,0)'),
-                         softDot('rgba(255,252,220,1)', 'rgba(255,210,80,0.9)', 'rgba(255,160,20,0)')];
       ctx.save();
       for (const p of list) {
+        if (!p.img) continue;
         const u = p.t / p.life, r = p.r * (1 + 0.5 * u);
-        ctx.globalAlpha = 1 - u; ctx.drawImage(dots[p.gold ? 1 : 0], p.x - r, p.y - r, 2 * r, 2 * r);
+        ctx.globalAlpha = 1 - u; ctx.drawImage(p.img, p.x - r, p.y - r, 2 * r, 2 * r);
       }
       ctx.restore();
     },
     reset() { list.length = 0; acc = 0; },
   };
 })();
+
+/* ---- 真相女神、灭迹恶魔、嫦娥、后羿的四片潮（2026-09-29）----
+   用户："给真相女神和恶魔添加类似水面和卷轴的效果"；"新增一对嫦娥 vs 后羿，制作规格和白娘子法海一致"。
+   贴图 v14/tides/make.py 出（尺寸是它打印的）：每片一张生图，远 / 中 / 近三层（中层水平翻），小兵是 2×2 一张切的。
+   摆位同海：三层浪上沿的中位数各对齐海那一层（远 1246、中 1311、近 1366，y = 1246 − 1190 − 贴图里上沿中位数），近层都高到出屏。
+   平移、起伏同海（各层反向走、远慢近快）；左边的往右冲、从左进场，右边的往左冲、从右进场。 */
+const TIDE_SWELL = [[-14, [4, 520, 30], [2, 0.9]], [26, [7, 640, -45], [3, 1.1]], [-44, [10, 780, 70], [4, 1.3]]];   // 三层的 [v, swell, bob]（同海）
+/* 三层：[名, w, h, y]（make.py 打印），dir：左边的潮 +1（层的平移方向跟海一致）、右边的 −1（镜像过来） */
+const tideLayers = (name, sizes, dir) => sizes.map(([ln, w, h, y], k) => {
+  const [v, sw, bob] = TIDE_SWELL[k];
+  return { src: `assets/world/tide_${name}_${ln}.webp`, w, h, y, v: v * dir, swell: [sw[0], sw[1], sw[2] * dir], bob };
+});
+const tideKinds = (name, list) => list.map(([k, v]) => ({ src: `assets/world/tide_${name}_${k}.webp`, v }));
+const TIDE_MOBS = [                    // 开场位置（同海）：row 0 骑中层（缩放 0.75）、row 1 骑近层（0.95）
+  { x: 0.08, row: 0, k: 2, s: 0.75 }, { x: 0.42, row: 0, k: 0, s: 0.75 }, { x: 0.76, row: 0, k: 3, s: 0.75 },
+  { x: 0.22, row: 1, k: 1, s: 0.95 }, { x: 0.58, row: 1, k: 2, s: 0.95 }, { x: 0.92, row: 1, k: 0, s: 0.95 },
+];
+
+/* 真相云海：翠绿发光云浪，往上冒聊天气泡（被翻出来的聊天记录）和绿色光点；放大镜、带翅膀的手机、聊天气泡、相机小精灵往右冲 */
+const TruthTide = Tide({
+  top: 1190, rise: 1.4, fall: 1.4, side: -1, front: { every: 0.014 },
+  layers: tideLayers('truth', [['far', 535, 319, 13], ['mid', 693, 413, 65], ['near', 888, 529, 105]], +1),
+  spray: { every: 0.04, crest: 0.4, V: [40, 120], spread: 1.2, G: -70, life: [0.9, 1.5], r: [3, 6], a: 0.95, layers: [0, 1, 2],
+           dot: ['rgba(240,255,230,1)', 'rgba(150,255,150,0.85)', 'rgba(40,200,80,0)'],
+           shape: ['chat', 0.3, 2.6, 'rgba(255,255,255,0.95)', 'rgb(40,140,60)'] },
+  kinds: tideKinds('truth', [['magnifier', 60], ['phone', 70], ['bubble', 50], ['camera', 55]]),
+  dir: +1, mobs: TIDE_MOBS,
+  sink: 0.22,                    // 小精灵下半截没在云里
+  hop: { every: [2.0, 3.6], T: 0.7, h: 80, splash: 12 },
+});
+
+/* 灭迹黑烟：紫黑浓烟浪，碎纸条从浪尖翻飞出来再落回去（被撕掉的证据），夹着紫色火星；小恶魔、吃纸垃圾桶、碎纸机、橡皮擦往左冲 */
+const DemonTide = Tide({
+  top: 1190, rise: 1.4, fall: 1.4, side: +1, front: { every: 0.014 },
+  layers: tideLayers('demon', [['far', 535, 301, 30], ['mid', 693, 390, 87], ['near', 888, 499, 133]], -1),
+  spray: { every: 0.03, crest: 0.35, V: [140, 300], spread: 1.1, G: 520, life: [0.7, 1.1], r: [3, 6], a: 0.95, layers: [1, 2, 2],
+           dot: ['rgba(255,220,255,1)', 'rgba(200,90,240,0.85)', 'rgba(90,20,120,0)'],
+           shape: ['paper', 0.55, 1.6, 'rgba(246,244,250,0.95)'] },
+  kinds: tideKinds('demon', [['imp', 70], ['bin', 55], ['shredder', 50], ['eraser', 62]]),
+  dir: -1, mobs: TIDE_MOBS,
+  sink: 0.22,
+  hop: { every: [2.0, 3.6], T: 0.7, h: 80, splash: 14 },
+});
+
+/* 月夜银云海：银白月蓝云浪，银色星光慢慢往上飘；三只玉兔、一只金蟾往右跑 */
+const MoonTide = Tide({
+  top: 1190, rise: 1.4, fall: 1.4, side: -1, front: { every: 0.014 },
+  layers: tideLayers('moon', [['far', 535, 275, 29], ['mid', 693, 356, 86], ['near', 888, 456, 131]], +1),
+  spray: { every: 0.04, crest: 0.45, V: [30, 90], spread: 1.4, G: -50, life: [0.9, 1.5], r: [2.5, 5.5], a: 0.95, layers: [0, 1, 2],
+           dot: ['rgba(255,255,255,1)', 'rgba(215,228,255,0.85)', 'rgba(140,170,255,0)'] },
+  kinds: tideKinds('moon', [['rabbit1', 66], ['rabbit2', 78], ['toad', 48], ['rabbit3', 70]]),
+  dir: +1, mobs: TIDE_MOBS,
+  sink: 0.2,
+  hop: { every: [1.6, 3.0], T: 0.7, h: 90, splash: 12 },     // 兔子蹦得勤、蹦得高
+});
+
+/* 太阳火云海：金红火焰云浪，火星往上蹿；四只三足金乌贴着火浪往左飞（sink 负：飞在浪尖上方，不泡在里面） */
+const SunTide = Tide({
+  top: 1190, rise: 1.4, fall: 1.4, side: +1, front: { every: 0.012 },
+  layers: tideLayers('sun', [['far', 535, 292, 30], ['mid', 693, 378, 88], ['near', 888, 485, 134]], -1),
+  spray: { every: 0.025, crest: 0.4, V: [60, 170], spread: 1.2, G: -140, life: [0.6, 1.1], r: [2.5, 6], a: 0.95, layers: [0, 1, 2],
+           dot: ['rgba(255,255,220,1)', 'rgba(255,190,60,0.9)', 'rgba(255,80,10,0)'] },
+  kinds: tideKinds('sun', [['crow1', 80], ['crow2', 70], ['crow3', 95], ['crow4', 75]]),
+  dir: -1, mobs: TIDE_MOBS,
+  sink: -0.3,
+  hop: { every: [1.8, 3.2], T: 0.8, h: 110, splash: 10 },
+});
