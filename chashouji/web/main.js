@@ -1113,7 +1113,7 @@ const RECIPE = {
       const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, sp = sp0 + Math.random() * (sp1 - sp0);
       Particles.spawn({ kind: 'glyph', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 260, drag: 0.94,
                         life: 0.6 + Math.random() * 0.3, r: sz * 0.6, r1: sz, rot: (Math.random() - 0.5) * 0.6, vrot: (Math.random() - 0.5) * 3,
-                        rgb: [255, 214, 70], edge: [90, 36, 6], lw: Math.max(3, sz * 0.14),
+                        rgb: [255, 214, 70], edge: [90, 36, 6], lw: Math.max(2, sz * 0.06),   // 描边细（同 crew.js FAHAI_FX.mantra.lw）
                         text: this.GLYPHS[Math.floor(Math.random() * this.GLYPHS.length)] });
     },
     burst(x, y, side, s) {

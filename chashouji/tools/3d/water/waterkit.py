@@ -33,6 +33,9 @@ def setup(W, H, samp, outline_px):
     r.film_transparent = True
     r.image_settings.file_format = 'PNG'; r.image_settings.color_mode = 'RGBA'
     sc.view_settings.view_transform = 'Standard'     # 自发光颜色 = 贴图颜色（默认 AgX 会把饱和蓝压灰）
+    if outline_px <= 0:                               # 不描边（水柱 2026-09-28 起：描边在引擎里被放粗，读成贴纸）
+        r.use_freestyle = False
+        return sc
     r.use_freestyle = True; r.line_thickness_mode = 'ABSOLUTE'; r.line_thickness = 1.0
     vl = sc.view_layers[0]; vl.use_freestyle = True
     fs = vl.freestyle_settings

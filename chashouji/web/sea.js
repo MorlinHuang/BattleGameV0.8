@@ -29,7 +29,7 @@
 /* 掌心水柱的 3D 贴图（tools/3d/water/pack_water.py 打印的，重渲后重填）。
    16 帧、4 列，x0 = 掌心在格子里的 x、cy = 中轴的 y；loop = 引擎里多少秒转一圈（jet.py 按整周期渲，首尾相接）。 */
 const WaterArt = {
-  jet: { src: 'assets/fx/jet.webp', n: 16, cols: 4, w: 712, h: 171, x0: 4, cy: 92, loop: 0.5 },
+  jet: { src: 'assets/fx/jet.webp', n: 16, cols: 4, w: 709, h: 166, x0: 1, cy: 90, loop: 0.5 },
   load(v, off) {
     if (off) return Promise.resolve(false);
     const o = this.jet;

@@ -1126,7 +1126,9 @@ const FAHAI_FX = {
   orb: { R: 64, rgb: [255, 200, 60] },                                                 // 掌心金光团
   /* 咒语金字：出手时字号 → 飞 grow 秒后的字号；every：每几颗粒子画一个字（其余只当金光雾）。
      第一版 24 → 50、每秒 10 个字，一串小字 —— 用户："咒语太细太小，参考真相女神的喷雾"：字放到 40 → 90，外面套一层金光雾锥（mist） */
-  mantra: { chars: '卍唵嘛呢叭咪吽', size: [40, 90], grow: 0.22, every: 3, fill: [255, 220, 90], edge: [96, 40, 6], glow: [255, 190, 40] },
+  /* lw：描边宽 = 字号的几成。原来 0.16（90 号字描 14 像素，一圈深褐粗边），用户："咒语描边不要那么粗" → 0.06，描边也半透一点（edge 0.8）；
+     字从底图上跳出来靠身后那团金光（glow），不靠粗描边 */
+  mantra: { chars: '卍唵嘛呢叭咪吽', size: [40, 90], grow: 0.22, every: 3, lw: 0.06, fill: [255, 220, 90], edge: [96, 40, 6], glow: [255, 190, 40] },
   mist: { r0: 30, r1: 110, rim: [170, 90, 10], body: [255, 214, 100], core: [255, 250, 225], a: [0.2, 0.3], star: 0 },      // 粒子只有女神的 1/7（30 vs 220），单团浓一些
 };
 function drawFahaiAura(ctx, b, s, at, probe) {
@@ -1178,7 +1180,7 @@ function drawMantra(ctx, ps) {
     ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(Math.sin(d.t * 5 + d.j * 6) * 0.25);
     ctx.font = `900 ${sz.toFixed(1)}px "Noto Serif CJK SC","Songti SC","STSong","SimSun",serif`;
     const ch = M.chars[((d.seq % M.chars.length) + M.chars.length) % M.chars.length];
-    ctx.lineWidth = Math.max(3, sz * 0.16); ctx.strokeStyle = rgba(M.edge, 1); ctx.strokeText(ch, 0, 1);
+    ctx.lineWidth = Math.max(2, sz * M.lw); ctx.strokeStyle = rgba(M.edge, 0.8); ctx.strokeText(ch, 0, 1);
     ctx.fillStyle = rgba(M.fill, 1); ctx.fillText(ch, 0, 1);
     ctx.restore();
   }

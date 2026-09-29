@@ -7,7 +7,17 @@
   jet.webp：水柱 16 帧，原尺寸。打印的 x0 = 掌心（渲染图 x 12 像素处，jet.py X0）在裁剪框里的 x，cy = 中轴在裁剪框里的 y。
 """
 import os, sys, glob
-from PIL import Image
+from PIL import Image, ImageChops, ImageFilter
+
+# 边缘往里羽化（像素）：alpha × 自己模糊一遍 —— 轮廓处降到一半、往里 EDGE_SOFT 像素渐到不透明。
+# 2026-09-28 水柱改不描边（jet.py OUTLINE = 0）后，赛璐璐的硬边还是一刀切；用户要"参考真相女神的喷雾做柔一点"
+EDGE_SOFT = 5
+
+
+def soften(im):
+    a = im.getchannel('A')
+    im.putalpha(ImageChops.multiply(a, a.filter(ImageFilter.GaussianBlur(EDGE_SOFT))))
+    return im
 
 SRC, DST = sys.argv[1], sys.argv[2]
 
@@ -28,7 +38,7 @@ def pack(files, out, scale, cols):
     rows = (len(files) + cols - 1) // cols
     at = Image.new('RGBA', (cw * cols, ch * rows))
     for i, f in enumerate(files):
-        im = Image.open(f).crop(box)
+        im = soften(Image.open(f).convert('RGBA')).crop(box)
         if scale != 1: im = im.resize((cw, ch), Image.LANCZOS)
         at.paste(im, ((i % cols) * cw, (i // cols) * ch))
     at.save(out, 'WEBP', quality=86, method=6)
