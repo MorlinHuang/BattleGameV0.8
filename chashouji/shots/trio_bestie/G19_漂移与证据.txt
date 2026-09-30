@@ -1,0 +1,8 @@
+G19 网红主播（哥们美术代做）。胶片都是 ammosc=1 noshake=1 bestie=G19，errors 全空。
+drift.py <胶片> 12 web/assets/trio/G19_streamer.webp 315x315 4 0 90,130,200,195 160,540,0.9 108.3,187.8 16 id=G19 names=idle,wind,throw,follow,zoom,brake,wave,idle2 robust=0.08（框 = 短裤 + 大腿）
+  G19_atk_1.6（idle→wind→throw→follow→idle）最大 0.48 px
+  G19_atk_1.9（idle→wind→throw→follow→idle）最大 0.39 px
+  G19_idle（格 1~4 还在飞进来不算；格 5~12 wave→idle→wind→throw）在场最大 1.09 px
+无人机挂件：每帧 at 都是 [140,192,0]、同一张图，逐像素相同（只随 sway 0.03 rad 整体悬停晃）。
+进场 G19_enter（ammoms 90 ammoskip 0）：格 1~6 zoom，7~9 brake，10~12 wave(land)，之后 idle —— 露面后换两次帧。
+同组 组6_G19（ammoms 200）：G19 无人机和鞋最低到屏幕 y ≈ 643，同组后排 G9 头顶 ≈ 669，不相交；G28 在地板远在下面。

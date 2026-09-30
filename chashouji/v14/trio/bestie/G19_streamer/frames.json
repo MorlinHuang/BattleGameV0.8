@@ -1,0 +1,21 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1g.png",
+   "screen": "green",
+   "frames": ["idle", "wind", "throw", "follow"]
+  },
+  {
+   "src": "raw/act_b1g.png",
+   "screen": "green",
+   "frames": ["zoom", "brake", "wave", "idle2"]
+  }
+ ],
+ "ref": "idle",
+ "head": [140, 10, 280, 190],
+ "fixed": [120, 300, 280, 400],
+ "size": ["h", 300],
+ "anchor": [160, 395],
+ "scale_by": "sheet",
+ "check": []
+}

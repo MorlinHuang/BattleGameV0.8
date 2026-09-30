@@ -468,6 +468,29 @@ const TRIO_BESTIE = {
              T: 0.5, arc: 0.2, spin: 12, idleSpin: 3, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
 
+    G19: {      // 网红主播：戴猫耳耳机、举着手机直播，坐着白色四旋翼无人机从左边飞进来（前倾冲 → 后仰急刹 → 挥手打招呼）；甩出一枚打赏小火箭（3D）砸他
+      face: +1,
+      sheet: { src: 'assets/trio/G19_streamer.webp', cell: [315, 315], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'zoom', 'brake', 'wave', 'idle2'] },
+      /* 人和无人机分开生（bestie/G19_streamer/raw/act_a1g / act_b1g 是"坐在看不见的座上"的人，drone.png 单独一张）：无人机做成挂件层垫在身后，
+         每一帧同一张图、同一个位置（第七轮 G15 船头的要求）。人按屁股 + 大腿配准（残差 ≤ 0.40 px）；锚点 = 屁股坐在机身顶面的那一点。
+         大小：人 idle 剪影 2.53 万格内像素 × 0.9² ≈ 2.05 万（上方样板 G11 2.06 万）；wind 头 0.92 是举过头顶的手压进了头框，同一张条缩放 1.00 */
+      anchor: [108.3, 187.8], at: [160, 540, 0.9], pivot: [108, 188], leanK: 0.2,
+      depth: 0.5, recipe: 'star',
+      /* 从左边画外平着飞进来减速（fly，from 同一高度偏左）：前倾冲、头发往后拖 → 后仰急刹、两脚往前踢 → 到位挥手（露面后换两次帧，最后标 land） */
+      enter: { kind: 'fly', from: [-460, -60], T: 1.0, air: 1.0, tilt: 0.08, seq: [['zoom', 0.45], ['brake', 0.25], ['wave', 9, 'land']], sq: 0.05 },
+      exit: { frame: 'zoom' },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
+      flex: { idle: [[38, 60, 72, 162, 'r', 5, 0.8]] },   // 身后垂着的长发：根在右边钉住，框上、下、左三边透明（flexcheck 0 / 0 / 0）
+      /* 无人机：pivot = 机身顶面（她坐的地方），整机绕它轻轻晃（悬停），画在人后面 */
+      parts: [{ src: 'assets/trio/G19_drone.webp', pivot: [150, 38], z: -1, sway: [0.03, 1.1, 0],
+                 at: { idle: [140, 192, 0], wind: [140, 192, 0], throw: [140, 192, 0], follow: [140, 192, 0], zoom: [140, 192, 0], brake: [140, 192, 0], wave: [140, 192, 0], idle2: [140, 192, 0] } }],
+      /* 打赏小火箭照道具表 3D：r 28 cell 106 scale 1.35。另一只手一直举着手机直播，扔火箭的是前侧那只手：举过头顶 → 往右甩出去 */
+      atk: { kind: 'throw', item: 'rocket', r: 28, atlas: { src: 'assets/trio/prop_rocket.webp', n: 36, cols: 6, cell: 106, scale: 1.35 },
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             hold: { wind: [72, 14], throw: [292, 96] },
+             T: 0.55, arc: 0.2, spin: 5.7, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       /* 2026-10-01 迁成帧序列（引擎负责人）：idle = 原单张立绘（手心朝上托着），kiss = 同一张画布上只局部重绘右臂（指尖送到唇边，
