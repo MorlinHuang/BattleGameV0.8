@@ -11,13 +11,15 @@
    ]
   },
   {
-   "src": "raw/act_b1_fix.png",
-   "screen": "magenta",
+   "src": "raw/act_b2.png",
+   "screen": "auto",
    "frames": [
     "walk1",
     "walk2",
     "walk3",
-    "taunt"
+    "walk4",
+    "taunt",
+    "idle2"
    ]
   }
  ],
@@ -46,6 +48,10 @@
   "walk1",
   "walk2",
   "walk3",
-  "taunt"
+  "walk4"
+ ],
+ "scale": [
+  0.9,
+  1.5
  ]
 }
