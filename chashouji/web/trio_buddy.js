@@ -479,8 +479,11 @@ const TRIO_BUDDY = {
          背后的扇子右沿到 x 958 不出画；和同组 B6 在场四帧 × B18 在场六帧剪影外扩 4px 相交 0 */
       anchor: [194.8, 211.6], at: [890, 570, 0.72], pivot: [195, 212], leanK: 0.3,
       depth: 0.5, recipe: 'feather',
-      /* 从墙头那一行后面升上来（线以下剪掉），蹿上来 → 落座（压一下）→ 坐定；淡入 0.35 秒内是 leap，之后换 land */
-      enter: { kind: 'appear', rise: 220, cut: 212, T: 0.8, seq: [['leap', 0.4], ['land', 0.2, 'land'], ['idle', 9]], sq: 0.08 },
+      /* 从墙头那一行后面升上来（线以下剪掉），整段升起都是 leap，升到位那一刻（= T）换成坐定 idle，腿同一格垂到墙前。
+         剪裁在 t < T 时一直生效（trio.js place / drawBody），所以 T 必须正好落在"腿翻到墙前"的那次换帧上：
+         land（蹲坐、膝盖和鞋已经在墙线以下的墙前）放进 seq 就一定被剪一截，T 0.8 时剪到 idle 里、T 0.6 时剪 land 整段（审查第十轮 B18：
+         胶片 land 膝盖以下没了，land→idle 一格 19137 px），所以进场不用 land */
+      enter: { kind: 'appear', rise: 220, cut: 212, T: 0.6, seq: [['leap', 0.6], ['idle', 9]], sq: 0.08 },
       exit: { frame: 'leap' },
       idle: { frame: 'idle', breathe: [0.016, 0.9, 0.4] },
       /* 挂件层：墙头瓦檐（buddy/B18_tangbohu/raw/wall.png，下接一截渐隐白墙）垫在人后面；背后斜插的折扇（定妆拆的那一层 ref/B18_fan.png）跟着轻晃，
