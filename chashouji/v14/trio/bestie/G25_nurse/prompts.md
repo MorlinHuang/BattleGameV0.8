@@ -1,4 +1,4 @@
-# G25 针筒护士（待生图：2026-09-30 生图服务熔断 / 429，未出）
+# G25 针筒护士
 槽位地板、进场 slide（推输液架滑进来）、出手 throw（巨型针筒，onHit wear 扎在他头上）、绿幕（粉色角色）。
 ## act_a1（idle / wind / throw / follow）参考图 bestie/ref/G25.png，1024x1536 2x2
 Character animation pose sheet, 2x2 grid (4 poses), each pose one full-body drawing of THE SAME adult nurse as the reference image (black hair in a ponytail, white nurse cap with a red cross, short pink and white nurse dress with white apron and red cross, white thigh-high stockings, white high heels), anime cel-shading, clean black lineart, identical character size, identical costume details and identical camera distance in all four poses. In every pose she is in the SAME LOW KNEELING POSE facing RIGHT: right knee up with the right foot planted forward, left knee on the floor, legs and hips in exactly the same place in every cell (only arms, head and torso change). Her LEFT hand always holds the same metal IV drip stand (tall pole with a hanging drip bag, wheeled base) standing upright just BEHIND her on the left. Her right hand is EMPTY.

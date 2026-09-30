@@ -1,4 +1,4 @@
-# G27 杉菜（待生图：2026-09-30 生图服务熔断 / 429，未出）
+# G27 杉菜
 槽位地板、进场 slide（冲过来滑铲）、出手 throw（书包，平面道具，盖上贴纯红纸条）、品红幕。书包不画进帧（运行时画在手里）。
 ## act_a1（idle / wind / throw / follow）参考图 bestie/ref/G27.png，1024x1536 2x2
 Character animation pose sheet, 2x2 grid (4 poses), each pose one full-body drawing of THE SAME young woman university student about 21 years old as the reference image (shoulder-length straight black hair with blunt bangs, white shirt with rolled-up sleeves, beige knit vest, denim A-line skirt, white canvas sneakers), NOT a school uniform, anime cel-shading, clean black lineart, identical character size, identical costume details and identical camera distance in all four poses. In every pose she is in the SAME LOW HALF-KNEEL facing RIGHT: right foot planted forward, left knee on the floor, legs and hips in exactly the same place in every cell (only arms, head and torso change). No bag is drawn. Her hands are EMPTY.
