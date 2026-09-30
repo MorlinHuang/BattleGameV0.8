@@ -449,6 +449,24 @@ const TRIO_BESTIE = {
              hold: { wind: [132, 16], throw: [318, 72] },
              T: 0.55, arc: 0.18, spin: 5.7, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
+    G13: {      // 白衣古墓仙子（小龙女式）：躺在一根横拉的麻绳上从左边滑进来、随绳颠着荡；支起身子一甩白绸，绸梢金铃"叮当"抽过去
+      face: +1,
+      sheet: { src: 'assets/trio/G13_xiaolongnv.webp', cell: [421, 303], cols: 4, names: ['idle', 'wind', 'throw', 'follow'] },
+      /* 锚点 = 腰臀压在绳上那一点；按伸直的那条腿 + 脚配准（残差 ≤ 2.0 px）。绳子引擎画（rope，画在人之下），帧里不画绳。
+         剪影（含垂下的长发、绸带）约 4.8 万格内像素 × 0.66² ≈ 2.1 万屏幕像素，同 G11 */
+      anchor: [206.5, 166.1], at: [175, 520, 0.66], pivot: [206, 166], leanK: 0.3,
+      depth: 0.5, recipe: 'bloom',
+      /* 横绳（rope）：躺在绳上撩着头发滑进来 → 躺定一手枕头一手搭膝（露面后换一次帧，两个姿态）；绳是黄褐麻绳 */
+      enter: { kind: 'rope', ends: [[-80, 532], [470, 488]], touch: [206.5, 166.1], sag: 16, sway: 5, w: 6, fill: '#b98a4e', edge: '#5a3a1a',
+               seq: [['follow', 0.45], ['idle', 9, 'land']], sq: 0.04 },
+      exit: { frame: 'follow' },
+      idle: { frame: 'idle', breathe: [0.012, 0.7, 0] },
+      /* 垂下去的长发、身下垂着的裙摆绸带：上沿（压在身下那一行）钉住，梢晃（框左、右、下三边透明） */
+      flex: { idle: [[0, 216, 165, 300, 't', 5, 0.8], [200, 210, 404, 300, 't', 5, 0.7]] },
+      /* 金铃索（whip）：支起身子手举过头 → 往右一甩，白绸末端一对金铃抽过去 */
+      atk: { kind: 'whip', seq: [['wind', 0.3], ['throw', 0.44, 'fire'], ['follow', 0.3]], from: [290, 45], phases: [0.14, 0.08, 0.22],
+             whip: { w: 10, taper: 0.5, amp: 26, waves: 1.3, hz: 3, color: '#f6f4f8', edge: 'rgba(120,120,150,.9)', tip: [18, 13, '#e8b52c'] }, gap: [0.9, 1.3] },
+    },
     G14: {      // 金发剑之公主（希瑞式）：左上一道蓝白闪光里举剑变身现身，剑指前方、扛剑站定；双手举剑过头一劈，金色剑光斩在他身上
       face: +1,
       sheet: { src: 'assets/trio/G14_shera.webp', cell: [335, 433], cols: 4, names: ['idle', 'wind', 'throw', 'follow'] },
