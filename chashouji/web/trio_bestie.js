@@ -176,6 +176,25 @@ const TRIO_BESTIE = {
              hold: { idle: [116, 118], wind: [10, 152], throw: [266, 20] },
              T: 0.5, arc: 0.22, spin: 6.3, idleSpin: 0.9, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
+    G28: {      // 80 年代健美操女：从左边一路开合跳进来，指尖转着呼啦圈，甩出去套在他头上
+      face: +1,
+      sheet: { src: 'assets/trio/G28_aerobics.webp', cell: [301, 417], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'jump1', 'jump2', 'jump3', 'jump4'] },
+      anchor: [138.9, 396.5], at: [175, 1330, 1], pivot: [138, 396],
+      leanK: 0,   // 两脚大开站定：整体前后倾绕两脚中点转，离中点 120 px 的脚会上下挪 7 px（量出来的）
+      depth: 1.3, recipe: 'star',
+      /* 开合跳：jump1 并腿落地 → jump2 腾空张开 → jump3 开腿落地、双臂举成 V → jump4 腾空合拢（偶数帧接地、奇数帧 bob 抬起，规范第九节 G28）。
+         stride = 每跳前进的距离（格内像素）：接地 → 腾空 → 接地换两次帧，每次前进 stride / 2 */
+      enter: { kind: 'walk', fps: 6, bob: 20, stride: 110, seq: [[['jump1', 'jump2', 'jump3', 'jump4'], 9]] },
+      exit: { frame: ['jump1', 'jump2', 'jump3', 'jump4'], fps: 8, flip: true, T: 0.8 },
+      idle: { frame: 'idle', breathe: [0.014, 0.9] },
+      /* 呼啦圈：引擎 3D 转盘（道具表 r 36 cell 108 scale 1.07），待机顶在指尖上转；套在他头上那只用图集第 4 格（压扁的椭圆）当平面图。
+         收势用 jump3（双臂举成 V 欢呼）：A 条的 follow 那格头画小了 9%，按头缩放后脚踩到地板下 17 px，不上场 */
+      atk: { kind: 'throw', item: 'hoop', r: 36, atlas: { src: 'assets/trio/prop_hoop.webp', n: 36, cols: 6, cell: 108, scale: 1.07 },
+             prop: 'assets/world/trio_g28_hoop.webp',
+             seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['jump3', 0.35]],
+             hold: { idle: [84, 40], wind: [27, 196], throw: [295, 114] },
+             T: 0.55, arc: 0.25, spin: 5.7, idleSpin: 2.5, stretch: 0.03, gap: [1.0, 1.4], onHit: 'wear' },
+    },
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
