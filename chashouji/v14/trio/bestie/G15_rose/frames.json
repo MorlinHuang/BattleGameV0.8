@@ -5,7 +5,7 @@
    "screen": "auto",
    "frames": [
     "idle",
-    "raise",
+    "wind",
     "throw",
     "follow"
    ]
@@ -15,31 +15,32 @@
    "screen": "auto",
    "frames": [
     "grip",
-    "rise",
-    "wind",
+    "step",
+    "open",
     "idle2"
    ]
   }
  ],
  "ref": "idle",
  "head": [
-  285,
-  40,
-  360,
-  130
+  230,
+  15,
+  350,
+  150
  ],
  "fixed": [
-  300,
-  380,
-  440,
-  700
+  290,
+  565,
+  425,
+  640
  ],
  "size": [
   "h",
-  330
+  400
  ],
  "anchor": [
-  370,
-  695
- ]
+  355,
+  630
+ ],
+ "check": []
 }

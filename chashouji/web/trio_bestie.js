@@ -299,6 +299,28 @@ const TRIO_BESTIE = {
              T: 0.4, arc: 0.12, spin: 14, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
 
+    /* ---- 上方（左上，男女主头顶以下；样板 G11） ---- */
+    G15: {      // 船头红发少女（泰坦尼克 Rose 式）：站在一截白色船头上从左边平着滑出来，捂着心口 → 张开双臂"飞"；举起心形蓝宝石项链一抛（3D）砸他
+      face: +1,
+      sheet: { src: 'assets/trio/G15_rose.webp', cell: [362, 435], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'grip', 'step', 'open', 'idle2'] },
+      /* 船头画在每一帧里（动作条每格同一截船头，人站在同一处），锚点 = 两只高跟鞋之间的船头甲板；按两只鞋配准（残差 0.22 px）。
+         grip / step 两帧模型多画了一根竖栏杆（船头变形），不上场。大小：人（不算船头）剪影 × 0.75² ≈ 2.34 万（上方样板 G11 2.06 万，+14%，蓬裙占得多）。
+         站位：同组后排 G5 头顶 671、蓄力举过头的算盘顶到 626，船头最低点 616 让开 */
+      anchor: [212.4, 367.4], at: [190, 565, 0.75], pivot: [212, 367], leanK: 0,
+      depth: 0.5, recipe: 'bloom',
+      /* 船头从左边画外平着滑进来（fly，from 在同一高度偏左、dy 小），减速到位；滑行时捂着心口 → 双臂半张 → 到位张开双臂（露面后换两次帧，最后标 land） */
+      enter: { kind: 'fly', from: [-420, -30], air: 0.75, tilt: 0.04, seq: [['follow', 0.35], ['open', 0.3], ['idle', 9, 'land']], sq: 0.05 },
+      exit: { frame: 'follow' },
+      idle: { frame: 'idle', breathe: [0.014, 0.6, 0] },
+      /* 往后飘的长卷发：根在右边钉住，框上、下、左三边透明 */
+      flex: { idle: [[42, 45, 140, 152, 'r', 6, 0.8]] },   // 框里连着张开的左手：飘发和手一起随风轻晃
+      /* 心形蓝宝石项链照道具表 3D：r 26 cell 79 scale 1.39，转速 π / T */
+      atk: { kind: 'throw', item: 'necklace', r: 26, atlas: { src: 'assets/trio/prop_necklace.webp', n: 36, cols: 6, cell: 79, scale: 1.39 },
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             hold: { wind: [250, 14], throw: [352, 52] },
+             T: 0.55, arc: 0.2, spin: 5.7, idleSpin: 1.2, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 230, 1],   /* 2026-10-01 自由组合：原 y 360 秋千荡下来压后排地面的头，抬 130（组合遮挡矩阵_bestie 建议站位） */
