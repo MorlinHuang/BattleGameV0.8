@@ -52,15 +52,17 @@ const TRIO_BUDDY = {
     /* B5 是后排地面的样板（引擎负责人 2026-09-30 临时写在这里，哥们美术接手后照规范维护）。素材：v14/trio/tools/samples/B5_jkd */
     B5: {       // 截拳道：从右边画外晃着双节棍走进来，站定摆格斗架；连打——双节棍左右抡，一串棍影砸到她身上，"啊哒"
       face: -1,
-      sheet: { src: 'assets/trio/B5_jkd.webp', cell: [494, 482], cols: 4, names: ['idle', 'wind', 'hitA', 'hitB', 'walk1', 'walk2', 'walk3', 'walk4', 'taunt', 'idle2'] },
+      sheet: { src: 'assets/trio/B5_jkd.webp', cell: [494, 482], cols: 4, names: ['idle', 'wind', 'hitA', 'hitB', 'walk1', 'walk4', 'walk3', 'walk2', 'taunt', 'idle2'] },
       anchor: [260.7, 478.1], at: [740, 1070, 0.83], pivot: [260, 478], leanK: 0,   // 站在男生身后右边、比主角小一圈（同 crew.js 后排的透视）
       /* 原 [800, 1158, 0.85]：同组 B24 坐在右下角，头顶和举起的磁带到 y 1038，比 B5 的脚底还高，横着挪到 x 650 也分不开（剪影重叠 ≥ 600px）。
          改成往左 60、往后排退 88（脚底 1070，仍在地板上），缩一点点：B5 在场五帧（含复审重出的宽马步 taunt）× B24 在场六帧 + 手里的磁带，剪影外扩 4px 逐对相交为 0 */
       depth: 0.8, recipe: 'thud',
       /* 走进来：四帧一个循环（两步），每秒 7 帧，换帧那一刻才前进 stride/2（钉脚）；一步一伏 7 px。离场掉头（flip）走回右边画外。
-         走路条（复审重出）：walk1 近侧腿（带黑条）在前、walk3 远侧腿（纯黄）在前，walk2 / walk4 两腿交错；棍四帧都在远侧手，随摆臂前后。
-         stride = walk1 两只鞋尖横向距离 197、walk3 233，取 210（格内像素） */
-      enter: { kind: 'walk', fps: 7, bob: 7, stride: 210, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
+         走路条（第三次，审查_样板 7.2）：四帧同一张底图——第一次生图的 walk1 / walk4，蒙版只重绘腿和手臂（raw/walk_inp1.png）。
+         walk1 近侧腿（带黑条）在前、walk2 近侧腿撑地、walk3 远侧腿（纯黄）在前、walk4 远侧腿撑地；棍四帧都在近侧手：后 → 胯边 → 前 → 胯边。
+         stride 209.5 = 一圈四次换帧"继续着地那只脚"的格内位移之和 / 2（walkfix.py edge pivot：前脚落地→支撑钉鞋跟、支撑→后脚踮起钉鞋尖；
+         各帧横移后四次都是 105）；dist = 5 步 × 86.94，最后一步落在 walk1（walkfix 的 ref，走完换待机不跳） */
+      enter: { kind: 'walk', fps: 7, bob: 7, stride: 209.5, dist: 434.7, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
       exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 9, flip: true, T: 0.8 },
       idle: { frame: 'idle', breathe: [0.012, 0.8] },
       /* 连打：蓄力（棍举过头）0.3 秒 → 左右抡 0.6 秒（hitA / hitB 每秒 10 帧交替），每 0.1 秒一道棍影飞过去打一下 → 收势摸鼻子 */
@@ -97,7 +99,7 @@ const TRIO_BUDDY = {
       enter: { kind: 'slide', seq: [['plank', 0.25], ['pushup', 0.2], ['plank', 0.15], ['pop', 9, 'land']], sq: 0.12 },   // 俯卧撑平板滑 → 压下去 → 撑起 → 弹起秀肌肉
       exit: { frame: 'plank' },
       idle: { frame: 'pop', breathe: [0.02, 0.9, 0] },
-      atk: { kind: 'throw', item: 'dumbbell', r: 24, atlas: { src: 'assets/trio/prop_dumbbell.webp', n: 36, cols: 6, cell: 75, scale: 1.08 },
+      atk: { kind: 'throw', item: 'dumbbell', r: 28, atlas: { src: 'assets/trio/prop_dumbbell.webp', n: 36, cols: 6, cell: 75, scale: 1.06 },
              seq: [['raise', 0.3], ['throw', 0.1, 'fire'], ['idle', 0.3]],
              hold: { pop: [54, 61], raise: [192, 15], throw: [9, 80] },
              T: 0.5, arc: 0.3, spin: 6.3, idleSpin: 1.6, stretch: 0, gap: [0.55, 0.95], onHit: 'bounce' },
@@ -154,7 +156,7 @@ const TRIO_BUDDY = {
 
     B23: {      // 三刀剑客（索隆式）：三刀在手从右下角一个滑步压低、刹住落成单膝跪三刀流架势，向左一记横斩，三道绿色斩痕交叉劈在她身上
       face: -1,
-      sheet: { src: 'assets/trio/B23_zoro.webp', cell: [361, 368], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'skid', 'slide', 'set', 'idle2'] },
+      sheet: { src: 'assets/trio/B23_zoro.webp', cell: [391, 284], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'skid', 'slide', 'set', 'idle2'] },
       /* 锚点 = 前脚和跪地膝之间的地面；在场帧最低点屏幕 y 1332。剪影面积 2.89 万（樱木 +9%，刀算在剪影里） */
       anchor: [160.4, 279.1], at: [820, 1330, 1], pivot: [160, 279],
       leanK: 0,   // 单膝跪地：整体前后倾会把跪地的膝盖翘起来
@@ -222,6 +224,21 @@ const TRIO_BUDDY = {
              T: 0.5, arc: 0.25, spin: 5, gap: [0.6, 1.0], onHit: 'wear' },
     },
 
+    B9: {       // 外卖小哥：骑蓝色小电驴飞驰进来、一个漂移甩尾、急刹，坐在车上竖大拇指；把外卖盒托过头顶一甩，3D 外卖盒翻着砸过去、汤汁溅开
+      face: -1,
+      sheet: { src: 'assets/trio/B9_rider.webp', cell: [438, 504], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'drift', 'brake', 'idle2'] },
+      /* 后排地面；电驴画在帧里（两张条都按车身 + 后轮配准、scale_by fixed），锚点 = 两轮着地中点 */
+      anchor: [197.4, 489.6], at: [625, 1062, 0.83], pivot: [197, 490], leanK: 0,
+      depth: 0.8, recipe: 'splash',
+      enter: { kind: 'ride', T: 1.0, tilt: 0.15, seq: [['cruise', 0.4], ['drift', 0.3], ['brake', 9, 'land']], sq: 0.08 },   // 伏低飞驰 → 漂移甩尾、一脚点地 → 急刹两脚落地
+      exit: { frame: 'cruise', flip: true },
+      idle: { frame: 'idle', breathe: [0.012, 0.8] },
+      /* wind 帧手掌托过头顶（掌心顶 y 4，头顶 y 71），外卖盒托在掌上、在那一刻离手；throw 帧是甩完往前下的手 */
+      atk: { kind: 'throw', item: 'takeout', r: 26, atlas: { src: 'assets/trio/prop_takeout.webp', n: 36, cols: 6, cell: 96, scale: 1.32 },
+             seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.4]], hold: { wind: [343, -20] },
+             T: 0.5, arc: 0.35, spin: 6.3, stretch: 0.02, gap: [0.6, 1.0] },
+    },
+
     B8: {       // 光头伐木工：被身后看不见的熊追着倒退跑进来、猛回头急刹；攥着松果举过头顶狠狠砸过去
       face: -1,
       sheet: { src: 'assets/trio/B8_logger.webp', cell: [463, 479], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'skid', 'idle2'] },
@@ -269,7 +286,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B28_pig.webp', cell: [256, 268], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'plop', 'idle2'] },
       /* 地板前排，锚点 = 屁股着地那一点。剪影面积 2.71 万（樱木 +2%）；各帧剪影最低一行屏幕 y 最大 1325 */
       anchor: [113.3, 265.0], at: [830, 1325, 1], pivot: [113, 265], leanK: 0,
-      depth: 1.3, recipe: 'splash',
+      depth: 1.3, recipe: 'melon',
       /* 蹲着挪：步子小、慢（fps 5）；最后一步换成一屁股坐下（plop 落地压扁），坐定 = idle。钉脚：walkfix.py 横向对齐（平移 -3 / 0 / -4 / 0），stride = 四次换帧鞋位差之和 / 2。
          两条腿都是黑灯笼裤白袜，接地帧换没换腿看不出，四张取同一张生图里的四格 */
       enter: { kind: 'walk', fps: 5, bob: 5, stride: 129.5, dist: 324, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.8], ['plop', 9, 'land']], sq: 0.14 },   // dist = 5 步：前 4 步走完一个循环，第 5 步是一屁股坐下

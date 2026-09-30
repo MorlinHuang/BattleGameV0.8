@@ -1,0 +1,7 @@
+B23 frames.json 加 loose ["skid","slide"] 后重 build（cell 361x368 → 391x284，anchor 不变 160.4,279.1）。
+图集 × at [820,1330,1] 每帧剪影最低点（alpha > 16）：
+  改前 idle 1329.9 wind 1328.9 throw 1331.9 follow 1331.9 skid 1415.9 slide 1322.9 set 1324.9 idle2 1323.9
+  改后 idle 1329.9 wind 1328.9 throw 1331.9 follow 1331.9 skid 1330.9 slide 1330.9 set 1324.9 idle2 1323.9   → 全部 ≤ 1334
+胶片 B23修_enter / enter2（ammoms 50）靴底深色像素最低行：slide 1358~1372 → skid 1337~1351 → set 1326~1332 → idle 1329。
+slide / skid 段比 1334 低，是引擎 slide 写法本身的路径（trio.js:195 dy = 110 × k，从右下角斜着滑上来，k 随进场收到 0），不是帧的配准；
+set 起全部 ≤ 1332。改前同一段 skid 帧再往下多 85 px。

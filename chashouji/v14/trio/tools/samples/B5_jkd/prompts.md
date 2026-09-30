@@ -36,3 +36,17 @@ Bottom-right (taunt / follow-through): standing in the same fighting stance as t
 - 出手点 `atk.from` [80, 104] → [270, 28]（wind 帧举过头顶的拳头）：`?trioprobe=1` 12 格男生脸框像素全 0（`shots/trio_buddy/B5_复审_出手翻头顶_probe_faces.json`）。
 - 验收：`ammoms=40` 胶片同一帧名连续格着地鞋相位相关位移 0.0 px（walk3 × 4 格、walk4 × 3 格），换帧处 8 px（`shots/trio_buddy/B5_复审_走路钉脚_ms40.jpg`）。
 - 新 taunt 马步更宽，右脚会碰到同组 B24 的头：`at` 再往后退到 [740, 1070, 0.83]（剪影外扩 4px 逐对相交 0）。
+
+## 走路条第三次：蒙版重绘（2026-10-01，审查_样板 7.2）
+上一版（act_b2 = gen1 两格 + gen2 两格拼起来）被打回：远侧脚换帧滑 16~25 px、躯干朝向逐帧来回拧、棍 1 帧在前 3 帧在后。
+- inpaint/make_base.py：底 = raw/walk_gen1.png 第一行（walk1 接地、walk4 过渡），行 2 复制一份；蒙版只放开手臂（行 1）/ 腿 + 手臂（行 2），头和躯干锁住；行 3 原 taunt / idle 只给模型看人。
+  产物 inpaint/base.png、inpaint/mask.png、inpaint/mask_vis.jpg（蓝 = 重绘区）。
+- generate_image（images = base.png，mask = mask.png，n 2）：raw/walk_inp1.png 用；另一张 walk_inp1_rejected.png 背景重画成黑底发光，不用。
+  提示词要点："The NEAR arm (sleeve with the black stripe) ALWAYS holds the nunchaku … far hand empty"；逐格写腿：walk3 = plain FAR leg forward、striped NEAR leg behind on toes；walk2 = striped NEAR leg standing、plain FAR leg lifted；过渡帧 "both hands relaxed at the hips, stick hanging along the outer side of the thigh"。
+  一次就对：四帧腿、棍都按要求，锁住区（头、躯干）相位相关位移 ≤ 0.7 px。
+- raw/act_b3.png = walk_inp1 前两行（walk1 walk4 / walk3 walk2）+ act_b2 第三行（taunt、idle2，上一版审过的）。
+- 棍四帧都在近侧手：walk1 后 → walk2 胯边 → walk3 前 → walk4 胯边。
+- 钉脚：buddy/walkfix.py 加 edge pivot（整只黑鞋：前脚落地 → 支撑钉鞋跟，支撑 → 后脚踮起钉鞋尖）。只看贴地 16 行时量不到踮起来的后脚，第一版按它对齐后胶片上 walk2→walk3 滑 25 px、walk4→walk1 滑 37 px。
+  各帧横移 walk1 0 / walk2 +16 / walk3 +8 / walk4 +17（两次 walkfix 叠加），四次换帧格内位移都是 105，stride 209.5，dist 434.7（5 步，最后一步 walk1）。
+  walk1 / walk3 鞋尖距 197 / 228（相差 31，审查 7.2 写的 ≤ 10 没做到）：两张接地帧是模型画的步幅，换帧滑不滑只看"继续着地那只脚"，已经按它对齐（胶片实测 ≤ 1 px）。
+- 验收：buddy/shoepin.py 胶片上量鞋跟 / 鞋尖，四次换帧 |Δx| ≤ 1 px（shots/trio_buddy/B5修_走路钉脚与漂移.txt）。
