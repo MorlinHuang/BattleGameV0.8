@@ -29,6 +29,19 @@ const TRIO = {
   sq: { decay: 12 },                            // 挤压（落地 / 出手那一下压扁）回弹快慢，1-exp(-k·dt)
   pop: 0.16,                                    // 出完手、手里重新冒出一个（篮球 / 绣球）用多少秒长到原大
   still: false,                                 // 诊断：在场时秋千不摆、整体不前后倾（胶片 ?trioswing=0，只剩换帧本身，量漂移用；出手时机照样按相位）
+  /* 叠第二组（2026-09-30 用户："最多在场 5 个人，两边各 5 个"，选的是"再送叠第二组"）：有人在场时再送，
+     在场的续时间，再从别的组里挑人补到 MAX 个（一组三人在场 → 补两个 = 3 + 2）。组还没做齐、或叠上来的人先走了，下一次送照样补满。
+     站位：自己的 at（第一组这个槽位空着时站这）和备用位（SLOT2），每个槽位最多站 CAP 个人。
+     地板只有自己那个下角一个位：备用位往中间挪，两边的趴着 / 半跪的人在两个主角脚下叠成一堆（2026-09-30 截图），所以 2 + 2 + 1 = 5。
+     挑人先后 PREFER：后排地面最好塞（在主角身后、被挡一部分也读得出）；上方其次；地板最后。
+     SLOT2[槽位] = [往屏幕中间挪几像素, 往下挪几像素（负 = 往上）, 缩放倍数]，按这个人自己的 at 换算：
+       ground 往里、往上、缩小 = 站得更远（透视：远的小、脚底高），depth 同乘，排远近时在第一组那位之后；
+       top    同侧贴得更高（第一组上方那位和 HUD 之间），缩小一点；正上方仍空给档 4；
+     crew.js 的滑板哥们 / 平衡车闺蜜不走 SLOT2：同一份 Crew 最多站两人（cfg.max 2），第二个自己挑没人的那一排。 */
+  MAX: 5,
+  CAP: { ground: 2, top: 2, floor: 1 },
+  PREFER: ['ground', 'top', 'floor'],
+  SLOT2: { ground: [110, -45, 0.85], top: [0, -210, 0.85] },
 };
 
 const easeOut = (u) => 1 - Math.pow(1 - u, 3);
@@ -45,11 +58,11 @@ const bezDir = (p0, c, p2, e) => Math.atan2((1 - e) * (c[1] - p0[1]) + e * (p2[1
    at [x, y, s] 锚点落在屏幕哪、画多大；anchor 贴图上的锚点（帧序列：所有帧共用；扒墙的手脚、趴着的肚皮、秋千座板中心）
    pivot  前后倾 / 秋千摆绕的点（贴图像素，秋千是绳子顶端，在贴图外面）；leanK 前后倾打几折（帧序列里动作已经画在帧上，默认 1）
    depth  远近（< 1 主角身后，> 1 主角之前），main.js 按它跟别的帮手一起排
-   enter  进场方式：crawl 爬 / spring 弹 / slide 扑地滑 / dive 腾空扑地再滑 / dash 斜冲 / roll 翻滚 / creep 匍匐 / swing 荡 /
+   enter  进场方式：crawl 爬 / spring 弹 / slide 扑地滑 / dive 腾空扑地再滑 / dash 斜冲 / roll 翻滚 / creep 匍匐（crawl、creep 帧序列：一个爬行帧一步、手 / 肘钉住，bob 奇数帧抬几 px）/ swing 荡 /
           walk 走（跑，stride 接地帧两脚距离：一帧一步、脚钉地）/ ride 骑、滑 / fly 飞下 / leap 跳落（fly、leap 同一条路：from 起点、h 抛物线高、air 几秒到）/ drop 倒挂垂下 /
           appear 原地出现（fx 闪光 / 烟，rise 从一条线后面升上来）/ rope 横绳（ends 两头屏幕点、touch 压绳点）。见 place()
           帧序列：enter { kind, T: 几秒, seq: [[帧或帧数组, 秒, 'land'?], ...], fps, ... }；exit { frame（可为数组）, T, fps, flip }
-   idle   帧序列：{ frame: 待机帧, breathe: [胀缩幅度, 每秒几次, 横向补偿 (默认 0.4)] }；flex { 帧: [[x0, y0, x1, y1, 't'|'l', 幅度, 每秒几次, 跟摆], ...] }
+   idle   帧序列：{ frame: 待机帧, breathe: [胀缩幅度, 每秒几次, 横向补偿 (默认 0.4)] }；flex { 帧: [[x0, y0, x1, y1, 't'|'b'|'l'|'r' 钉住哪边, 幅度, 每秒几次, 跟摆], ...] }
    atk    攻击：{ kind: 'throw' | 'punch' | 'beam' | 'camera' | 'whip' | 'rush' | 'slash' | 'spray', ... }。帧序列：seq [[帧或帧数组, 秒, 'fire'?], ...]、
           hold { 帧: [x, y] } 东西拿在哪（出手帧那一格就是出手点）或 from [x, y]、atlas 3D 转盘图集 { src, n, cols, cell, scale }（没有就用 prop 平面图）、
           tether 手和丢出去的东西连一根线；onHit 另有 net 网兜、freeze 冻住。throw / camera / beam / punch 帧序列和单张立绘都能用，
@@ -69,6 +82,20 @@ function Act(cfg) {
     const n = Math.max(1, Math.round(E.stride ? D / (E.stride / 2 * cfg.at[2]) : (E.T || TRIO.T.enter) * fps));
     return { fps, D, n, step: D / n };
   })() : null;
+  /* 爬 / 匍匐（帧序列）：同 walk，位移跟帧走。进场 seq 开头的爬行段（到 'land' 段或最后一段为止，数组段按 fps 每格算一帧）
+     每换一帧往前挪一步、同一帧停着时人不动 —— 扒墙的手、贴地的手肘就钉住（连续平移时同一帧 70ms 能滑 40px）。
+     步子 = 画外距离 ÷ 爬行帧数，第一帧已经露出一截，最后一个爬行帧落到 at，之后的 land / 到位帧原地换 */
+  const CK = (EK === 'crawl' || EK === 'creep') && SH && E.seq ? (() => {
+    const st = [], fps = E.fps || 10;
+    let a = 0;
+    for (let i = 0; i < E.seq.length - 1 && E.seq[i][2] !== 'land'; i++) {
+      const [f, d] = E.seq[i];
+      if (Array.isArray(f)) for (let j = 0; j * (1 / fps) < d - 1e-9; j++) st.push(a + j / fps);
+      else st.push(a);
+      a += d;
+    }
+    return st.length ? { st, end: a } : null;
+  })() : null;
   const TE = WK ? WK.n / WK.fps : E.T || TRIO.T.enter, TX = (cfg.exit && cfg.exit.T) || TRIO.T.exit;   // 这个人进场 / 离场用几秒（走进来的要比扑进来的慢）
   let img = null, prop = null, atlas = null, o = {}, b = null;
   const PARTS = (SH && cfg.parts) || [], partImg = [];
@@ -84,7 +111,7 @@ function Act(cfg) {
   const holdPt = (P) => { const fn = SH ? frameName() : null; return fn && A.hold && A.hold[fn] ? pt(P, A.hold[fn]) : handPt(P); };
   /* 出手的东西从 p0 到 p2 走的二次贝塞尔的控制点（横坐标取中点，纵坐标默认 cy）。
      后排（depth < 1）的人站在自己主角身后，出手点和他的头一样高，东西、链子、手臂、雾都画在主角之上 —— 直着过去一定横穿他的脸。
-     所以后排的路要从他头顶翻过去：曲线经过他脸框（o.shield() = [x, y, r]）那几列时，要在脸框上沿 − 40 以上，按这个反推控制点够多高。
+     所以后排的路要从他头顶翻过去：曲线经过他脸框（o.shield() = [x, y, r]）那几列（左右各再放宽 pad）时，要在脸框上沿 − 40 − pad 以上，按这个反推控制点够多高。
      pad = 走在路上的这件东西自己的半径（雾团、道具、棍影都有个头，路过去了它的下沿还会蹭到脸）。
      出发点本身得在头顶以上（后排的人出手帧把手举过头顶，from / hold 写在那一点）—— 路只管中间那一段。 */
   const REAR = (cfg.depth || 1) < 1;
@@ -92,7 +119,7 @@ function Act(cfg) {
     const c = [(p0[0] + p2[0]) / 2, cy], f = REAR && o.shield && o.shield();
     if (!f || Math.abs(p2[0] - p0[0]) < 1) return c;
     const Y = f[1] - f[2] - 40 - pad;
-    for (const x of [f[0] - f[2], f[0], f[0] + f[2]]) {
+    for (const x of [f[0] - f[2] - pad, f[0], f[0] + f[2] + pad]) {      // 列也按 pad 放宽：物件中心走到脸框外侧 pad 以内时，它的边还压在脸框上
       const e = (x - p0[0]) / (p2[0] - p0[0]);                     // 控制点横坐标在中点 ⇒ 曲线的 x 对 e 是线性的
       if (e > 0.02 && e < 0.98) c[1] = Math.min(c[1], (Y - (1 - e) * (1 - e) * p0[1] - e * e * p2[1]) / (2 * e * (1 - e)));
     }
@@ -111,8 +138,9 @@ function Act(cfg) {
       .then(([a, p, t, ...ps]) => { img = a; prop = p; atlas = t; ps.forEach((im, i) => { partImg[i] = im; }); return !!a; });
   }
 
-  /* 来一个（wait 秒后才开始进场）；在场再送 = 续一份时间，下一下按礼物力度打 */
-  function summon(_sk, wait = 0) {
+  /* 来一个（wait 秒后才开始进场）；在场再送 = 续一份时间，下一下按礼物力度打。
+     slot（可无）：{ at, depth } 这一趟站哪、排多远（叠第二组时站备用位，见 TRIO.SLOT2）；不给就是自己的 cfg.at / cfg.depth */
+  function summon(_sk, wait = 0, slot = null) {
     if (b && b.t <= TE + b.stay) { b.stay += TRIO.T.stay; b.first = true; return; }
     /* 正在离场又被叫住：从现在退到的地方倒着走回来。离场退出去 out²，进场还差 (1 − u)³（easeOut），两者相等处接上 */
     if (b && b.wait <= 0) {
@@ -122,7 +150,8 @@ function Act(cfg) {
     }
     b = { t: 0, wait, stay: TRIO.T.stay, first: true, cd: rnd(0.15, 0.4), lean: 0, snap: 0, ph: Math.random() * 6,
           pk: null, bm: null, prevPh: 0, landed: false,
-          clip: null, ammo: true, pop: 1, hang: Math.random() * 6, sq: 0, fn: null, tf: null };   // 帧序列：出手动作、手里有没有东西、挤压、当前帧
+          clip: null, ammo: true, pop: 1, hang: Math.random() * 6, sq: 0, fn: null, tf: null,   // 帧序列：出手动作、手里有没有东西、挤压、当前帧
+          at: slot ? slot.at : cfg.at, depth: slot ? slot.depth : cfg.depth };                 // 这一趟站哪、排多远
     return b;
   }
   const active = () => !!b;
@@ -131,15 +160,24 @@ function Act(cfg) {
 
   /* 此刻的摆放：锚点在屏幕 (x, y)，画多大 s，整个人绕 rc（屏幕点）转 rot。 */
   function place() {
-    const [ax, ay, s] = cfg.at, t = b.t, T = TRIO.T, se = TE + b.stay;
+    const [ax, ay, s] = b.at, t = b.t, T = TRIO.T, se = TE + b.stay;
     const off = texW() * s + 30;                         // 整个人挪出画外要多远
     let dx = 0, dy = 0, rot = 0, spin = 0, w = 0;
     const u = Math.min(1, t / TE), out = t > se ? Math.min(1, (t - se) / TX) : 0;
     /* 进场 k：1 = 还在画外、0 = 到位；离场按 u² 退回画外（往来的方向回去） */
     const k = t < TE ? 1 - (EK === 'spring' ? backOut(u) : easeOut(u)) : out * out;
     const sd = F > 0 ? -1 : 1;                           // 画外在哪边：闺蜜在左、哥们在右
+    /* 帧序列的爬 / 匍匐进场：第 j 个爬行帧停在 (1 − (j+1)/n) × 画外距离；一耸（bob）也跟帧，奇数帧抬起 */
+    const crawlStep = (bob) => {
+      if (t >= CK.end) return;
+      let j = 0;
+      while (j + 1 < CK.st.length && t >= CK.st[j + 1]) j++;
+      dx = sd * (E.dist || off) * (1 - (j + 1) / CK.st.length);
+      dy = -(j % 2) * (E.bob != null ? E.bob : bob) * s;
+    };
     switch (EK) {
-      case 'crawl':   // 扒着屏幕边爬进来：一步一耸
+      case 'crawl':   // 扒着屏幕边爬进来：一步一耸（帧序列走 CK，见 crawlStep）
+        if (CK && t < TE) { crawlStep(6); break; }
         dx = sd * off * k; dy = Math.sin(u * Math.PI * 5) * 7 * (1 - u); rot = Math.sin(u * Math.PI * 5) * 0.05 * (1 - u); break;
       case 'spring':  // 橡皮人：一下弹进来、冲过头再弹回
         dx = sd * off * k; rot = -sd * 0.18 * k; break;
@@ -155,7 +193,8 @@ function Act(cfg) {
         dx = sd * off * 0.7 * k; dy = 300 * k; rot = sd * 0.2 * k; break;
       case 'roll':    // 翻滚进来：转一圈落成半跪
         dx = sd * off * k; dy = 220 * k; spin = -sd * 6.2832 * k; break;
-      case 'creep':   // 匍匐爬进来：贴着地一耸一耸
+      case 'creep':   // 匍匐爬进来：贴着地一耸一耸（帧序列走 CK：起伏已经画在帧上，整个人再抬会让贴地的手肘离地，默认不抬）
+        if (CK && t < TE) { crawlStep(0); break; }
         dx = sd * off * k; dy = -Math.abs(Math.sin(u * Math.PI * 6)) * 6 * (1 - u); break;
       case 'walk': {  // 走 / 跑（帧序列，enter.seq 第一段写循环帧，接地帧起头）：从自己那侧画外一帧一步走进来（WK）；离场同样一帧一步走回去
         let i = -1;
@@ -326,10 +365,7 @@ function Act(cfg) {
     const C = b.clip; C.t += dt;
     if (b.bm) {                                                  // 发波：出手帧开轰（fire()），之后每 drip 秒溅一下，轰满 beam.fire 秒收
       const S = b.bm; S.t += dt;
-      if (S.ph === 'fire') {
-        if ((S.dr += dt) >= A.beam.drip) { S.dr -= A.beam.drip; const tg = o.aim(S.u); if (tg && o.onSplash) o.onSplash(tg[0], tg[1]); }
-        if (S.t >= A.beam.fire) S.ph = 'rest';
-      }
+      if (S.ph === 'fire') { beamTick(S, dt); if (S.t >= A.beam.fire) S.ph = 'rest'; }
     }
     const i = seqAt(A.seq, C.t);
     /* 蓄力那几帧整个人再往后倾一点（帧上画的动作 + 一点整体惯性），出手那一下往前甩 */
@@ -352,11 +388,7 @@ function Act(cfg) {
       for (let i = 0; i < Q.n; i++) shots.push({ kind: 'slash', t: -i * Q.gap, u: u + rnd(-0.12, 0.12), ang: Q.ang + rnd(-1, 1) * Q.spread + (i % 2 ? Math.PI * 0.12 : 0) });
       return;
     }
-    if (A.kind === 'beam') {                                     // 帧序列的发波（单张立绘的走 stepBeam，不经过这里）
-      b.bm.ph = 'fire'; b.bm.t = 0; b.bm.dr = 0;
-      const tg = o.aim(b.bm.u); if (tg) hit(tg[0], tg[1]);
-      return;
-    }
+    if (A.kind === 'beam') { Object.assign(b.bm, { ph: 'fire', t: 0, dr: 0, hit: false }); return; }   // 帧序列的发波（单张立绘的走 stepBeam）：光头伸到脸上才打中（beamTick）
     for (let k = 0; k < (A.n || 1); k++) launch(P);
   }
 
@@ -482,7 +514,7 @@ function Act(cfg) {
         const a = Math.atan2(tg[1] - h[1], tg[0] - h[0]) + rnd(-1, 1) * (Q.spread || 0.12), d = Math.hypot(tg[0] - h[0], tg[1] - h[1]);
         const v = d / (Q.T || 0.3) * rnd(0.85, 1.1), T = Q.T || 0.3, p2 = [h[0] + Math.cos(a) * v * T, h[1] + Math.sin(a) * v * T];
         /* 雾团：前 T 秒沿 h → p2 飞（前排直线，后排翻过主角头顶），之后顺着切线飘、减速散开 */
-        shots.push({ kind: 'puff', x: h[0], y: h[1], p0: h, c: over(h, p2, (h[1] + p2[1]) / 2, (Q.r || 14) * 2.4), p2, T, vx: 0, vy: 0, t: 0, life: T * rnd(1.3, 1.8), j: Math.random() });
+        shots.push({ kind: 'puff', x: h[0], y: h[1], p0: h, c: over(h, p2, (h[1] + p2[1]) / 2, (Q.r || 14) * 2.8), p2, T, vx: 0, vy: 0, t: 0, life: T * rnd(1.3, 1.8), j: Math.random() });
       }
       if (tg && S.t >= (Q.T || 0.3) + S.h * Q.tick && S.t <= Q.dur + (Q.T || 0.3)) {
         if (S.h === 0 || !o.onSplash) hit(tg[0], tg[1]); else o.onSplash(tg[0], tg[1]);
@@ -502,7 +534,7 @@ function Act(cfg) {
     return 1 - backOut(u);
   }
 
-  /* 气功波（悟空）：手心聚一团水光（charge 秒，越聚越大）→ 一束水光轰过去（fire 秒，开轰那一下打中、之后每 drip 秒溅一下）→ 歇 rest 秒 */
+  /* 气功波（悟空）：手心聚一团水光（charge 秒，越聚越大）→ 一束水光轰过去（fire 秒，光头伸到脸上那一下打中、之后每 drip 秒溅一下（beamTick））→ 歇 rest 秒 */
   function stepBeam(dt, on) {
     if (!b.bm) { if (!on) return; b.bm = { ph: 'rest', t: rnd(0, 0.3), dr: 0, u: 0.5 }; }
     const S = b.bm, B = A.beam;
@@ -510,11 +542,19 @@ function Act(cfg) {
     if (S.ph === 'rest') { if (on && S.t >= B.rest) { S.ph = 'charge'; S.t = 0; } return; }
     if (S.ph === 'charge') {
       b.lean = -F * TRIO.lean.wind * 0.6 * Math.min(1, S.t / B.charge);
-      if (S.t >= B.charge) { S.ph = 'fire'; S.t = 0; S.u = rnd(0.1, 0.8); b.lean = 0; b.snap = F * TRIO.lean.snap; const tg = o.aim(S.u); if (tg) hit(tg[0], tg[1]); }
+      if (S.t >= B.charge) { S.ph = 'fire'; S.t = 0; S.dr = 0; S.hit = false; S.u = rnd(0.1, 0.8); b.lean = 0; b.snap = F * TRIO.lean.snap; }
       return;
     }
-    if ((S.dr += dt) >= B.drip) { S.dr -= B.drip; const tg = o.aim(S.u); if (tg && o.onSplash) o.onSplash(tg[0], tg[1]); }
+    beamTick(S, dt);
     if (S.t >= B.fire) { S.ph = 'rest'; S.t = 0; if (!on) b.bm = null; }
+  }
+
+  /* 光束开轰（fire 阶段，S.t 从 0 起）：前 reach 秒光头从手伸到脸上（drawBeam 同一个 e），伸到那一刻才打中；之后每 drip 秒溅一下。
+     打中挂着爆点和顿帧，顿帧冻的是逻辑时钟（S.t 一起停）—— 开轰那一刻就打中的话，光束被冻在长度 0、爆点先于光束出现在脸上 */
+  const beamReach = () => A.beam.reach || 0.08;
+  function beamTick(S, dt) {
+    if (!S.hit) { if (S.t < beamReach()) return; S.hit = true; S.dr = 0; const tg = o.aim(S.u); if (tg) hit(tg[0], tg[1]); return; }
+    if ((S.dr += dt) >= A.beam.drip) { S.dr -= A.beam.drip; const tg = o.aim(S.u); if (tg && o.onSplash) o.onSplash(tg[0], tg[1]); }
   }
 
   /* 拍照（探险家）：镜头一闪、他脸上一闪（打中），相机里吐出一张照片往上蹦 */
@@ -621,8 +661,9 @@ function Act(cfg) {
     }
     ctx.restore();
   }
-  /* 画图集里的一帧。flex 区域不在原处画，按条带错位重画：钉住的那一边（'t' 顶 / 'l' 左）位移为 0、越往外越大（r^1.5），
-     相位沿条带往外滞后一点（r × 1.6），读成挂着的东西在晃而不是整块平移。区域四周除了钉住那边都必须是透明的，不然错位会撕开 */
+  /* 画图集里的一帧。flex 区域不在原处画，按条带错位重画：钉住的那一边（'t' 顶 / 'b' 底 / 'l' 左 / 'r' 右）位移为 0、越往外越大（r^1.5），
+     相位沿条带往外滞后一点（r × 1.6），读成挂着的东西在晃而不是整块平移。区域四周除了钉住那边都必须是透明的，不然错位会撕开。
+     钉右 / 钉底是给朝右的闺蜜：拖在身后（左边）的头发、飘带挂在右边，翘起来的脚、往上飘的东西根在底边 */
   function drawFrame(ctx, P, fn) {
     const i = SH.names.indexOf(fn), [cw, ch] = SH.cell, sx0 = (i % SH.cols) * cw, sy0 = Math.floor(i / SH.cols) * ch;
     const [x0, y0] = P.at([0, 0]), s = P.s, fx = cfg.flex && cfg.flex[fn];
@@ -635,11 +676,12 @@ function Act(cfg) {
     const ST = 2;
     for (const [bx0, by0, bx1, by1, pin, amp, hz, lag] of fx) {
       const off = (r) => Math.pow(r, 1.5) * (amp * Math.sin(b.t * 6.2832 * hz + b.ph - r * 1.6) + (lag || 0) * P.w);
-      if (pin === 't') for (let y = by0; y < by1; y += ST) {
-        const h = Math.min(ST, by1 - y), d = off((y + h / 2 - by0) / (by1 - by0));
+      /* 横条（钉上 / 下边，条带左右错位）或竖条（钉左 / 右边，上下错位）；r = 离钉住那边多远（0 ~ 1） */
+      if (pin === 't' || pin === 'b') for (let y = by0; y < by1; y += ST) {
+        const h = Math.min(ST, by1 - y), m = (y + h / 2 - by0) / (by1 - by0), d = off(pin === 't' ? m : 1 - m);
         ctx.drawImage(img, sx0 + bx0, sy0 + y, bx1 - bx0, h, x0 + (bx0 + d) * s, y0 + y * s, (bx1 - bx0) * s, h * s + 0.6);
       } else for (let x = bx0; x < bx1; x += ST) {
-        const w = Math.min(ST, bx1 - x), d = off((x + w / 2 - bx0) / (bx1 - bx0));
+        const w = Math.min(ST, bx1 - x), m = (x + w / 2 - bx0) / (bx1 - bx0), d = off(pin === 'l' ? m : 1 - m);
         ctx.drawImage(img, sx0 + x, sy0 + by0, w, by1 - by0, x0 + x * s, y0 + (by0 + d) * s, w * s + 0.6, (by1 - by0) * s);
       }
     }
@@ -805,9 +847,9 @@ function Act(cfg) {
   function drawGhost(ctx, s) {
     if (!s.p2) return;
     const Q = A.rush, G = Array.isArray(Q.ghost) ? Q.ghost[s.i % Q.ghost.length] : Q.ghost, [bx0, by0, bx1, by1] = G.box, i = SH.names.indexOf(G.frame), [cw, ch] = SH.cell;
-    const sx = (i % SH.cols) * cw + bx0, sy = Math.floor(i / SH.cols) * ch + by0, sc = cfg.at[2] * (G.z || 1.1), w = (bx1 - bx0) * sc, hh = (by1 - by0) * sc;
+    const sx = (i % SH.cols) * cw + bx0, sy = Math.floor(i / SH.cols) * ch + by0, sc = (b ? b.at : cfg.at)[2] * (G.z || 1.1), w = (bx1 - bx0) * sc, hh = (by1 - by0) * sc;
     const e = easeOut(Math.min(1, s.t / s.T)), fade = s.t > s.T ? 1 - (s.t - s.T) / 0.14 : 1;
-    const p2 = [s.p2[0] + s.j * 18, s.p2[1] + s.j * 14], c = over(s.p0, p2, (s.p0[1] + p2[1]) / 2, hh / 2);   // 前排是直线（控制点在中点），后排翻过主角头顶
+    const p2 = [s.p2[0] + s.j * 18, s.p2[1] + s.j * 14], c = over(s.p0, p2, (s.p0[1] + p2[1]) / 2, Math.max(w, hh) / 2);   // 前排是直线（控制点在中点），后排翻过主角头顶；残影是横着的长条，半径按长边
     ctx.save();
     for (let k = 3; k >= 0; k--) {
       const q = Math.max(0, e - k * 0.12), [x, y] = bez(s.p0, c, p2, q);
@@ -875,7 +917,7 @@ function Act(cfg) {
     } else {
       const tg = o.aim(S.u);
       if (tg) {
-        const e = Math.min(1, S.t / 0.08), fade = Math.min(1, (B.fire - S.t) / 0.15), x1 = lerp(h[0], tg[0], e), y1 = lerp(h[1], tg[1], e);
+        const e = Math.min(1, S.t / beamReach()), fade = Math.min(1, (B.fire - S.t) / 0.15), x1 = lerp(h[0], tg[0], e), y1 = lerp(h[1], tg[1], e);
         ctx.globalAlpha = fade; ctx.lineCap = 'round';
         for (const [w, c, a] of B.layers) {
           ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${a})`; ctx.lineWidth = w * (1 + 0.1 * Math.sin(S.t * 50 + w));
@@ -983,7 +1025,7 @@ function Act(cfg) {
 
   function items() {
     if (!b || b.wait > 0 || !img) return [];
-    return [{ s: cfg.depth, draw: drawBody }];
+    return [{ s: b.depth, draw: drawBody }];
   }
   return { init, load, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), frame: () => (b && SH ? frameName() : null), cfg };
 }
@@ -1052,29 +1094,70 @@ const ROPE = { w: 7, y: 0, fill: '#c9a36a', edge: 'rgba(70,45,20,.85)', wood: ['
 function Trio(ground, data) {
   const acts = {};
   for (const [id, c] of Object.entries(data.cast)) acts[id] = Act({ id, ...c });
-  const who = (id) => (id == null ? null : id in data.ground ? { m: ground, sk: data.ground[id] } : acts[id] ? { m: acts[id] } : null);
-  const groups = data.groups.map((g, i) => ({ no: i + 1, name: g.name, mem: [g.ground, g.top, g.floor].map(who).filter(Boolean) }));
+  const who = (id, slot) => (id == null ? null : id in data.ground ? { m: ground, sk: data.ground[id], slot } : acts[id] ? { m: acts[id], slot } : null);
+  const groups = data.groups.map((g, i) => ({ no: i + 1, name: g.name, mem: ['ground', 'top', 'floor'].map(k => who(g[k], k)).filter(Boolean) }));
   const ready = groups.filter(g => g.mem.length);
   const all = [ground, ...Object.values(acts)];
-  let cur = null;
+  /* cur 第一组；extra 第二次送时叠上来的人 [{ m, sk, slot, b }]；一个人在场 = 他那一趟的 b 还在 m 里。
+     滑板哥们 / 平衡车闺蜜两个人同在一份 Crew 里，只能按 b 分，不能看 m.active() */
+  let cur = null, extra = [];
+  const live = (x) => !!x.b && x.m.peek().includes(x.b);
+  const come = (x, wait, slot) => { const b = x.m.summon(x.sk, wait, slot); if (b) x.b = b; };
+  /* 续：Act 在场 / 离场中再 summon 就是续 / 叫回；Crew 按这个人续（同一份 Crew 里另一个人不动），他已经在走就让他走 ——
+     这时 Crew.summon 满员会去续另一个人，不会把他叫回来。下一次送他不在场了，按第一组走掉的人叫回来 */
+  const stay = (x) => (x.m.extend ? x.m.extend(x.b) : x.m.summon(x.sk));
   const stagger = () => [...TRIO.STAGGER].sort(() => Math.random() - 0.5);
+  /* 从别的组里挑 n 个能上场的人补位，返回 [{ m, sk, slot, pos }]（pos 1 = 自己的 at，2 = 备用位）。
+     每个槽位最多 CAP 个站位，被在场的人（on）占掉的不能再用；Crew 的人各占一个后排站位（Crew 自己挑没人的那一排）。
+     组按随机顺序、组内按 PREFER 挑 —— 先把一组挑够再看下一组，读起来是"又来了一组"。
+     这个人此刻不能已经在场；Crew 还要有空位、形象跟场上的不重复 */
+  function pickExtra(on, n) {
+    const used = { ground: 0, top: 0, floor: 0 }, pos1 = { ground: false, top: false, floor: false };
+    for (const x of on) { used[x.slot]++; if (!x.m.extend && x.pos !== 2) pos1[x.slot] = true; }
+    const can = (x) => used[x.slot] < TRIO.CAP[x.slot] && (x.m.extend ? x.m.peek().length < x.m.cfg.max && !x.m.peek().some(b => b.skin === x.sk) : !x.m.active());
+    const got = [];
+    for (const g of [...ready].sort(() => Math.random() - 0.5)) {
+      if (cur && g.no === cur.no) continue;
+      for (const k of TRIO.PREFER) {
+        const x = g.mem.find(y => y.slot === k);
+        if (!x || got.length >= n || !can(x) || got.some(y => y.m === x.m && !x.m.extend)) continue;
+        const pos = x.m.extend || !pos1[k] ? 1 : 2;
+        if (pos === 1 && !x.m.extend) pos1[k] = true;
+        used[k]++;
+        got.push({ ...x, pos });
+      }
+    }
+    return got;
+  }
+  const slot2 = (x) => {
+    const c = x.m.cfg, [dx, dy, k] = TRIO.SLOT2[x.slot];
+    return { at: [c.at[0] + c.face * dx, c.at[1] + dy, c.at[2] * k], depth: c.depth * (x.slot === 'ground' ? k : 1) };
+  };
   return {
     groups, ready, all, acts: Object.values(acts),
     summon(pick) {
-      if (cur && cur.mem.some(x => x.m.active())) {
+      if ([...(cur ? cur.mem : []), ...extra].some(live)) {
         const st = stagger();
-        cur.mem.forEach((x, i) => x.m.summon(x.sk, x.m.active() ? 0 : st[i]));
+        cur.mem.forEach((x, i) => (live(x) ? stay(x) : come(x, st[i])));   // 第一组：在场的续，走掉的叫回来
+        extra = extra.filter(live);
+        extra.forEach(stay);
+        const on = [...cur.mem, ...extra].filter(live);
+        const add = pickExtra(on, TRIO.MAX - on.length);   // 补满 MAX（叠第二组）
+        add.forEach((x, i) => come(x, (i + 1) * 0.3, x.pos === 2 ? slot2(x) : null));
+        extra.push(...add.filter(live));
         return;
       }
       const want = ready.find(g => g.no === +pick);
-      const pool = ready.length > 1 ? ready.filter(g => g !== cur) : ready;
-      cur = want || pool[Math.floor(Math.random() * pool.length)] || null;
-      if (!cur) return;
+      const pool = ready.length > 1 ? ready.filter(g => !cur || g.no !== cur.no) : ready;
+      const g = want || pool[Math.floor(Math.random() * pool.length)];
+      extra = [];
+      if (!g) { cur = null; return; }
+      cur = { ...g, mem: g.mem.map(x => ({ ...x })) };       // 这一趟的 b 记在副本上，别写进组表
       const st = stagger();
-      cur.mem.forEach((x, i) => x.m.summon(x.sk, st[i]));
+      cur.mem.forEach((x, i) => come(x, st[i]));
     },
     current: () => cur,
     active: () => all.some(m => m.active()),
-    reset() { all.forEach(m => m.reset()); cur = null; },
+    reset() { all.forEach(m => m.reset()); cur = null; extra = []; },
   };
 }

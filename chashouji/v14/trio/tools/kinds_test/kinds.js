@@ -4,6 +4,7 @@
 'use strict';
 (() => {
   const b5 = TRIO_BUDDY.cast.B5, b21 = TRIO_BUDDY.cast.B21, b22 = TRIO_BUDDY.cast.B22, b27 = TRIO_BUDDY.cast.B27, g11 = TRIO_BESTIE.cast.G11;
+  const b11 = TRIO_BUDDY.cast.B11, g22 = TRIO_BESTIE.cast.G22, g23 = TRIO_BESTIE.cast.G23;
   const { ropes, swing, enter: _e1, exit: _x1, parts: _p1, ...g } = g11;      // 格格去掉秋千，只借她的帧
   const { enter: _e2, exit: _x2, ...b } = b5;
   TRIO_BUDDY.cast = {
@@ -29,12 +30,15 @@
        出手点按规范写在举过头顶的那只手上（B5 wind 帧举棍的拳头 [270, 25]）—— 路只管中间那段，出发点得美术画高 */
     T11: { ...b5, atk: { ...b21.atk, seq: [['wind', 0.3], ['hitA', 0.3, 'fire'], ['taunt', 0.4]], hold: {}, from: [270, 25], tether: { w: 2.5, color: '#6a4b2a' }, onHit: null, gap: [0.5, 0.8] } },
     T13: { ...b5, atk: { ...b5.atk, from: [270, 25] } },
+    /* 哥10 / 哥11 修4：扒墙爬一帧一步（原数据）、气功波光头先到脸上再打中（原数据） */
+    B11: b11, B22: b22,
     T12: { ...b5, atk: { kind: 'spray', seq: [['wind', 0.3], ['hitA', 0.7, 'fire'], ['taunt', 0.4]], from: [270, 25], spray: { dur: 0.6, rate: 90, T: 0.3, tick: 0.15, color: [120, 200, 255], r: 18, spread: 0.14 }, gap: [0.5, 0.8] } },
   };
   TRIO_BUDDY.ground = {};
   TRIO_BUDDY.groups = [{ name: '骑+抽打', ground: 'T1' }, { name: '闪现+伸缩拳', ground: 'T2' }, { name: '跳落+冻住', floor: 'T3' },
                        { name: '蓄力球在手上', floor: 'T8' }, { name: '图集不认 item', floor: 'T9' },
-                       { name: '走路钉脚', ground: 'T10' }, { name: '走路钉脚（原数据）', ground: 'B5' }, { name: '后排丢+带线', ground: 'T11' }, { name: '后排喷', ground: 'T12' }, { name: '后排连打', ground: 'T13' }];
+                       { name: '走路钉脚', ground: 'T10' }, { name: '走路钉脚（原数据）', ground: 'B5' }, { name: '后排丢+带线', ground: 'T11' }, { name: '后排喷', ground: 'T12' }, { name: '后排连打', ground: 'T13' },
+                       { name: '扒墙爬（原数据）', top: 'B11' }, { name: '气功波（原数据）', floor: 'B22' }];
 
   const hold = g11.atk.hold, fire4 = (d) => [['raise', 0.12], ['wind', 0.22], ['throw', d, 'fire'], ['follow', 0.3]];
   TRIO_BESTIE.cast = {
@@ -51,7 +55,14 @@
     /* 闺4 横绳（躺在绳上从左边滑进来）+ 带线的丢东西（打中罩网兜） */
     T7: { ...g, enter: { kind: 'rope', ends: [[-60, 560], [470, -40]], touch: [128, 212], sag: 16, seq: [['tuck', 0.5], ['idle', 9]] }, exit: { frame: 'tuck' },
           atk: { ...g11.atk, seq: fire4(0.1), hold, tether: { w: 2.5, color: '#6a4b2a' }, onHit: 'net', gap: [0.6, 0.9] } },
+    /* 闺5 / 闺6 修4：匍匐一帧一步（原数据）、排山倒海光头先到脸上再打中（原数据） */
+    G22: g22, G23: g23,
+    /* 闺7 flex 钉右边：探险家趴着，膝盖那头（左端）上下晃、大腿那侧（右边）钉住。框的上、左、下三边透明；拆掉翘腿挂件免得挡住 */
+    T14: { ...g22, parts: [], flex: { idle: [[60, 80, 138, 152, 'r', 8, 0.9]] } },
+    /* 闺8 flex 钉底边：女侠头顶的发髻根在底边，髻顶左右晃（框上、左、右三边透明）；发带那条原来的钉上边照旧 */
+    T15: { ...g23, flex: { idle: [[170, 0, 238, 20, 'b', 8, 1.2], ...g23.flex.idle] } },
   };
   TRIO_BESTIE.ground = {};
-  TRIO_BESTIE.groups = [{ name: '飞下+喷', top: 'T4' }, { name: '倒挂+斩痕', top: 'T5' }, { name: '升起+红绸', top: 'T6' }, { name: '横绳+带线+网兜', top: 'T7' }];
+  TRIO_BESTIE.groups = [{ name: '飞下+喷', top: 'T4' }, { name: '倒挂+斩痕', top: 'T5' }, { name: '升起+红绸', top: 'T6' }, { name: '横绳+带线+网兜', top: 'T7' },
+                        { name: '匍匐（原数据）', floor: 'G22' }, { name: '排山倒海（原数据）', floor: 'G23' }, { name: 'flex 钉右', floor: 'T14' }, { name: 'flex 钉底', floor: 'T15' }];
 })();

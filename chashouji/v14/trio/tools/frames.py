@@ -163,37 +163,76 @@ def in_hsv(a, ranges):
     return m
 
 
-def fill_in(a, hole):
-    """把 hole 里的像素从四周往里一圈一圈补（每圈取已知邻居的平均，按 alpha 预乘）：
-    挂件拆走以后，它原来挡着的地方 —— 背景那侧补成透明、贴着头发 / 肩膀那侧顺着头发 / 皮肤补上"""
-    a = a.copy(); pm = np.dstack([a[..., :3] * a[..., 3:] / 255, a[..., 3:]])
-    known = ~hole
-    pm[hole] = 0
+def grow(a, hole, known):
+    """hole 里的像素从 known 往里一圈一圈补（每圈取已知邻居的平均，按 alpha 预乘）→ 预乘的 RGBA"""
+    pm = np.dstack([a[..., :3] * a[..., 3:] / 255, a[..., 3:]]); pm[~known] = 0
+    known = known.copy(); todo = hole & ~known
     k = np.ones((3, 3), np.float32)
-    while not known.all():
-        ring = ndimage.binary_dilation(known) & ~known
+    while todo.any():
+        ring = ndimage.binary_dilation(known) & todo
         if not ring.any(): break
         n = ndimage.convolve(known.astype(np.float32), k, mode='constant')
         for c in range(4):
             sm = ndimage.convolve(pm[..., c] * known, k, mode='constant')
             pm[..., c] = np.where(ring, sm / np.maximum(n, 1), pm[..., c])
-        known |= ring
-    al = pm[..., 3]
-    # 补出来的边硬一点（半透明的一团读成脏），再在补的范围里开运算：两边往里长、在中间碰头会顶出一个小尖角（流苏压着肩膀的那一截），削掉
-    solid = ndimage.binary_opening(np.where(hole, al > 127, al > 127), structure=np.ones((3, 3)), iterations=4)
-    al = np.where(hole, np.where(solid, 255, 0), al)
-    a[..., :3] = np.where(hole[..., None], pm[..., :3] * 255 / np.maximum(pm[..., 3:], 1e-3), a[..., :3])
-    a[..., 3] = al
-    return a
+        known |= ring; todo &= ~ring
+    return pm
+
+
+def shoulder(op, hole):
+    """挂件压着的那段身体轮廓（肩线）：hole 左右紧挨着的两列里，身体（op 不透明）在 hole 最低一行附近从哪一行开始，两点连线。
+    往上找不超过 hole 的中线（再往上是帽子 / 头发，不是肩）；hole 底下那一行是透明的就往下找。两边都没有身体 → None"""
+    ys, xs = np.nonzero(hole)
+    xl, xr, yb, ym = xs.min() - 1, xs.max() + 1, ys.max(), (ys.min() + ys.max()) // 2
+
+    def top(x):
+        if op[yb + 1, x]:
+            y = yb + 1
+            while y - 1 > ym and op[y - 1, x]: y -= 1
+            return y
+        d = np.nonzero(op[yb + 1:yb + 40, x])[0]
+        return yb + 1 + d[0] if len(d) else None
+    yl, yr = top(xl), top(xr)
+    if yl is None and yr is None: return None
+    yl, yr = (yr if yl is None else yl), (yl if yr is None else yr)
+    return (lambda x: yl + (yr - yl) * (x - xl) / (xr - xl)), [(x, y) for x, y in ((xl, yl), (xr, yr)) if op[y, x]]
+
+
+def fill_in(a, hole):
+    """挂件拆走以后把它原来挡着的地方（hole）补上。以被挡住那段肩线（shoulder）为界分两侧各补各的：
+    贴身体那侧只从肩线以下的身体往里长（肤色 / 衣服），不透明、肩线那一行按覆盖率抗锯齿；
+    外侧只从肩线以上往里长（背景 → 透明，帽子 / 头发照旧）。
+    不分两侧、四周一起平均的话，流苏压着肩膀那一截会把肤色、描边和透明背景混成一块不透明的直角灰块（G11 审查 2026-09-30）"""
+    op = (a[..., 3] > 127) & ~hole
+    sh = shoulder(op, hole)
+    line, ends = sh if sh else (None, [])
+    Y, X = np.mgrid[0:hole.shape[0], 0:hole.shape[1]]
+    below = Y + 0.5 >= line(X) if line else np.zeros_like(hole)
+    body = hole & below
+    pm = np.where(body[..., None], grow(a, body, op & below), grow(a, hole & ~below, ~hole & ~below))
+    if ends:
+        # 肩线上补一道描边：颜色取两头露在外面那段轮廓最外一像素（不描的话，肤色和描边平均出来是一条灰边）
+        ink = np.mean([a[y, x, :3] for x, y in ends], axis=0)
+        edge = body & (Y + 0.5 - line(X) < 1.5)
+        pm[edge] = np.append(ink, 255.0)                  # 预乘：alpha 255，RGB 就是它本身
+    # 外侧补出来的边硬一点（半透明的一团读成脏），开运算削掉两边往里长在中间碰头顶出的小尖角
+    solid = ndimage.binary_opening(pm[..., 3] > 127, structure=np.ones((3, 3)), iterations=4)
+    cov = np.clip(Y + 1 - line(X), 0, 1) if line else 0
+    out = a.copy()
+    out[..., :3] = np.where(hole[..., None], pm[..., :3] * 255 / np.maximum(pm[..., 3:], 1e-3), a[..., :3])
+    out[..., 3] = np.where(hole, np.where(body, 255 * cov, np.where(solid, 255, 0)), a[..., 3])
+    return out
 
 
 def lift(outs, L):
     """挂件拆层（lift）：挂着的东西碰到身体（格格帽后的流苏下端贴着肩膀），flex 条带错位会把身体撕开 —— 把它从每一帧里拆出来，
-    做成挂件层（运行时 cfg.parts 按 sway 甩），帧里它原来的位置补成背景 / 头发 / 皮肤（fill_in）。
+    做成挂件层（运行时 cfg.parts 按 sway 甩），帧里它原来的位置补上（fill_in：贴身体那侧沿肩线补肤色，外侧补透明）。
     L = {"name", "from": 挂件图取哪一帧, "box": {帧: [x0, y0, x1, y1]} 每一帧里它在哪（输出像素，只框它，别框进身上同色的地方）,
          "hsv": [[[h0, h1], [s0, s1], [v0, v1]], ...] 它是什么颜色（几段取并集，描边自动带上）}
     → 挂件图 web/assets/trio/<name>.webp；打印 cfg.parts 那一条（pivot = 挂件图顶上正中，at[帧] = 那一帧里顶上正中的位置）"""
     at, part = {}, None
+    names = list(outs); cols = min(4, len(names)); cw, ch = outs[names[0]].size
+    holes = Image.new('L', (cw * cols, ch * ((len(names) + cols - 1) // cols)))     # 补过的像素，按图集排（lift_check.py 只数这些）
     for fn, (x0, y0, x1, y1) in L['box'].items():
         a = np.array(outs[fn]).astype(np.float32)
         box = np.zeros(a.shape[:2], bool); box[y0:y1, x0:x1] = True
@@ -209,7 +248,9 @@ def lift(outs, L):
             part = Image.fromarray(p.clip(0, 255).astype(np.uint8), 'RGBA').crop((xs.min(), top, xs.max() + 1, ys.max() + 1))
             piv = [round(float(cx - xs.min()), 1), 0.0]
         outs[fn] = Image.fromarray(fill_in(a, m).clip(0, 255).astype(np.uint8), 'RGBA')
+        i = names.index(fn); holes.paste(Image.fromarray((m * 255).astype(np.uint8)), ((i % cols) * cw, (i // cols) * ch))
     part.save(os.path.join(OUT, f"{L['name']}.webp"), 'WEBP', quality=92, method=6)
+    os.makedirs(PRE, exist_ok=True); holes.save(os.path.join(PRE, f"{L['name']}_holes.png"))
     ats = ', '.join(f'{fn}: [{x}, {y}, 0]' for fn, (x, y) in at.items())
     print(f"挂件 {L['name']}：{part.width}x{part.height} → web/assets/trio/{L['name']}.webp")
     print(f"cfg.parts：{{ src: 'assets/trio/{L['name']}.webp', pivot: {piv}, z: 1, at: {{ {ats} }}, sway: [...] }}")
