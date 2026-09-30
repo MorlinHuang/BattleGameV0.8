@@ -9,3 +9,14 @@ Bottom-right (follow-through): right arm crossed down in front of her body, huff
 Generous empty space between cells, nothing overlaps another cell, nothing cropped.
 Background MUST be pure flat magenta #FF00FF single solid color, no gradient, no shadow, no ground, no text, no panel borders.
 ## act_b1（slide / land / wind / idle2）：棒球式滑铲（一腿前伸、身体后仰）/ 刹住坐起 / strong wind-up / idle
+
+## 实际出图（2026-09-30）
+- act_a1 = edited-1790747889830-1（05:58，参考图 ref/G27.png，上面 A 条原文照用）。
+- act_b1 = edited-1790748017392-2（透明底；参考图 act_a1 + 定妆），另一张存 act_b1_alt.png。原文：
+  "slide tackle: a baseball-style slide along the floor toward the right, right leg stretched straight forward with the sneaker sole leading,
+  left leg bent under her, torso leaning far back, left hand trailing on the floor … stopping: the slide braking, right heel digging in,
+  pushing herself up with the left hand … strong wind-up … idle"。
+- **wind、follow 两帧模型把两腿间距画宽了**（前脚比 idle 靠左 4.4 / 3.7 px）：按后腿配准，前腿用 `fixleg.py` 局部横向拉回（graft 会切掉 follow 压在膝上的拳头），
+  build 之后必跑 `python3 v14/trio/bestie/G27_shancai/fixleg.py`。
+- 书包用引擎的 3D 转盘（prop_schoolbag.webp，道具表 r 30 cell 115 scale 1.37），没画进帧。
+- M_g27_atk 第一次拍（15:55 服务器时间）报 4 个 404：同一时刻另一个角色在往服务器传 B 系列素材和道具（ls -lt 15:55~15:56），重拍两次 0 error。

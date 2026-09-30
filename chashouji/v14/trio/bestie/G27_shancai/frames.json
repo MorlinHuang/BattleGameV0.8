@@ -1,0 +1,58 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "auto",
+   "frames": [
+    "idle",
+    "wind",
+    "throw",
+    "follow"
+   ]
+  },
+  {
+   "src": "raw/act_b1.png",
+   "screen": "auto",
+   "frames": [
+    "tackle",
+    "rise",
+    "wind2",
+    "idle2"
+   ]
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  185,
+  18,
+  366,
+  148
+ ],
+ "fixed": [
+  12,
+  528,
+  290,
+  672
+ ],
+ "size": [
+  "h",
+  300
+ ],
+ "anchor": [
+  260,
+  684
+ ],
+ "loose": [
+  "tackle",
+  "rise"
+ ],
+ "check": [
+  [
+   179,
+   273,
+   238,
+   308,
+   "前脚"
+  ]
+ ]
+}

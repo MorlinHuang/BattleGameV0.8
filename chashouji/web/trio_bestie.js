@@ -160,6 +160,22 @@ const TRIO_BESTIE = {
              hold: { idle: [153, 62], wind2: [53, 67], throw: [326, 50] },
              T: 0.6, arc: 0.3, spin: 5.2, idleSpin: 0.5, stretch: 0.03, gap: [1.0, 1.4] },
     },
+    G27: {      // 暴脾气平民女孩（杉菜式）：从左下角冲过来一记滑铲、撑地起身半跪，抡起书包砸过去
+      face: +1,
+      sheet: { src: 'assets/trio/G27_shancai.webp', cell: [332, 314], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'tackle', 'rise', 'wind2', 'idle2'] },
+      anchor: [134.0, 308.1], at: [170, 1330, 1], pivot: [134, 308],
+      leanK: 0,   // 半跪：整体前后倾会把跪地的膝盖带起来
+      depth: 1.3, recipe: 'thud',
+      /* 滑铲进来（前脚鞋底朝前）→ 刹住撑地起身 → 半跪；wind / follow 两帧的前腿按 idle 挪正过（G27_shancai/fixleg.py，build 后必跑） */
+      enter: { kind: 'slide', seq: [['tackle', 0.46], ['rise', 0.14, 'land'], ['idle', 9]], sq: 0.1 },
+      exit: { frame: 'tackle' },
+      idle: { frame: 'idle', breathe: [0.018, 0.8, 0] },
+      /* 书包：引擎 3D 转盘（tools/3d/schoolbag.py，道具表 r 30 cell 115 scale 1.37）；待机拎着书包带在手里晃（idleSpin） */
+      atk: { kind: 'throw', item: 'schoolbag', r: 30, atlas: { src: 'assets/trio/prop_schoolbag.webp', n: 36, cols: 6, cell: 115, scale: 1.37 },
+             seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.3]],
+             hold: { idle: [116, 118], wind: [10, 152], throw: [266, 20] },
+             T: 0.5, arc: 0.22, spin: 6.3, idleSpin: 0.9, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
+    },
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
