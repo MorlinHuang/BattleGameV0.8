@@ -37,6 +37,111 @@ const TRIO = {
   SLOTS: ['ground', 'top', 'floor'],
 };
 
+/* 三人组专用的命中配方（2026-10-01，审查第八批）：main.js 把它并进 RECIPE（cfg.recipe 写这几个名字）。
+   只用 fx.js 现成的粒子（dot / ring / spark / soft / glyph），配色照 main.js RECIPE 头上那条规矩：发光的靠色相、
+   每道亮环下面垫一道同形的深色环（浅绿墙米色地板上，光不托底就化掉）。三个都**不出爱心、不出星星**（名单第 151 行）。 */
+const TRIO_RECIPE = (() => {
+  const P = Particles;
+  /* 沿一段螺旋（或圆弧）同时放 n 颗：第 k 颗在 θ0 + k·dθ、半径 r0 + k·dr 处，速度由 fire 定（切向 = 打旋、径向 = 一弯光弧往外扩）。
+     一颗火星自己只能走直线，排成弧 / 螺旋的一串才读得出形状。**不用 setTimeout 错开**：那是墙钟，顿帧冻住游戏时间时它照走、
+     胶片按模拟时间推进时它不跟（修8 实测：月牙光弧的 20 颗全错过了命中那几格） */
+  function sweep(x, y, n, th0, dth, r0, dr, fire) {
+    for (let k = 0; k < n; k++) {
+      const th = th0 + k * dth, r = r0 + k * dr;
+      fire(x + Math.cos(th) * r, y + Math.sin(th) * r * 0.8, th, k / Math.max(1, n - 1));
+    }
+  }
+  return {
+    /* 狐火（G16 妲己，名单"青蓝狐火球"）：白芯一闪 + 深靛托底的青蓝环，三股青蓝火舌绕着命中点打旋往外甩，
+       一把青蓝 / 冰白火苗往上窜（负重力，越飘越快，像火往上烧），几团蓝色冷焰雾慢慢升起散掉 */
+    foxfire: {
+      tint: [190, 226, 255],
+      burst(x, y, side, s) {
+        P.spawn({ kind: 'dot', x, y, r: 14 * s, r1: 70 * s, life: 0.18, rgb: [236, 250, 255], a: 0.9 });
+        P.spawn({ kind: 'dot', x, y, r: 24 * s, r1: 120 * s, life: 0.3, rgb: [80, 200, 255], a: 0.75 });
+        P.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 130 * s, life: 0.36, rgb: [26, 30, 110], lw: 7 * s });
+        P.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 126 * s, life: 0.36, rgb: [80, 200, 255], lw: 3.5 * s });
+        const dir = -side;                                   // 往场内那边旋
+        for (let arm = 0; arm < 3; arm++) {
+          sweep(x, y, 8, Math.random() * 6.283 + arm * 2.094, 0.55 * dir, 10 * s, 11 * s, (px, py, th, u) => {
+            const t = th + dir * 1.571, sp = (170 + 140 * u) * Math.min(1.6, s);
+            P.spawn({ kind: 'spark', x: px, y: py, vx: Math.cos(t) * sp + Math.cos(th) * 90, vy: Math.sin(t) * sp + Math.sin(th) * 90 - 40,
+                      g: -180, drag: 0.93, life: 0.32 + 0.12 * u, rgb: u < 0.5 ? [150, 235, 255] : [70, 180, 255], lw: 4.5 - 1.5 * u });
+            if (!(Math.round(u * 7) % 3)) P.spawn({ kind: 'dot', x: px, y: py, r: 8 * s, r1: 26 * s, life: 0.22, rgb: [80, 200, 255], a: 0.7 });
+          });
+        }
+        for (let i = 0; i < Math.round(9 * s); i++) {
+          const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, sp = 120 + Math.random() * 240;
+          P.spawn({ kind: 'spark', x: x + (Math.random() - 0.5) * 30 * s, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: -320, drag: 0.94,
+                    life: 0.35 + Math.random() * 0.3, rgb: i % 3 ? [80, 200, 255] : [214, 246, 255], lw: 3 + Math.random() * 2 });
+        }
+        /* 冷焰雾：从头顶上方出生、快快升走（修8 第一版从命中点出、慢飘一秒，蓝雾糊在他脸上半秒多） */
+        for (let i = 0; i < Math.round(1.2 * s); i++) {
+          const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, sp = 160 + Math.random() * 80;
+          P.spawn({ kind: 'soft', x: x + (Math.random() - 0.5) * 30 * s, y: y - 34 * s, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: -120, drag: 0.96,
+                    life: 0.45, r: 10 * s, r1: 30 * s, rgb: [60, 140, 255], a: 0.45 });
+        }
+      },
+    },
+    /* 月牙（G20 复古歌后，名单"一弯小月牙飞镖，拖音符尾"）：金芯一闪 + 深褐托底的金环，两道金色光弧从命中点
+       往两边扫开（依次点着、边扫边往外冲），几弯金月牙 ☾ 和两三个音符 ♪ 飞散（不蹦字：她不是档 4 那种喊口号的） */
+    crescent: {
+      tint: [255, 238, 196],
+      moon(x, y, sz, sp0, sp1) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6, sp = sp0 + Math.random() * (sp1 - sp0);
+        P.spawn({ kind: 'glyph', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 260, drag: 0.94,
+                  life: 0.65 + Math.random() * 0.3, r: sz * 0.6, r1: sz, rot: (Math.random() - 0.5) * 0.6, vrot: (Math.random() - 0.5) * 4,
+                  rgb: [255, 212, 70], edge: [110, 64, 8], lw: Math.max(2, sz * 0.07), text: '☾' });
+      },
+      note(x, y, sz) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.8, sp = 220 + Math.random() * 140;
+        P.spawn({ kind: 'glyph', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: -40, drag: 0.95, sway: 30,
+                  life: 0.9 + Math.random() * 0.3, r: sz * 0.6, r1: sz, rot: (Math.random() - 0.5) * 0.4, vrot: (Math.random() - 0.5) * 2,
+                  rgb: [255, 246, 220], edge: [40, 50, 120], lw: Math.max(2, sz * 0.07), text: Math.random() < 0.5 ? '♪' : '♫' });
+      },
+      burst(x, y, side, s) {
+        P.spawn({ kind: 'dot', x, y, r: 16 * s, r1: 90 * s, life: 0.2, rgb: [255, 240, 190], a: 0.9 });
+        P.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 130 * s, life: 0.36, rgb: [110, 60, 8], lw: 7 * s });
+        P.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 126 * s, life: 0.36, rgb: [255, 206, 80], lw: 3.5 * s });
+        for (const d of [-1, 1]) {                           // 两道光弧：各扫半圈多一点，一上一下
+          const th0 = (d > 0 ? -2.6 : 0.5) + (Math.random() - 0.5) * 0.4;
+          /* 光弧用高饱和琥珀（lighter 叠在暖灯光的底图上，淡金 / 金白整条化掉 —— 修8 第一条胶片实测看不见） */
+          sweep(x, y, 10, th0, 0.2, 34 * s, 4 * s, (px, py, th, u) => {
+            const sp = (340 + 100 * u) * Math.min(1.6, s);
+            P.spawn({ kind: 'spark', x: px, y: py, vx: Math.cos(th) * sp, vy: Math.sin(th) * sp * 0.8, g: 60, drag: 0.93,
+                      life: 0.34, rgb: u < 0.25 || u > 0.8 ? [255, 214, 70] : [255, 160, 20], lw: 7 - 3 * Math.abs(u - 0.5) });
+          });
+        }
+        for (let i = 0; i < Math.round(3 * s); i++) this.moon(x, y, 28 + 8 * s, 280, 480);   // 比 change 的快：尽快离开他的脸
+        for (let i = 0; i < Math.max(1, Math.round(1.2 * s)); i++) this.note(x, y, 26 + 4 * s);
+      },
+    },
+    /* 紫色光球（B15 白发蒙眼最强，名单"手指弹出紫色光球"）：一圈紫环从外往命中点收、同时里面炸开（收和放叠在同一下，不用定时器错开） ——
+       深紫托底 + 品紫亮环，红、蓝两色火花对着甩（红蓝相撞成紫那个梗），中间留一团紫光 */
+    hollow: {
+      tint: [226, 196, 255],
+      burst(x, y, side, s) {
+        P.spawn({ kind: 'ring', x, y, r: 110 * s, r1: 6 * s, life: 0.12, rgb: [170, 90, 255], lw: 5 * s });
+        P.spawn({ kind: 'dot', x, y, r: 18 * s, r1: 60 * s, life: 0.28, rgb: [150, 60, 255], a: 0.9 });
+        {
+          P.spawn({ kind: 'dot', x, y, r: 20 * s, r1: 120 * s, life: 0.24, rgb: [236, 214, 255], a: 0.85 });
+          P.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 150 * s, life: 0.4, rgb: [40, 8, 70], lw: 8 * s });
+          P.spawn({ kind: 'ring', x, y, r: 10 * s, r1: 146 * s, life: 0.4, rgb: [190, 100, 255], lw: 4 * s });
+          const n = Math.round(12 * s), a0 = Math.random() * 6.283;
+          for (let i = 0; i < n; i++) {
+            const a = a0 + i * 6.283 / n + (Math.random() - 0.5) * 0.3, sp = 260 + Math.random() * 300;
+            P.spawn({ kind: 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 120, drag: 0.94,
+                      life: 0.28 + Math.random() * 0.2, rgb: i % 2 ? [255, 80, 120] : [90, 130, 255], lw: 3.5 });
+          }
+          for (let i = 0; i < Math.round(1.2 * s); i++)             // 紫雾同 foxfire：头顶上方出生、快快升走，不糊脸
+            P.spawn({ kind: 'soft', x: x + (Math.random() - 0.5) * 30 * s, y: y - 34 * s, vx: (Math.random() - 0.5) * 80, vy: -160 - Math.random() * 80, g: -120, drag: 0.96,
+                      life: 0.45, r: 10 * s, r1: 32 * s, rgb: [120, 50, 220], a: 0.45 });
+        }
+      },
+    },
+  };
+})();
+
 const easeOut = (u) => 1 - Math.pow(1 - u, 3);
 const backOut = (u) => { const c = 2.2; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
 const lerp = (a, b, k) => a + (b - a) * k;

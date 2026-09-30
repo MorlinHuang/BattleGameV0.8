@@ -1384,6 +1384,7 @@ const RECIPE = {
     },
   },
 };
+Object.assign(RECIPE, TRIO_RECIPE);   // 三人组专用配方（trio.js：foxfire 狐火 / crescent 月牙 / hollow 紫色光球）
 
 /* 礼物有两张表，因为它是两件事。
 
@@ -1428,6 +1429,9 @@ const G4L = CrewGroup([Baisu, Truth, Change]);   // 查岗党：白娘子 / 真�
 const G4R = CrewGroup([Fahai, Demon, Houyi, Sister]);    // 灭迹党：法海 / 灭迹恶魔 / 后羿 / 绿茶妹妹
 /* 档 3 三人组（trio.js）：一次送礼三个槽位 —— 后排地面、上方、前景地板（全是帧序列；滑板哥们 / 平衡车闺蜜 2026-10-01 从 crew.js 迁过来）——
    各自从本边名单里独立随机抽一人（2026-10-01 改自由组合）。角色在 trio_buddy.js / trio_bestie.js（美术维护）；在场再送 = 在场的续、空槽补人 */
+/* cfg.recipe 写错名字的话 impact() 会悄悄退回 thud、画面上看不出错 —— 这里先对一遍，写错的直接进 console error（胶片 errors 会抓到） */
+for (const [side, T] of [['buddy', TRIO_BUDDY], ['bestie', TRIO_BESTIE]])
+  for (const [id, c] of Object.entries(T.cast)) if (c.recipe && !RECIPE[c.recipe]) console.error(`trio_${side}.js ${id}: recipe '${c.recipe}' 不在 RECIPE 里`);
 const BuddyTrio = Trio(TRIO_BUDDY);
 const BestieTrio = Trio(TRIO_BESTIE);
 const ACTS = [...BuddyTrio.acts, ...BestieTrio.acts];
