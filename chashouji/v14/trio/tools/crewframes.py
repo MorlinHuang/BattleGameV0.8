@@ -140,7 +140,7 @@ def ident(code):
     poses = {'idle': (lo + (hi - lo) * 0.45, 0, 0), 'wind': (hi + 0.12, 0, 0), 'follow': (lo - 0.05, 0, 0), 'ride': ((lo + hi) / 2 + 0.1, 0, 0), 'brake': (hi + 0.05, 0, 0)}
     poses.update({f'aim{i}': (th, 0, 1) for i, th in enumerate(aims)})
     if R['kick']: poses.update({f'kick{i}': (th, 1, 1) for i, th in enumerate(aims)})
-    out = {fn: [] for fn in meta['frames']}
+    out = {fn: {} for fn in meta['frames']}                                 # {帧: {名: 框}}：combo_scan 按项算可见率要知道哪块是枪、哪块是板
     for tag, lk, rule in IDENT[side]:
         lay = {}
         for k in R['layers']:
@@ -157,7 +157,7 @@ def ident(code):
             al = np.array(im)[..., 3] > 60; ys, xs = np.nonzero(al)
             if not len(ys): continue
             f = K / SS
-            out[fn].append([round(float(xs.min() * f - x0), 1), round(float(ys.min() * f - y0), 1), round(float((xs.max() + 1) * f - x0), 1), round(float((ys.max() + 1) * f - y0), 1)])
+            out[fn][tag] = [round(float(xs.min() * f - x0), 1), round(float(ys.min() * f - y0), 1), round(float((xs.max() + 1) * f - x0), 1), round(float((ys.max() + 1) * f - y0), 1)]
     meta['ident'] = out
     json.dump(meta, open(jp, 'w'), ensure_ascii=False)
     print(code, name, 'ident idle', out.get('idle'), 'aim0', out.get('aim0'))

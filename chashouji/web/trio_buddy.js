@@ -12,7 +12,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B1_surfer.webp', cell: [434, 421], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 415.6], at: [814, 1040, 0.83], pivot: [265.3, 415.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
+      anchor: [265.3, 415.6], at: [814, 960, 0.81], pivot: [265.3, 415.6], leanK: 0,   // 锚点 = 滑板着地那一点；站位按遮挡判据第二版第 5 条（哥们后排对男主：头框 0 / 认人点逐项可见 ≥ 70% / 合计 ≤ 35%）脚底抬到 y 960、缩到 0.8，头和水枪露在男主右肩上方，滑板右头不出画（combo_scan.py，2026-10-01）
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -28,7 +28,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B2_zhizunbao.webp', cell: [434, 424], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 418.6], at: [814, 1040, 0.83], pivot: [265.3, 418.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
+      anchor: [265.3, 418.6], at: [814, 960, 0.81], pivot: [265.3, 418.6], leanK: 0,   // 锚点 = 滑板着地那一点；站位按遮挡判据第二版第 5 条（哥们后排对男主：头框 0 / 认人点逐项可见 ≥ 70% / 合计 ≤ 35%）脚底抬到 y 960、缩到 0.8，头和水枪露在男主右肩上方，滑板右头不出画（combo_scan.py，2026-10-01）
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -44,7 +44,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B3_beile.webp', cell: [434, 419], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 413.6], at: [814, 1040, 0.83], pivot: [265.3, 413.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
+      anchor: [265.3, 413.6], at: [814, 960, 0.8], pivot: [265.3, 413.6], leanK: 0,   // 锚点 = 滑板着地那一点；站位按遮挡判据第二版第 5 条（哥们后排对男主：头框 0 / 认人点逐项可见 ≥ 70% / 合计 ≤ 35%）脚底抬到 y 960、缩到 0.8，头和水枪露在男主右肩上方，滑板右头不出画（combo_scan.py，2026-10-01）
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -60,7 +60,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B4_yagami.webp', cell: [442, 458], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [273.3, 452.6], at: [814, 1040, 0.83], pivot: [273.3, 452.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
+      anchor: [273.3, 452.6], at: [814, 960, 0.8], pivot: [273.3, 452.6], leanK: 0,   // 锚点 = 滑板着地那一点；站位按遮挡判据第二版第 5 条（哥们后排对男主：头框 0 / 认人点逐项可见 ≥ 70% / 合计 ≤ 35%）脚底抬到 y 960、缩到 0.8，头和水枪露在男主右肩上方，滑板右头不出画（combo_scan.py，2026-10-01）
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -534,7 +534,7 @@ const TRIO_BUDDY = {
          出手：收拳蓄力 → 换回伸拳那一帧、橡皮手臂从手腕伸出去弹她脑门（punch：拳头那一块画在伸出去的地方）→ 缩回来 */
       face: -1,
       sheet: { src: 'assets/trio/B12_straw.webp', cell: [305, 360], cols: 2, names: ['idle', 'wind'] },
-      anchor: [300, 180], at: [960, 620, 1], pivot: [298, 180], leanK: 0.6,   // 绕扒墙的那只手前后倾：蓄力往后、出拳往前甩
+      anchor: [300, 180], at: [960, 580, 1], pivot: [298, 180], leanK: 0.6,   // 绕扒墙的那只手前后倾：蓄力往后、出拳往前甩；y 620 → 580（遮挡判据第二版重扫：后排 B6 挪到 x 820 后，620 时她被挡）
       depth: 0.5, enter: 'spring', recipe: 'star',
       idle: { frame: 'idle', breathe: [0.014, 0.9, 0.4] },
       atk: { kind: 'punch', seq: [['wind', 0.3], ['idle', 0.62, 'fire']],
