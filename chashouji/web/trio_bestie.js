@@ -30,6 +30,25 @@ const TRIO_BESTIE = {
              T: 0.5, arc: 0.25, spin: 5, idleSpin: 0.8, stretch: 0.04, onHit: 'bounce' },
     },
 
+    G23: {      // 客栈女侠（郭芙蓉式）：马步从左下角滑进来、跺地站定，排山倒海 —— 双掌齐推，一道气浪轰他的脸
+      face: +1,
+      sheet: { src: 'assets/trio/G23_furong.webp', cell: [394, 307], cols: 4, names: ['idle', 'raise', 'throw', 'follow', 'slide', 'land', 'wind', 'idle2'] },
+      anchor: [213.1, 305.4], at: [175, 1330, 1], pivot: [213, 305],
+      leanK: 0,   // 马步两只靴子离锚点各 150px：整体前后倾会把靴子一上一下翘起来，蓄力 / 出手全靠帧
+      depth: 1.3, recipe: 'thud',
+      /* slide 帧（弓步滑）人一露面就在画 → land（跺进马步，压扁）→ idle。wind / idle2 是第二张条里的，马步画宽了一截，不上场 */
+      enter: { kind: 'slide', seq: [['slide', 0.5], ['land', 0.14, 'land'], ['idle', 9]], sq: 0.12 },
+      exit: { frame: 'slide' },
+      idle: { frame: 'idle', breathe: [0.018, 0.75, 0] },   // 站马步：只竖向起伏（绕两靴之间的地面），横向不补 —— 不然两只靴子左右挪
+      /* 发带下面那截飘带：上沿钉住，下端左右甩（框只有上沿压着飘带，其余三边透明） */
+      flex: { idle: [[100, 62, 150, 86, 't', 8, 1.2]] },
+      atk: { kind: 'beam', seq: [['raise', 0.34], ['throw', 0.4, 'fire'], ['follow', 0.3]],
+             hold: { throw: [350, 80] }, stretch: 0.03, gap: [1.0, 1.4],
+             /* 气浪：比悟空的光线粗一倍（排山倒海是一堵墙推过去，不是一根线）；最外一层暗红给它在暖色客厅上描个边 */
+             beam: { fire: 0.38, drip: 0.1, ball: 40, glow: [255, 170, 70], edge: [220, 60, 30],
+                     layers: [[84, [170, 30, 20], 0.3], [64, [255, 90, 40], 0.6], [42, [255, 160, 70], 0.85], [20, [255, 230, 160], 1], [7, [255, 255, 255], 1]] } },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],

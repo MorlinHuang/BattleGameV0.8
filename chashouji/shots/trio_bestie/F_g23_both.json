@@ -1,0 +1,1 @@
+[["B21:dive", "G23:slide"], ["B21:dive", "G23:slide"], ["B21:slide", "G23:land"], ["B21:idle", "G23:idle"], ["B21:wind", "G23:raise"], ["B21:throw", "G23:raise"], ["B21:follow", "G23:throw"], ["B21:idle", "G23:throw"], ["B21:idle", "G23:follow"], ["B21:idle", "G23:idle"], ["B21:wind", "G23:idle"], ["B21:throw", "G23:idle"]]
