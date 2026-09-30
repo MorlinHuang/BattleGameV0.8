@@ -369,6 +369,24 @@ const TRIO_BESTIE = {
              hold: { idle: [455, 100], wind: [380, -4] },
              T: 0.45, arc: 0.15, spin: 0, aim: true, stretch: 0.03, gap: [0.9, 1.3], onHit: 'freeze' },
     },
+    G9: {       // 广场舞大妈：腰挂小音箱、扭着秧歌步抬腿甩手走进来；一只手叉腰、一只手翘着兰花指打拍子；抡起一条红绸从头顶甩过去抽他
+      face: +1,
+      sheet: { src: 'assets/trio/G9_auntie.webp', cell: [277, 415], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4'] },
+      /* 锚点 = 两只布鞋鞋底中点：出手四帧按两只鞋配准（残差 0.64 px）；走路四帧 loose，出自同一张底图（蓝幕，layers.cut_blue） */
+      anchor: [137.6, 410.8], at: [230, 1030, 0.88], pivot: [137, 410], leanK: 0,
+      depth: 0.8, recipe: 'rouge',
+      /* 秧歌步（walk）：接地 A（右手甩到身前）→ 抬膝过渡 → 接地 B（右手甩到身后）→ 抬膝过渡。
+         stride 136.5：着地鞋跟每次换帧前进 68 / 69 / 68 / 68 格内 px（walkshift.py 把 walk2~4 横移 −3 / +4 / −5 后），换帧同一只脚差 ≤ 0.75 格内 px */
+      /* dist 300.3 = 5 步 × 60.06（stride / 2 × s）：默认 dist（格宽 × s + 30 = 273.8）÷ 60.06 取整 5 步、每步被匀成 54.8，换帧着地脚差 −5.4 px（W_g9_ms40 实测） */
+      enter: { kind: 'walk', fps: 6, bob: 8, stride: 136.5, dist: 300.3, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
+      exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 6, flip: true },
+      idle: { frame: 'idle', breathe: [0.016, 0.9, 0] },
+      /* 翘着的兰花指打拍子：小臂那一行（框底）钉住，手掌左右晃（框上、左、右三边透明） */
+      flex: { idle: [[192, 70, 252, 120, 'b', 5, 1.5]] },
+      /* 红绸（whip，引擎画）：wind 手抡到脑后 → throw 手举到头顶最高点、红绸从那里甩出去（出手点 [258, 14] 在她自己头顶以上，也在女生头顶以上）→ follow 叉腰大笑 */
+      atk: { kind: 'whip', seq: [['wind', 0.3], ['throw', 0.44, 'fire'], ['follow', 0.3]], from: [258, 14], phases: [0.14, 0.08, 0.22],
+             whip: { w: 14, taper: 0.35, amp: 30, waves: 1.3, hz: 3, color: '#e0303a', edge: 'rgba(110,10,20,.9)' }, gap: [0.9, 1.3] },
+    },
 
     /* ---- 上方（左上，男女主头顶以下；样板 G11） ---- */
     G15: {      // 船头红发少女（泰坦尼克 Rose 式）：站在一截白色船头上从左边平着滑出来，捂着心口 → 张开双臂"飞"；举起心形蓝宝石项链一抛（3D）砸他

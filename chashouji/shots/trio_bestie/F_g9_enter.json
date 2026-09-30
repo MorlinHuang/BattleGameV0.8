@@ -1,0 +1,1 @@
+[["G28:jump1", "G9:walk1"], ["G28:jump2", "G9:walk1"], ["G28:jump2", "G9:walk1"], ["G28:jump3", "G9:walk1"], ["G28:jump4", "G9:walk2"], ["G28:jump1", "G9:walk3"], ["G28:jump2", "G9:walk4"], ["G28:idle", "G9:walk1"], ["G28:idle", "G9:idle"], ["G28:wind", "G9:idle"], ["G28:wind", "G9:idle"], ["G28:throw", "G9:wind"]]
