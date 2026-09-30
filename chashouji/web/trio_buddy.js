@@ -449,6 +449,22 @@ const TRIO_BUDDY = {
                      layers: [[26, [40, 110, 220], 0.35], [16, [140, 210, 255], 0.8], [8, [225, 245, 255], 0.95], [3, [255, 255, 255], 1]] } },
     },
 
+    B20: {      // 济公式疯和尚：坐在一只大酒坛上从右上飘下来、晃一下抓住坛盖、坐稳；仰头灌一口酒葫芦，鼓着腮往前一喷，一股酒雾喷到她脸上
+      face: -1,
+      sheet: { src: 'assets/trio/B20_monk.webp', cell: [259, 316], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'drift', 'wobble', 'settle', 'idle2'] },
+      /* 上方；酒坛画在帧里（两张条都按酒坛配准），锚点 = 坛底中点。剪影面积 s 1 时 3.24 万（含酒坛），s 0.8 → 2.07 万（上方对格格）。
+         [860, 680]：同组 B2（820, 1040，含 aim 帧）、B28 在场帧外扩 4px 相交 0（700 时 settle × B2 wind 36 px）。画布宽 960：最右伸出锚点 83 px */
+      anchor: [120.6, 310.9], at: [860, 680, 0.8], pivot: [121, 311], leanK: 0.2,
+      depth: 0.5, recipe: 'splash',
+      /* 坐酒坛飘下来：从右上斜着飘（坛前倾、两腿翘起）→ 坛往后一晃抓住坛盖 → 坐稳 */
+      enter: { kind: 'fly', from: [380, -420], T: 0.9, air: 0.9, tilt: 0.1, seq: [['drift', 0.4], ['wobble', 0.3], ['settle', 0.2, 'land'], ['idle', 9]], sq: 0.06 },
+      exit: { frame: 'drift' },
+      idle: { frame: 'idle', breathe: [0.016, 0.8, 0.3] },
+      /* 喷酒雾（spray，名单二选一取喷）：wind 仰头灌酒、throw 鼓腮从嘴里喷（from = throw 帧嘴），琥珀色酒雾 */
+      atk: { kind: 'spray', seq: [['wind', 0.35], ['throw', 0.7, 'fire'], ['follow', 0.35]], from: [30, 106],
+             spray: { dur: 0.6, rate: 90, T: 0.3, tick: 0.15, color: [235, 195, 110], r: 18, spread: 0.14 }, gap: [0.6, 1.0], stretch: 0.02 },   // 出手挤压小一点：坛子是硬的
+    },
+
     B18: {      // 摇扇才子：从右上墙头后面一蹿翻上来、坐定；背后插着题诗折扇，伸手抽出来一甩，3D 折扇旋着飞过去
       face: -1,
       sheet: { src: 'assets/trio/B18_tangbohu.webp', cell: [279, 375], cols: 4, names: ['idle', 'raise', 'wind', 'throw', 'follow', 'leap', 'land', 'idle2'] },
