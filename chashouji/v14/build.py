@@ -363,6 +363,36 @@ TWEEN = {'aK': ('n0', 690), 'aF': ('aK', 580), 'aL': ('aF', 595),
 TWEEN_FEATHER = 20
 
 EDGE_STEP = 6    # 轮廓按行采样的间距（引擎像素）
+# 贴地段（2026-09-30 用户：「发生位移的帧……需要在地上留下痕迹（被拉的人留下的）」）：只量被拉倒的那个人
+# （各档输方蒙版 tween/<档>/mask.png 的透明区 —— 关键帧、步态帧、过渡帧都是同一张原图的坐标，蒙版通用；
+# 不按手机左右切：男生跪档的前脚会伸到手机左边）。取他自己最低的不透明像素，每列最低点离它不超过 GROUND_TOL
+# 就算这一列贴着地（拖鞋底、膝盖、趴着的身子），相邻列连成段；同时给出这个人最低点离脚底线几像素（float）。
+# 侧视角里画得高一点 = 离镜头远一点，所以引擎把痕印在 脚底线 − float 那条线上；float 太大（腾空的帧）引擎不印。
+# 引擎拖动时把这些段按世界坐标印在地板上（main.js Scuff）。
+GROUND_TOL = 8     # 离这个人最低点几像素内算贴地（引擎像素）；鞋底描边、脚尖翘起约 3~6
+GROUND_GAP = 4     # 两段之间空不到几列就连成一段
+GROUND_MIN = 6     # 比这窄的段不要（发梢、鞋尖一个角）
+
+
+def ground_segs(solid, ay, ax):
+    """solid：贴图里输方的不透明掩码；返回 (贴地段 [[x0, x1], ...] 相对锚点 ax, 这个人最低点离脚底线几像素)。"""
+    h, w = solid.shape
+    low = np.where(solid.any(0), h - 1 - np.argmax(solid[::-1], 0), -10 ** 6)
+    bottom = int(low.max())
+    on = low >= bottom - GROUND_TOL
+    segs, x = [], 0
+    while x < w:
+        if on[x]:
+            e = x
+            while e < w and on[e:e + GROUND_GAP + 1].any():
+                e += 1
+            while not on[e - 1]:
+                e -= 1
+            if e - x >= GROUND_MIN:
+                segs.append([round(x - ax, 1), round(e - ax, 1)])
+            x = e
+        x += 1
+    return segs, int(ay - bottom)
 
 
 def edges(solid, phone):
@@ -419,7 +449,45 @@ def edges(solid, phone):
     return {'step': EDGE_STEP, 'a': a, 'b': b, 'top': tops(ga), 'topB': tops(run3(who == 2))}
 
 
-def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE):
+# 被拖的人挣扎（2026-09-30 用户：「当前帧数还是太少 动作很僵硬」）：步态 8 格原来只重画了赢方的腿，被拖的那个人
+# 8 格一模一样，被拖着走一路纹丝不动。struggle/<档>/ 下 s1~s3.png 是拿本档原图蒙版局部重绘、**只重画输方腰线以下**
+# （小腿、膝盖、拖鞋在地上蹭、乱蹬；头、手臂、上身一个像素不动，免得循环起来一跳一跳）得来的。
+# 构建时第 f 格步态取 s[f % 4]（0 = 原图的腿）：被拖一步，腿跟着蹬一下，停下不拖就不动（步态只随位移走）。
+# 取用区域 = 输方蒙版（tween/<档>/mask.png）∩ 不在赢方步态蒙版里（外扩 STRUGGLE_KEEP，
+# 赢方迈步的那只脚会伸进这一侧，挨着的地方贴生图会叠出两只拖鞋）∩ 不碰原图腿区 STRUGGLE_HIP 以外的身体，边缘羽化 STRUGGLE_FEATHER。
+# 腿在哪：(这一行以下, 这一列起, 到这一列)，原图坐标。跪 / 扑倒按短裤下沿横切；趴着的两档腿在身后水平伸出，按短裤后沿竖切
+STRUGGLE_HIP = {'aK': (745, 0, 1536), 'aF': (640, 0, 1536), 'aL': (0, 1190, 1536),
+                'bK': (700, 0, 1536), 'bF': (700, 0, 1536), 'bL': (0, 0, 390)}
+STRUGGLE_KEEP = 25
+STRUGGLE_GUARD = 6
+STRUGGLE_FEATHER = 8
+
+
+def struggle_load(name, gait_mask):
+    """返回 ([s1, s2, s3 的 RGB int16 数组], 取用权重 H×W×1)；这一档没做挣扎帧返回 ([], None)"""
+    d = os.path.join(HERE, 'struggle', name)
+    fs = sorted([f for f in os.listdir(d) if f[0] == 's' and f[1:-4].isdigit()], key=lambda f: int(f[1:-4])) if os.path.isdir(d) else []
+    if not fs:
+        return [], None
+    lose = np.array(Image.open(LOSE(name)).getchannel('A')) < 128
+    keep = ndimage.binary_dilation(np.array(Image.open(gait_mask).getchannel('A')) < 128, iterations=STRUGGLE_KEEP)
+    y0, x0, x1 = STRUGGLE_HIP[name]
+    legs = np.zeros_like(lose)
+    legs[y0:, x0:x1] = True
+    # 腿区以外只护住原图里有人的像素（上身、头发，外扩 STRUGGLE_GUARD）：踢起来的小腿会高过腰线伸进空白处，
+    # 按腰线一刀切的话那截腿被切在羽化带里、跟原图的品红底一混，边上一道粉边（2026-09-30 男跪档截图）
+    base = np.array(Image.open(os.path.join(d, 'base.png')).convert('RGB')).astype(np.int16)
+    guard = ndimage.binary_dilation((keyed(base) < 60) & ~legs, iterations=STRUGGLE_GUARD)
+    r = lose & ~keep & ~guard
+    w = ndimage.gaussian_filter(r.astype(np.float32), STRUGGLE_FEATHER) * r      # 只往里羽化，区域外一个像素不动
+    size = Image.open(os.path.join(d, fs[0])).size
+    return [np.array(Image.open(os.path.join(d, f)).convert('RGB').resize(size)).astype(np.int16) for f in fs], w[..., None]
+
+
+LOSE = lambda name: os.path.join(HERE, 'tween', name, 'mask.png')     # 各档输方蒙版（贴地段用，见 ground_segs）
+
+
+def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE, lose=None):
     """path 可以是文件，也可以是处理过的 RGB 数组（步态帧踩地之后，见 plant_feet）。
     anchor：直接指定锚点在**原图**里的像素坐标 (x, 脚底 y)，不按本张自己算。
     步态帧用：它们只重画了腿，其余像素跟原姿势一模一样，锚点必须跟原姿势同一个点，
@@ -444,8 +512,19 @@ def build_pose(name, path, feet_align=False, anchor=None, scale=SCALE):
         cx = (x0 + x1) / 2     # 拖地这类宽姿势比屏幕还宽，按质心对齐会让一侧整截出画
     im = im.crop((x0, y0, x1, y1))
     im.save(os.path.join(OUT, f'pose_{name}.webp'), quality=90, method=6)
+    if lose:    # 被拉倒各档：输方的贴地段（拖痕），lose = 输方蒙版路径（透明 = 输方）
+        # 输方蒙版扣掉赢方步态蒙版：a 档输方蒙版是 x≥800 一整块，女生前脚的拖鞋尖也在里面，会在男生前面印出一截痕
+        lo = np.array(Image.open(lose).getchannel('A')) < 128
+        gm = os.path.join(HERE, 'gait', name[:2], 'mask.png')
+        if os.path.exists(gm):
+            lo &= ~(np.array(Image.open(gm).getchannel('A')) < 128)
+        who = Image.fromarray((lo * 255).astype(np.uint8))
+        who = np.array(who.resize((round(who.width * scale), round(who.height * scale)), Image.NEAREST).crop((x0, y0, x1, y1))) > 0
+        drag = ground_segs((a[y0:y1, x0:x1] > 0.5) & who, foot - y0, cx - x0)
     meta = {'w': int(x1 - x0), 'h': int(y1 - y0),
             'ax': round(float(cx - x0), 1), 'ay': int(foot - y0)}
+    if lose:
+        meta['drag'], meta['float'] = drag
     if ph:
         meta['phone'] = [round(ph[0] * scale - x0, 1), round(ph[1] * scale - y0, 1)]
         meta['edge'] = edges(np.array(im)[..., 3] > 127, meta['phone'])
@@ -564,7 +643,7 @@ def main():
             k = BODY[name]
             scales[name] = SCALE / k
             print(name, 'body %.3f  head %.2f' % (k, head_scale(ref, im, name[0])))
-            meta, im, raw = build_pose(name, os.path.join(HERE, f), feet, scale=scales[name])
+            meta, im, raw = build_pose(name, os.path.join(HERE, f), feet, scale=scales[name], lose=LOSE(name))
         # 两张脸在贴图里的位置（香蕉朝女生的脸飞、脸上的白点跟着脸走）：[x, y, 半径]
         ref_ = im if name == 'n0' else ref
         meta['face'] = {s_: [round(v, 1) for v in head_find(ref_, im, s_)[1:]] for s_ in 'ab'}
@@ -586,11 +665,16 @@ def main():
         if not os.path.isdir(d):
             continue
         k = scales.get(name, SCALE)
+        struggle, sw = struggle_load(name, os.path.join(d, 'mask.png'))
         frames = [name]
         for f in range(1, 8):
             g = f'{name}_g{f}'
             img = plant_feet(os.path.join(d, f'f{f}.png'), os.path.join(d, 'base.png'), os.path.join(d, 'mask.png'))
-            meta, im, _ = build_pose(g, img, anchor=base_raw, scale=k)
+            if struggle:
+                j = f % (len(struggle) + 1)          # 第 0、4 格是原图的腿，其余轮着换挣扎帧
+                if j:
+                    img = np.round(img * (1 - sw) + struggle[j - 1] * sw).astype(np.int16)
+            meta, im, _ = build_pose(g, img, anchor=base_raw, scale=k, lose=LOSE(name))
             meta['face'] = poses[name]['face']      # 只重画了腿，脸和 base 同一处
             meta['hip'] = hip_find(im)              # 腿换了，短裤跟着变，每格重量
             poses[g] = meta
@@ -624,7 +708,7 @@ def main():
             want = dx(poses[name]) * t + dx(poses[frm]) * (1 - t)
             cx = anchors[name][0] - (want - dx(poses[name])) / k
             g = f'{name}_t{i}'
-            meta, im, _ = build_pose(g, img, anchor=(cx, anchors[name][1]), scale=k)
+            meta, im, _ = build_pose(g, img, anchor=(cx, anchors[name][1]), scale=k, lose=LOSE(name))
             meta['face'] = {s_: [round(v, 1) for v in head_find(ref, im, s_)[1:]] for s_ in 'ab'}
             meta['hip'] = hip_find(im)
             poses[g] = meta

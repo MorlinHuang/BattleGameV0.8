@@ -67,9 +67,10 @@ const P = {
   /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
      来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
   loopFps: 8,
-  /* 换档的过渡帧（world.json 的 tweens，v14/tween/）播放速度（格/秒）。站 → 跪 4 格 × 1/10 秒 = 0.4 秒，
-     比 stageHold 短，播完之前不会再换档。往回换（跪 → 站）同一组倒着播。 */
-  tweenFps: 10,
+  /* 换档的过渡帧（world.json 的 tweens，v14/tween/）播放速度（格/秒）。每段 4~6 格（2026-09-30 用户「帧数还是太少，
+     动作很僵硬」从 3~4 格补上来），最长 6 格 × 1/14 秒 = 0.43 秒，比 stageHold 短，播完之前不会再换档。
+     每段时长仍在 0.3~0.43 秒：格多了是每格之间的动作差变小，不是动作变慢。往回换（跪 → 站）同一组倒着播。 */
+  tweenFps: 14,
   /* 被拉倒的三档各只有一张图（循环帧还没画），靠上下颠一下假装领先方在走。
      这是占位：等循环帧画出来就删掉。bobHz 是每秒几步，bobPx 是颠多高
      （落后方贴着地，只有领先方在迈步，所以颠得比站着走小）。 */
@@ -323,7 +324,7 @@ function startMatch() {
   S.clock = NUM.MATCH; S.phase = 'play';
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
-  stains.length = 0;
+  stains.length = 0; Scuff.reset();
   for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); for (const t of TIDE_OF.values()) t.reset(); Clash.reset(); Foam.reset();
   IntroVideo.stop();
   S.auto = false;
@@ -443,6 +444,7 @@ function derive(dt) {
     const wx = WORLD.center - S.pos * P.pxPerM;
     FX.camX = clamp(wx, MID, WORLD.total - MID);
     FX.pairX = MID + (wx - FX.camX);
+    Scuff.tick(dt, wx, FX.frame, FX.pose);
   }
   FX.struggle = 1 - Math.abs(bias) * 0.78;          // 僵持度：五五开时最高
 
@@ -1781,6 +1783,87 @@ function drawStains(ctx) {
 }
 const phonePos = () => [FX.phoneX, FX.phoneY];
 
+/* ---------- 拖痕：被拉倒的那个人在地板上蹭出来的印子 ----------
+   2026-09-30 用户：「发生位移的帧，为了还原拉着走的效果，需要在地上留下痕迹（被拉的人留下的），5s后消失」。
+   world.json 每张被拉倒档的贴图有 drag：输方贴着地的那几段（拖鞋底、膝盖、趴着的身子，v14/build.py ground_segs），
+   相对锚点；float：输方最低点在脚底线上方几像素。侧视角里画得高一点就是离镜头远一点，所以痕印在 脚底线 − float
+   这条线上（女生扑倒/趴那两张原图她整个人比男生的脚高 20~28），超过 maxFloat 的是腾空的帧，不印。两人在世界里挪动时，把这几段这一帧扫过的地方按**世界横坐标**记进一排格子（跟地板一起卷，
+   镜头走了印子留在原地），每格记最后一次被蹭的时刻；画的时候按离现在多久淡掉。
+   只记时刻不叠透明度：同一块地一秒被蹭六十次，叠起来会越蹭越黑，而真实的擦痕蹭一次和蹭十次差不多。
+   颜色是比地板浅的一道（木地板被鞋底、膝盖磨亮），外沿一道深一点的细线把它从米色地板里描出来
+   （明亮底图上的规矩：看得见靠轮廓，见 chashouji-fx）。每格按位置哈希出粗细和深浅，读成一道道擦痕而不是一条带子。 */
+const SCUFF = {
+  cell: 3,          // 地板按世界横坐标每几像素记一格
+  life: 5,          // 蹭上之后多少秒完全消失（用户定的 5 秒）
+  fade: 1.8,        // 最后几秒淡出（前 3.2 秒保持原样）
+  minV: 0.25,       // 拖动速度（米/秒）低于它不算在拖 —— 礼物停了两人原地僵着，不该还在往地上印
+  y: 3,             // 痕的中线在输方最低点往下几像素（痕在贴地那一点前面一点点，不被身子的轮廓线压住）
+  maxFloat: 40,     // 输方最低点离脚底线超过这么多算腾空（生图画成了飞扑），这一帧不印
+  lanes: [-5, 0, 5.5],   // 一格里画三道细线，各自在中线上下的偏移（像素）
+  lw: 4,            // 每道细线的粗细上限（像素）；2.2 在手机上缩到一个像素，几乎看不见（2026-09-30 截图）
+  a: 0.75,          // 最浓的一道的透明度
+  fill: [252, 236, 214],     // 擦亮的颜色：比地板浅的米白
+  edge: [96, 64, 40],        // 外沿细线：深木色
+  dustEvery: 0.09,  // 拖动时每隔几秒在输方最前面那段贴地处扬一小团灰
+};
+const Scuff = (() => {
+  let at = null, ys = null, clock = 0, prevWx = null, prevFrame = null, dustT = 0;
+  const hash = (i, k) => { const v = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v); };
+  function lay(x0, x1, y) {
+    const c = SCUFF.cell;
+    for (let i = Math.max(0, Math.floor(x0 / c)), e = Math.min(at.length - 1, Math.ceil(x1 / c)); i <= e; i++) { at[i] = clock; ys[i] = y; }
+  }
+  return {
+    reset() { if (at) at.fill(-1e9); prevWx = null; },
+    /* wx：两人（锚点）在世界里的横坐标；frame：这一帧的贴图名；pose：档名（'n' 僵持不印） */
+    tick(dt, wx, frame, pose) {
+      if (!at) { at = new Float32Array(Math.ceil(WORLD.total / SCUFF.cell) + 1); at.fill(-1e9); ys = new Float32Array(at.length); }
+      clock += dt;
+      const m = WORLD.poses[frame];
+      const moving = Math.abs(S.vel) >= SCUFF.minV && pose !== 'n' && m && m.drag && m.float <= SCUFF.maxFloat && prevWx !== null;
+      if (moving) {
+        /* 这一段这一帧扫过的是 [上一帧位置, 这一帧位置] 的并集。上一帧换了贴图的话段不一样，只印这一帧的 */
+        const pm = prevFrame === frame ? m : null;
+        for (const [s0, s1] of m.drag)
+          lay(Math.min(wx + s0, pm ? prevWx + s0 : wx + s0), Math.max(wx + s1, pm ? prevWx + s1 : wx + s1), -m.float);
+        /* 灰：扬在被拖那一方的最前沿（离赢方最远的那段贴地处的外头） */
+        if ((dustT += dt) >= SCUFF.dustEvery && m.drag.length) {
+          dustT = 0;
+          const away = pose[0] === 'a' ? 1 : -1;       // a 档男生输、在右边，被往左拖：灰扬在他身后（右边）
+          const seg = away > 0 ? m.drag[m.drag.length - 1] : m.drag[0];
+          const sx = FX.pairX + (away > 0 ? seg[1] : seg[0]) - Math.random() * 10 * away;
+          Particles.spawn({ kind: 'soft', x: sx, y: GROUND + FX.bob - m.float - 4, vx: away * (20 + Math.random() * 40), vy: -18 - Math.random() * 22,
+                            drag: 0.94, r: 6, r1: 16 + Math.random() * 10, life: 0.55, rgb: [214, 196, 170], a: 0.32 });
+        }
+      }
+      prevWx = wx; prevFrame = frame;
+    },
+    /* 画在背景层（地板上、人底下）；ox = 世界 x 到屏幕 x 的偏移 */
+    draw(ctx, ox) {
+      if (!at) return;
+      const c = SCUFF.cell;
+      const i0 = Math.max(0, Math.floor(-ox / c)), i1 = Math.min(at.length - 1, Math.ceil((W - ox) / c));
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.fillStyle = `rgb(${(pass ? SCUFF.fill : SCUFF.edge).join(',')})`;
+        for (let i = i0; i <= i1; i++) {
+          const age = clock - at[i];
+          if (age >= SCUFF.life) continue;
+          const k = Math.min(1, (SCUFF.life - age) / SCUFF.fade), y0 = GROUND + SCUFF.y + ys[i];
+          SCUFF.lanes.forEach((ly, l) => {
+            const h = hash(i >> 2, l);                  // 四格（12 像素）一段同粗同浓，读成连贯的一道
+            if (h < 0.18) return;                        // 这一道在这里断开
+            const lw = SCUFF.lw * (0.45 + 0.55 * h);
+            ctx.globalAlpha = SCUFF.a * k * (0.5 + 0.5 * hash(i >> 3, l + 7)) * (pass ? 1 : 0.6);
+            if (pass) ctx.fillRect(ox + i * c, y0 + ly - lw / 2, c + 0.5, lw);
+            else ctx.fillRect(ox + i * c, y0 + ly - lw / 2 - 1.2, c + 0.5, lw + 2.4);   // 先铺深色外沿，比亮线宽一圈
+          });
+        }
+      }
+      ctx.globalAlpha = 1;
+    },
+  };
+})();
+
 /* ---------- 角色：姿势贴图 ---------- */
 /* 每张贴图按 world.json 里的锚点贴：锚点 (ax, ay) 对到屏幕上的 (pairX, GROUND)。
    不做相邻帧的交叉淡化：两张画的是不同姿态，叠在一起是两副骨架互相穿透的
@@ -2554,6 +2637,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* 背景里会动的东西（bgmotion.js）：档 3/4 帮手在场时让位 */
     BgMotion.draw(bctx, Math.round(-(FX.camX - MID)), W, H, BuddyTrio.active() || BestieTrio.active() || G4L.active() || G4R.active());
     drawGoalFloor(bctx);
+    Scuff.draw(bctx, Math.round(-(FX.camX - MID)));   // 拖痕在地板上、人底下
   }
 
   /* 档 4 真相女神的出场（GIFT.truth）：档 4 要一眼读出"比闺蜜贵一档"，光靠她比闺蜜大一点读不出来。
