@@ -1,0 +1,6 @@
+组 3: errors []  帧：格12 B5:taunt B24:idle B16:victory G30:throw G6:idle G20:idle
+组 4: errors []  帧：格12 B2:aim4 B20:follow B28:follow G26:idle G7:idle G16:idle
+组 5: errors []  帧：格12 B1:aim0 B23:follow B14:idle G25:idle G8:idle G18:idle
+组 6: errors []  帧：格12 B21:idle B11:idle B9:idle G28:jump3 G9:idle G19:idle
+组 8: errors []  帧：格12 B26:idle B8:idle B15:follow G2:aim4 G29:idle G13:idle
+组 9: errors []  帧：格12 B10:idle B17:idle B29:follow G22:idle G10:follow G14:follow
