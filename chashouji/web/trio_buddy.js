@@ -76,7 +76,7 @@ const TRIO_BUDDY = {
     B21: {      // 樱木（红发篮球少年）：右下角腾空扑地 → 砸地 → 贴地滑进来，趴着甩 3D 篮球，砸中弹开
       face: -1,
       sheet: { src: 'assets/trio/B21_sakura.webp', cell: [555, 208], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'dive', 'flop', 'slide', 'idle2'] },
-      anchor: [300.1, 199.2], at: [712, 1328, 0.95], pivot: [300, 199],   // 整个人在画面里：脚尖到 x 955、手到 428、最低点（follow 帧第 205 行）1333.6（旧立绘 812 × 1.05 脚伸出右沿 ~100px，脚翘看不见）
+      anchor: [300.1, 199.2], at: [712, 1308, 0.95], pivot: [300, 199],   // 整个人在画面里：脚尖到 x 955、手到 428、最低点（follow 帧第 205 行）1333.6（旧立绘 812 × 1.05 脚伸出右沿 ~100px，脚翘看不见）
       leanK: 0,   // 趴着的人不整体前后倾：绕肚皮转会把贴地的腿翘起来，读成一张图在转；蓄力 / 出手全靠帧
       depth: 1.3, recipe: 'thud',
       enter: { kind: 'dive', seq: [['dive', 0.3], ['flop', 0.1, 'land'], ['slide', 9]], h: 150, air: 0.3, sq: 0.12 },
@@ -94,7 +94,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B27_chef.webp', cell: [420, 281], cols: 4, names: ['idle', 'wind1', 'throw', 'follow', 'slide', 'skid', 'wind', 'idle2'] },
       /* 锚点 = 两脚中间的地面。整个人在 x 543~957；最低点（throw / wind 帧第 277 行）屏幕 y 1333.5。
          剪影面积 2.97 万（樱木 2.65 万 +12%，同槽位 ±15% 以内） */
-      anchor: [210.2, 268.5], at: [750, 1325, 1], pivot: [210, 268],
+      anchor: [210.2, 268.5], at: [750, 1305, 1], pivot: [210, 268],
       leanK: 0,     // 弓步两脚都踩着地，不能整体前后倾：绕两脚中间转 0.045 rad，前脚（离转轴 160px）就翘起 5.6px（drift.py 实测）
       depth: 1.3, recipe: 'splash',
       enter: { kind: 'slide', seq: [['slide', 0.5], ['skid', 0.15, 'land'], ['idle', 9]], sq: 0.1 },   // 张开双臂贴地滑 → 手拍地刹住（压扁）→ 待机
@@ -115,7 +115,7 @@ const TRIO_BUDDY = {
     B5: {       // 截拳道：从右边画外晃着双节棍走进来，站定摆格斗架；连打——双节棍左右抡，一串棍影砸到她身上，"啊哒"
       face: -1,
       sheet: { src: 'assets/trio/B5_jkd.webp', cell: [494, 482], cols: 4, names: ['idle', 'wind', 'hitA', 'hitB', 'walk1', 'walk4', 'walk3', 'walk2', 'taunt', 'idle2'] },
-      anchor: [260.7, 478.1], at: [740, 1070, 0.83], pivot: [260, 478], leanK: 0,   // 站在男生身后右边、比主角小一圈（同 crew.js 后排的透视）
+      anchor: [260.7, 478.1], at: [740, 1030, 0.83], pivot: [260, 478], leanK: 0,   // 站在男生身后右边、比主角小一圈（同 crew.js 后排的透视）
       /* 原 [800, 1158, 0.85]：同组 B24 坐在右下角，头顶和举起的磁带到 y 1038，比 B5 的脚底还高，横着挪到 x 650 也分不开（剪影重叠 ≥ 600px）。
          改成往左 60、往后排退 88（脚底 1070，仍在地板上），缩一点点：B5 在场五帧（含复审重出的宽马步 taunt）× B24 在场六帧 + 手里的磁带，剪影外扩 4px 逐对相交为 0 */
       depth: 0.8, recipe: 'thud',
@@ -170,7 +170,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B30_smart.webp', cell: [287, 345], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'kneeslide', 'arrive', 'stop', 'idle2'] },
       /* 锚点 = 两膝和靴尖之间的地面；在场帧最低点屏幕 y 1333.3。名单里的发胶喷雾引擎还没有 spray，这一版只有飞梳子 */
-      anchor: [147.3, 338.7], at: [835, 1330, 1], pivot: [147, 338],
+      anchor: [147.3, 338.7], at: [835, 1330, 0.92], pivot: [147, 338],
       leanK: 0,   // 跪在地上：整体前后倾会把膝盖翘起来
       depth: 1.3, recipe: 'star',
       enter: { kind: 'slide', seq: [['kneeslide', 0.4], ['arrive', 0.2], ['stop', 9, 'land']], sq: 0.1 },
@@ -186,7 +186,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B22_goku.webp', cell: [262, 328], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'dash', 'skid', 'guard', 'idle2'] },
       /* 锚点 = 前脚和跪地膝之间的地面；在场帧最低点屏幕 y 1332.9。剪影面积 2.90 万 */
-      anchor: [138.1, 291.2], at: [835, 1330, 1], pivot: [138, 291],
+      anchor: [138.1, 291.2], at: [835, 1310, 1], pivot: [138, 291],
       leanK: 0,   // 半跪两点着地：整体前后倾会把前脚翘起来
       depth: 1.3, recipe: 'water',
       enter: { kind: 'dash', seq: [['dash', 0.45], ['skid', 0.15, 'land'], ['guard', 9]], sq: 0.1 },
@@ -203,7 +203,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B11_mask.webp', cell: [215, 301], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'crawl1', 'crawl2', 'arrive', 'idle2'] },
       /* 锚点 = 贴墙的那只鞋（右屏边）；剪影面积 2.31 万（格格 2.09 万 +10%） */
-      anchor: [203.9, 167.8], at: [952, 620, 1], pivot: [204, 168],
+      anchor: [203.9, 167.8], at: [952, 580, 1], pivot: [204, 168],
       leanK: 0.4,   // 挂在墙上的人前后倾打折：转轴就是贴墙那一点，幅度大了手脚离墙
       depth: 0.5, recipe: 'petal',
       enter: { kind: 'crawl', seq: [['crawl1', 0.15], ['crawl2', 0.15], ['crawl1', 0.15], ['crawl2', 0.15], ['arrive', 9]] },   // 一步一耸爬进来（crawl 的耸动 5 个半周期，换帧跟着它）→ 压帽檐到位
@@ -255,12 +255,13 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B6_shanghai.webp', cell: [394, 521], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'stop', 'idle2'] },
       /* 后排地面：站在男生身后右边。原想用 B5 的 [740, 1070]，同组 B27 蹲滑的头和锅铲会碰上（外扩 4px 相交 851px），退到 1040 后在场四帧 × B27 在场五帧相交 0 */
-      anchor: [152.8, 506.2], at: [740, 1040, 0.83], pivot: [153, 506], leanK: 0,
+      anchor: [152.8, 506.2], at: [820, 980, 0.81], pivot: [153, 506], leanK: 0,
       depth: 0.8, recipe: 'star',
       /* 慢步走：两腿都是黑西裤，生图两次、改图一次都没把接地腿换过来（颜色一样也看不出换没换），四张取同一张生图里的四格。
          钉脚：buddy/walkfix.py 按"继续着地那只脚"把四帧横向对齐（-25 / +6 / -24 / 0 → 以 walk1 为 0），stride = 一个循环四次换帧鞋位差之和 / 2。
-         dist 必须是步长（stride / 2 × s）的整数倍：引擎每步走 dist / 步数，默认距离 357 / 5 步 = 71.4 ≠ 78.2，换帧时脚滑 6.8px（胶片实测 +6.9 / +7.7） */
-      enter: { kind: 'walk', fps: 5, bob: 4, stride: 188.5, dist: 391.2, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
+         dist 必须是步长（stride / 2 × s）的整数倍：引擎每步走 dist / 步数，默认距离 357 / 5 步 = 71.4 ≠ 78.2，换帧时脚滑 6.8px（胶片实测 +6.9 / +7.7）。
+         最终站位 s 0.81：5 步 × 76.34 = 381.71 */
+      enter: { kind: 'walk', fps: 5, bob: 4, stride: 188.5, dist: 381.71, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
       exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 7, flip: true, T: 0.8 },
       idle: { frame: 'idle', breathe: [0.012, 0.8] },
       flex: { idle: [[253, 215, 330, 323, 'l', 5, 1.0]] },   // 围巾尾：靠身子那头钉住、梢往后飘
@@ -274,7 +275,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B7_f4.webp', cell: [332, 461], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'swerve', 'brake', 'idle2'] },
       /* 后排地面；平衡车画在帧里，锚点 = 车底中点。[740, 1040]：同组 B25 在场四帧相交 0（1070 时 234px） */
-      anchor: [168.8, 453.1], at: [740, 1040, 0.83], pivot: [169, 453], leanK: 0,
+      anchor: [168.8, 453.1], at: [820, 1040, 0.83], pivot: [169, 453], leanK: 0,
       depth: 0.8, recipe: 'feather',
       enter: { kind: 'ride', T: 1.0, tilt: 0.1, seq: [['cruise', 0.4], ['swerve', 0.3], ['brake', 9, 'land']], sq: 0.08 },   // 插兜滑行 → 甩头发拐弯 → 急刹后仰
       exit: { frame: 'cruise', flip: true },
@@ -290,7 +291,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B9_rider.webp', cell: [438, 504], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'drift', 'brake', 'idle2'] },
       /* 后排地面；电驴画在帧里（两张条都按车身 + 后轮配准、scale_by fixed），锚点 = 两轮着地中点 */
-      anchor: [197.4, 489.6], at: [625, 1062, 0.83], pivot: [197, 490], leanK: 0,
+      anchor: [197.4, 489.6], at: [785, 1022, 0.8], pivot: [197, 490], leanK: 0,
       depth: 0.8, recipe: 'splash',
       enter: { kind: 'ride', T: 1.0, tilt: 0.15, seq: [['cruise', 0.4], ['drift', 0.3], ['brake', 9, 'land']], sq: 0.08 },   // 伏低飞驰 → 漂移甩尾、一脚点地 → 急刹两脚落地
       exit: { frame: 'cruise', flip: true },
@@ -305,11 +306,11 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B8_logger.webp', cell: [463, 479], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'skid', 'idle2'] },
       /* 后排地面。[740, 1040]：同组 B26 在场四帧相交 0（1070 时 542px）。格子 463 宽是急刹那格两臂张开撑出来的，人本身 ~250 */
-      anchor: [265.3, 466.8], at: [740, 1040, 0.83], pivot: [265, 467], leanK: 0,
+      anchor: [265.3, 466.8], at: [800, 1020, 0.8], pivot: [265, 467], leanK: 0,
       depth: 0.8, recipe: 'debris',
       /* 倒退跑：身子朝右（看着追来的熊）、腿往左倒着蹬；最后一步换成急刹回头（skid 落地压一下）。
-         跑：过渡帧腾空，没有哪只脚跨着换帧一直着地，不做钉脚平移（硬对齐要来回平移 ±97px，人一抽一抽）；stride = walk1 两只靴前沿横距（规范第九节 G6 跑步的取法） */
-      enter: { kind: 'walk', fps: 12, bob: 10, stride: 188, dist: 624.2, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.5], ['skid', 9, 'land']], sq: 0.08 },
+         跑：过渡帧腾空，没有哪只脚跨着换帧一直着地，不做钉脚平移（硬对齐要来回平移 ±97px，人一抽一抽）；stride = walk1 两只靴前沿横距（规范第九节 G6 跑步的取法）；最终站位 s 0.8：8 步 × 75.2 = 601.6 */
+      enter: { kind: 'walk', fps: 12, bob: 10, stride: 188, dist: 601.6, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.5], ['skid', 9, 'land']], sq: 0.08 },
       exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 12, flip: true, T: 0.6 },
       idle: { frame: 'idle', breathe: [0.014, 1.1] },
       /* 3D 松果（500273c 返工：上尖下圆 + 人字齿鳞片），r / cell / scale 照 docs/待办.md 的返工交接。
@@ -324,12 +325,12 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B10_mahjong.webp', cell: [473, 425], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'plop', 'idle2'] },
       /* 后排地面，锚点 = 两只人字拖中间的地面。坐在马扎上待机、出手（条 1 按马扎配准）。[740, 1020]：同组 B29 在场各帧外扩 4px 相交 0（1040 时 wind 371 px） */
-      anchor: [277.0, 419.4], at: [740, 1020, 0.83], pivot: [277, 419], leanK: 0,
+      anchor: [277.0, 419.4], at: [860, 1000, 0.8], pivot: [277, 419], leanK: 0,
       depth: 0.8, recipe: 'thud',
       /* 走进来：四帧同一张底图（walk1 / walk2 生图，walk3 / walk4 蒙版重绘腿和手臂），马扎四帧都在近侧手：后 → 胯边 → 前 → 胯边。
-         stride 159.5（walkfix pivot，蓝人字拖；walk1 / walk3 鞋尖距 158 / 161），5 步 × 66.19 = 330.96；第 5 步换成一屁股坐下（plop），
+         stride 159.5（walkfix pivot，蓝人字拖；walk1 / walk3 鞋尖距 158 / 161），5 步 × 63.8 = 319（最终站位 s 0.8）；第 5 步换成一屁股坐下（plop），
          plop 在图集里已经往前挪了一步（cellshift −80），坐下那一刻马扎就落在站位上，换待机不跳 */
-      enter: { kind: 'walk', fps: 6, bob: 6, stride: 159.5, dist: 330.96, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.66667], ['plop', 9, 'land']], sq: 0.12 },
+      enter: { kind: 'walk', fps: 6, bob: 6, stride: 159.5, dist: 319, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.66667], ['plop', 9, 'land']], sq: 0.12 },
       exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 7, flip: true, T: 0.8 },
       idle: { frame: 'idle', breathe: [0.016, 0.8] },
       /* wind 帧捏着牌的拳头举过头顶（拳顶 y 3，头顶 y 62），两张一起离手 */
@@ -343,7 +344,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B13_sword.webp', cell: [257, 333], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'swoop', 'brake', 'settle', 'idle2', 'sword'] },
       /* 上方；锚点 = 两脚鞋底中点（踩在剑上）。剪影面积 2.12 万（上方槽位对格格 2.09 万）。画布宽 960：人最右伸出锚点 98 px；
          [850, 680]：同组 B7 在场帧外扩 4px 相交 0（730 时 throw 前伸的手压到 B7 头 556 px） */
-      anchor: [155.2, 317.3], at: [850, 680, 1], pivot: [155, 317], leanK: 0.3,
+      anchor: [155.2, 317.3], at: [830, 560, 1], pivot: [155, 317], leanK: 0.3,
       depth: 0.5, recipe: 'thud',
       /* 脚下的剑是挂件层（raw/sword_plain.png，part.py w 240），画在人后、鞋底压在剑身上；每帧按两只鞋底连线摆（角度 = 连线斜率） */
       parts: [{ src: 'assets/trio/B13_sword_ride.webp', pivot: [120, 10], z: -1, sway: [0.02, 0.7, 0],
@@ -365,7 +366,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B14_miner.webp', cell: [240, 286], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'dig', 'step', 'land', 'idle2'] },
       /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 2.52 万，s 0.91 → 2.09 万（上方对格格）。画布宽 960：最右伸出锚点 97 px，x 855 */
-      anchor: [130.9, 275.0], at: [855, 740, 0.91], pivot: [131, 275], leanK: 0.2,
+      anchor: [130.9, 275.0], at: [855, 640, 0.91], pivot: [131, 275], leanK: 0.2,
       depth: 0.5, recipe: 'debris',
       /* 挖墙钻出：从方块墙上沿（cut 279 = 靴底那一行）后面升上来 + 灰土烟；升的时候是挖墙的一拳（dig），升到位跨出来（step）、落地（land） */
       enter: { kind: 'appear', rise: 200, cut: 279, fx: 'smoke', color: [150, 125, 95], T: 0.8, seq: [['dig', 0.35], ['step', 0.25], ['land', 0.15, 'land'], ['idle', 9]], sq: 0.08 },
@@ -384,7 +385,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B15_gojo.webp', cell: [235, 319], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'fold', 'reveal', 'settle', 'idle2'] },
       /* 上方；悬浮，锚点 = 盘着的腿最低处。剪影面积 2.20 万（上方对格格 2.09 万）。[880, 730]：同组 B8 在场帧外扩 4px 相交 0 */
-      anchor: [137.3, 318.9], at: [880, 730, 1], pivot: [137, 319], leanK: 0.2,
+      anchor: [137.3, 318.9], at: [880, 710, 1], pivot: [137, 319], leanK: 0.2,
       depth: 0.5, recipe: 'bloom',
       /* 凭空浮现：紫白闪光里淡入（抱臂低头）→ 抬头张开双手 → 手插兜落定 */
       enter: { kind: 'appear', fx: 'flash', color: [200, 160, 255], fade: 0.3, T: 0.8, seq: [['fold', 0.35], ['reveal', 0.3], ['settle', 0.15, 'land'], ['idle', 9]], sq: 0.05 },
@@ -422,7 +423,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B17_wolf.webp', cell: [232, 324], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'plunge', 'bounce', 'settle', 'idle2'] },
       /* 上方；倒挂，锚点 = 两只脚踝（绳子拴的那一点）。剪影面积 s 1 时 1.72 万，s 1.05 → 1.89 万（上方对格格 −10%）。
          [830, 370]：同组 B10 收势双手举过头顶，y 470 时相交 5223 px；370 时在场帧外扩 4px 相交 0。画布宽 960：人最右伸出锚点 119 px */
-      anchor: [116.3, 6.5], at: [830, 370, 1.05], pivot: [116, -660], leanK: 0,
+      anchor: [116.3, 6.5], at: [830, 290, 1.05], pivot: [116, -660], leanK: 0,
       depth: 0.5, recipe: 'thud',
       /* 倒挂垂下：顺着绳从上面掉下来（伸直俯冲）→ 冲过头弹回（张开手脚）→ 稳住；绳子引擎画，拴在脚踝 line */
       enter: { kind: 'drop', len: 700, line: [116, 6], T: 0.8, w: 3, fill: '#8a6a44', edge: 'rgba(60,40,20,.9)',
@@ -441,7 +442,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B19_ultra.webp', cell: [225, 318], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'transform', 'land', 'rise', 'idle2'] },
       /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 1.85 万，s 1.06 → 2.08 万（上方对格格）。
          [850, 700]：同组 B3（820, 1040）在场帧（含 aim0~10）、B30 外扩 4px 相交 0；720 时 follow 举拳 × B3 wind 相交 398 px。画布宽 960：最右伸出锚点 93 px */
-      anchor: [99.1, 311.8], at: [850, 700, 1.06], pivot: [99, 312], leanK: 0.2,
+      anchor: [99.1, 311.8], at: [830, 700, 1.06], pivot: [99, 312], leanK: 0.2,
       depth: 0.5, recipe: 'water',
       /* 变身闪光：白光里淡入（冲天拳）→ 落地一蹲 → 起身 */
       enter: { kind: 'appear', fx: 'flash', color: [230, 240, 255], fade: 0.3, T: 0.9, seq: [['transform', 0.35], ['land', 0.25, 'land'], ['rise', 0.2], ['idle', 9]], sq: 0.08 },
@@ -459,7 +460,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B20_monk.webp', cell: [259, 316], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'drift', 'wobble', 'settle', 'idle2'] },
       /* 上方；酒坛画在帧里（两张条都按酒坛配准），锚点 = 坛底中点。剪影面积 s 1 时 3.24 万（含酒坛），s 0.8 → 2.07 万（上方对格格）。
          [860, 680]：同组 B2（820, 1040，含 aim 帧）、B28 在场帧外扩 4px 相交 0（700 时 settle × B2 wind 36 px）。画布宽 960：最右伸出锚点 83 px */
-      anchor: [120.6, 310.9], at: [860, 680, 0.8], pivot: [121, 311], leanK: 0.2,
+      anchor: [120.6, 310.9], at: [860, 660, 0.8], pivot: [121, 311], leanK: 0.2,
       depth: 0.5, recipe: 'splash',
       /* 坐酒坛飘下来：从右上斜着飘（坛前倾、两腿翘起）→ 坛往后一晃抓住坛盖 → 坐稳 */
       enter: { kind: 'fly', from: [380, -420], T: 0.9, air: 0.9, tilt: 0.1, seq: [['drift', 0.4], ['wobble', 0.3], ['settle', 0.2, 'land'], ['idle', 9]], sq: 0.06 },
@@ -476,7 +477,7 @@ const TRIO_BUDDY = {
       /* 锚点 = 撑在墙头上的那只手 = 墙头那一行。上方槽位：剪影面积 3.94 万 × 0.72² = 2.04 万（格格 2.09 万 −2%）。
          [890, 630]：和别的上方角色（B11 y 620）同一高度，把 y 400 一带留给叠第二组时的上方备用位（SLOT2 = 往上 210）；原来放 y 520 正好占了它。
          背后的扇子右沿到 x 958 不出画；和同组 B6 在场四帧 × B18 在场六帧剪影外扩 4px 相交 0 */
-      anchor: [194.8, 211.6], at: [890, 630, 0.72], pivot: [195, 212], leanK: 0.3,
+      anchor: [194.8, 211.6], at: [890, 570, 0.72], pivot: [195, 212], leanK: 0.3,
       depth: 0.5, recipe: 'feather',
       /* 从墙头那一行后面升上来（线以下剪掉），蹿上来 → 落座（压一下）→ 坐定；淡入 0.35 秒内是 leap，之后换 land */
       enter: { kind: 'appear', rise: 220, cut: 212, T: 0.8, seq: [['leap', 0.4], ['land', 0.2, 'land'], ['idle', 9]], sq: 0.08 },
@@ -497,7 +498,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B28_pig.webp', cell: [256, 268], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'plop', 'idle2'] },
       /* 地板前排，锚点 = 屁股着地那一点。剪影面积 2.71 万（樱木 +2%）；各帧剪影最低一行屏幕 y 最大 1325 */
-      anchor: [113.3, 265.0], at: [830, 1325, 1], pivot: [113, 265], leanK: 0,
+      anchor: [113.3, 265.0], at: [810, 1325, 1], pivot: [113, 265], leanK: 0,
       depth: 1.3, recipe: 'melon',
       /* 蹲着挪：步子小、慢（fps 5）；最后一步换成一屁股坐下（plop 落地压扁），坐定 = idle。钉脚：walkfix.py 横向对齐（平移 -3 / 0 / -4 / 0），stride = 四次换帧鞋位差之和 / 2。
          两条腿都是黑灯笼裤白袜，接地帧换没换腿看不出，四张取同一张生图里的四格 */
