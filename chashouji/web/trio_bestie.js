@@ -70,7 +70,6 @@ const TRIO_BESTIE = {
              hold: { idle: [116, 157], wind0: [42, 77], wind: [36, 123], throw: [285, 77] },
              T: 0.45, arc: 0.18, spin: 16, idleSpin: 0.8, stretch: 0.03, gap: [1.0, 1.4], onHit: 'wear' },
     },
-
     G22: {      // 麻花辫探险家（劳拉式）：左下角匍匐爬进来（左右肘交替）趴定，举相机拍照取证，闪光晃他的眼，照片飞出来
       face: +1,
       sheet: { src: 'assets/trio/G22_explorer.webp', cell: [467, 185], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'crawl1', 'crawl2', 'land', 'idle2'] },
@@ -105,17 +104,12 @@ const TRIO_BESTIE = {
              hold: { wind: [127, 34], throw: [421, 59] },
              T: 0.5, arc: 0.2, spin: 12, stretch: 0, gap: [1.0, 1.4], onHit: 'bounce' },
     },
-
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
       depth: 0.5, enter: 'swing', recipe: 'rouge', ropes: { ...ROPE, x: [100, 190], fill: '#a7864f' },
       swing: { a0: 1.3, a: 0.12, tau: 0.5, w: 2.4 },
       atk: { kind: 'throw', item: 'heart', n: 2, color: [255, 70, 130], T: 0.55, arc: 0.1, spin: 0, onHit: 'lips' },
-    },    G22: {      // 探险家：从左下角匍匐爬进来，举相机拍照取证，闪光晃他的眼，照片飞出来
-      face: +1, src: 'assets/world/trio_explorer.webp', at: [150, 1345, 1.05], anchor: [215, 208], pivot: [330, 200], hand: [415, 48],
-      depth: 1.3, enter: 'creep', recipe: 'star',
-      atk: { kind: 'camera', wind: 0.18, gap: [0.75, 1.1] },
     },
   },
 
