@@ -1,0 +1,62 @@
+== B5B19B26
+B5（头框 3276 px 量级）: 1:hitB=49 2:taunt=34 3:taunt=19 4:taunt=52 5:taunt=45 6:idle=36 7:idle=67 8:idle=36 9:idle=12 10:idle=38 11:idle=16 12:idle=19  → 头框最差 67/3253 px（2.1%，帧 idle）
+B19（头框 1575 px 量级）: 1:wind=11 2:throw=0 3:throw=9 4:throw=13 5:throw=1 6:throw=11 7:follow=21 8:follow=0 9:idle=5 10:idle=12 11:idle=1 12:idle=4  → 头框最差 21/1712 px（1.2%，帧 follow）
+== B6B14B23
+B6（头框 1746 px 量级）: 1:follow=52 2:follow=27 3:idle=42 4:idle=14 5:idle=10 6:idle=52 7:idle=7 8:idle=52 9:wind=76 10:wind=0 11:follow=28 12:follow=0  → 头框最差 76/1747 px（4.4%，帧 wind）
+B14（头框 3345 px 量级）: 1:wind=148 2:wind=147 3:throw=117 4:follow=44 5:follow=0 6:follow=4 7:idle=24 8:idle=2 9:idle=123 10:idle=7 11:idle=11 12:idle=64  → 头框最差 148/3345 px（4.4%，帧 wind）
+== B7B19B25
+B7（头框 1940 px 量级）: 1:follow=8 2:follow=19 3:idle=19 4:idle=6 5:idle=6 6:idle=7 7:idle=0 8:wind=34 9:wind=50 10:throw=20 11:follow=10 12:follow=15  → 头框最差 50/1990 px（2.5%，帧 wind）
+B19（头框 1575 px 量级）: 1:wind=13 2:throw=34 3:throw=31 4:throw=0 5:throw=7 6:throw=0 7:follow=5 8:follow=14 9:idle=23 10:idle=5 11:idle=1 12:idle=3  → 头框最差 34/1717 px（2.0%，帧 throw）
+== B8B12B30
+B8（头框 1698 px 量级）: 1:follow=32 2:follow=1 3:idle=66 4:idle=0 5:idle=38 6:idle=36 7:idle=36 8:idle=95 9:wind=29 10:wind=10 11:wind=77 12:throw=6  → 头框最差 95/2612 px（3.6%，帧 idle）
+B12（头框 4839 px 量级）: 1:idle=35 2:idle=53 3:idle=96 4:idle=17 5:idle=31 6:idle=55 7:wind=24 8:wind=218 9:idle=98 10:idle=16 11:idle=14 12:idle=32  → 头框最差 218/4839 px（4.5%，帧 wind）
+== B8B16B29
+B8（头框 2612 px 量级）: 1:idle=74 2:idle=9 3:idle=11 4:idle=65 5:wind=1 6:wind=30 7:throw=37 8:follow=57 9:follow=37 10:follow=3 11:follow=32 12:idle=0  → 头框最差 57/1698 px（3.4%，帧 follow）
+B16（头框 1703 px 量级）: 1:hitB=4 2:hitB=3 3:hitA=19 4:victory=4 5:victory=0 6:victory=43 7:idle=27 8:idle=5 9:idle=2 10:idle=44 11:idle=1 12:idle=44  → 头框最差 44/1728 px（2.5%，帧 idle）
+== B9B11B22
+B9（头框 3554 px 量级）: 1:follow=0 2:follow=21 3:idle=30 4:idle=6 5:idle=4 6:idle=0 7:idle=4 8:idle=79 9:wind=7 10:wind=0 11:throw=48 12:follow=12  → 头框最差 79/3356 px（2.4%，帧 idle）
+B11（头框 2280 px 量级）: 1:throw=1 2:follow=4 3:follow=2 4:idle=3 5:idle=32 6:idle=0 7:idle=27 8:wind=21 9:wind=44 10:follow=18 11:follow=434 12:idle=50  → 头框最差 434/2141 px（20.3%，帧 follow）
+== B9B15B30
+B9（头框 3307 px 量级）: 1:wind=35 2:wind=13 3:throw=114 4:throw=0 5:follow=28 6:follow=21 7:follow=49 8:idle=26 9:idle=9 10:idle=34 11:idle=34 12:idle=19  → 头框最差 114/3634 px（3.1%，帧 throw）
+B15（头框 1932 px 量级）: 1:throw=7 2:follow=3 3:follow=28 4:follow=1 5:follow=79 6:idle=28 7:idle=17 8:idle=31 9:idle=36 10:idle=3 11:idle=1 12:wind=35  → 头框最差 79/2042 px（3.9%，帧 follow）
+== B9B16B21
+B9（头框 3554 px 量级）: 1:follow=1 2:follow=9 3:idle=25 4:idle=64 5:idle=104 6:idle=44 7:idle=6 8:idle=54 9:idle=15 10:wind=35 11:wind=3 12:throw=59  → 头框最差 104/3356 px（3.1%，帧 idle）
+B16（头框 1703 px 量级）: 1:hitB=1 2:hitB=46 3:hitA=64 4:victory=65 5:victory=41 6:victory=0 7:victory=7 8:idle=1 9:idle=0 10:idle=1 11:idle=28 12:idle=27  → 头框最差 65/1747 px（3.7%，帧 victory）
+== B9B18B24
+B9（头框 3554 px 量级）: 1:follow=2 2:follow=71 3:follow=10 4:idle=53 5:idle=1 6:idle=16 7:idle=0 8:idle=39 9:idle=41 10:idle=62 11:wind=4 12:wind=9  → 头框最差 71/3554 px（2.0%，帧 follow）
+B18（头框 1062 px 量级）: 1:follow=0 2:idle=28 3:idle=36 4:idle=0 5:idle=22 6:idle=29 7:idle=6 8:idle=36 9:idle=7 10:raise=20 11:wind=196 12:wind=188  → 头框最差 196/1548 px（12.7%，帧 wind）
+== B9B19B25
+B9（头框 3554 px 量级）: 1:follow=16 2:follow=0 3:follow=35 4:idle=25 5:idle=22 6:idle=10 7:idle=1 8:idle=49 9:wind=34 10:wind=3 11:throw=14 12:follow=21  → 头框最差 49/3356 px（1.5%，帧 idle）
+B19（头框 1717 px 量级）: 1:throw=0 2:throw=1 3:throw=13 4:throw=0 5:throw=2 6:follow=4 7:follow=0 8:follow=0 9:idle=11 10:idle=3 11:idle=0 12:idle=7  → 头框最差 13/1717 px（0.8%，帧 throw）
+== G10G16G24
+G10（头框 1303 px 量级）: 1:throw=5 2:follow=40 3:follow=2 4:idle=1 5:idle=48 6:idle=34 7:idle=47 8:idle=8 9:idle=34 10:idle=35 11:idle=40 12:idle=39  → 头框最差 48/1992 px（2.4%，帧 idle）
+G16（头框 1666 px 量级）: 1:wind=64 2:throw=3 3:follow=9 4:follow=52 5:follow=88 6:idle=52 7:idle=103 8:idle=118 9:idle=39 10:idle=75 11:idle=60 12:idle=53  → 头框最差 118/1990 px（5.9%，帧 idle）
+== G4G11G29
+G4（头框 2598 px 量级）: 1:hitA=81 2:hitB=58 3:hitA=93 4:hitB=4 5:follow=107 6:follow=89 7:follow=41 8:idle=79 9:idle=113 10:idle=109 11:idle=122 12:idle=144  → 头框最差 144/2567 px（5.6%，帧 idle）
+G11（头框 3738 px 量级）: 1:idle=1577 2:idle=1842 3:idle=1838 4:idle=1622 5:idle=1584 6:idle=1683 7:idle=1835 8:idle=1874 9:idle=89 10:idle=1394 11:idle=1451 12:idle=1377  → 头框最差 1874/3738 px（50.1%，帧 idle）
+== G5G14G26
+G5（头框 2541 px 量级）: 1:wind=496 2:wind=445 3:wind=397 4:throw=78 5:follow=16 6:follow=51 7:idle=53 8:idle=46 9:idle=16 10:idle=22 11:idle=15 12:idle=22  → 头框最差 496/2541 px（19.5%，帧 wind）
+G14（头框 696 px 量级）: 1:follow=0 2:idle=0 3:idle=0 4:idle=4 5:idle=5 6:idle=0 7:idle=0 8:idle=5 9:wind=2 10:wind=2 11:wind=5 12:throw=2  → 头框最差 5/774 px（0.6%，帧 idle）
+== G5G16G25
+G5（头框 2103 px 量级）: 1:follow=0 2:idle=43 3:idle=30 4:idle=21 5:idle=56 6:idle=10 7:idle=34 8:idle=36 9:idle=57 10:idle=51 11:idle=20 12:idle=13  → 头框最差 57/2161 px（2.6%，帧 idle）
+G16（头框 2053 px 量级）: 1:follow=6 2:idle=87 3:idle=28 4:idle=27 5:idle=65 6:idle=74 7:idle=14 8:idle=88 9:idle=83 10:idle=34 11:wind=55 12:wind=57  → 头框最差 88/1990 px（4.4%，帧 idle）
+== G5G20G23
+G5（头框 2541 px 量级）: 1:wind=343 2:throw=57 3:follow=84 4:follow=37 5:follow=13 6:idle=18 7:idle=5 8:idle=56 9:idle=65 10:idle=10 11:idle=14 12:idle=37  → 头框最差 343/2541 px（13.5%，帧 wind）
+G20（头框 1894 px 量级）: 1:idle=28 2:idle=10 3:idle=3 4:idle=0 5:idle=1 6:idle=8 7:idle=0 8:idle=1 9:idle=0 10:wind=11 11:wind=8 12:throw=6  → 头框最差 28/1894 px（1.5%，帧 idle）
+== G6G13G27
+G6（头框 3712 px 量级）: 1:idle=3 2:idle=0 3:idle=13 4:idle=82 5:idle=26 6:idle=76 7:wind=195 8:wind=175 9:throw=11 10:follow=61 11:follow=40 12:idle=31  → 头框最差 195/4125 px（4.7%，帧 wind）
+G13（头框 624 px 量级）: 1:wind=22 2:throw=40 3:throw=27 4:throw=37 5:throw=26 6:follow=22 7:follow=41 8:idle=32 9:idle=11 10:idle=19 11:idle=3 12:idle=0  → 头框最差 40/634 px（6.3%，帧 throw）
+== G7G12G29
+G7（头框 2151 px 量级）: 1:follow=2 2:follow=32 3:idle=33 4:idle=77 5:idle=67 6:idle=10 7:idle=51 8:idle=31 9:idle=13 10:idle=0 11:idle=23 12:wind=15  → 头框最差 77/2155 px（3.6%，帧 idle）
+G12（头框 2175 px 量级）: 1:idle=242 2:idle=626 3:idle=566 4:idle=613 5:idle=612 6:idle=608 7:idle=599 8:idle=605 9:idle=663 10:idle=600 11:idle=0 12:idle=578  → 头框最差 663/2175 px（30.5%，帧 idle）
+== G8G12G21
+G8（头框 1767 px 量级）: 1:follow=0 2:idle=4 3:idle=3 4:idle=0 5:idle=2 6:idle=4 7:idle=1 8:idle=6 9:idle=9 10:idle=0 11:idle=0 12:wind=0  → 头框最差 9/1607 px（0.6%，帧 idle）
+G12（头框 2175 px 量级）: 1:idle=574 2:idle=696 3:idle=633 4:idle=32 5:idle=612 6:idle=658 7:idle=610 8:idle=596 9:idle=602 10:idle=595 11:idle=602 12:idle=690  → 头框最差 696/2175 px（32.0%，帧 idle）
+== G8G15G22
+G8（头框 1767 px 量级）: 1:follow=0 2:follow=2 3:follow=2 4:follow=1 5:idle=0 6:idle=7 7:idle=0 8:idle=4 9:idle=0 10:idle=0 11:idle=6 12:idle=5  → 头框最差 7/1607 px（0.4%，帧 idle）
+G15（头框 1732 px 量级）: 1:idle=23 2:idle=11 3:idle=0 4:idle=0 5:idle=35 6:idle=6 7:idle=25 8:idle=20 9:wind=5 10:wind=21 11:throw=28 12:follow=4  → 头框最差 35/1732 px（2.0%，帧 idle）
+== G8G18G28
+G8（头框 1767 px 量级）: 1:follow=1 2:follow=1 3:follow=2 4:idle=6 5:idle=4 6:idle=8 7:idle=0 8:idle=0 9:idle=6 10:idle=0 11:idle=5 12:wind=2  → 头框最差 8/1607 px（0.5%，帧 idle）
+G18（头框 1859 px 量级）: 1:follow=4 2:follow=110 3:follow=12 4:idle=16 5:idle=37 6:idle=152 7:idle=126 8:idle=121 9:idle=102 10:idle=23 11:idle=146 12:idle=129  → 头框最差 152/1865 px（8.2%，帧 idle）
+== e2_B14
+== e2_B16
