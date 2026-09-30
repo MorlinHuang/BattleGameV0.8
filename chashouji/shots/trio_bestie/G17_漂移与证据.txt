@@ -1,0 +1,7 @@
+G17 恋柱（哥们美术代做）。胶片都是 ammosc=1 noshake=1 bestie=G17，errors 全空。
+进场 G17_enter（ammoms 110 ammoskip 0）：格 1~3 plunge，4~5 bounce，6~7 settle(land)，8~10 idle，11~12 wind —— 露面后换三次帧。
+出手 G17_atk_1.4 / _1.8：idle → wind → throw(fire，粉色鞭剑螺旋抽到男生头上、迸樱花瓣 petal) → follow → idle。
+漂移：drop 在场随绳荡（E.sway 默认 0.04 rad × 绳长 700），按 B17 的量法在临时副本页只给 G17 加 sway: 0 拍（G17_M_sway0_*）：
+  drift.py <胶片> 12 web/assets/trio/G17_mitsuri.webp 245x349 4 0 95,15,150,110 150,240,1.06 119.7,15.3 16 id=G17 names=idle,wind,throw,follow,plunge,bounce,settle,idle2 robust=0.08（框 = 两条腿上半截）
+  G17_M_sway0_1.8（throw→follow→idle）最大 0.88 px；G17_M_sway0_idle 格 2~12（idle→wind→throw）最大 0.85 px（格 1 还在进场弹跳）
+同组 组1_G17：辫梢最低约 y 594，G4 头顶约 675，不相交；鞋在 HUD（拉力行 ≤ 180）下面。

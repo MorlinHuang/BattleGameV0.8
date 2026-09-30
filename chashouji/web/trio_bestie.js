@@ -509,6 +509,25 @@ const TRIO_BESTIE = {
              T: 0.55, arc: 0.2, spin: 5.7, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
 
+    G17: {      // 恋柱（甘露寺式）：脚踝拴着绳从左上倒挂着掉下来、弹两下，捧着脸颊笑；握着剑柄一甩，粉色软鞭剑螺旋着抽过去，打中迸樱花瓣
+      face: +1,
+      sheet: { src: 'assets/trio/G17_mitsuri.webp', cell: [245, 349], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'plunge', 'bounce', 'settle', 'idle2'] },
+      /* 上方；倒挂，锚点 = 两只脚踝（绳子拴的那一点）。两条腿每帧都并拢伸直，缩放和配准都按腿（scale_by fixed，残差 ≤ 0.51 px）。
+         蓝幕（身上粉 + 嫩绿，品红 / 绿幕都会吃掉头发），bestie/G17_mitsuri/bluekey.py 先抠成透明再进 frames.py。
+         大小：idle 剪影 1.84 万 × 1.06² ≈ 2.07 万（上方样板 G11 2.06 万）。站位临时：脚踝 y 240 在 HUD（拉力行 ≤ 180）下面，辫梢最低 594 */
+      anchor: [119.7, 15.3], at: [150, 240, 1.06], pivot: [120, -645], leanK: 0,
+      depth: 0.5, recipe: 'petal',
+      /* 倒挂垂下：伸直俯冲、辫子往上飞 → 冲过头弹回、张开双臂 → 捧脸稳住；绳子引擎画，拴在脚踝 line */
+      enter: { kind: 'drop', len: 700, line: [120, 15], T: 0.8, w: 3, fill: '#8a6a44', edge: 'rgba(60,40,20,.9)',
+               seq: [['plunge', 0.35], ['bounce', 0.25], ['settle', 0.2, 'land'], ['idle', 9]], sq: 0.06 },
+      exit: { frame: 'plunge' },
+      idle: { frame: 'idle', breathe: [0.014, 0.9, 0.3] },
+      flex: { idle: [[90, 280, 146, 338, 't', 5, 0.8]] },   // 垂着的两根麻花辫：顶边钉住，辫梢晃（flexcheck 下、左、右三边 0）
+      /* 鞭剑（whip，引擎画）：手里只画剑柄（粉绿圆镡 + 白柄），wind 抡到身后 → throw 甩到右下、软剑从镡上螺旋抽出去（waves 2），末端一截剑尖 */
+      atk: { kind: 'whip', seq: [['wind', 0.3], ['throw', 0.44, 'fire'], ['follow', 0.3]], from: [236, 278], phases: [0.14, 0.08, 0.22],
+             whip: { w: 7, taper: 0.55, amp: 26, waves: 2, hz: 4, color: '#f7a3c6', edge: 'rgba(120,30,70,.9)', tip: [30, 6, '#ffd6e6'] }, gap: [0.9, 1.3] },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       /* 2026-10-01 迁成帧序列（引擎负责人）：idle = 原单张立绘（手心朝上托着），kiss = 同一张画布上只局部重绘右臂（指尖送到唇边，
