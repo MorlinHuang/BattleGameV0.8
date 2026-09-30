@@ -2780,6 +2780,22 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     if (Q.get('noshake') === '1') Particles.addShake = () => {};
     TRIO.still = Q.get('trioswing') === '0';
     if (Q.get('trioprobe') === '1') { trioProbe = document.createElement('canvas'); trioProbe.width = cvCh.width; trioProbe.height = cvCh.height; }
+    /* ?coupleprobe=1：每个模拟步把两个主角单独画进离屏画布、按人叠成并集（拉锯时身子前后晃、长发甩开扫过的范围），
+       胶片结束后导出 window.coupleMask = { a: 女生, b: 男生 }（W×H 的 PNG dataURL）。combo_scan.py 用它把主角算进遮挡物 */
+    const coupleProbe = Q.get('coupleprobe') === '1' ? ['a', 'b'].map(() => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; }) : null;
+    const probeCouple = () => {
+      if (!probeCouple.tmp) { probeCouple.tmp = document.createElement('canvas'); probeCouple.tmp.width = W; probeCouple.tmp.height = H; }
+      const t = probeCouple.tmp.getContext('2d');
+      t.clearRect(0, 0, W, H);
+      actors.draw(t, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, 0);
+      /* 一张 PoseView 帧里两个人都在：按两张脸中点左右分（女生在左） */
+      const fa = faceOf('a'), fb = faceOf('b'), mid = fa && fb ? (fa[0] + fb[0]) / 2 : W / 2;
+      coupleProbe.forEach((c, i) => {
+        const x = c.getContext('2d'); x.save(); x.beginPath();
+        if (i === 0) x.rect(0, 0, mid, H); else x.rect(mid, 0, W - mid, H);
+        x.clip(); x.drawImage(probeCouple.tmp, 0, 0); x.restore();
+      });
+    };
     S.auto = false; S.t = 3.0;
     for (let k = 0; k < 150; k++) derive(1 / 60);
 
@@ -2822,6 +2838,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); tideUpdate(d);
         Bubble.update(d, FX.struggle);
         derive(d); hudTick(d);
+        if (coupleProbe) probeCouple();
       }
       el += step;
       if (Q.get('crewlog') === '1') crewLog();
@@ -2850,6 +2867,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         o.fillText(`${g.name || gname} · ${g.style} · spin ${g.spin} · p=${S.p.toFixed(0)}`, dx + 8, 42);
       }
     }
+    if (coupleProbe) window.coupleMask = { a: coupleProbe[0].toDataURL(), b: coupleProbe[1].toDataURL() };
     const stage = document.getElementById('stage');
     stage.style.width = out.width + 'px';
     stage.style.aspectRatio = `${out.width}/${out.height}`;

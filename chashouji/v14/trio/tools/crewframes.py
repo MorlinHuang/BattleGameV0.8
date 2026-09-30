@@ -13,6 +13,7 @@
 
 用法（在 chashouji 下）：python3 v14/trio/tools/crewframes.py B1|B2|B3|B4|G1|G2|G3|all
   → web/assets/trio/<名>.webp + .json，v14/trio/preview/<名>_frames.png；打印 cfg 片段
+  python3 v14/trio/tools/crewframes.py ident B1|...|all → 图集 json 里写 ident：每帧招牌道具的框（格内像素），combo_scan 当认人点
   python3 v14/trio/tools/crewframes.py compare B1|...|all → shots/trio_std/老_<编号>_原图对比.png
       左：crew.js 原来画的样子（分层原图、瞄准角 0、三人组那一排的中间缩放）；右：新图集的 idle 帧 × at.s。同一屏幕像素比例，标剪影面积"""
 import json, math, os, sys
@@ -31,6 +32,11 @@ RIG = {
 }
 WHO = {'B1': ('buddy', 1, 'B1_surfer'), 'B2': ('buddy', 4, 'B2_zhizunbao'), 'B3': ('buddy', 5, 'B3_beile'), 'B4': ('buddy', 7, 'B4_yagami'),
        'G1': ('bestie', 2, 'G1_shades'), 'G2': ('bestie', 6, 'G2_bulma'), 'G3': ('bestie', 7, 'G3_sailor')}
+# 招牌道具在分层原图上的位置（贴图像素，七个人同一套姿势改图换人，所以一边一条规则）：
+#   哥们 水枪 = up 层 x ≤ 165（连握枪的两只手）、滑板 = lo 层 y ≥ 395（板 + 轮 + 踩板的拖鞋）；
+#   闺蜜 喷罐 = arm 层 x ≥ 300（罐 + 握罐的手）、平衡车 = lo 层 y ≥ 415
+IDENT = {'buddy': [('枪', 'up', lambda X, Y: X <= 165), ('板', 'lo', lambda X, Y: Y >= 395)],
+         'bestie': [('罐', 'arm', lambda X, Y: X >= 300), ('车', 'lo', lambda X, Y: Y >= 415)]}
 SS = 2                                         # 合成时先放大 SS 倍转、再缩（转角边缘不糊）
 PAD = 160
 
@@ -120,6 +126,43 @@ def build(code):
     return dict(name=name, cell=[cw, ch], cols=cols, names=names, anchor=anchor, nozzle=nz, aims=aims, K=K)
 
 
+def ident(code):
+    """每帧招牌道具的框（审查第八轮：画在帧里的水枪、滑板、平衡车也是认人点）：把 IDENT 规则选中的那块单独留在层里，
+    按 build 一模一样的转角合成一遍，取外框，换到格内像素（x0, y0 由图集 json 的 anchor 反推）。只改 json，不动图集"""
+    side, n, name = WHO[code]; R0 = RIG[side]
+    jp = os.path.join(OUT, name + '.json'); meta = json.load(open(jp))
+    K = R0['s'] / R0['AT_S']
+    foot = [R0['foot'][0] + PAD, R0['foot'][1] + PAD]
+    x0, y0 = foot[0] * K - meta['anchor'][0], foot[1] * K - meta['anchor'][1]
+    sh = lambda q: [q[0] + PAD, q[1] + PAD] if q else q
+    R = dict(R0, body=sh(R0['body']), arm=sh(R0['arm']), foot=foot, muzzle=sh(R0['muzzle']))
+    lo, hi = R['lo'], R['hi']; aims = [lo + (hi - lo) * i / 10 for i in range(11)]
+    poses = {'idle': (lo + (hi - lo) * 0.45, 0, 0), 'wind': (hi + 0.12, 0, 0), 'follow': (lo - 0.05, 0, 0), 'ride': ((lo + hi) / 2 + 0.1, 0, 0), 'brake': (hi + 0.05, 0, 0)}
+    poses.update({f'aim{i}': (th, 0, 1) for i, th in enumerate(aims)})
+    if R['kick']: poses.update({f'kick{i}': (th, 1, 1) for i, th in enumerate(aims)})
+    out = {fn: [] for fn in meta['frames']}
+    for tag, lk, rule in IDENT[side]:
+        lay = {}
+        for k in R['layers']:
+            im = Image.open(os.path.join(WEB, R['src'].replace('%n', str(n)).replace('%k', k))).convert('RGBA')
+            a = np.array(im)
+            if k == lk:
+                Y, X = np.mgrid[:a.shape[0], :a.shape[1]]; a[..., 3] = np.where(rule(X, Y), a[..., 3], 0)
+            else: a[..., 3] = 0
+            big = Image.new('RGBA', (im.width + 2 * PAD, im.height + 2 * PAD)); big.paste(Image.fromarray(a), (PAD, PAD))
+            lay[k] = big.resize((big.width * SS, big.height * SS), Image.NEAREST)
+        for fn in meta['frames']:
+            if fn not in poses: continue
+            im, _, _ = compose(R, lay, *poses[fn])
+            al = np.array(im)[..., 3] > 60; ys, xs = np.nonzero(al)
+            if not len(ys): continue
+            f = K / SS
+            out[fn].append([round(float(xs.min() * f - x0), 1), round(float(ys.min() * f - y0), 1), round(float((xs.max() + 1) * f - x0), 1), round(float((ys.max() + 1) * f - y0), 1)])
+    meta['ident'] = out
+    json.dump(meta, open(jp, 'w'), ensure_ascii=False)
+    print(code, name, 'ident idle', out.get('idle'), 'aim0', out.get('aim0'))
+
+
 def head_box(im, px, K):
     """头框（combo_scan 判"头被挡"用）：剪影最上面 20% 高那几行的横向范围 —— crew 立绘都是站直的人，头在最上面
     枪 / 罐子举起来也会进这几行，所以只看腰转轴正上方 −140 ~ +70 贴图像素那几列（七个人的头都在这一带，同一姿势改图换人）"""
@@ -156,6 +199,10 @@ def compare(code):
 
 
 if __name__ == '__main__':
+    if sys.argv[1:2] == ['ident']:
+        which = sys.argv[2] if len(sys.argv) > 2 else 'all'
+        for c in (WHO if which == 'all' else [which]): ident(c)
+        sys.exit()
     if sys.argv[1:2] == ['compare']:
         which = sys.argv[2] if len(sys.argv) > 2 else 'all'
         for c in (WHO if which == 'all' else [which]): compare(c)

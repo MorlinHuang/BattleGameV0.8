@@ -11,7 +11,7 @@ const TRIO_BESTIE = {
       face: 1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.88 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/G1_shades.webp', cell: [234, 380], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10', 'kick0', 'kick1', 'kick2', 'kick3', 'kick4', 'kick5', 'kick6', 'kick7', 'kick8', 'kick9', 'kick10'] },
-      anchor: [74.9, 374.3], at: [250, 1000, 0.88], pivot: [74.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点
+      anchor: [74.9, 374.3], at: [70, 940, 0.88], pivot: [74.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点；站位按遮挡判据第二版（主角算遮挡物）往左挪、离开女主身后（combo_scan.py，2026-10-01）
       depth: 0.8, recipe: 'pepper',
       /* 踩着平衡车从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下罐子往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [6, 1.9, 0.9], bob: [1.8, 2.6], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -29,7 +29,7 @@ const TRIO_BESTIE = {
       face: 1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.88 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/G2_bulma.webp', cell: [245, 380], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10', 'kick0', 'kick1', 'kick2', 'kick3', 'kick4', 'kick5', 'kick6', 'kick7', 'kick8', 'kick9', 'kick10'] },
-      anchor: [85.9, 374.3], at: [250, 1010, 0.88], pivot: [85.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点
+      anchor: [85.9, 374.3], at: [110, 950, 0.8], pivot: [85.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点；站位按遮挡判据第二版（主角算遮挡物）往左挪、离开女主身后（combo_scan.py，2026-10-01）
       depth: 0.8, recipe: 'pepper',
       /* 踩着平衡车从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下罐子往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [6, 1.9, 0.9], bob: [1.8, 2.6], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -47,7 +47,7 @@ const TRIO_BESTIE = {
       face: 1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.88 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/G3_sailor.webp', cell: [250, 380], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10', 'kick0', 'kick1', 'kick2', 'kick3', 'kick4', 'kick5', 'kick6', 'kick7', 'kick8', 'kick9', 'kick10'] },
-      anchor: [90.9, 374.3], at: [240, 1000, 0.88], pivot: [90.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点
+      anchor: [90.9, 374.3], at: [80, 940, 0.8], pivot: [90.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点；站位按遮挡判据第二版（主角算遮挡物）往左挪、离开女主身后（combo_scan.py，2026-10-01）
       depth: 0.8, recipe: 'pepper',
       /* 踩着平衡车从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下罐子往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [6, 1.9, 0.9], bob: [1.8, 2.6], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -65,7 +65,7 @@ const TRIO_BESTIE = {
     G11: {      // 花饰格格：秋千从左上画外荡进来（往前荡伸腿、往后荡收腿），荡到最前面抛绣球砸他的头
       face: +1,
       sheet: { src: 'assets/trio/G11_gege.webp', cell: [315, 343], cols: 4, names: ['idle', 'raise', 'throw', 'follow', 'wind', 'tuck', 'kick', 'idle2'] },
-      anchor: [128, 212.3], at: [170, 540, 1], pivot: [128, -530], leanK: 0.5,   // y 640 → 540（引擎负责人 2026-10-01，组合遮挡矩阵新判据：640 时后排 G4~G7 在场帧挡她 13~26%）
+      anchor: [128, 212.3], at: [170, 500, 1], pivot: [128, -530], leanK: 0.5,   // y 640 → 540 → 500（引擎负责人 2026-10-01，遮挡判据第二版：后排 G5 挪到 [230, 960] 以后 540 时她被挡 15.5%）
       depth: 0.5, recipe: 'bloom',
       /* 进场：0.4 秒从左上画外露面时收着腿俯冲（tuck），0.6 秒荡到最低点（摆角过零）伸腿（kick）往前荡，0.75 秒接出手 */
       enter: { kind: 'swing', seq: [['tuck', 0.6], ['kick', 9]] },

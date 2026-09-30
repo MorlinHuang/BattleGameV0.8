@@ -12,7 +12,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B1_surfer.webp', cell: [434, 421], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 415.6], at: [820, 1040, 0.83], pivot: [265.3, 415.6], leanK: 0,   // 锚点 = 滑板着地那一点
+      anchor: [265.3, 415.6], at: [814, 1040, 0.83], pivot: [265.3, 415.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -28,7 +28,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B2_zhizunbao.webp', cell: [434, 424], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 418.6], at: [820, 1040, 0.83], pivot: [265.3, 418.6], leanK: 0,   // 锚点 = 滑板着地那一点
+      anchor: [265.3, 418.6], at: [814, 1040, 0.83], pivot: [265.3, 418.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -44,7 +44,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B3_beile.webp', cell: [434, 419], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 413.6], at: [820, 1040, 0.83], pivot: [265.3, 413.6], leanK: 0,   // 锚点 = 滑板着地那一点
+      anchor: [265.3, 413.6], at: [814, 1040, 0.83], pivot: [265.3, 413.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -60,7 +60,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B4_yagami.webp', cell: [442, 458], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [273.3, 452.6], at: [820, 1040, 0.83], pivot: [273.3, 452.6], leanK: 0,   // 锚点 = 滑板着地那一点
+      anchor: [273.3, 452.6], at: [814, 1040, 0.83], pivot: [273.3, 452.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },

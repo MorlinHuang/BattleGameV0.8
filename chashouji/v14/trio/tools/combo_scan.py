@@ -12,6 +12,21 @@
   前景地板在后排地面前面，挡住后排一点脚和小腿（躯干以下）本来就对，只要不超 8%。
   尺寸下限（suggest 只在这个范围里缩）：后排 s ≥ 0.8；别的槽位 ≥ 本人现值 × 0.9。先挪位置，挪不开才缩。
 
+第二版（2026-10-01，审查第八轮「自由组合遮挡抽查」4 个漏洞）：
+  1. 主角也是遮挡物：两个主角画在上方 / 后排之后、地板之前（main.js renderActors）。遮挡范围 = couple_a.png / couple_b.png ——
+     正式页 ?coupleprobe=1 拍 4 段 4.8 秒胶片（哥们礼物 / 闺蜜礼物 × 开头 / 往后 4.8 秒），每个模拟步把两人单独画出来叠的并集
+     （拉锯前后晃、甩开的长发都在里面）。主角对每个人判头框 0、认人点 0；剪影占比不单独卡（主角是站在画面中间不动的一大块，
+     后排按设计站在自己主角身后、脚在地板上 —— 腿脚压在主角身后是这个布局本来的样子），剪影算进第 3 条合计。
+  2. 认人点加上画在帧里的招牌道具：图集 json 的 ident（每帧各自的框，crewframes.py ident 按合成转角算的水枪 / 喷罐 / 滑板 / 平衡车），
+     或 cfg.ident [[x0, y0, x1, y1], ...]（参考帧格内像素，每帧跟头框一样按模板重找）。框 ∩ 自己的剪影才算。
+  3. 合计：一组三个人 + 两个主角同时在场，后面那个人这一帧被所有画在他前面的东西挡住的并集 ≤ 25%（TOTAL）。
+     一对一的 8% 管"哪一个人挡得太多"，合计管"几样东西各挡一点加起来"。25% 的来历：主角并集占 x 145~785、y 793~1194，
+     后排脚底只能在 980~1080（视平线 845，再抬就站到沙发上了），闺蜜后排挪到最好的位置光主角就挡 0~21%（全是腿脚）；
+     头、躯干、招牌道具由头框 0 / 认人点 0 保住，合计管的是剩下的腿脚，25% = 主角那一份 + 同组一点余量。
+  4. 不出画：在场各帧剪影横向在 0~960 以内（扒着右屏边的 B11 / B12 本来就贴边，秋千摆到两头那一下不算）；
+     地板最低点 ≤ 1334、上方最高点 ≥ 200。suggest 的站位也按这条约束，所以不会再建议出一个出画的站位。
+  另外：人名单直接取 cast（按 depth 分槽，不再取 groups：组表只剩诊断用），ride 在场前后溜（enter.roll）的人按 ±幅度 三个位置都判。
+
   帧序列（cfg.sheet）：屏幕点 = at + (格内点 − anchor) × s（trio.js place()，在场时没有位移）
   单张立绘（cfg.src）：整张图一帧；头框用剪影最上面 22% 估（没有 frames.json）
   后排的滑板哥们 / 平衡车闺蜜（原 crew.js，站位随机）2026-10-01 迁成了帧序列（crewframes.py），和别人一样按 at 摆
@@ -20,7 +35,7 @@
 
 每个槽位同时只站一人，只扫不同槽位之间。最后给一份建议站位（suggest），写在矩阵文件末尾。
 
-用法（在 chashouji 下）：python3 v14/trio/tools/combo_scan.py [buddy|bestie|all] [--only=B1,B2,...]
+用法（在 chashouji 下）：python3 v14/trio/tools/combo_scan.py [buddy|bestie|all] [--only=B1,B2,...] [--nosuggest]
   → shots/trio_std/组合遮挡矩阵_<边>.txt；头框映射缓存 /tmp/combo_heads.json"""
 import json, os, subprocess, sys
 import numpy as np
@@ -33,8 +48,11 @@ WEB = os.path.join(ROOT, 'web')
 TRIO_DIR = os.path.join(ROOT, 'v14/trio')
 W, H = 960, 1334
 DIL = 4                                        # 头框 / 认人点：前面那人外扩几 px 再比（留一道缝，轮廓线读得出）
-RATIO = 0.08                                   # 被挡剪影占比上限
+RATIO = 0.08                                   # 被挡剪影占比上限（一个遮挡物）
+TOTAL = 0.25                                   # 三人 + 主角同时在场，被挡的并集占比上限（取值理由见文件头第二版第 3 条）
 DEPTH = {'ground': 0.8, 'top': 0.5, 'floor': 1.3}
+SLOT = {v: k for k, v in DEPTH.items()}
+EDGE = ('B11', 'B12')                          # 扒着右屏边的人：设计上就贴边出画，不查横向出画
 PAIRS = [('ground', 'floor', '后排 × 地板'), ('top', 'ground', '上方 × 后排'), ('top', 'floor', '上方 × 地板（附带）')]   # (后, 前)
 
 
@@ -74,6 +92,16 @@ def ov(a, da, b, db):
     x0, y0 = max(ax, bx), max(ay, by); x1, y1 = min(ax + a.m.shape[1], bx + b.m.shape[1]), min(ay + a.m.shape[0], by + b.m.shape[0])
     if x0 >= x1 or y0 >= y1: return 0
     return int((a.m[y0 - ay:y1 - ay, x0 - ax:x1 - ax] & b.m[y0 - by:y1 - by, x0 - bx:x1 - bx]).sum())
+
+
+def ovmask(a, da, b, db):
+    """a（平移 da）上被 b（平移 db）盖住的像素：返回 a.m 形状的 bool（合计遮挡要按像素并）"""
+    out = np.zeros_like(a.m)
+    ax, ay = a.x + da[0], a.y + da[1]; bx, by = b.x + db[0], b.y + db[1]
+    x0, y0 = max(ax, bx), max(ay, by); x1, y1 = min(ax + a.m.shape[1], bx + b.m.shape[1]), min(ay + a.m.shape[0], by + b.m.shape[0])
+    if x0 < x1 and y0 < y1:
+        out[y0 - ay:y1 - ay, x0 - ax:x1 - ax] = a.m[y0 - ay:y1 - ay, x0 - ax:x1 - ax] & b.m[y0 - by:y1 - by, x0 - bx:x1 - bx]
+    return out
 
 
 def union(bs):
@@ -181,7 +209,7 @@ def torso(m, hb):
 
 
 class Frame:
-    """一帧在屏幕上：body（剪影）、head（头框）、key（认人点：躯干 + 挂件 + 道具）"""
+    """一帧在屏幕上：body（剪影）、head（头框）、key（认人点：躯干 + 画在帧里的招牌道具 + 挂件 + 手里拿的道具）"""
     __slots__ = ('name', 'body', 'head', 'key', 'area')
     def __init__(self, name, body, head, key):
         self.name, self.body, self.head, self.key = name, body, head, key; self.area = max(1, body.area())
@@ -212,9 +240,14 @@ def sheet_person(c, at):
         hr = head_out(name); hb, refc = (hr[0], cell(hr[1])) if hr else (None, None)   # 头框量在参考帧上（不一定是 idle：G4 是 wind）
         cells = [(f, cell(f)) for f in want]
         heads = {f: (find_head(cc, refc, hb) if hb else est_head(cc[..., 3] > 40)) for f, cc in cells}
+        # 画在帧里的招牌道具：图集 json 的 ident（每帧各自的框）优先；cfg.ident 是参考帧上的框，每帧按模板重找
+        meta = json.load(open(os.path.join(WEB, 'assets/trio', name + '.json')))
+        idents = {f: meta.get('ident', {}).get(f, []) for f, _ in cells}
+        if c.get('ident') and refc is not None:
+            for f, cc in cells: idents[f] = idents[f] + [find_head(cc, refc, bx) for bx in c['ident']]
     else:
         im = np.array(Image.open(os.path.join(WEB, c['src'])).convert('RGBA'))
-        cells = [('立绘', im)]; heads = {'立绘': est_head(im[..., 3] > 40)}
+        cells = [('立绘', im)]; heads = {'立绘': est_head(im[..., 3] > 40)}; idents = {'立绘': []}
     # 挂件（场景层 fixed 不算人）、道具
     parts = []
     for q in c.get('parts', []) if c.get('sheet') else []:
@@ -230,6 +263,7 @@ def sheet_person(c, at):
     for f, cc in cells:
         m = cc[..., 3] > 40
         hb = heads[f]; t = torso(m, hb)
+        for bx in idents[f]: t = t | (_box(m.shape, bx) & m)
         extra = []
         for q, pm in parts:
             a = q['at'].get(f)
@@ -252,6 +286,13 @@ def sheet_person(c, at):
     return out
 
 
+def couple():
+    """两个主角在场扫过的并集（main.js ?coupleprobe=1 拍的，见文件头）→ Person（不动、不当"后面的人"）"""
+    ms = [np.array(Image.open(os.path.join(TRIO_DIR, 'tools', f'couple_{w}.png'))) > 100 for w in 'ab']
+    b = Blob(ms[0] | ms[1], 0, 0)
+    return Person('主角', 'couple', '主角', [Frame('拉锯', b, rect(0, 0, 1, 1), b)])
+
+
 def _box(shape, hb):
     m = np.zeros(shape, bool); x0, y0, x1, y1 = (int(round(v)) for v in hb)
     m[max(0, y0):max(0, y1), max(0, x0):max(0, x1)] = True
@@ -271,100 +312,185 @@ def ref_person(side, rid, done):
 
 
 class Person:
-    def __init__(self, rid, slot, kind, frames):
+    def __init__(self, rid, slot, kind, frames, roll=0):
+        """roll：ride 在场前后溜的幅度（enter.roll[0] + 细抖）—— 后面的人按 −roll / 0 / +roll 三个位置判，前面的人按溜过的范围并"""
         self.rid, self.slot, self.kind, self.frames = rid, slot, kind, frames
-        self.all = union([f.body for f in frames]); self.all_g = grow(self.all)
+        self.shifts = [(-roll, 0), (0, 0), (roll, 0)] if roll else [(0, 0)]
+        one = union([f.body for f in frames])
+        self.all = union([Blob(one.m, one.x + dx, one.y) for dx, _ in self.shifts]) if roll else one
+        self.all_g = grow(self.all)
+
+
+def roll_of(c):
+    E = c.get('enter')
+    return int(round(E['roll'][0] + (E['roll'][2] if len(E['roll']) > 2 else 0))) if isinstance(E, dict) and E.get('roll') else 0
+
+
+def out_of_canvas(p, d, slot):
+    """在场各帧剪影出画多少 px（横向出 0~960、地板低过 1334、上方高过 200 的像素行 / 列数之和）。秋千摆到两头的那两帧不算"""
+    bad = 0
+    for f in p.frames:
+        if ' 摆' in f.name: continue
+        x0, y0, x1, y1 = f.body.box(); dx = d[0]
+        lo, hi = min(sx for sx, _ in p.shifts), max(sx for sx, _ in p.shifts)
+        if p.rid not in EDGE: bad += max(0, -(x0 + dx + lo)) + max(0, x1 + dx + hi - W)
+        if slot == 'floor': bad += max(0, y1 + d[1] - 1334)
+        if slot == 'top': bad += max(0, 200 - (y0 + d[1]))
+    return bad
+
+
+_J = {}
+def judge_c(back, db, front, dfr):
+    """judge 的缓存版（suggest 里同一对被反复问）"""
+    k = (id(back), tuple(db), id(front), tuple(dfr))
+    if k not in _J:
+        if len(_J) > 200000: _J.clear()
+        _J[k] = judge(back, db, front, dfr)
+    return _J[k]
 
 
 def judge(back, db, front, dfr):
     """后面那人（平移 db）× 前面那人（平移 dfr）：返回 (最坏帧占比, 那一帧名, 头框被挡 px, 认人点被挡 px)，都取所有帧里最坏的"""
     if not ov(back.all_g, db, front.all_g, dfr): return (0.0, '', 0, 0)
     worst, wf, hd, ky = 0.0, '', 0, 0
-    for f in back.frames:
-        r = ov(f.body, db, front.all, dfr) / f.area
-        if r > worst: worst, wf = r, f.name
-        hd = max(hd, ov(f.head, db, front.all_g, dfr)); ky = max(ky, ov(f.key, db, front.all_g, dfr))
+    for sx, sy in back.shifts:
+        d = (db[0] + sx, db[1] + sy)
+        for f in back.frames:
+            r = ov(f.body, d, front.all, dfr) / f.area
+            if r > worst: worst, wf = r, f.name
+            hd = max(hd, ov(f.head, d, front.all_g, dfr)); ky = max(ky, ov(f.key, d, front.all_g, dfr))
     return worst, wf, hd, ky
 
 
-def ok_cell(j): return j[0] <= RATIO and j[2] == 0 and j[3] == 0
+_OCC = {}
+def _occ(back, db, p, dp):
+    """back（平移 db）每个溜位 × 每一帧被 p（平移 dp）盖住的掩码（缓存：suggest 里同一对会被上百个组合反复问）"""
+    k = (id(back), tuple(db), id(p), tuple(dp))
+    if k not in _OCC:
+        if len(_OCC) > 20000: _OCC.clear()
+        _OCC[k] = [ovmask(f.body, (db[0] + sx, db[1] + sy), p.all, dp) for sx, sy in back.shifts for f in back.frames]
+    return _OCC[k]
 
 
-def fmt(j, n=1):
+def total(back, db, fronts):
+    """合计：后面那人每一帧被 fronts（[(Person, 平移)]，含主角）盖住的像素并集 / 自己的剪影 → (最坏占比, 那一帧)"""
+    fronts = [(p, d) for p, d in fronts if ov(back.all_g, db, p.all_g, d)]
+    if len(fronts) < 2: return (0.0, '')                  # 只有一样东西挡：一对一判过了
+    ms = [_occ(back, db, p, d) for p, d in fronts]
+    fr = [f for _ in back.shifts for f in back.frames]
+    worst, wf = 0.0, ''
+    for i, f in enumerate(fr):
+        if sum(m[i].sum() for m in ms) / f.area <= worst: continue     # 并集 ≤ 各自之和：和都不超当前最坏，这一帧不用并
+        u = ms[0][i].copy()
+        for m in ms[1:]: u |= m[i]
+        r = u.sum() / f.area
+        if r > worst: worst, wf = r, f.name
+    return worst, wf
+
+
+def ok_cell(j, cp=False): return (cp or j[0] <= RATIO) and j[2] == 0 and j[3] == 0   # cp：前面是主角（剪影只算进合计）
+
+
+def fmt(j, cp=False):
     if not j[0] and not j[2] and not j[3]: return '0'
     t = f'{j[0]:.1%}'
     if j[2]: t += f' 头{j[2]}'
     if j[3]: t += f' 认{j[3]}'
-    return t + ('' if ok_cell(j) else ' ✗')
+    return t + ('' if ok_cell(j, cp) else ' ✗')
 
 
 def build(side, D, at_over=None):
+    """cast 里每个人按 depth 分槽 → ids {槽: [编号]}、ppl {编号: Person}（含 '主角'）"""
     data = D[side]; at_over = at_over or {}
-    ids = {sl: [g[sl] for g in data['groups']] for sl in DEPTH}
-    ppl = {}
-    for sl in DEPTH:
-        for rid in ids[sl]:
-            if rid in data['cast']:
-                c = data['cast'][rid]
-                ppl[rid] = Person(rid, sl, 'sheet' if c.get('sheet') else '单张', sheet_person(c, at_over.get(rid, c['at'])))
-    for sl in DEPTH:
-        done = [ppl[r].frames[0].body for r in ids[sl] if r in ppl and ppl[r].kind in ('sheet', '单张')]
-        for rid in ids[sl]:
-            if rid not in ppl:
-                fr = ref_person(side, rid, done)
-                if fr: ppl[rid] = Person(rid, sl, '估', fr)
+    ids = {sl: [] for sl in DEPTH}; ppl = {}
+    for rid, c in data['cast'].items():
+        sl = SLOT.get(c.get('depth'))
+        if not sl: continue
+        ids[sl].append(rid)
+        ppl[rid] = Person(rid, sl, 'sheet' if c.get('sheet') else '单张', sheet_person(c, at_over.get(rid, c['at'])), roll_of(c))
+    for sl in ids: ids[sl].sort(key=lambda r: int(r[1:]))
+    ppl['主角'] = couple()
     return ids, ppl
 
 
-def rescan(side, D, at):
-    """按建议站位（at：{编号: [x, y, s]}）重贴一遍，逐对复核：返回 (对数, 不过的对, 后排最小 s)"""
-    ids, ppl = build(side, D, at)
-    n, bad = 0, []
-    for bk, fr, _ in PAIRS:
+def occluders(ids, slot):
+    """画在这个槽位前面的槽位（主角另算：上方、后排都在主角后面）"""
+    return [fr for bk, fr, _ in PAIRS if bk == slot]
+
+
+def check_all(ids, ppl, at=None, who=None):
+    """全部判一遍（at：{编号: (dx, dy)} 平移；who：只看涉及这些人的项）→ (对数, 不过的对, 组数, 不过的组)
+    对：每个人 × 每个画在他前面的人 / 主角；组：每一组（后排 g, 上方 t, 地板 f）里后排、上方两个人的合计"""
+    at = at or {}; d = lambda r: at.get(r, (0, 0))
+    CP = ppl['主角']; pairs, badp = 0, []
+    for bk in ('ground', 'top'):
         for r in ids[bk]:
-            for c in ids[fr]:
-                if r not in ppl or c not in ppl or '估' in (ppl[r].kind, ppl[c].kind): continue
-                j = judge(ppl[r], (0, 0), ppl[c], (0, 0)); n += 1
-                if not ok_cell(j): bad.append((r, c, j))
-    ks = [at[r][2] for r in ids['ground'] if r in at]
-    return n, bad, min(ks) if ks else None
+            fronts = [(c, ppl[c]) for fr in occluders(ids, bk) for c in ids[fr]] + [('主角', CP)]
+            for c, pc in fronts:
+                if who and r not in who and c not in who: continue
+                j = judge(ppl[r], d(r), pc, d(c)); pairs += 1
+                if not ok_cell(j, c == '主角'): badp.append((r, c, j))
+    groups, badg = 0, []
+    for g in ids['ground']:
+        for f in ids['floor']:
+            if who and not ({g, f} & set(who)): continue
+            t_ = total(ppl[g], d(g), [(ppl[f], d(f)), (CP, (0, 0))]); groups += 1
+            if t_[0] > TOTAL: badg.append((g, (g, None, f), t_))
+    for t in ids['top']:
+        for g in ids['ground']:
+            for f in ids['floor']:
+                if who and not ({t, g, f} & set(who)): continue
+                t_ = total(ppl[t], d(t), [(ppl[g], d(g)), (ppl[f], d(f)), (CP, (0, 0))]); groups += 1
+                if t_[0] > TOTAL: badg.append((t, (g, t, f), t_))
+    return pairs, badp, groups, badg
 
 
 def scan(side, D):
     ids, ppl = build(side, D)
-    out = [f'# 组合遮挡矩阵 · {side}（combo_scan.py，2026-10-01 新判据）',
-           f'判据：画在后面的人（上方 0.5 < 后排 0.8 < 地板 1.3）逐帧：被挡剪影占比 ≤ {RATIO:.0%}、头框被挡 0、认人点（躯干 + 挂件 + 手里道具）被挡 0；'
-           f'头 / 认人点按前面那人外扩 {DIL}px 比。',
-           '格子：最坏一帧的被挡占比；"头N" 头框被挡 N px；"认N" 认人点被挡 N px；✗ 不过。行 = 后面的人，列 = 前面的人。',
-           '种类：sheet 帧序列 / 单张 旧单张立绘 / 估 定妆图估算（还没做出来的人，不在验收范围）']
+    CP = ppl['主角']
+    out = [f'# 组合遮挡矩阵 · {side}（combo_scan.py，2026-10-01 第二版判据：主角算遮挡物、帧里招牌道具算认人点、合计 ≤ {TOTAL:.0%}、不出画）',
+           f'一对一：画在后面的人（上方 0.5 < 后排 0.8 < 主角 < 地板 1.3）逐帧被挡剪影 ≤ {RATIO:.0%}（主角不卡剪影）、头框被挡 0、认人点（躯干 + 帧里招牌道具 + 挂件 + 手里道具）被挡 0；'
+           f'头 / 认人点按前面那人外扩 {DIL}px 比。合计：一组三人 + 主角同时在场，后面那人被挡的并集 ≤ {TOTAL:.0%}。',
+           '格子：最坏一帧的被挡占比；"头N" 头框被挡 N px；"认N" 认人点被挡 N px；✗ 不过。行 = 后面的人，列 = 前面的人。']
     bad = []
     for bk, fr, title in PAIRS:
-        rows, cols = ids[bk], ids[fr]
-        out.append(f'\n== {title}（行在后 × 列在前）')
-        out.append('        ' + ''.join(f'{c + "(" + ppl[c].kind + ")" if c in ppl else c:>16}' for c in cols))
+        rows, cols = ids[bk], ids[fr] + ['主角']
+        out.append(f'\n== {title}（行在后 × 列在前；最后一列是两个主角）')
+        out.append('        ' + ''.join(f'{c:>14}' for c in cols))
         for r in rows:
             cells = []
             for c in cols:
-                if r not in ppl or c not in ppl: cells.append(f'{"缺图":>16}'); continue
+                if c == '主角' and bk == 'top' and fr == 'floor': cells.append(f'{"同上":>14}'); continue
                 j = judge(ppl[r], (0, 0), ppl[c], (0, 0))
-                tag = '估' if '估' in (ppl[r].kind, ppl[c].kind) else ''
-                cells.append(f'{fmt(j) + tag:>16}')
-                if not ok_cell(j): bad.append((r, c, j, tag, ppl[r].kind, ppl[c].kind))
-            out.append(f'{r + "(" + ppl[r].kind + ")" if r in ppl else r:>9}' + ''.join(cells))
-    real = [x for x in bad if not x[3]]
-    out.append(f'\n== 汇总：不过 {len(bad)} 对（已做完的人之间 {len(real)} 对；其余含估）')
-    for r, c, j, tag, kr, kc in sorted(bad, key=lambda q: (bool(q[3]), -q[2][0])):
-        out.append(f'  {r} 在 {c} 后面：最坏帧 {j[1]} 被挡 {j[0]:.1%}' + (f'，头框 {j[2]} px' if j[2] else '') + (f'，认人点 {j[3]} px' if j[3] else '') + (' 估' if tag else ''))
+                cells.append(f'{fmt(j, c == "主角"):>14}')
+                if not ok_cell(j, c == '主角'): bad.append((r, c, j))
+            out.append(f'{r:>8}' + ''.join(cells))
+    bad = list({(r, c): (r, c, j) for r, c, j in bad}.values())
+    _, _, ng, badg = check_all(ids, ppl)
+    out.append(f'\n== 一对一不过 {len(bad)} 对')
+    for r, c, j in sorted(bad, key=lambda q: -q[2][0]):
+        out.append(f'  {r} 在 {c} 后面：最坏帧 {j[1]} 被挡 {j[0]:.1%}' + (f'，头框 {j[2]} px' if j[2] else '') + (f'，认人点 {j[3]} px' if j[3] else ''))
+    out.append(f'\n== 合计（{ng} 组 × 后面的人）超过 {TOTAL:.0%}：{len(badg)} 项' + ('（只列每人最坏的一组）' if badg else ''))
+    worst = {}
+    for r, grp, t_ in badg:
+        if r not in worst or t_[0] > worst[r][1][0]: worst[r] = (grp, t_)
+    for r, (grp, t_) in sorted(worst.items(), key=lambda q: -q[1][1][0]):
+        n = sum(1 for x in badg if x[0] == r)
+        out.append(f'  {r}：{n} 组超，最坏 后排 {grp[0]} / 上方 {grp[1] or "-"} / 地板 {grp[2]}，帧 {t_[1]} 合计被挡 {t_[0]:.1%}')
+    oc = [(r, out_of_canvas(ppl[r], (0, 0), ppl[r].slot)) for sl in ids for r in ids[sl]]
+    oc = [(r, n) for r, n in oc if n]
+    out.append('\n== 出画（在场帧剪影出 0~960 / 地板低过 1334 / 上方高过 200，逐帧像素和；B11 B12 扒右屏边不查横向，秋千两头不算）：' +
+               ('、'.join(f'{r} {n}' for r, n in oc) if oc else '无'))
     return '\n'.join(out), ids, ppl
 
 
 def suggest(side, D, ids, ppl, fixed_ids=()):
-    """建议站位：轮流给不过的人找挪动最小的站位（|dx| + |dy|，10px 一档），让他和别的槽位已做完的人都满足判据。
-    先挪，挪不开才缩：缩一档记 1000 分（比最大挪动 360 大），后排缩到 s ≥ 0.8，别的槽位缩到 ≥ 本人现值 × 0.9。
-    约束：地板最低点 ≤ 1334；上方最高点 ≥ 200（拉力条下沿）；左右不比现在多出画（本来扒着墙出画的照旧）；横向 ±100、竖向 −100 ~ +40（后排 −160、上方 −260 起）。
-    估的人不参与，也不当约束（还没有数据）。fixed_ids：不许挪的人（只当约束）"""
-    data = D[side]
-    movers = [r for r in ppl if ppl[r].kind in ('sheet', '单张')]
+    """建议站位：轮流给不过的人找挪动最小的站位（|dx| + |dy|，10px 一档），让一对一、合计、不出画都满足。
+    先挪，挪不开才缩：缩一档记 1000 分，后排缩到 s ≥ 0.8，别的槽位缩到 ≥ 本人现值 × 0.9。
+    20px 一档，横向 ±200、竖向 −100 ~ +40（后排 −60 起：脚底再往上就不在地板上了；上方 −260 起）；后排只在自己主角那一侧（哥们 x ≥ 600、闺蜜 x ≤ 360，
+    中间是两人拉手机的地方），上方也只在自己那一侧（哥们 x ≥ 560、闺蜜 x ≤ 400），地板横向只挪 ±60（地板在两个下角，往中间挪会压到拉手机那一块）。主角不动。fixed_ids：不许挪的人（只当约束）"""
+    data = D[side]; CP = ppl['主角']
+    movers = [r for r in ppl if r != '主角']
     slot = {r: ppl[r].slot for r in movers}
     def scales(r):
         s0 = data['cast'][r]['at'][2]
@@ -373,75 +499,136 @@ def suggest(side, D, ids, ppl, fixed_ids=()):
         while v - 0.02 >= lo - 1e-9: v = round(v - 0.02, 3); ks.append(v)
         if ks[-1] > lo + 1e-9 and slot[r] == 'ground': ks.append(round(lo, 3))
         return ks
-    var = {}                                   # r → {s: Person}
+    var = {}
     def person(r, s):
+        if r == '主角': return CP
         var.setdefault(r, {})
         if s not in var[r]:
-            a = data['cast'][r]['at']
-            var[r][s] = ppl[r] if s == a[2] else Person(r, slot[r], ppl[r].kind, sheet_person(data['cast'][r], [a[0], a[1], s]))
+            a = data['cast'][r]['at']; c = data['cast'][r]
+            var[r][s] = ppl[r] if s == a[2] else Person(r, slot[r], ppl[r].kind, sheet_person(c, [a[0], a[1], s]), roll_of(c))
         return var[r][s]
     cur = {r: (data['cast'][r]['at'][2], [0, 0]) for r in movers}
-    def pairs_of(r):
-        for bk, fr, _ in PAIRS:
-            if slot[r] == bk:
-                for o in movers:
-                    if slot[o] == fr: yield (r, o)
-            if slot[r] == fr:
-                for o in movers:
-                    if slot[o] == bk: yield (o, r)
-    def fails(r, s, d):
+    P = lambda r, s=None, d=None: (person(r, cur[r][0] if s is None else s), cur[r][1] if d is None else d) if r != '主角' else (CP, [0, 0])
+    def fronts_of(sl): return [c for fr in occluders(ids, sl) for c in ids[fr]]
+    def fails(r, s, d, early=False, weighted=False):
+        """不过的项数；early：搜索用，一对一先判（便宜），碰到第一项不过就返回。
+        weighted：按受影响的组合数计（每边每槽 10 人 → 一组 1000 种里：对主角不过 = 这个人在的全部 100 种、一对一或两人合计 = 10 种、三人合计 = 1 种）"""
+        W1 = lambda k: (100 if k == 'cp' else 10 if k == 'pair' else 1) if weighted else 1
+        sev = 0                                          # weighted 时一起返回严重度：不过的一对一里被挡的头框 ×10 + 认人点像素 + 剪影占比 ×1e4
+        me = {r: (s, d)}
+        g = lambda x: (person(x, me[x][0]), me[x][1]) if x in me else P(x)
         n = 0
-        for b, f in pairs_of(r):
-            pb = person(b, s if b == r else cur[b][0]); pf = person(f, s if f == r else cur[f][0])
-            db = d if b == r else cur[b][1]; df = d if f == r else cur[f][1]
-            if not ok_cell(judge(pb, db, pf, df)): n += 1
-        return n
-    def inside(r, s, d):
-        p = person(r, s); x0, y0, x1, y1 = p.all.box(); p0 = ppl[r].all.box()
-        outx = lambda a, b: max(0, -a) + max(0, b - W)
-        return ((slot[r] != 'floor' or y1 - 1 + d[1] <= 1334) and (slot[r] != 'top' or y0 + d[1] >= 200)
-                and outx(x0 + d[0], x1 + d[0]) <= outx(p0[0], p0[2]) + 10)
+        pairs = []                                   # (后, 前)
+        if slot[r] in ('ground', 'top'): pairs += [(r, c) for c in fronts_of(slot[r]) + ['主角']]
+        for bk in ('ground', 'top'):
+            if slot[r] in occluders(ids, bk): pairs += [(b, r) for b in ids[bk]]
+        for b, f in pairs:
+            j = judge_c(*g(b), *g(f))
+            if not ok_cell(j, f == '主角'):
+                n += W1('cp' if f == '主角' else 'pair'); sev += j[2] * 10 + j[3] + j[0] * 1e4
+                if early: return n
+        def tg(b, fs):
+            fr = [g(x) for x in fs] + [(CP, (0, 0))]
+            if sum(judge_c(*g(b), *q)[0] for q in fr) <= TOTAL: return False   # 并集 ≤ 各自最坏之和：和都不超就不用求并集
+            return total(*g(b), fr)[0] > TOTAL
+        if slot[r] == 'ground': items = [(r, [f]) for f in ids['floor']] + [(t, [r, f]) for t in ids['top'] for f in ids['floor']]
+        elif slot[r] == 'floor': items = [(b, [r]) for b in ids['ground']] + [(t, [b, r]) for t in ids['top'] for b in ids['ground']]
+        else: items = [(r, [b, f]) for b in ids['ground'] for f in ids['floor']]
+        for b, fs in items:
+            if tg(b, fs):
+                n += W1('pair' if len(fs) == 1 else 'tri')
+                if early: return n
+        return (n, sev) if weighted else n
+    def inside(r, s, d): return out_of_canvas(person(r, s), d, slot[r]) == 0
     def search(r):
         best = None
         for i, s in enumerate(scales(r)):
             if best and i * 1000 >= best[0]: break
-            for dy in range(-260 if slot[r] == 'top' else -160 if slot[r] == 'ground' else -100, 41, 10):
-                for dx in range(-100, 101, 10):
+            cand = []
+            for dy in range(-260 if slot[r] == 'top' else -60 if slot[r] == 'ground' else -100, 41, 20):
+                for dx in range(-200, 201, 20):
+                    x = data['cast'][r]['at'][0] + dx
+                    if slot[r] == 'ground' and (x < 600 if side == 'buddy' else x > 360): continue
+                    if slot[r] == 'top' and (x < 560 if side == 'buddy' else x > 400): continue
+                    if slot[r] == 'floor' and abs(dx) > 60: continue
                     cost = abs(dx) + abs(dy) + i * 1000
-                    if best and cost >= best[0]: continue
-                    if inside(r, s, [dx, dy]) and not fails(r, s, [dx, dy]): best = (cost, s, [dx, dy])
+                    if not best or cost < best[0]: cand.append((cost, dx, dy))
+            for cost, dx, dy in sorted(cand):
+                if best and cost >= best[0]: break
+                if inside(r, s, [dx, dy]) and not fails(r, s, [dx, dy], early=True): best = (cost, s, [dx, dy]); break
         return best
-    # 每轮给所有不过的人各找一个最省的站位，只落实全场最省的那一个（挪的优先于缩的：缩一档 1000 分），直到都过或找不到
-    tried = set()
-    for _ in range(30):
-        cand = [(search(r), r) for r in movers if r not in fixed_ids and fails(r, *cur[r])]
+    bad0 = lambda r: fails(r, *cur[r]) or not inside(r, *cur[r])
+    tried, hopeless = set(), set()              # hopeless：整个范围都搜不到解的人（挪别人一般救不了他，后面不再重搜，省掉大半时间）
+    for _ in range(40):
+        todo = [r for r in movers if r not in fixed_ids and r not in hopeless and bad0(r)]
+        cand = [(search(r), r) for r in todo]
+        hopeless |= {r for b, r in cand if not b}
         cand = [(b, r) for b, r in cand if b and (r, b[1], tuple(b[2])) not in tried]
         if not cand: break
         (cost, s, d), r = min(cand, key=lambda q: q[0][0])
         tried.add((r, s, tuple(d))); cur[r] = (s, d)
-    out = ['\n== 建议站位（suggest，新判据：只挪已做完的人；先挪后缩，后排 s ≥ 0.8、其他 ≥ 现值 × 0.9；估 的人不在内）']
+        print(f'  [{side}] {r} → dx {d[0]:+d} dy {d[1]:+d} s {s}', flush=True)
+    # 兜底：整个范围都找不到全过的人，取"受影响的组合最少"的站位（fails weighted），同分比严重度（被挡的头框 / 认人点像素），再同取挪得少的；标"无全过解"。
+    # 兜底挪完的人可能挤到别人（G5 抬高压到 G11），所以兜底两遍，之后再给还不过、但有全过解的人补搜一轮
+    nosol = set()
+    def fallback(r):
+        k0 = fails(r, *cur[r], weighted=True); best = (k0[0] + (0 if inside(r, *cur[r]) else 10 ** 6), k0[1], 0, cur[r][0], cur[r][1])
+        for i, s_ in enumerate(scales(r)):
+            for dy in range(-260 if slot[r] == 'top' else -60 if slot[r] == 'ground' else -100, 41, 20):
+                for dx in range(-200, 201, 20):
+                    x = data['cast'][r]['at'][0] + dx
+                    if slot[r] == 'ground' and (x < 600 if side == 'buddy' else x > 360): continue
+                    if slot[r] == 'top' and (x < 560 if side == 'buddy' else x > 400): continue
+                    if slot[r] == 'floor' and abs(dx) > 60: continue
+                    if not inside(r, s_, [dx, dy]): continue
+                    n, sv = fails(r, s_, [dx, dy], weighted=True)
+                    k = (n, round(sv), abs(dx) + abs(dy) + i * 1000, s_, [dx, dy])
+                    if k[:3] < best[:3]: best = k
+        cur[r] = (best[3], best[4])
+        print(f'  [{side}] 兜底 {r} → dx {best[4][0]:+d} dy {best[4][1]:+d} s {best[3]}（受影响组合加权 {best[0]}，严重度 {best[1]}）', flush=True)
+    for _ in range(2):
+        for r in movers:
+            if r in fixed_ids or not bad0(r): continue
+            if r in hopeless or not search(r): nosol.add(r); fallback(r)
+    for r in movers:
+        if r in fixed_ids or r in nosol or not bad0(r): continue
+        b = search(r)
+        if b: cur[r] = (b[1], b[2]); print(f'  [{side}] 补搜 {r} → dx {b[2][0]:+d} dy {b[2][1]:+d} s {b[1]}', flush=True)
+        else: nosol.add(r); fallback(r)
+    out = ['\n== 建议站位（suggest，第二版判据：一对一 + 合计 + 不出画；先挪后缩，后排 s ≥ 0.8、其他 ≥ 现值 × 0.9）']
     at = {}
     for r in movers:
         a0 = data['cast'][r]['at']; s, d = cur[r]
         at[r] = [a0[0] + d[0], a0[1] + d[1], s]
-        f = fails(r, s, d)
-        if at[r] != list(a0) or f:
-            out.append(f'  {r}（{slot[r]}）at {a0} → {at[r]}' + (f'  仍有 {f} 对不过' if f else ''))
-    if len(out) == 1: out.append('  不用挪：已做完的人两两都过')
+        f = fails(r, s, d); o = out_of_canvas(person(r, s), d, slot[r])
+        if at[r] != list(a0) or f or o:
+            out.append(f'  {r}（{slot[r]}）at {a0} → {at[r]}' + ('  【无全过解，取受影响组合最少】' if r in nosol else '') + (f'  仍有 {f} 项不过' if f else '') + (f'  仍出画 {o}' if o else ''))
+    if len(out) == 1: out.append('  不用挪：全部都过')
     return '\n'.join(out), at
 
 
+def rescan(side, D, at):
+    """按建议站位重贴每人全部在场帧，一对一 + 合计 + 出画全部复核"""
+    ids, ppl = build(side, D, at)
+    n, badp, ng, badg = check_all(ids, ppl)
+    oc = [r for sl in ids for r in ids[sl] if out_of_canvas(ppl[r], (0, 0), sl)]
+    ks = [at[r][2] for r in ids['ground'] if r in at]
+    return n, badp, ng, badg, oc, min(ks) if ks else None
+
+
 if __name__ == '__main__':
-    args = [a for a in sys.argv[1:] if not a.startswith('--only=')]
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
     only = next((a[7:].split(',') for a in sys.argv[1:] if a.startswith('--only=')), None)   # --only=B1,B2：建议站位只挪这几个人（别人只当约束）
     which = args[0] if args else 'all'
     D = load_data()
     for side in (['buddy', 'bestie'] if which == 'all' else [which]):
         txt, ids, ppl = scan(side, D)
         print(txt, flush=True)
+        if '--nosuggest' in sys.argv: continue
         sg, at = suggest(side, D, ids, ppl, fixed_ids=[r for r in ppl if only and r not in only])
-        n, bad, kmin = rescan(side, D, at)
-        sg += (f'\n\n== 按建议站位复扫（重贴每人全部在场帧，逐对复核）：已做完的人 {n} 对，不过 {len(bad)} 对；后排最小 s {kmin}' +
-               ''.join(f'\n  ✗ {r} 在 {c} 后面：{fmt(j)}（最坏帧 {j[1]}）' for r, c, j in bad))
+        n, badp, ng, badg, oc, kmin = rescan(side, D, at)
+        sg += (f'\n\n== 按建议站位复扫（重贴每人全部在场帧）：一对一 {n} 对不过 {len(badp)}；合计 {ng} 组不过 {len(badg)}；出画 {len(oc)} 人；后排最小 s {kmin}' +
+               ''.join(f'\n  ✗ {r} 在 {c} 后面：{fmt(j, c == "主角")}（最坏帧 {j[1]}）' for r, c, j in badp) +
+               ''.join(f'\n  ✗ 合计 {r}（组 {g}）{t_[0]:.1%}' for r, g, t_ in badg[:30]) + ''.join(f'\n  ✗ 出画 {r}' for r in oc))
         p = os.path.join(ROOT, 'shots/trio_std', f'组合遮挡矩阵_{side}.txt')
         open(p, 'w').write(txt + '\n' + sg + '\n'); print(sg)
