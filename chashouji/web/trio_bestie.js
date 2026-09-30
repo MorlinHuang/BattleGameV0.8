@@ -53,20 +53,48 @@ const TRIO_BESTIE = {
                      layers: [[84, [170, 30, 20], 0.3], [64, [255, 90, 40], 0.6], [42, [255, 160, 70], 0.85], [20, [255, 230, 160], 1], [7, [255, 255, 255], 1]] } },
     },
 
+    G21: {      // 忍者扇娘（不知火舞式）：左下角翻滚进来（团身滚 → 落地蹲 → 半跪），胸罩当手里剑甩出去，打中挂在他头上
+      face: +1,
+      sheet: { src: 'assets/trio/G21_mai.webp', cell: [297, 284], cols: 4, names: ['idle', 'wind0', 'throw', 'follow', 'roll', 'land', 'wind', 'idle2'] },
+      anchor: [142.6, 278.4], at: [150, 1330, 1], pivot: [142, 278],
+      leanK: 0,   // 半跪：绕地面转会把着地的膝盖和前脚翘起来
+      depth: 1.3, recipe: 'rouge',
+      enter: { kind: 'roll', seq: [['roll', 0.5], ['land', 0.14, 'land'], ['idle', 9]], sq: 0.1 },
+      exit: { frame: 'roll' },
+      idle: { frame: 'idle', breathe: [0.016, 0.7, 0] },
+      /* 前脚脚尖不耐烦地点地：脚踝钉住（'l'），脚尖上下点（框上、右、下三边透明） */
+      flex: { idle: [[238, 257, 262, 283, 'l', 6, 0.9]] },
+      /* wind0（第一张条的蓄力，手只到肩后）当蓄力前段，wind（第二张条的强蓄力，手甩到身后）接着 */
+      atk: { kind: 'throw', item: 'bra', prop: 'assets/world/trio_prop_bra.webp', scale: 0.55,
+             seq: [['wind0', 0.1], ['wind', 0.22], ['throw', 0.1, 'fire'], ['follow', 0.3]],
+             hold: { idle: [116, 157], wind0: [42, 77], wind: [36, 123], throw: [285, 77] },
+             T: 0.45, arc: 0.18, spin: 16, idleSpin: 0.8, stretch: 0.03, gap: [1.0, 1.4], onHit: 'wear' },
+    },
+
+    G22: {      // 麻花辫探险家（劳拉式）：左下角匍匐爬进来（左右肘交替）趴定，举相机拍照取证，闪光晃他的眼，照片飞出来
+      face: +1,
+      sheet: { src: 'assets/trio/G22_explorer.webp', cell: [467, 185], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'crawl1', 'crawl2', 'land', 'idle2'] },
+      anchor: [228.8, 152.6], at: [200, 1314, 1], pivot: [228, 152],
+      leanK: 0,   // 趴着的人不整体前后倾（同樱木）
+      depth: 1.3, recipe: 'star',
+      enter: { kind: 'creep', seq: [['crawl1', 0.14], ['crawl2', 0.14], ['crawl1', 0.14], ['crawl2', 0.14], ['land', 0.1, 'land'], ['idle', 9]], sq: 0.08 },
+      exit: { frame: 'crawl2' },
+      idle: { frame: 'idle', breathe: [0.02, 0.7, 0] },   // 趴着：只竖向起伏
+      /* 翘起来的两条小腿 + 靴子是挂件层（bestie/G22_explorer/legs.py 从 idle 拆出来，四个在场帧里原处已清掉）：
+         绕小腿中段的切口来回晃 = 趴着懒洋洋晃脚。爬的帧（腿平放）不画 */
+      parts: [{ src: 'assets/trio/G22_legs.webp', pivot: [62, 96], z: 1, sway: [0.06, 0.6, 0],
+                at: { idle: [105, 100, 0], wind: [105, 100, 0], throw: [105, 100, 0], follow: [105, 100, 0] } }],
+      atk: { kind: 'camera', seq: [['wind', 0.3], ['throw', 0.12, 'fire'], ['follow', 0.35]],
+             hold: { throw: [430, 50] }, stretch: 0, gap: [1.0, 1.4] },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
       depth: 0.5, enter: 'swing', recipe: 'rouge', ropes: { ...ROPE, x: [100, 190], fill: '#a7864f' },
       swing: { a0: 1.3, a: 0.12, tau: 0.5, w: 2.4 },
       atk: { kind: 'throw', item: 'heart', n: 2, color: [255, 70, 130], T: 0.55, arc: 0.1, spin: 0, onHit: 'lips' },
-    },
-    G21: {      // 忍者扇娘：从左下角翻滚进来半跪，胸罩当手里剑甩出去，打中挂在他头上
-      face: +1, src: 'assets/world/trio_ninja.webp', at: [140, 1330, 1.05], anchor: [160, 288], pivot: [150, 280], hand: [305, 92],
-      depth: 1.3, enter: 'roll', recipe: 'rouge',
-      atk: { kind: 'throw', item: 'bra', prop: 'assets/world/trio_prop_bra.webp', scale: 0.55, T: 0.45, arc: 0.18, spin: 16,
-             wind: 0.2, gap: [0.7, 1.0], onHit: 'wear' },
-    },
-    G22: {      // 探险家：从左下角匍匐爬进来，举相机拍照取证，闪光晃他的眼，照片飞出来
+    },    G22: {      // 探险家：从左下角匍匐爬进来，举相机拍照取证，闪光晃他的眼，照片飞出来
       face: +1, src: 'assets/world/trio_explorer.webp', at: [150, 1345, 1.05], anchor: [215, 208], pivot: [330, 200], hand: [415, 48],
       depth: 1.3, enter: 'creep', recipe: 'star',
       atk: { kind: 'camera', wind: 0.18, gap: [0.75, 1.1] },
