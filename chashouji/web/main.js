@@ -1242,6 +1242,37 @@ const RECIPE = {
     },
   },
 
+  /* 西瓜（B28 八戒扔的）：红瓤溅开 + 黑籽 + 几片绿皮。结构同 splash（浆糊住 + 硬颗粒弹开），换成西瓜的三种颜色 ——
+     原来借 splash，焦糖色读成奶茶。瓤用饱和的西瓜红（浅粉在浅绿墙上看不见）；籽黑、小、多，是对比最强的一组；
+     绿皮少而大、带深绿描边，一眼认出"是个瓜"。 */
+  melon: {
+    tint: [255, 214, 206],
+    burst(x, y, side, s) {
+      Particles.spawn({ kind: 'dot', x, y, r: 20 * s, r1: 92 * s, life: 0.18, rgb: [255, 120, 110], a: 0.85 });
+      Particles.spawn({ kind: 'ring', x, y, r: 12 * s, r1: 150 * s, life: 0.30, rgb: [226, 52, 60], lw: 6 * s });
+      for (let i = 0; i < Math.round(15 * s); i++) {           // 瓤：糊住不动（drag 0.86）
+        const a = (Math.random() - 0.5) * 2.4;
+        Particles.spawn({ kind: 'soft', x, y, vx: -side * Math.cos(a) * (110 + Math.random() * 330) * s,
+                          vy: Math.sin(a) * (80 + Math.random() * 230) * s - 110,
+                          g: 180, drag: 0.86, r: 14 * s, r1: (34 + Math.random() * 30) * s,
+                          life: 1.1 + Math.random() * 0.8, rgb: [222, 40, 56], a: 0.55 });
+      }
+      for (let i = 0; i < Math.round(22 * s); i++) {           // 籽：黑、小、弹得开
+        const a = (Math.random() - 0.5) * 2.7, sp = (260 + Math.random() * 520) * s, d = 7 + Math.random() * 5 * s;
+        Particles.spawn({ kind: 'chip', shape: 'pearl', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 300,
+                          g: 1180, drag: 0.992, life: 0.9 + Math.random() * 0.7, w: d * 0.7, h: d,
+                          rot: Math.random() * 6.28, vrot: (Math.random() - 0.5) * 18, rgb: [28, 22, 20], edge: INK, lw: 1.2, a: 1 });
+      }
+      for (let i = 0; i < Math.round(5 * s); i++) {            // 绿皮：几片大的
+        const a = (Math.random() - 0.5) * 2.2, sp = (200 + Math.random() * 380) * s;
+        Particles.spawn({ kind: 'chip', shape: 'debris', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 260,
+                          g: 1250, drag: 0.99, life: 0.8 + Math.random() * 0.5, w: 16 + Math.random() * 12 * s, h: 8 + Math.random() * 6 * s,
+                          rot: Math.random() * 6.28, vrot: (Math.random() - 0.5) * 14,
+                          rgb: i % 2 ? [58, 150, 60] : [34, 104, 44], edge: [20, 60, 24], lw: 1.8, a: 1 });
+      }
+    },
+  },
+
   /* 求婚戒指盒绽放（档 4 左）。**绽放式**：不朝被打的一侧溅，而是从命中点
      向四周全向炸开 —— 这是它跟前面所有配方唯一的结构差别，也是"绽放"和
      "溅射"的分界。独占那 0.8 秒里画面重心必须在被砸的那个人身上，全向才
@@ -1395,8 +1426,8 @@ const SHOP = {
    同日删掉黑蛛女特工、内裤外穿侠、二郎·打码神，加嫦娥、后羿） */
 const G4L = CrewGroup([Baisu, Truth, Change]);   // 查岗党：白娘子 / 真相女神 / 嫦娥
 const G4R = CrewGroup([Fahai, Demon, Houyi, Sister]);    // 灭迹党：法海 / 灭迹恶魔 / 后羿 / 绿茶妹妹
-/* 档 3 三人组（trio.js，2026-09-29）：一次送礼抽一组，组里三个槽位各一人 —— 后排地面（crew.js 滑板哥们 / 平衡车闺蜜）、上方、前景地板。
-   角色与 10 组搭配在 trio_buddy.js / trio_bestie.js（美术维护）；在场再送 = 同一组各续一段 */
+/* 档 3 三人组（trio.js）：一次送礼三个槽位 —— 后排地面（帧序列，或 crew.js 滑板哥们 / 平衡车闺蜜的老角色）、上方、前景地板 ——
+   各自从本边名单里独立随机抽一人（2026-10-01 改自由组合）。角色在 trio_buddy.js / trio_bestie.js（美术维护）；在场再送 = 在场的续、空槽补人 */
 const BuddyTrio = Trio(Buddy, TRIO_BUDDY);
 const BestieTrio = Trio(Bestie, TRIO_BESTIE);
 const ACTS = [...BuddyTrio.acts, ...BestieTrio.acts];
@@ -1408,7 +1439,7 @@ const CREWS = [...BuddyTrio.all, ...BestieTrio.all, ...G4L.members, ...G4R.membe
    不然 CrewGroup 只会给在场那位续时间，选了嫦娥出来的还是白娘子。 */
 function summonCrew(name, sk, pick) {
   const c = CREW[name];
-  /* 三人组：?buddy=<组号 1~10> / ?bestie= 指定抽哪一组（诊断）；不返回新来的人（没有出场视频） */
+  /* 三人组（自由组合）：诊断 ?buddy=<组号 1~10> 按名单组表召、?buddy=B5.B13.B23 按三个人召（?bestie= 同）；不返回新来的人（没有出场视频） */
   if (c.groups) { c.summon(new URLSearchParams(location.search).get(name) || undefined); return [c, undefined]; }
   if (!c.members) return [c, c.summon(sk)];
   if (pick != null) {

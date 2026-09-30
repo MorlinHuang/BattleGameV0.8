@@ -29,19 +29,12 @@ const TRIO = {
   sq: { decay: 12 },                            // 挤压（落地 / 出手那一下压扁）回弹快慢，1-exp(-k·dt)
   pop: 0.16,                                    // 出完手、手里重新冒出一个（篮球 / 绣球）用多少秒长到原大
   still: false,                                 // 诊断：在场时秋千不摆、整体不前后倾（胶片 ?trioswing=0，只剩换帧本身，量漂移用；出手时机照样按相位）
-  /* 叠第二组（2026-09-30 用户："最多在场 5 个人，两边各 5 个"，选的是"再送叠第二组"）：有人在场时再送，
-     在场的续时间，再从别的组里挑人补到 MAX 个（一组三人在场 → 补两个 = 3 + 2）。组还没做齐、或叠上来的人先走了，下一次送照样补满。
-     站位：自己的 at（第一组这个槽位空着时站这）和备用位（SLOT2），每个槽位最多站 CAP 个人。
-     地板只有自己那个下角一个位：备用位往中间挪，两边的趴着 / 半跪的人在两个主角脚下叠成一堆（2026-09-30 截图），所以 2 + 2 + 1 = 5。
-     挑人先后 PREFER：后排地面最好塞（在主角身后、被挡一部分也读得出）；上方其次；地板最后。
-     SLOT2[槽位] = [往屏幕中间挪几像素, 往下挪几像素（负 = 往上）, 缩放倍数]，按这个人自己的 at 换算：
-       ground 往里、往上、缩小 = 站得更远（透视：远的小、脚底高），depth 同乘，排远近时在第一组那位之后；
-       top    同侧贴得更高（第一组上方那位和 HUD 之间），缩小一点；正上方仍空给档 4；
-     crew.js 的滑板哥们 / 平衡车闺蜜不走 SLOT2：同一份 Crew 最多站两人（cfg.max 2），第二个自己挑没人的那一排。 */
-  MAX: 5,
-  CAP: { ground: 2, top: 2, floor: 1 },
-  PREFER: ['ground', 'top', 'floor'],
-  SLOT2: { ground: [110, -45, 0.85], top: [0, -210, 0.85] },
+  /* 自由组合（2026-10-01 用户："点击一次同时出现 3 个角色自由组合，一个从上面，一个在地上，一个趴着的或者从下方出现的"）：
+     每次送礼三个槽位（后排地面 / 上方 / 前景地板）各自从本边名单里独立随机抽一人，每边 10 × 10 × 10 种；在场时再送，在场的各自续，
+     空出来的槽位随机补人。**每个槽位同时只站一个人**：原来的"叠第二组"（最多 5 人、备用位 SLOT2）撤掉了 ——
+     v14/trio/tools/combo_scan.py 扫过，后排 / 上方都找不到不压人的备用位（后排两人横向放不下；上方再往上就进 HUD），
+     见 shots/trio_std/组合遮挡矩阵_*.txt 末尾。任意 后排 × 地板 × 上方 同框不互相遮挡，站位按那两张矩阵调 */
+  SLOTS: ['ground', 'top', 'floor'],
 };
 
 const easeOut = (u) => 1 - Math.pow(1 - u, 3);
@@ -120,14 +113,22 @@ function Act(cfg) {
      后排（depth < 1）的人站在自己主角身后，出手点和他的头一样高，东西、链子、手臂、雾都画在主角之上 —— 直着过去一定横穿他的脸。
      所以后排的路要从他头顶翻过去：曲线经过他脸框（o.shield() = [x, y, r]）那几列（左右各再放宽 pad）时，要在脸框上沿 − 40 − pad 以上，按这个反推控制点够多高。
      pad = 走在路上的这件东西自己的半径（雾团、道具、棍影都有个头，路过去了它的下沿还会蹭到脸）。
-     出发点本身得在头顶以上（后排的人出手帧把手举过头顶，from / hold 写在那一点）—— 路只管中间那一段。 */
+     出发点本身得在头顶以上（后排的人出手帧把手举过头顶，from / hold 写在那一点）—— 路只管中间那一段。
+     脸框那几列离落点很近（拔河拉近、两张脸挨着）时，控制点横坐标在中点的话那一列落在 e ≥ 0.9，反推出来的控制点高得离谱、
+     不约束又会让最后一段斜着擦过脸框（哥们美术报的 B8 松果）：这时控制点横坐标挪到落点正上方 —— 最后一段竖着砸下去，
+     x(e) = p2 + (1 − e)² (p0 − p2)，挨着落点的列对应的 e 也不再贴着 1，照样反推得出来。 */
   const REAR = (cfg.depth || 1) < 1;
   function over(p0, p2, cy, pad = 0) {
-    const c = [(p0[0] + p2[0]) / 2, cy], f = REAR && o.shield && o.shield();
-    if (!f || Math.abs(p2[0] - p0[0]) < 1) return c;
+    const f = REAR && o.shield && o.shield(), dx = p2[0] - p0[0];
+    if (!f || Math.abs(dx) < 1) return [(p0[0] + p2[0]) / 2, cy];
     const Y = f[1] - f[2] - 40 - pad;
-    for (const x of [f[0] - f[2] - pad, f[0], f[0] + f[2] + pad]) {      // 列也按 pad 放宽：物件中心走到脸框外侧 pad 以内时，它的边还压在脸框上
-      const e = (x - p0[0]) / (p2[0] - p0[0]);                     // 控制点横坐标在中点 ⇒ 曲线的 x 对 e 是线性的
+    const cols = [f[0] - f[2] - pad, f[0], f[0] + f[2] + pad];       // 列也按 pad 放宽：物件中心走到脸框外侧 pad 以内时，它的边还压在脸框上
+    const steep = cols.some(x => { const e = (x - p0[0]) / dx; return e >= 0.9 && e < 1; });
+    const c = [steep ? p2[0] : (p0[0] + p2[0]) / 2, cy];
+    for (const x of cols) {
+      const u = (x - p0[0]) / dx;
+      if (u <= 0 || u >= 1) continue;
+      const e = steep ? 1 - Math.sqrt(1 - u) : u;                   // 这一列在曲线上的参数（中点控制：x 对 e 线性；落点正上方：(1 − e)² = 1 − u）
       if (e > 0.02 && e < 0.98) c[1] = Math.min(c[1], (Y - (1 - e) * (1 - e) * p0[1] - e * e * p2[1]) / (2 * e * (1 - e)));
     }
     return c;
@@ -145,9 +146,8 @@ function Act(cfg) {
       .then(([a, p, t, ...ps]) => { img = a; prop = p; atlas = t; ps.forEach((im, i) => { partImg[i] = im; }); return !!a; });
   }
 
-  /* 来一个（wait 秒后才开始进场）；在场再送 = 续一份时间，下一下按礼物力度打。
-     slot（可无）：{ at, depth } 这一趟站哪、排多远（叠第二组时站备用位，见 TRIO.SLOT2）；不给就是自己的 cfg.at / cfg.depth */
-  function summon(_sk, wait = 0, slot = null) {
+  /* 来一个（wait 秒后才开始进场）；在场再送 = 续一份时间，下一下按礼物力度打。 */
+  function summon(_sk, wait = 0) {
     if (b && b.t <= TE + b.stay) { b.stay += TRIO.T.stay; b.first = true; return; }
     /* 正在离场又被叫住：从现在退到的地方倒着走回来。离场退出去 out²，进场还差 (1 − u)³（easeOut），两者相等处接上 */
     if (b && b.wait <= 0) {
@@ -159,7 +159,7 @@ function Act(cfg) {
     b = { t: 0, wait, stay: TRIO.T.stay, first: true, cd: rnd(0.15, 0.4), lean: 0, snap: 0, ph: Math.random() * 6,
           pk: null, bm: null, prevPh: 0, landed: false,
           clip: null, ammo: true, pop: 1, hang: Math.random() * 6, sq: 0, fn: null, tf: null,   // 帧序列：出手动作、手里有没有东西、挤压、当前帧
-          at: slot ? slot.at : cfg.at, depth: slot ? slot.depth : cfg.depth };                 // 这一趟站哪、排多远
+          at: cfg.at, depth: cfg.depth };
     return b;
   }
   /* 从现在起 lead 秒后起手，一整下（ACT）能不能在离场前收完 */
@@ -274,7 +274,8 @@ function Act(cfg) {
 
   /* 丢东西：从手出去，沿二次贝塞尔飞到落点（每帧重取），弧往上鼓 arc × 距离 */
   /* 丢出去的东西在屏幕上多大（半径）：3D 转盘 / 程序画的按 r，平面图按长边 */
-  const itemR = () => A.r || (prop ? Math.max(prop.width, prop.height) * (A.scale || 1) / 2 : 20);
+  /* 3D 转盘整格画成 2r × atlas.scale 见方（drawAtlas），物件离中心最远 ≈ r × scale（松果 26 × 1.25 = 32.5，实测 32.6）—— 只按 r 算，翻头顶的路会贴着脸框擦过去 */
+  const itemR = () => (A.atlas ? A.r * A.atlas.scale : A.r) || (prop ? Math.max(prop.width, prop.height) * (A.scale || 1) / 2 : 20);
   function launch(P) {
     const h = handPt(P);
     const miss = A.miss && Math.random() < A.miss;       // 玫瑰：一部分故意扔在她脚边，钉在地板上
@@ -381,7 +382,7 @@ function Act(cfg) {
     const i = seqAt(A.seq, C.t);
     /* 蓄力那几帧整个人再往后倾一点（帧上画的动作 + 一点整体惯性），出手那一下往前甩 */
     if (i < FI) b.lean = -F * L.wind * LK * Math.min(1, C.t / LEAD);
-    if (!C.fired && i >= FI) { C.fired = true; b.lean = 0; b.snap = F * L.snap * LK; b.sq = -(A.stretch || 0.05); fire(); b.ammo = false; }
+    if (!C.fired && i >= FI) { C.fired = true; b.lean = 0; b.snap = F * L.snap * LK; b.sq = -(A.stretch ?? 0.05); fire(); b.ammo = false; }
     if (C.t >= CLIP) { b.clip = null; b.bm = null; b.cd = rnd(A.gap ? A.gap[0] : 0.5, A.gap ? A.gap[1] : 0.8); reload(); }
   }
   /* 手里重新冒出一个：出手动作收完、带线的那一只也收回来了（还在线上就不画手里这只，不然同时两只） */
@@ -462,8 +463,10 @@ function Act(cfg) {
     const f = o.face();
     mark(s.x, s.y);
     if (A.onHit === 'wear' && f) { for (const m of marks) if (m.kind === 'wear') m.life = Math.min(m.life, m.t + 0.25); marks.push({ kind: 'wear', t: 0, life: 2.6, a: rnd(-0.3, 0.3) }); return false; }
-    if (A.onHit === 'bounce' || A.onHit === 'heart') {                      // 弹开：往回、往上蹦，转着掉下去
-      s.fall = FALL; s.vx = -Math.sign(s.vx || -F) * rnd(160, 320); s.vy = -rnd(420, 620); s.spin = (A.spin || 6) * (s.vx > 0 ? 1 : -1);
+    /* 弹开：往上蹦、顺着来的方向擦过去一点，转着掉下去。不往回弹 —— 往回就是往扔的人自己那边，后排的人扔出去的东西弹回来
+       正好擦过自己主角的脸（B27 牛丸弹回压男生脸 149 px，哥们美术报的） */
+    if (A.onHit === 'bounce' || A.onHit === 'heart') {
+      s.fall = FALL; s.vx = Math.sign(s.vx || -F) * rnd(60, 160); s.vy = -rnd(420, 620); s.spin = (A.spin || 6) * (s.vx > 0 ? 1 : -1);
       return true;
     }
     return false;
@@ -1103,78 +1106,63 @@ function star5(ctx, R, r) {
 /* 秋千绳的默认样子（数据文件里 { ...ROPE, ... } 再覆写） */
 const ROPE = { w: 7, y: 0, fill: '#c9a36a', edge: 'rgba(70,45,20,.85)', wood: ['#b07a42', '#d9a468', 'rgba(90,55,25,.6)'] };
 
-/* 三人组（2026-09-29 夜改成 10 组固定搭配，docs/三人组30人名单.md）。ground = 后排地面那个 crew.js 的 Crew（哥们 Buddy / 闺蜜 Bestie），
+/* 三人组（自由组合，2026-10-01）。ground = 后排地面那个 crew.js 的 Crew（哥们 Buddy / 闺蜜 Bestie，滑板 / 平衡车的老角色还没迁成帧序列），
    data = trio_buddy.js / trio_bestie.js：{ ground: { 名单编号: Crew 的形象下标 }, cast: { 名单编号: cfg }, groups: [{ name, ground, top, floor }] }。
-   每次送礼：上一组还有人在场（含正在离场）→ 同一组三个人各续一段（在场的续时间、走了的重新进场）；否则随机抽一组（不连着抽同一组）。
-   **名单里还没做出来的人**（cast / ground 里没有这个编号）：这个槽位空着；一组一个都没做出来就整组跳过、不参与抽。
-   pick（诊断 ?buddy=<组号 1~10>）：指定抽哪一组（那组一个人都没有就照常随机）。 */
+   每次送礼：三个槽位各自从本边名单里（groups 里这个槽位出现过的编号）独立随机抽一人；**名单里还没做出来的人**（cast / ground 里都没有）不参与抽，
+   一个槽位一个人都没有就空着。在场时再送：在场的人各自续一段（Act 正在离场的叫回来；Crew 的人已经在走就让他走，这个槽位另抽一人），
+   空出来的槽位随机补人，不抽此刻还在场上（含正在离场）的人。
+   组表 groups 线上不用，只给诊断：pick（?buddy=<组号 1~10>）按组表召那一组；?buddy=B5.B13.B23 直接按三个人召（各自落到名单里他那个槽位）。 */
 function Trio(ground, data) {
   const acts = {};
   for (const [id, c] of Object.entries(data.cast)) acts[id] = Act({ id, ...c });
-  const who = (id, slot) => (id == null ? null : id in data.ground ? { m: ground, sk: data.ground[id], slot } : acts[id] ? { m: acts[id], slot } : null);
-  const groups = data.groups.map((g, i) => ({ no: i + 1, name: g.name, mem: ['ground', 'top', 'floor'].map(k => who(g[k], k)).filter(Boolean) }));
-  const ready = groups.filter(g => g.mem.length);
+  const who = (id, slot) => (id == null ? null : id in data.ground ? { m: ground, sk: data.ground[id], slot, id } : acts[id] ? { m: acts[id], slot, id } : null);
+  const slotOf = {};
+  for (const g of data.groups) for (const k of TRIO.SLOTS) if (g[k] != null) slotOf[g[k]] = k;
+  const pool = Object.fromEntries(TRIO.SLOTS.map(k => [k, Object.keys(slotOf).filter(id => slotOf[id] === k).map(id => who(id, k)).filter(Boolean)]));
+  const groups = data.groups.map((g, i) => ({ no: i + 1, name: g.name, mem: TRIO.SLOTS.map(k => who(g[k], k)).filter(Boolean) }));
   const all = [ground, ...Object.values(acts)];
-  /* cur 第一组；extra 第二次送时叠上来的人 [{ m, sk, slot, b }]；一个人在场 = 他那一趟的 b 还在 m 里。
-     滑板哥们 / 平衡车闺蜜两个人同在一份 Crew 里，只能按 b 分，不能看 m.active() */
-  let cur = null, extra = [];
-  const live = (x) => !!x.b && x.m.peek().includes(x.b);
-  const come = (x, wait, slot) => { const b = x.m.summon(x.sk, wait, slot); if (b) x.b = b; };
-  /* 续：Act 在场 / 离场中再 summon 就是续 / 叫回；Crew 按这个人续（同一份 Crew 里另一个人不动），他已经在走就让他走 ——
-     这时 Crew.summon 满员会去续另一个人，不会把他叫回来。下一次送他不在场了，按第一组走掉的人叫回来 */
-  const stay = (x) => (x.m.extend ? x.m.extend(x.b) : x.m.summon(x.sk));
-  const stagger = () => [...TRIO.STAGGER].sort(() => Math.random() - 0.5);
-  /* 从别的组里挑 n 个能上场的人补位，返回 [{ m, sk, slot, pos }]（pos 1 = 自己的 at，2 = 备用位）。
-     每个槽位最多 CAP 个站位，被在场的人（on）占掉的不能再用；Crew 的人各占一个后排站位（Crew 自己挑没人的那一排）。
-     组按随机顺序、组内按 PREFER 挑 —— 先把一组挑够再看下一组，读起来是"又来了一组"。
-     这个人此刻不能已经在场；Crew 还要有空位、形象跟场上的不重复 */
-  function pickExtra(on, n) {
-    const used = { ground: 0, top: 0, floor: 0 }, pos1 = { ground: false, top: false, floor: false };
-    for (const x of on) { used[x.slot]++; if (!x.m.extend && x.pos !== 2) pos1[x.slot] = true; }
-    const can = (x) => used[x.slot] < TRIO.CAP[x.slot] && (x.m.extend ? x.m.peek().length < x.m.cfg.max && !x.m.peek().some(b => b.skin === x.sk) : !x.m.active());
-    const got = [];
-    for (const g of [...ready].sort(() => Math.random() - 0.5)) {
-      if (cur && g.no === cur.no) continue;
-      for (const k of TRIO.PREFER) {
-        const x = g.mem.find(y => y.slot === k);
-        if (!x || got.length >= n || !can(x) || got.some(y => y.m === x.m && !x.m.extend)) continue;
-        const pos = x.m.extend || !pos1[k] ? 1 : 2;
-        if (pos === 1 && !x.m.extend) pos1[k] = true;
-        used[k]++;
-        got.push({ ...x, pos });
-      }
-    }
-    return got;
-  }
-  const slot2 = (x) => {
-    const c = x.m.cfg, [dx, dy, k] = TRIO.SLOT2[x.slot];
-    return { at: [c.at[0] + c.face * dx, c.at[1] + dy, c.at[2] * k], depth: c.depth * (x.slot === 'ground' ? k : 1) };
+  /* cur[槽位] = 这个槽位这一趟的人 { m, sk, slot, id, b }；一个人在场 = 他那一趟的 b 还在 m 里（含正在离场）。
+     滑板哥们 / 平衡车闺蜜几个人同在一份 Crew 里，只能按 b / 形象分，不能看 m.active() */
+  let cur = {};
+  const live = (x) => !!x && !!x.b && x.m.peek().includes(x.b);
+  const onStage = (x) => (x.m.extend ? x.m.peek().some(b => b.skin === x.sk) : x.m.active());
+  const room = (x) => (x.m.extend ? x.m.peek().length < x.m.cfg.max : true);
+  const come = (x, wait) => { const b = x.m.summon(x.sk, wait); if (b) x.b = b; return x; };
+  /* 续：Act 在场 / 离场中再 summon 就是续 / 叫回；Crew 按这个人续，他已经在走（extend 返回 false）就让他走 */
+  const stay = (x) => (x.m.extend ? x.m.extend(x.b) : (x.m.summon(x.sk), true));
+  const draw = (k) => {
+    const c = pool[k].filter(x => !onStage(x) && room(x));
+    return c.length ? { ...c[Math.floor(Math.random() * c.length)] } : null;
   };
+  const stagger = () => [...TRIO.STAGGER].sort(() => Math.random() - 0.5);
+  /* 诊断 pick → { 槽位: 人 }：组号按组表；"B5.B13.B23" 按编号（名单里没有 / 没做出来的忽略） */
+  function forced(pick) {
+    if (pick == null || pick === '') return null;
+    const g = groups.find(q => q.no === +pick);
+    const mem = g ? g.mem : String(pick).split('.').map(id => who(id, slotOf[id])).filter(x => x && x.slot);
+    return mem.length ? Object.fromEntries(mem.map(x => [x.slot, { ...x }])) : null;
+  }
   return {
-    groups, ready, all, acts: Object.values(acts),
+    groups, pool, all, acts: Object.values(acts),
     summon(pick) {
-      if ([...(cur ? cur.mem : []), ...extra].some(live)) {
-        const st = stagger();
-        cur.mem.forEach((x, i) => (live(x) ? stay(x) : come(x, st[i])));   // 第一组：在场的续，走掉的叫回来
-        extra = extra.filter(live);
-        extra.forEach(stay);
-        const on = [...cur.mem, ...extra].filter(live);
-        const add = pickExtra(on, TRIO.MAX - on.length);   // 补满 MAX（叠第二组）
-        add.forEach((x, i) => come(x, (i + 1) * 0.3, x.pos === 2 ? slot2(x) : null));
-        extra.push(...add.filter(live));
+      const st = stagger();
+      if (TRIO.SLOTS.some(k => live(cur[k]))) {
+        TRIO.SLOTS.forEach((k, i) => {
+          if (live(cur[k]) && stay(cur[k])) return;
+          const x = draw(k);
+          cur[k] = x && come(x, st[i]);
+        });
         return;
       }
-      const want = ready.find(g => g.no === +pick);
-      const pool = ready.length > 1 ? ready.filter(g => !cur || g.no !== cur.no) : ready;
-      const g = want || pool[Math.floor(Math.random() * pool.length)];
-      extra = [];
-      if (!g) { cur = null; return; }
-      cur = { ...g, mem: g.mem.map(x => ({ ...x })) };       // 这一趟的 b 记在副本上，别写进组表
-      const st = stagger();
-      cur.mem.forEach((x, i) => come(x, st[i]));
+      const f = forced(pick);
+      cur = {};
+      TRIO.SLOTS.forEach((k, i) => {
+        const x = f ? f[k] : draw(k);
+        if (x) cur[k] = come(x, st[i]);
+      });
     },
     current: () => cur,
     active: () => all.some(m => m.active()),
-    reset() { all.forEach(m => m.reset()); cur = null; extra = []; },
+    reset() { all.forEach(m => m.reset()); cur = {}; },
   };
 }

@@ -33,6 +33,9 @@ frames.json：
   "erase": {"hsv": [[h0, h1], [s0, s1], [v0, v1]], "grow": 5, "band": 30},   可选：把引擎自己画的东西（秋千座板）按颜色抠掉
   "check": [[x0, y0, x1, y1, "脚"], ...],   可选：另外量几个本该不动的部位（输出像素），打印每帧偏多少
   "graft": [{"from": "wind", "to": ["throw"], "box": [x0, y0, x1, y1], "feather": 30}]   可选：从好的一帧把一块搬到画走样的帧上（输出像素，左边 feather 宽渐变）
+  "scale_by": "fixed",               可选：缩放也按 fixed 找（站在滑板 / 平衡车上的人：板长不变，头仰着转着按头找不准）；loose 帧取同一张条的中位数
+  "scale_by": "sheet",               可选：每张条只在 scale_ref 帧（条上的 "scale_ref"，默认最后一格 = 重画的 idle）按头找一次缩放，整张条都用它
+  "loose_scale": "sheet",            可选：只让 loose 帧的缩放取同一张条其它帧的中位数（B12 飞扑那帧头侧着按头找会顶到边界）
   "loose": ["walk1", ...],            可选：脚在动的帧（走路 / 跑 / 跳），不按 fixed 配：横向按头、竖向按脚底贴参考帧的地面线；残差表里不计
   "lift": [{"name": "G11_tassel", "from": "idle", "box": {"idle": [x0, y0, x1, y1], ...}, "hsv": [[[h0, h1], [s0, s1], [v0, v1]], ...]}]
       可选：挂着的东西碰到身体（流苏贴肩膀）时拆成挂件层（见 lift()），帧里原位置补画
@@ -308,12 +311,38 @@ def cmd_build(d, spec):
     place = {}                                          # 帧 → (缩放 s, 这一格原点落在参考帧坐标的 (tx, ty))
     loose = set(spec.get('loose', []))
     ref_low = np.nonzero((np.array(ref)[..., 3] > 128).any(1))[0].max()
-    for fn, c in got.items():
+    byfix = spec.get('scale_by') == 'fixed'
+    loose_med = byfix or spec.get('loose_scale') == 'sheet'   # loose 帧的缩放取同一张条的中位数（头在飞扑 / 急刹里仰着按头找不准）
+    sheet_of = {fn: i for i, sh in enumerate(spec['sheets']) for fn in sh['frames']}
+    fixed_s = {}                                        # scale_by fixed：每张条里按板找到的缩放（loose 帧取同一张条的中位数）
+    # 按板找缩放时先做非 loose 帧，loose 帧（板翘起来、找不准）再取同一张条里其它帧的中位数：同一张条人一样大，头在急刹里仰着按头找不准
+    # scale_by "sheet"：同一张条里的姿势是一起画的、人一样大；每张条只在它的 scale_ref 帧（画了一遍 idle 的那格）上按头找一次缩放，
+    # 整张条都用它（G12 仰头、收腿那几格按头 / 按臀找都会偏 10%）
+    bysheet = spec.get('scale_by') == 'sheet'
+    sheet_ref = {i: (spec['ref'] if spec['ref'] in sh['frames'] else sh.get('scale_ref', sh['frames'][-1])) for i, sh in enumerate(spec['sheets'])}
+    sheet_s = {sheet_of[spec['ref']]: 1.0}
+    order = lambda q: (bysheet and q[0] != sheet_ref[sheet_of[q[0]]], loose_med and q[0] in loose)
+    for fn, c in sorted(got.items(), key=order):
         if fn == spec['ref']:
-            place[fn] = (1.0, 0.0, 0.0, 1.0); continue
+            place[fn] = (1.0, 0.0, 0.0, 1.0); fixed_s.setdefault(sheet_of[fn], []).append(1.0); continue
+        if bysheet and fn != sheet_ref[sheet_of[fn]]:
+            s = sheet_s[sheet_of[fn]]
+            if fn in loose:
+                cs = resize(c, s); h = find(gray(cs), head_t); low = np.nonzero((np.array(cs)[..., 3] > 128).any(1))[0].max()
+                place[fn] = (s, float(hb[0] - h[1]), float(ref_low - low), h[2]); print(f'  {fn:8s} 同条缩放 {s:.2f}  loose'); continue
+            r = find(gray(resize(c, s)), fix_t)
+            place[fn] = (s, fb[0] - r[1], fb[1] - r[0], r[2]); print(f'  {fn:8s} 同条缩放 {s:.2f}  不动部位匹配 {r[2]:.2f}'); continue
+        if loose_med and fn in loose and fixed_s.get(sheet_of[fn]):
+            s = float(np.median(fixed_s[sheet_of[fn]])); cs = resize(c, s); h = find(gray(cs), head_t)
+            low = np.nonzero((np.array(cs)[..., 3] > 128).any(1))[0].max()
+            place[fn] = (s, float(hb[0] - h[1]), float(ref_low - low), h[2])
+            print(f'  {fn:8s} 同条中位缩放 {s:.2f}  loose：横按头、竖按脚底')
+            continue
         best = None
+        # scale_by "fixed"：缩放也按不动的部位找（脚下的滑板 / 平衡车：长短不变，头在蓄力 / 出手里仰着转着，按头找会顶到搜索边界）
+        sc_t = fix_t if spec.get('scale_by') == 'fixed' and fn not in loose else head_t
         for s in np.arange(lo, hi + 1e-6, 0.01):
-            r = find(gray(resize(c, s)), head_t)
+            r = find(gray(resize(c, s)), sc_t)
             if r and (best is None or r[2] > best[1]): best = (s, r[2])
         s = best[0]
         if fn in loose:
@@ -325,7 +354,9 @@ def cmd_build(d, spec):
             continue
         r = find(gray(resize(c, s)), fix_t)
         place[fn] = (s, fb[0] - r[1], fb[1] - r[0], r[2])
-        print(f'  {fn:8s} 头缩放 {s:.2f}（匹配 {best[1]:.2f}）  不动部位匹配 {r[2]:.2f}')
+        if loose_med: fixed_s.setdefault(sheet_of[fn], []).append(s)
+        if bysheet: sheet_s[sheet_of[fn]] = s
+        print(f'  {fn:8s} {"板" if sc_t is fix_t else "头"}缩放 {s:.2f}（匹配 {best[1]:.2f}）  不动部位匹配 {r[2]:.2f}')
     # 统一画布：所有帧（缩放、平移后）的并集
     bx0 = min(tx for s, tx, ty, _ in place.values()); by0 = min(ty for s, tx, ty, _ in place.values())
     bx1 = max(place[f][1] + got[f].width * place[f][0] for f in got); by1 = max(place[f][2] + got[f].height * place[f][0] for f in got)
