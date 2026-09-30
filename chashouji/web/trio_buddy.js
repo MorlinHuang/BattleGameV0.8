@@ -6,72 +6,10 @@
 'use strict';
 
 const TRIO_BUDDY = {
+  /* 后排地面的人 = crew.js Buddy 的第几个形象（Buddy.skins 的下标）：B1 冲浪男 skate1 / B2 金箍浪子 skate4 / B3 贝勒 skate5 / B4 八神 skate7 */
+  ground: { B1: 0, B2: 1, B3: 2, B4: 3 },
+
   cast: {
-    /* ---- 后排地面：原 crew.js 的老角色（2026-10-01 迁成帧序列，引擎负责人维护这几条） ---- */
-    B1: {      // 冲浪男（棕发护目镜、花短裤、红滑板）：原 crew.js 滑板哥们（v14/buddy/skate1.png），2026-10-01 迁成帧序列（引擎负责人）
-      face: -1,
-      /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
-      sheet: { src: 'assets/trio/B1_surfer.webp', cell: [434, 421], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 415.6], at: [740, 1040, 0.83], pivot: [265.3, 415.6], leanK: 0,   // 锚点 = 滑板着地那一点
-      depth: 0.8, recipe: 'water',
-      /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
-      exit: { frame: 'ride', T: 0.5 },
-      idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
-      /* 水枪（crew.js Buddy.fluid 原样）：举枪（wind）→ 按瞄准角挑 aim0~10 那一帧、水柱沿枪口仰角射出去一直扫她（aim 段 2.2 秒）→ 枪口往下一甩收（follow） */
-      atk: { kind: 'jet', seq: [['wind', 0.22], ['aim', 2.2, 'fire'], ['follow', 0.3]], gap: [0.2, 0.45], stretch: 0,
-             aim: { frames: ['aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'], rate: 2.4, follow: 10, sweep: { a: [0.32, 0.2], w: [1.2, 2.8] },
-                    nozzle: { aim0: [6.9, 219.1, -0.52], aim1: [5.3, 199.8, -0.447], aim2: [5.1, 180.4, -0.374], aim3: [6.4, 161.1, -0.301], aim4: [9.0, 141.8, -0.228], aim5: [13.1, 122.9, -0.155], aim6: [18.5, 104.2, -0.082], aim7: [25.2, 86.1, -0.009], aim8: [33.3, 68.4, 0.064], aim9: [42.6, 51.4, 0.137], aim10: [53.2, 35.1, 0.21] } },
-             jet: { draw: 'stream', V: 1250, G: 900, rate: 55, life: 1.6, miss: 90, hitEvery: 0.3, floor: true } },
-    },
-    B2: {      // 金箍浪子（至尊宝式）：原 crew.js 滑板哥们（v14/buddy/skate4.png），2026-10-01 迁成帧序列（引擎负责人）
-      face: -1,
-      /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
-      sheet: { src: 'assets/trio/B2_zhizunbao.webp', cell: [434, 424], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 418.6], at: [740, 1040, 0.83], pivot: [265.3, 418.6], leanK: 0,   // 锚点 = 滑板着地那一点
-      depth: 0.8, recipe: 'water',
-      /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
-      exit: { frame: 'ride', T: 0.5 },
-      idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
-      /* 水枪（crew.js Buddy.fluid 原样）：举枪（wind）→ 按瞄准角挑 aim0~10 那一帧、水柱沿枪口仰角射出去一直扫她（aim 段 2.2 秒）→ 枪口往下一甩收（follow） */
-      atk: { kind: 'jet', seq: [['wind', 0.22], ['aim', 2.2, 'fire'], ['follow', 0.3]], gap: [0.2, 0.45], stretch: 0,
-             aim: { frames: ['aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'], rate: 2.4, follow: 10, sweep: { a: [0.32, 0.2], w: [1.2, 2.8] },
-                    nozzle: { aim0: [6.9, 222.1, -0.52], aim1: [5.3, 202.8, -0.447], aim2: [5.1, 183.4, -0.374], aim3: [6.4, 164.1, -0.301], aim4: [9.0, 144.8, -0.228], aim5: [13.1, 125.9, -0.155], aim6: [18.5, 107.2, -0.082], aim7: [25.2, 89.1, -0.009], aim8: [33.3, 71.4, 0.064], aim9: [42.6, 54.4, 0.137], aim10: [53.2, 38.1, 0.21] } },
-             jet: { draw: 'stream', V: 1250, G: 900, rate: 55, life: 1.6, miss: 90, hitEvery: 0.3, floor: true } },
-    },
-    B3: {      // 格格府贝勒（五阿哥式）：原 crew.js 滑板哥们（v14/buddy/skate5.png），2026-10-01 迁成帧序列（引擎负责人）
-      face: -1,
-      /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
-      sheet: { src: 'assets/trio/B3_beile.webp', cell: [434, 419], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 413.6], at: [740, 1040, 0.83], pivot: [265.3, 413.6], leanK: 0,   // 锚点 = 滑板着地那一点
-      depth: 0.8, recipe: 'water',
-      /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
-      exit: { frame: 'ride', T: 0.5 },
-      idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
-      /* 水枪（crew.js Buddy.fluid 原样）：举枪（wind）→ 按瞄准角挑 aim0~10 那一帧、水柱沿枪口仰角射出去一直扫她（aim 段 2.2 秒）→ 枪口往下一甩收（follow） */
-      atk: { kind: 'jet', seq: [['wind', 0.22], ['aim', 2.2, 'fire'], ['follow', 0.3]], gap: [0.2, 0.45], stretch: 0,
-             aim: { frames: ['aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'], rate: 2.4, follow: 10, sweep: { a: [0.32, 0.2], w: [1.2, 2.8] },
-                    nozzle: { aim0: [6.9, 217.1, -0.52], aim1: [5.3, 197.8, -0.447], aim2: [5.1, 178.4, -0.374], aim3: [6.4, 159.1, -0.301], aim4: [9.0, 139.8, -0.228], aim5: [13.1, 120.9, -0.155], aim6: [18.5, 102.2, -0.082], aim7: [25.2, 84.1, -0.009], aim8: [33.3, 66.4, 0.064], aim9: [42.6, 49.4, 0.137], aim10: [53.2, 33.1, 0.21] } },
-             jet: { draw: 'stream', V: 1250, G: 900, rate: 55, life: 1.6, miss: 90, hitEvery: 0.3, floor: true } },
-    },
-    B4: {      // 红发宿敌（八神庵式）：原 crew.js 滑板哥们（v14/buddy/skate7.png），2026-10-01 迁成帧序列（引擎负责人）
-      face: -1,
-      /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
-      sheet: { src: 'assets/trio/B4_yagami.webp', cell: [442, 458], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [273.3, 452.6], at: [740, 1040, 0.83], pivot: [273.3, 452.6], leanK: 0,   // 锚点 = 滑板着地那一点
-      depth: 0.8, recipe: 'water',
-      /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
-      exit: { frame: 'ride', T: 0.5 },
-      idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
-      /* 水枪（crew.js Buddy.fluid 原样）：举枪（wind）→ 按瞄准角挑 aim0~10 那一帧、水柱沿枪口仰角射出去一直扫她（aim 段 2.2 秒）→ 枪口往下一甩收（follow） */
-      atk: { kind: 'jet', seq: [['wind', 0.22], ['aim', 2.2, 'fire'], ['follow', 0.3]], gap: [0.2, 0.45], stretch: 0,
-             aim: { frames: ['aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'], rate: 2.4, follow: 10, sweep: { a: [0.32, 0.2], w: [1.2, 2.8] },
-                    nozzle: { aim0: [14.9, 256.1, -0.52], aim1: [13.3, 236.8, -0.447], aim2: [13.1, 217.4, -0.374], aim3: [14.4, 198.1, -0.301], aim4: [17.0, 178.8, -0.228], aim5: [21.1, 159.9, -0.155], aim6: [26.5, 141.2, -0.082], aim7: [33.2, 123.1, -0.009], aim8: [41.3, 105.4, 0.064], aim9: [50.6, 88.4, 0.137], aim10: [61.2, 72.1, 0.21] } },
-             jet: { draw: 'stream', V: 1250, G: 900, rate: 55, life: 1.6, miss: 90, hitEvery: 0.3, floor: true } },
-    },
     /* ---- 帧序列（新标准） ---- */
     B21: {      // 樱木（红发篮球少年）：右下角腾空扑地 → 砸地 → 贴地滑进来，趴着甩 3D 篮球，砸中弹开
       face: -1,
