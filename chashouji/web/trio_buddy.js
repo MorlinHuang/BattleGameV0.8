@@ -412,6 +412,25 @@ const TRIO_BUDDY = {
              gap: [0.7, 1.1], stretch: 0.03 },
     },
 
+    B17: {      // 补丁帽灰狼：脚踝拴着绳从右上倒挂着掉下来、蹦两下，挂着抱臂坏笑露尖牙；抡起捕羊网兜一甩，罩在她头上
+      face: -1,
+      sheet: { src: 'assets/trio/B17_wolf.webp', cell: [232, 324], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'plunge', 'bounce', 'settle', 'idle2'] },
+      /* 上方；倒挂，锚点 = 两只脚踝（绳子拴的那一点）。剪影面积 s 1 时 1.72 万，s 1.05 → 1.89 万（上方对格格 −10%）。
+         [830, 370]：同组 B10 收势双手举过头顶，y 470 时相交 5223 px；370 时在场帧外扩 4px 相交 0。画布宽 960：人最右伸出锚点 119 px */
+      anchor: [116.3, 6.5], at: [830, 370, 1.05], pivot: [116, -660], leanK: 0,
+      depth: 0.5, recipe: 'thud',
+      /* 倒挂垂下：顺着绳从上面掉下来（伸直俯冲）→ 冲过头弹回（张开手脚）→ 稳住；绳子引擎画，拴在脚踝 line */
+      enter: { kind: 'drop', len: 700, line: [116, 6], T: 0.8, w: 3, fill: '#8a6a44', edge: 'rgba(60,40,20,.9)',
+               seq: [['plunge', 0.35], ['bounce', 0.25], ['settle', 0.2, 'land'], ['idle', 9]], sq: 0.06 },
+      exit: { frame: 'plunge' },
+      idle: { frame: 'idle', breathe: [0.014, 0.9, 0.3] },
+      flex: { idle: [[150, 110, 208, 198, 'l', 5, 0.9]] },   // 大尾巴：贴屁股那边（左）钉住，尾梢甩
+      /* 捕羊网兜（raw/net_src.png，part.py w 200）：wind 抡到身后，throw 帧爪子甩出去那一刻离手，打中罩在头上（onHit net） */
+      atk: { kind: 'throw', item: 'net', prop: 'assets/trio/B17_net.webp', scale: 0.7,
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.45]], hold: { throw: [14, 198] },
+             T: 0.5, arc: 0.2, spin: 1.5, stretch: 0.02, onHit: 'net', gap: [0.6, 1.0] },
+    },
+
     B18: {      // 摇扇才子：从右上墙头后面一蹿翻上来、坐定；背后插着题诗折扇，伸手抽出来一甩，3D 折扇旋着飞过去
       face: -1,
       sheet: { src: 'assets/trio/B18_tangbohu.webp', cell: [279, 375], cols: 4, names: ['idle', 'raise', 'wind', 'throw', 'follow', 'leap', 'land', 'idle2'] },
