@@ -356,8 +356,9 @@ def hip_find(im):
 # 取中间（前倾角度不同，单用身高会偏；衣服被手臂/头发挡住，单用面积会偏）。换了关键姿势必须重量。
 BODY = {'aK': 0.920, 'aF': 0.756, 'aL': 0.797, 'bK': 0.909, 'bF': 0.855, 'bL': 0.827}
 
-# 过渡帧：档名 → (从哪一档来, 贴回 base 的分界列 TWEEN_CUT，原图坐标)。见 main() 里「过渡帧」一段
-TWEEN = {'aK': ('n0', 690)}
+# 过渡帧：档名 → (从哪一档来, 贴回 base 的分界列，原图坐标 ≈ base 里手机中心)。见 main() 里「过渡帧」一段。
+# a 档赢方（女生）在左：分界以左贴回；b 档赢方（男生）在右：分界以右贴回
+TWEEN = {'aK': ('n0', 690), 'aF': ('aK', 580), 'aL': ('aF', 595)}
 TWEEN_FEATHER = 20
 
 EDGE_STEP = 6    # 轮廓按行采样的间距（引擎像素）
@@ -601,7 +602,7 @@ def main():
     # 过渡帧（2026-09-30 用户：「男女主的动作切换还是太生硬……需要加中间帧」）：tween/<档>/ 下 base.png（= 该档原图）
     # + t1~tN（从上一档往这一档，按顺序），换档时引擎先把这几格播完再进步态，往回换倒着播。
     # t* 是拿 base 做蒙版局部重绘、**只重画输的那一方**得来的（赢方每张重画的话发丝衣褶都在变，一播就抖）。
-    # 生图总会把没开放的区域也动一点，所以 TWEEN_CUT 以左（赢方 + 手机）一律贴回 base 原像素，
+    # 生图总会把没开放的区域也动一点，所以分界列靠赢方那一侧（赢方 + 手机）一律贴回 base 原像素，
     # 交界放在手机机身中段（纯黑平涂），过渡 TWEEN_FEATHER 像素看不出接缝；放在输方手腕上会错开一截手臂。
     # 缩放与脚底沿用这一档（赢方是 base 里同一个人），水平位置按格从上一档的手机偏移匀到这一档的，
     # 否则赢方会在上一档 → t1 那一下横跳（n0 → aK 手机相对锚点差 16 像素）。
@@ -609,7 +610,8 @@ def main():
     for name, (frm, cut) in TWEEN.items():
         d = os.path.join(HERE, 'tween', name)
         base = np.array(Image.open(os.path.join(d, 'base.png')).convert('RGB')).astype(np.float32)
-        w = np.clip((np.arange(base.shape[1]) - cut) / TWEEN_FEATHER, 0, 1)[None, :, None]
+        x = np.arange(base.shape[1])
+        w = np.clip(((x - cut) if name[0] == 'a' else (cut - x)) / TWEEN_FEATHER, 0, 1)[None, :, None]   # 取生图的权重
         n = len([f for f in os.listdir(d) if f[0] == 't' and f[1:-4].isdigit()])
         k = scales.get(name, SCALE)
         dx = lambda m: m['phone'][0] - m['ax']
