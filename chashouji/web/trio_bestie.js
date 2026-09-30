@@ -348,7 +348,7 @@ const TRIO_BESTIE = {
       atk: { kind: 'throw', item: 'knife', prop: 'assets/world/trio_g7_knife.webp', scale: 0.5,
              seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.35]],
              hold: { wind: [84, 16], throw: [316, 86] },
-             T: 0.4, arc: 0.12, spin: 14, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
+             T: 0.4, arc: 0.12, spin: 14, aim: true, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
     G8: {       // 冰雪女王（艾莎式）：踮着脚一路滑冰滑进来（燕式滑行 → 踮脚转一圈 → 急停），掌心上浮着一根冰锥；把冰锥举过头顶一掷，打中他的头冻出一层冰壳
       face: +1,
@@ -408,8 +408,8 @@ const TRIO_BESTIE = {
                  at: { idle: [133.4, 65.4, 0], wind: [144.4, 66.4, 0], throw: [155.4, 66.4, 0], follow: [128.4, 59.4, 0], leap: [133.4, 159.4, 0], land: [131.4, 130.4, 0], rise: [133.4, 72.4, 0] } },
               { src: 'assets/trio/G18_feathers.webp', pivot: [89.9, 169.0], z: -1, sway: [0.12, 0.9, 0],
                  at: { idle: [147.3, 20.2, 0], wind: [158.3, 21.2, 0], throw: [169.3, 21.2, 0], follow: [142.3, 14.2, 0], leap: [147.3, 114.2, 0], land: [145.3, 85.2, 0], rise: [147.3, 27.2, 0] } }],
-      /* 红缨枪照道具表 3D：r 40 cell 120 scale 1.07，转速 π / T；命中炸红（bloom） */
-      atk: { kind: 'throw', item: 'spear', r: 40, atlas: { src: 'assets/trio/prop_spear.webp', n: 36, cols: 6, cell: 120, scale: 1.07 },
+      /* 红缨枪照道具表 3D：r 95 cell 200 scale 1.02（审查第五批返工，引擎负责人：屏幕长 152~195 px，枪头始终朝右），转速 π / T；命中炸红（bloom） */
+      atk: { kind: 'throw', item: 'spear', r: 95, atlas: { src: 'assets/trio/prop_spear.webp', n: 36, cols: 6, cell: 200, scale: 1.02 },
              seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
              hold: { wind: [132, 16], throw: [318, 72] },
              T: 0.55, arc: 0.18, spin: 5.7, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },

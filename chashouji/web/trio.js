@@ -58,7 +58,8 @@ const bezDir = (p0, c, p2, e) => Math.atan2((1 - e) * (c[1] - p0[1]) + e * (p2[1
    idle   帧序列：{ frame: 待机帧, breathe: [胀缩幅度, 每秒几次, 横向补偿 (默认 0.4)] }；flex { 帧: [[x0, y0, x1, y1, 't'|'b'|'l'|'r' 钉住哪边, 幅度, 每秒几次, 跟摆], ...] }
    atk    攻击：{ kind: 'throw' | 'punch' | 'beam' | 'camera' | 'whip' | 'rush' | 'slash' | 'spray', ... }。帧序列：seq [[帧或帧数组, 秒, 'fire'?], ...]、
           hold { 帧: [x, y] } 东西拿在哪（出手帧那一格就是出手点）或 from [x, y]、atlas 3D 转盘图集 { src, n, cols, cell, scale }（没有就用 prop 平面图）、
-          tether 手和丢出去的东西连一根线；onHit 另有 net 网兜、freeze 冻住。throw / camera / beam / punch 帧序列和单张立绘都能用，
+          tether 手和丢出去的东西连一根线；aim 平面图（prop）的尖头朝飞行方向、不自转：true = 图上尖头朝右，数字 = 图上尖头的朝向角（弧度），
+          拿在手里时尖头指着落点、打中弹开后才打转；onHit 另有 net 网兜、freeze 冻住。throw / camera / beam / punch 帧序列和单张立绘都能用，
           whip 抽打 / rush 连打（残影）/ slash 斩痕 / spray 喷只有帧序列（fire() 起头、stepFx 按时间推）。持续型的出手帧时长要盖住它
    parts  帧序列：挂件层（扇子、靠旗、翎子这类单独拆出来随动作甩的东西）[{ src, pivot: [x, y] 挂件图上挂住的点, z: -1 画在人后 / 1 人前,
           at: { 帧: [x, y, 角度] } 这一帧挂在哪（格内像素）、没写的帧不画, sway: [幅度 rad, 每秒几次, 跟摆] }]（v14/trio/tools/part.py 出图）；
@@ -67,6 +68,7 @@ const bezDir = (p0, c, p2, e) => Math.atan2((1 - e) * (c[1] - p0[1]) + e * (p2[1
 function Act(cfg) {
   const F = cfg.face, A = cfg.atk, SH = cfg.sheet || null;
   const LK = cfg.leanK != null ? cfg.leanK : 1;
+  const AIM_TIP = A.aim === true ? 0 : typeof A.aim === 'number' ? A.aim : null;   // 平面道具尖头在图上的朝向（atk.aim）
   const E = typeof cfg.enter === 'string' ? { kind: cfg.enter } : cfg.enter, EK = E.kind;   // 进场方式（帧序列的 enter 是 { kind, seq, ... }）
   /* 走：位移跟帧走 —— 只在换帧那一刻迈一步，同一帧停留时人不动，踩在地上的那只脚就钉在地上（连续平移 + 7fps 换帧 = 着地的脚一帧滑 30px）。
      一步 = enter.stride（接地帧两脚距离，格内像素）/ 2 × s；步数 = 距离 ÷ 步长取整，步长按步数匀一下让最后一步正好落到 at；进场几秒由步数和 fps 定。
@@ -456,9 +458,9 @@ function Act(cfg) {
     if (tg) s.p2 = [tg[0], tg[1]];
     if (!s.p2) return false;
     const e = Math.min(1, s.t / s.T), p0 = s.p0, p2 = s.p2, d = Math.hypot(p2[0] - p0[0], p2[1] - p0[1]);
-    const [nx, ny] = bez(p0, over(p0, p2, Math.min(p0[1], p2[1]) - s.arc * d, itemR()), p2, e);
+    const c = over(p0, p2, Math.min(p0[1], p2[1]) - s.arc * d, itemR()), [nx, ny] = bez(p0, c, p2, e);
     s.vx = (nx - s.x) / Math.max(dt, 1e-3); s.vy = (ny - s.y) / Math.max(dt, 1e-3);
-    s.x = nx; s.y = ny; s.ang += s.spin * dt;
+    s.x = nx; s.y = ny; s.ang += s.spin * dt; s.dir = bezDir(p0, c, p2, e);
     if (e < 1) return true;
     if (s.miss) { s.stuck = 0; return true; }
     /* 到了：打中。后续看是什么东西 */
@@ -469,6 +471,7 @@ function Act(cfg) {
     /* 弹开：往上蹦、顺着来的方向擦过去一点，转着掉下去。不往回弹 —— 往回就是往扔的人自己那边，后排的人扔出去的东西弹回来
        正好擦过自己主角的脸（B27 牛丸弹回压男生脸 149 px，哥们美术报的） */
     if (A.onHit === 'bounce' || A.onHit === 'heart') {
+      if (AIM_TIP != null) s.ang = s.dir - AIM_TIP;                     // 朝前飞的刀：从飞进去的朝向接着打转
       s.fall = FALL; s.vx = Math.sign(s.vx || -F) * rnd(60, 160); s.vy = -rnd(420, 620); s.spin = (A.spin || 6) * (s.vx > 0 ? 1 : -1);
       return true;
     }
@@ -835,7 +838,11 @@ function Act(cfg) {
     const [x, y] = P.at(A.hold[fn]), z = b.pop < 1 ? backOut(b.pop) : 1;
     ctx.save(); ctx.translate(x, y);
     if (atlas) drawAtlas(ctx, b.hang, A.r * z);
-    else if (prop) { const w = prop.width * A.scale * z, h = prop.height * A.scale * z; ctx.rotate(b.hang * 0.2); ctx.drawImage(prop, -w / 2, -h / 2, w, h); }
+    else if (prop) {
+      const w = prop.width * A.scale * z, h = prop.height * A.scale * z, tg = AIM_TIP != null && o.aim(0.5);
+      ctx.rotate(tg ? Math.atan2(tg[1] - y, tg[0] - x) - AIM_TIP : b.hang * 0.2);     // aim：拿在手里就指着他
+      ctx.drawImage(prop, -w / 2, -h / 2, w, h);
+    }
     else if (A.item === 'bball') drawBall(ctx, A.r * z);
     ctx.restore();
   }
@@ -964,15 +971,23 @@ function Act(cfg) {
     if (atlas) { drawAtlas(ctx, s.ang, A.r); ctx.restore(); return; }                      // 有 3D 转盘图集就走图集，item 只是名字（命中反馈、带线认它）
     if (s.kind === 'bball') { ctx.rotate(s.ang); drawBall(ctx, A.r); ctx.restore(); return; }
     if (!prop) { ctx.restore(); return; }
-    let ang = s.ang;
-    /* 玫瑰：花头朝前飞（贴图里花在左）；钉在地上时花朝上斜插 */
-    if (s.kind === 'rose') ang = s.stuck != null ? -Math.PI / 2 + 0.5 * (s.j - 0.5) + Math.PI : Math.atan2(s.vy || 0, s.vx || -1) - Math.PI;
-    ctx.rotate(ang);
+    ctx.rotate(propAng(s));
     const w = prop.width * A.scale, h = prop.height * A.scale;
     const ox = s.kind === 'rose' ? -w * 0.12 : -w / 2;   // 玫瑰以花头为中心（钉住时花朝上、茎扎进地板）
     ctx.drawImage(prop, ox, -h / 2, w, h);
     ctx.restore();
   }
+
+  /* 平面图画成什么角度 */
+  function propAng(s) {
+    if (AIM_TIP != null && s.fall == null && s.dir != null) return s.dir - AIM_TIP;   // aim：尖头顺着这一刻的飞行方向
+    /* 玫瑰：花头朝前飞（贴图里花在左）；钉在地上时花朝上斜插 */
+    if (s.kind === 'rose') return s.stuck != null ? -Math.PI / 2 + 0.5 * (s.j - 0.5) + Math.PI : Math.atan2(s.vy || 0, s.vx || -1) - Math.PI;
+    return s.ang;
+  }
+  /* 诊断（胶片 fly）：飞着的平面道具 [x, y, 尖头朝向（画的角度 + 图上尖头角）, 这一步实际位移方向] */
+  const flying = () => (prop && AIM_TIP != null ? shots.filter(s => s.vx != null && s.fall == null && s.stuck == null)
+    .map(s => [Math.round(s.x), Math.round(s.y), +(propAng(s) + AIM_TIP).toFixed(3), +Math.atan2(s.vy, s.vx).toFixed(3)]) : []);
 
   /* 连打的残影：从手冲到落点，一路拖三道越来越淡的影子；影子是出手帧里的一块（A.rush.ghost { frame, box }，拳头 / 腿 / 棍） */
   function drawGhost(ctx, s) {
@@ -1164,7 +1179,7 @@ function Act(cfg) {
   }
   /* 此刻在哪一段：wait 等着上 / enter 进场 / on 在场 / exit 离场（胶片标格用：出手中途离场这种冲突只看帧名分不出来） */
   const phase = () => (!b ? null : b.wait > 0 ? 'wait' : b.t < TE ? 'enter' : b.t <= TE + b.stay ? 'on' : 'exit');
-  return { init, load, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), frame: () => (b && SH ? frameName() : null), phase, cfg };
+  return { init, load, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), flying, frame: () => (b && SH ? frameName() : null), phase, cfg };
 }
 
 /* ---- 程序画的小东西 ---- */

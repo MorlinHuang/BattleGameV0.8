@@ -6,11 +6,18 @@
   + 箍下一簇红缨（10 根独立的粗锥形缨穗，从箍下往外往下散开）+ 杆尾金属镦（圆柱 + 尖锥）。
 - **红缨是这件的主要内部结构**：7 根缨穗各是一块真几何，转起来互相遮挡一直在变。
   枪杆本身是一根线（剥外轮廓后什么都不剩），内部描边只能来自红缨和枪头的中脊。
-- r 40 → 1 单位 = 40 屏幕 px，g ≥ 2W ≈ 0.14 单位。**第一版杆半径 0.05、枪头宽 0.34、10 根缨穗根部 0.065**：
+- （首版）r 40 → 1 单位 = 40 屏幕 px，g ≥ 2W ≈ 0.14 单位。**第一版杆半径 0.05、枪头宽 0.34、10 根缨穗根部 0.065**：
   杆在屏幕上 4px 宽、缨穗 5px 粗，整件 12/12 帧是墨块（非描边色不到实心的 15%），描边读成 6.9px。
   现在杆 0.075、枪头宽 0.5 长 0.55、缨穗 7 根根部 0.1 长 0.5：每一块都自己占得住几个像素的填色。
 - 长轴竖着（Z），转轴 lean 45：长轴始终垂直于转轴，屏幕长度最短 cos45 ≈ 0.7；枪头是扁片（有正面），
   2×lean = 90° 的偏转让它一半帧看到菱形宽面、一半帧看到中脊侧面。
+
+## 返工（2026-10-01，审查第五批 G18）
+
+审查：屏幕长边 59~85px（中位 74），她身高 290px，飞出去读成一支小飞镖。要求屏幕长 ≥ 150px、长轴屏幕上 ≥ 0.76 倍长，r 和描边按新长度重算。
+- r 40 → 95（整根 2 单位 = 190px），screen_r 跟着改（描边按新 r 算，屏幕上仍是 ~3px），不是只放大 scale。
+- 长轴改横放（X）+ lean −75（同拐杖 / 哑铃，规范 7.4 第 2 条）：长轴绕转轴扫一个小圆锥、最多点头 30°，永远不会转到正对镜头缩成一团；
+  枪头扁片的宽面 / 中脊侧面靠绕长轴的滚（roll）轮流出来。首版 lean 45 长轴竖着：一半帧长轴斜向纵深，短到 0.7。
 
 跑：blender -b --python spear.py -- 36 <边长> 128 <out> 1
 """
@@ -62,5 +69,11 @@ for i in range(N):
 bar((0, 0, -0.82), (0, 0, -0.93), 0.1, 0.1, 'brass', 14)
 bar((0, 0, -0.93), (0, 0, -1.0), 0.1, 0.03, 'brass', 14)
 
+# 长轴横放：join 之前全选 apply 旋转（规范 7.4 第 3 条）
+for o in bpy.context.scene.objects:
+    if o.type == 'MESH': o.select_set(True)
+bpy.context.view_layer.objects.active = [o for o in bpy.context.scene.objects if o.type == 'MESH'][0]
+bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis='Y', center_override=(0, 0, 0))   # 枪头朝屏幕右（她往右扔，枪头一路朝前）
+bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
 ob = join_all()
-render_turntable('spear', active=ob, lean=45, tilt=0.25, roll=0.35, screen_r=40)
+render_turntable('spear', active=ob, lean=-75, tilt=0.0, roll=0.35, screen_r=95)

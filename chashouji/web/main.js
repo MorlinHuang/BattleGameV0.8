@@ -2832,7 +2832,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       const ph = Object.fromEntries(ACTS.filter(a => a.frame()).map(a => [a.cfg.id, a.phase()]));   // 这一格谁在进场 / 在场 / 离场
       /* 喷（atk.kind 'jet'）的瞄准：[编号, 枪口仰角, 平滑后的落点, 喷口]（喷着的时候才有喷口） */
       const jet = ACTS.filter(a => a.peek()[0] && a.peek()[0].ja != null).map(a => { const b = a.peek()[0]; return [a.cfg.id, +b.ja.toFixed(3), b.jtg && b.jtg.slice(0, 2).map(Math.round), b.jm && b.jm.map(Math.round)]; });
-      (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last, ph, jet });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
+      /* 朝前飞的平面道具（atk.aim）：[编号, x, y, 尖头朝向, 实际位移方向]，两个角应当一致 */
+      const fly = ACTS.filter(a => a.flying).flatMap(a => a.flying().map(f => [a.cfg.id, ...f]));
+      (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last, ph, jet, fly });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 168, 26);
