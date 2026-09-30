@@ -5,15 +5,67 @@
 'use strict';
 
 const TRIO_BESTIE = {
-  /* 后排地面的人 = crew.js Bestie 的第几个形象（MIST.skins 的下标）：G1 墨镜短发 src3 / G2 蓝发发明家 src7 / G3 月光水手 src8 */
-  ground: { G1: 0, G2: 1, G3: 2 },
-
   cast: {
+    /* ---- 后排地面：原 crew.js 的老角色（2026-10-01 迁成帧序列，引擎负责人维护这几条） ---- */
+    G1: {      // 墨镜短发（头顶墨镜、条纹比基尼、粉平衡车）：原 crew.js 平衡车闺蜜（v14/bestie/src3.png），2026-10-01 迁成帧序列（引擎负责人）
+      face: 1,
+      /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.88 时和 crew.js 原来一样大 */
+      sheet: { src: 'assets/trio/G1_shades.webp', cell: [234, 380], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10', 'kick0', 'kick1', 'kick2', 'kick3', 'kick4', 'kick5', 'kick6', 'kick7', 'kick8', 'kick9', 'kick10'] },
+      anchor: [74.9, 374.3], at: [250, 1000, 0.88], pivot: [74.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点
+      depth: 0.8, recipe: 'pepper',
+      /* 踩着平衡车从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下罐子往上一扬（brake）；离场往后溜出去 */
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      exit: { frame: 'ride', T: 0.5 },
+      idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
+      /* 防狼喷雾（crew.js MIST 原样）：摇罐举起（wind）→ 按瞄准角挑 aim0~10、每按一下后坐换 kick0~10（"呲—呲—"），雾冲男生的脸 → 收罐（follow） */
+      atk: { kind: 'jet', seq: [['wind', 0.22], ['aim', 2.2, 'fire'], ['follow', 0.3]], gap: [0.2, 0.45], stretch: 0,
+             aim: { frames: ['aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'],
+                    kick: ['kick0', 'kick1', 'kick2', 'kick3', 'kick4', 'kick5', 'kick6', 'kick7', 'kick8', 'kick9', 'kick10'], rate: 2.4, follow: 10, sweep: { a: [0.3, 0.15], w: [1.3, 3.1] },
+                    nozzle: { aim0: [225.9, 148.6, -0.7], aim1: [226.2, 134.5, -0.595], aim2: [225.1, 120.3, -0.49], aim3: [222.6, 106.2, -0.385], aim4: [218.7, 92.2, -0.28], aim5: [213.4, 78.6, -0.175], aim6: [206.7, 65.4, -0.07], aim7: [198.8, 52.9, 0.035], aim8: [189.6, 41.1, 0.14], aim9: [179.3, 30.2, 0.245], aim10: [167.9, 20.3, 0.35], kick0: [225.3, 132.1, -0.58], kick1: [224.0, 117.9, -0.475], kick2: [221.3, 103.7, -0.37], kick3: [217.1, 89.8, -0.265], kick4: [211.6, 76.3, -0.16], kick5: [204.8, 63.3, -0.055], kick6: [196.6, 50.9, 0.05], kick7: [187.3, 39.2, 0.155], kick8: [176.8, 28.5, 0.26], kick9: [165.2, 18.7, 0.365], kick10: [152.7, 10.1, 0.47] } },
+             jet: { draw: 'mist', V: 1100, G: 60, drag: 1.0, rate: 90, spread: 0.1, vJit: 0.15, life: 0.8, miss: 60, snap: 12, hitEvery: 0.3,
+                    pulse: [0.42, 0.14], kickDecay: 10 } },
+    },
+    G2: {      // 蓝发发明家（自制喷雾器）：原 crew.js 平衡车闺蜜（v14/bestie/src7.png），2026-10-01 迁成帧序列（引擎负责人）
+      face: 1,
+      /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.88 时和 crew.js 原来一样大 */
+      sheet: { src: 'assets/trio/G2_bulma.webp', cell: [245, 380], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10', 'kick0', 'kick1', 'kick2', 'kick3', 'kick4', 'kick5', 'kick6', 'kick7', 'kick8', 'kick9', 'kick10'] },
+      anchor: [85.9, 374.3], at: [250, 1010, 0.88], pivot: [85.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点
+      depth: 0.8, recipe: 'pepper',
+      /* 踩着平衡车从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下罐子往上一扬（brake）；离场往后溜出去 */
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      exit: { frame: 'ride', T: 0.5 },
+      idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
+      /* 防狼喷雾（crew.js MIST 原样）：摇罐举起（wind）→ 按瞄准角挑 aim0~10、每按一下后坐换 kick0~10（"呲—呲—"），雾冲男生的脸 → 收罐（follow） */
+      atk: { kind: 'jet', seq: [['wind', 0.22], ['aim', 2.2, 'fire'], ['follow', 0.3]], gap: [0.2, 0.45], stretch: 0,
+             aim: { frames: ['aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'],
+                    kick: ['kick0', 'kick1', 'kick2', 'kick3', 'kick4', 'kick5', 'kick6', 'kick7', 'kick8', 'kick9', 'kick10'], rate: 2.4, follow: 10, sweep: { a: [0.3, 0.15], w: [1.3, 3.1] },
+                    nozzle: { aim0: [236.9, 148.6, -0.7], aim1: [237.2, 134.5, -0.595], aim2: [236.1, 120.3, -0.49], aim3: [233.6, 106.2, -0.385], aim4: [229.7, 92.2, -0.28], aim5: [224.4, 78.6, -0.175], aim6: [217.7, 65.4, -0.07], aim7: [209.8, 52.9, 0.035], aim8: [200.6, 41.1, 0.14], aim9: [190.3, 30.2, 0.245], aim10: [178.9, 20.3, 0.35], kick0: [236.3, 132.1, -0.58], kick1: [235.0, 117.9, -0.475], kick2: [232.3, 103.7, -0.37], kick3: [228.1, 89.8, -0.265], kick4: [222.6, 76.3, -0.16], kick5: [215.8, 63.3, -0.055], kick6: [207.6, 50.9, 0.05], kick7: [198.3, 39.2, 0.155], kick8: [187.8, 28.5, 0.26], kick9: [176.2, 18.7, 0.365], kick10: [163.7, 10.1, 0.47] } },
+             jet: { draw: 'mist', V: 1100, G: 60, drag: 1.0, rate: 90, spread: 0.1, vJit: 0.15, life: 0.8, miss: 60, snap: 12, hitEvery: 0.3,
+                    pulse: [0.42, 0.14], kickDecay: 10 } },
+    },
+    G3: {      // 月光水手少女：原 crew.js 平衡车闺蜜（v14/bestie/src8.png），2026-10-01 迁成帧序列（引擎负责人）
+      face: 1,
+      /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.88 时和 crew.js 原来一样大 */
+      sheet: { src: 'assets/trio/G3_sailor.webp', cell: [250, 380], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10', 'kick0', 'kick1', 'kick2', 'kick3', 'kick4', 'kick5', 'kick6', 'kick7', 'kick8', 'kick9', 'kick10'] },
+      anchor: [90.9, 374.3], at: [240, 1000, 0.88], pivot: [90.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点
+      depth: 0.8, recipe: 'pepper',
+      /* 踩着平衡车从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下罐子往上一扬（brake）；离场往后溜出去 */
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      exit: { frame: 'ride', T: 0.5 },
+      idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
+      /* 防狼喷雾（crew.js MIST 原样）：摇罐举起（wind）→ 按瞄准角挑 aim0~10、每按一下后坐换 kick0~10（"呲—呲—"），雾冲男生的脸 → 收罐（follow） */
+      atk: { kind: 'jet', seq: [['wind', 0.22], ['aim', 2.2, 'fire'], ['follow', 0.3]], gap: [0.2, 0.45], stretch: 0,
+             aim: { frames: ['aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'],
+                    kick: ['kick0', 'kick1', 'kick2', 'kick3', 'kick4', 'kick5', 'kick6', 'kick7', 'kick8', 'kick9', 'kick10'], rate: 2.4, follow: 10, sweep: { a: [0.3, 0.15], w: [1.3, 3.1] },
+                    nozzle: { aim0: [241.9, 148.6, -0.7], aim1: [242.2, 134.5, -0.595], aim2: [241.1, 120.3, -0.49], aim3: [238.6, 106.2, -0.385], aim4: [234.7, 92.2, -0.28], aim5: [229.4, 78.6, -0.175], aim6: [222.7, 65.4, -0.07], aim7: [214.8, 52.9, 0.035], aim8: [205.6, 41.1, 0.14], aim9: [195.3, 30.2, 0.245], aim10: [183.9, 20.3, 0.35], kick0: [241.3, 132.1, -0.58], kick1: [240.0, 117.9, -0.475], kick2: [237.3, 103.7, -0.37], kick3: [233.1, 89.8, -0.265], kick4: [227.6, 76.3, -0.16], kick5: [220.8, 63.3, -0.055], kick6: [212.6, 50.9, 0.05], kick7: [203.3, 39.2, 0.155], kick8: [192.8, 28.5, 0.26], kick9: [181.2, 18.7, 0.365], kick10: [168.7, 10.1, 0.47] } },
+             jet: { draw: 'mist', V: 1100, G: 60, drag: 1.0, rate: 90, spread: 0.1, vJit: 0.15, life: 0.8, miss: 60, snap: 12, hitEvery: 0.3,
+                    pulse: [0.42, 0.14], kickDecay: 10 } },
+    },
     /* ---- 帧序列（新标准） ---- */
     G11: {      // 花饰格格：秋千从左上画外荡进来（往前荡伸腿、往后荡收腿），荡到最前面抛绣球砸他的头
       face: +1,
       sheet: { src: 'assets/trio/G11_gege.webp', cell: [315, 343], cols: 4, names: ['idle', 'raise', 'throw', 'follow', 'wind', 'tuck', 'kick', 'idle2'] },
-      anchor: [128, 212.3], at: [170, 640, 1], pivot: [128, -530], leanK: 0.5,
+      anchor: [128, 212.3], at: [170, 540, 1], pivot: [128, -530], leanK: 0.5,   // y 640 → 540（引擎负责人 2026-10-01，组合遮挡矩阵新判据：640 时后排 G4~G7 在场帧挡她 13~26%）
       depth: 0.5, recipe: 'bloom',
       /* 进场：0.4 秒从左上画外露面时收着腿俯冲（tuck），0.6 秒荡到最低点（摆角过零）伸腿（kick）往前荡，0.75 秒接出手 */
       enter: { kind: 'swing', seq: [['tuck', 0.6], ['kick', 9]] },
@@ -319,6 +371,29 @@ const TRIO_BESTIE = {
              seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
              hold: { wind: [250, 14], throw: [352, 52] },
              T: 0.55, arc: 0.2, spin: 5.7, idleSpin: 1.2, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
+    },
+
+    G18: {      // 挂帅女将（穆桂英式京剧武旦）：从左上一跃落下、单膝点地，起身亮相，翎子一甩；红缨枪举过头顶掷出去（3D）
+      face: +1,
+      sheet: { src: 'assets/trio/G18_mu.webp', cell: [335, 351], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'leap', 'land', 'rise', 'idle2'] },
+      /* 锚点 = 前脚厚底靴鞋底：出手四帧按这只靴子配准（残差 0.17 px）。人那一层 idle 剪影 2.80 万 × 0.88² ≈ 2.17 万（上方样板 G11 2.06 万） */
+      anchor: [273.7, 323.2], at: [260, 700, 0.88], pivot: [273, 323], leanK: 0,
+      depth: 0.5, recipe: 'bloom',
+      /* 从左上画外抛物线跃下（腾空收腿张臂）→ 单膝落地（压扁）→ 起身张臂 → 亮相待机 */
+      enter: { kind: 'leap', from: [-320, -380], h: 120, air: 0.5, T: 0.9, seq: [['leap', 0.5], ['land', 0.2, 'land'], ['rise', 0.14], ['idle', 9]], sq: 0.1 },
+      exit: { frame: 'leap' },
+      idle: { frame: 'idle', breathe: [0.014, 0.7, 0] },
+      /* 翎子、靠旗是定妆拆好的两层（ref/G18_feathers.png、G18_flags.png，part.py 按人那一层同一个比例 330/1424 缩）：都在人身后。
+         pivot：翎子 = 两根翎管插进盔头的那一点、靠旗 = 四根旗杆在背上并拢的插座。每帧的 at = idle 上的位置 + 这一帧的头相对 idle 的位移（头模板匹配） */
+      parts: [{ src: 'assets/trio/G18_flags.webp', pivot: [73.9, 118.5], z: -1, sway: [0.04, 0.7, 0],
+                 at: { idle: [133.4, 65.4, 0], wind: [144.4, 66.4, 0], throw: [155.4, 66.4, 0], follow: [128.4, 59.4, 0], leap: [133.4, 159.4, 0], land: [131.4, 130.4, 0], rise: [133.4, 72.4, 0] } },
+              { src: 'assets/trio/G18_feathers.webp', pivot: [89.9, 169.0], z: -1, sway: [0.12, 0.9, 0],
+                 at: { idle: [147.3, 20.2, 0], wind: [158.3, 21.2, 0], throw: [169.3, 21.2, 0], follow: [142.3, 14.2, 0], leap: [147.3, 114.2, 0], land: [145.3, 85.2, 0], rise: [147.3, 27.2, 0] } }],
+      /* 红缨枪照道具表 3D：r 40 cell 120 scale 1.07，转速 π / T；命中炸红（bloom） */
+      atk: { kind: 'throw', item: 'spear', r: 40, atlas: { src: 'assets/trio/prop_spear.webp', n: 36, cols: 6, cell: 120, scale: 1.07 },
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             hold: { wind: [132, 16], throw: [318, 72] },
+             T: 0.55, arc: 0.18, spin: 5.7, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
 
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
