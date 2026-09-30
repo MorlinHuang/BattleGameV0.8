@@ -1,0 +1,89 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "magenta",
+   "frames": [
+    "idle",
+    "wind",
+    "throw",
+    "follow"
+   ]
+  },
+  {
+   "src": "raw/act_b1.png",
+   "screen": "magenta",
+   "frames": [
+    "dive",
+    "flop",
+    "slide",
+    "idle2"
+   ]
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  65,
+  5,
+  195,
+  118
+ ],
+ "fixed": [
+  350,
+  155,
+  720,
+  295
+ ],
+ "size": [
+  "w",
+  470
+ ],
+ "anchor": [
+  450,
+  295
+ ],
+ "check": [
+  [
+   430,
+   120,
+   555,
+   205,
+   "鞋"
+  ],
+  [
+   330,
+   120,
+   440,
+   200,
+   "大腿到膝"
+  ]
+ ],
+ "graft": [
+  {
+   "from": "wind",
+   "to": [
+    "throw"
+   ],
+   "box": [
+    340,
+    88,
+    555,
+    208
+   ],
+   "feather": 36
+  },
+  {
+   "from": "idle",
+   "to": [
+    "follow"
+   ],
+   "box": [
+    340,
+    88,
+    555,
+    208
+   ],
+   "feather": 36
+  }
+ ]
+}

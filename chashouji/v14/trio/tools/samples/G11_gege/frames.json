@@ -1,0 +1,72 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "auto",
+   "frames": [
+    "idle",
+    "raise",
+    "throw",
+    "follow"
+   ]
+  },
+  {
+   "src": "raw/act_b1.png",
+   "screen": "auto",
+   "frames": [
+    "wind",
+    "tuck",
+    "kick",
+    "idle2"
+   ]
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  85,
+  15,
+  265,
+  180
+ ],
+ "fixed": [
+  95,
+  330,
+  290,
+  440
+ ],
+ "size": [
+  "h",
+  330
+ ],
+ "anchor": [
+  205,
+  455
+ ],
+ "erase": {
+  "hsv": [
+   [
+    0.04,
+    0.13
+   ],
+   [
+    0.36,
+    1
+   ],
+   [
+    0.3,
+    0.93
+   ]
+  ],
+  "grow": 5,
+  "band": 30
+ },
+ "check": [
+  [
+   70,
+   160,
+   150,
+   215,
+   "臀"
+  ]
+ ]
+}

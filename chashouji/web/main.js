@@ -1354,10 +1354,11 @@ const SHOP = {
    同日删掉黑蛛女特工、内裤外穿侠、二郎·打码神，加嫦娥、后羿） */
 const G4L = CrewGroup([Baisu, Truth, Change]);   // 查岗党：白娘子 / 真相女神 / 嫦娥
 const G4R = CrewGroup([Fahai, Demon, Houyi, Sister]);    // 灭迹党：法海 / 灭迹恶魔 / 后羿 / 绿茶妹妹
-/* 档 3 三人组（trio.js，2026-09-29）：一次送礼三个槽位各出一人 —— 后排地面（crew.js 滑板哥们 / 平衡车闺蜜）、上方、前景地板 */
-const BuddyTrio = Trio([[Buddy], [MaskMan, StrawMan], [Sakura, Goku]]);
-const BestieTrio = Trio([[Bestie], [Gege, Fairy], [Ninja, Explorer]]);
-const ACTS = [MaskMan, StrawMan, Sakura, Goku, Gege, Fairy, Ninja, Explorer];
+/* 档 3 三人组（trio.js，2026-09-29）：一次送礼抽一组，组里三个槽位各一人 —— 后排地面（crew.js 滑板哥们 / 平衡车闺蜜）、上方、前景地板。
+   角色与 10 组搭配在 trio_buddy.js / trio_bestie.js（美术维护）；在场再送 = 同一组各续一段 */
+const BuddyTrio = Trio(Buddy, TRIO_BUDDY);
+const BestieTrio = Trio(Bestie, TRIO_BESTIE);
+const ACTS = [...BuddyTrio.acts, ...BestieTrio.acts];
 const CREW = { buddy: BuddyTrio, bestie: BestieTrio, g4L: G4L, g4R: G4R };
 const CREWS = [...BuddyTrio.all, ...BestieTrio.all, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
 /* 召唤：组（档 4）按 URL ?g4L= / ?g4R= 强制召某一个人（诊断：胶片一个一个单独拍）；单个 Crew 可指定形象 sk（?skin=） */
@@ -1366,8 +1367,8 @@ const CREWS = [...BuddyTrio.all, ...BestieTrio.all, ...G4L.members, ...G4R.membe
    不然 CrewGroup 只会给在场那位续时间，选了嫦娥出来的还是白娘子。 */
 function summonCrew(name, sk, pick) {
   const c = CREW[name];
-  /* 三人组：?buddy=1.0.1 / ?bestie= 每个槽位指定第几个（诊断）；不返回新来的人（没有出场视频） */
-  if (c.slots) { c.summon(new URLSearchParams(location.search).get(name) || undefined); return [c, undefined]; }
+  /* 三人组：?buddy=<组号 1~10> / ?bestie= 指定抽哪一组（诊断）；不返回新来的人（没有出场视频） */
+  if (c.groups) { c.summon(new URLSearchParams(location.search).get(name) || undefined); return [c, undefined]; }
   if (!c.members) return [c, c.summon(sk)];
   if (pick != null) {
     for (const m of c.members) if (m !== c.members[pick] && m.active()) { if (IntroVideo.owner() === m) IntroVideo.stop(); m.reset(); }
@@ -2286,12 +2287,12 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 
   /* 三人组里的新角色（trio.js）：哥们侧打女生（落点同水枪哥们 girlAim），闺蜜侧打男生的脸（同喷雾闺蜜 boyAim）。
      第一下按档 3 力度，之后每下轻补。 */
-  for (const a of [MaskMan, StrawMan, Sakura, Goku]) a.init({
+  for (const a of BuddyTrio.acts) a.init({
     face: () => faceOf('a'), aim: girlAim, ground: () => GROUND + FX.bob,
     onHit: (x, y, first, rc) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE[rc], x),
     onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
   });
-  for (const a of [Gege, Fairy, Ninja, Explorer]) a.init({
+  for (const a of BestieTrio.acts) a.init({
     face: () => faceOf('b'), aim: boyAim, ground: () => GROUND + FX.bob,
     onHit: (x, y, first, rc) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE[rc], x),
   });
@@ -2701,6 +2702,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       ? { ...(GIFT[gname] || GIFT.pillow), spin: clamp(+Q.get('ammospin'), 0, 40) }
       : (GIFT[gname] || GIFT.pillow);
     Ammo.setBare(Q.get('ammobare') === '1');
+    /* ?noshake=1 关掉命中震屏：量三人组的锚点漂移用（v14/trio/tools/drift.py）—— 震屏把整个角色层一起晃，最多 30px，会混进读数 */
+    if (Q.get('noshake') === '1') Particles.addShake = () => {};
+    TRIO.still = Q.get('trioswing') === '0';
     S.auto = false; S.t = 3.0;
     for (let k = 0; k < 150; k++) derive(1 / 60);
 
@@ -2746,12 +2750,16 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       }
       el += step;
       if (Q.get('crewlog') === '1') crewLog();
+      /* 三人组帧序列角色这一格画的是哪一帧：记到 window.trioFrames（v14/trio/tools/film.py 导出，drift.py 按它取模板），格上也打出来 */
+      const tf = ACTS.filter(a => a.frame()).map(a => `${a.cfg.id}:${a.frame()}`);
+      (window.trioFrames = window.trioFrames || []).push(tf);
       render();
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 168, 26);
       o.fillStyle = '#fff'; o.font = '600 15px system-ui';
       o.fillText(`+${Math.round(el * 1000)}ms 弹${Ammo.count()} 粒${Particles.count()}`, dx + 8, 18);
+      if (tf.length) { o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 50, 20 + 11 * tf.join(' ').length, 24); o.fillStyle = '#9ef'; o.fillText(tf.join(' '), dx + 8, 67); }
       if (i === 0) {
         o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 26, 168, 24);
         o.fillStyle = '#ffd36b';
