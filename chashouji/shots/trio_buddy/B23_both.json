@@ -1,0 +1,1 @@
+[["B23:idle", "G11:idle", "G24:throw"], ["B23:wind", "G11:idle", "G24:follow"], ["B23:throw", "G11:idle", "G24:idle"], ["B23:throw", "G11:raise", "G24:idle"], ["B23:follow", "G11:wind", "G24:idle"], ["B23:idle", "G11:follow", "G24:idle"], ["B23:idle", "G11:idle", "G24:idle"], ["B23:idle", "G11:idle", "G24:idle"]]

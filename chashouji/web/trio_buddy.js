@@ -43,8 +43,7 @@ const TRIO_BUDDY = {
                 at: { idle: [194, 163, 0], wind1: [194, 163, 0], throw: [196, 160, 0.25], follow: [194, 163, 0], slide: [196, 163, 0.5],
                       skid: [196, 163, 0.3], wind: [192, 163, -0.1], idle2: [194, 163, 0] },
                 sway: [0.16, 1.1, 0] }],
-      /* item 写 'bball'：引擎按这个名字决定飞行途中走 3D 图集（trio.js drawShot），牛丸同样是图集道具 */
-      atk: { kind: 'throw', item: 'bball', r: 18, atlas: { src: 'assets/trio/prop_meatball.webp', n: 36, cols: 6, cell: 68, scale: 1.27 },
+      atk: { kind: 'throw', item: 'meatball', r: 18, atlas: { src: 'assets/trio/prop_meatball.webp', n: 36, cols: 6, cell: 68, scale: 1.27 },
              seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.3]],
              hold: { idle: [80, 76], wind: [120, 52], throw: [12, 82] },
              T: 0.5, arc: 0.35, spin: 6.3, idleSpin: 1.6, stretch: 0.03, gap: [0.5, 0.9], onHit: 'bounce' },
@@ -80,8 +79,7 @@ const TRIO_BUDDY = {
       exit: { frame: 'windmill' },
       idle: { frame: 'idle', breathe: [0.018, 0.9, 0] },
       flex: { idle: [[186, 70, 220, 120, 'l', 5, 1.4]], follow: [[186, 70, 220, 120, 'l', 5, 1.4]] },   // 头巾结的两条飘带：结那头钉住，梢往外甩
-      /* item 写 'bball'：引擎按这个名字决定飞行途中走 3D 图集（trio.js drawShot） */
-      atk: { kind: 'throw', item: 'bball', r: 22, atlas: { src: 'assets/trio/prop_cassette.webp', n: 36, cols: 6, cell: 84, scale: 1.31 },
+      atk: { kind: 'throw', item: 'cassette', r: 22, atlas: { src: 'assets/trio/prop_cassette.webp', n: 36, cols: 6, cell: 84, scale: 1.31 },
              seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.3]],
              hold: { idle: [232, 118], wind: [248, 72], throw: [28, 128] },
              T: 0.5, arc: 0.25, spin: 6.3, idleSpin: 1.6, stretch: 0, gap: [0.5, 0.9], onHit: 'bounce' },
@@ -97,7 +95,7 @@ const TRIO_BUDDY = {
       enter: { kind: 'slide', seq: [['plank', 0.25], ['pushup', 0.2], ['plank', 0.15], ['pop', 9, 'land']], sq: 0.12 },   // 俯卧撑平板滑 → 压下去 → 撑起 → 弹起秀肌肉
       exit: { frame: 'plank' },
       idle: { frame: 'pop', breathe: [0.02, 0.9, 0] },
-      atk: { kind: 'throw', item: 'bball', r: 24, atlas: { src: 'assets/trio/prop_dumbbell.webp', n: 36, cols: 6, cell: 75, scale: 1.08 },
+      atk: { kind: 'throw', item: 'dumbbell', r: 24, atlas: { src: 'assets/trio/prop_dumbbell.webp', n: 36, cols: 6, cell: 75, scale: 1.08 },
              seq: [['raise', 0.3], ['throw', 0.1, 'fire'], ['idle', 0.3]],
              hold: { pop: [54, 61], raise: [192, 15], throw: [9, 80] },
              T: 0.5, arc: 0.3, spin: 6.3, idleSpin: 1.6, stretch: 0, gap: [0.55, 0.95], onHit: 'bounce' },
@@ -131,7 +129,7 @@ const TRIO_BUDDY = {
       flex: { idle: [[212, 180, 245, 224, 'l', 5, 1.2]], follow: [[212, 180, 245, 224, 'l', 5, 1.2]] },   // 腰带的两条尾巴：结那头钉住
       /* 出手帧（throw）的时长 = beam.fire：波轰满 0.6 秒才收 */
       atk: { kind: 'beam', seq: [['wind', 0.45], ['throw', 0.6, 'fire'], ['follow', 0.3]],
-             hold: { throw: [38, 85] }, gap: [0.45, 0.8], stretch: 0.03,
+             hold: { wind: [215, 160], throw: [38, 85] }, gap: [0.45, 0.8], stretch: 0.03,
              beam: { fire: 0.6, drip: 0.1, ball: 26, glow: [120, 210, 255], edge: [30, 90, 200],
                      layers: [[34, [30, 90, 200], 0.35], [22, [90, 180, 255], 0.8], [11, [210, 240, 255], 0.95], [4, [255, 255, 255], 1]] } },
     },
@@ -152,6 +150,41 @@ const TRIO_BUDDY = {
              T: 0.42, arc: 0.12, spin: 0, gap: [0.45, 0.7], miss: 0.35, stick: 2.2, onHit: 'heart' },
     },
 
+    B23: {      // 三刀剑客（索隆式）：三刀在手从右下角一个滑步压低、刹住落成单膝跪三刀流架势，向左一记横斩，三道绿色斩痕交叉劈在她身上
+      face: -1,
+      sheet: { src: 'assets/trio/B23_zoro.webp', cell: [361, 368], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'skid', 'slide', 'set', 'idle2'] },
+      /* 锚点 = 前脚和跪地膝之间的地面；在场帧最低点屏幕 y 1332。剪影面积 2.89 万（樱木 +9%，刀算在剪影里） */
+      anchor: [160.4, 279.1], at: [820, 1330, 1], pivot: [160, 279],
+      leanK: 0,   // 单膝跪地：整体前后倾会把跪地的膝盖翘起来
+      depth: 1.3, recipe: 'star',
+      /* 滑步（刀往后拖）→ 刹住后仰 → 落膝（压扁）→ 三刀架势。进场条上排两格头后多一小截黑结（模型画的），只在前 0.3 秒 */
+      enter: { kind: 'slide', seq: [['slide', 0.3], ['skid', 0.15], ['set', 0.15, 'land'], ['idle', 9]], sq: 0.1 },
+      exit: { frame: 'slide' },
+      idle: { frame: 'idle', breathe: [0.018, 0.9, 0] },
+      flex: { idle: [[215, 93, 233, 120, 'l', 5, 1.3]] },   // 左臂头巾结的两条尾巴：结那头钉住，尾梢甩
+      /* 斩痕画在她身上（引擎 slash），出手那一段 0.35 秒盖住三道（gap 0.08 × 2 + 划出 0.07） */
+      atk: { kind: 'slash', seq: [['wind', 0.3], ['throw', 0.35, 'fire'], ['follow', 0.3]],
+             slash: { n: 3, gap: 0.08, len: 230, w: 18, life: 0.5, color: [90, 230, 110], ang: -0.5, spread: 0.25 },
+             gap: [0.6, 1.0] },
+    },
+    B26: {      // 电竞宅男：趴在橙色懒人沙发上被（画外的人）推进来，趴着攥住鼠标线抡圈，把 3D 有线鼠标当流星锤甩出去，线连着手
+      face: -1,
+      sheet: { src: 'assets/trio/B26_gamer.webp', cell: [253, 274], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'pushed', 'skid', 'settle', 'idle2'] },
+      /* 锚点 = 懒人沙发底的中点；在场帧最低点（拖鞋）屏幕 y 1333。剪影面积按"人 + 沙发"对齐樱木：约 3.0 万（+13%），所以人比别的地板角色小一圈。
+         skid 格模型多画了一双拖鞋（四只），不用 */
+      anchor: [132.7, 254.2], at: [830, 1316, 1], pivot: [133, 254],
+      leanK: 0,   // 趴在沙发上：整体前后倾会把沙发底翘起来
+      depth: 1.3, recipe: 'thud',
+      enter: { kind: 'slide', seq: [['pushed', 0.45], ['settle', 0.2, 'land'], ['idle', 9]], sq: 0.12 },   // 被推着滑 → 瘫下去伸懒腰（压扁）→ 撑脸待机
+      exit: { frame: 'pushed' },
+      idle: { frame: 'idle', breathe: [0.02, 0.9, 0] },
+      /* 次级摆动：手里的鼠标一直慢慢转（3D 图集） */
+      atk: { kind: 'throw', item: 'mouse', r: 22, atlas: { src: 'assets/trio/prop_mouse.webp', n: 36, cols: 6, cell: 88, scale: 1.37 },
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             hold: { idle: [66, 168], wind: [76, 12], throw: [28, 88], follow: [80, 92] },
+             tether: { w: 2.5, color: '#2a2d33' },
+             T: 0.45, arc: 0.2, spin: 7, idleSpin: 1.6, stretch: 0, gap: [0.5, 0.9], onHit: 'bounce' },
+    },
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     B12: {      // 草帽船长：扒在右边屏幕壁上，橡皮手臂伸长弹她脑门
       face: -1, src: 'assets/world/trio_straw.webp', at: [960, 620, 1], anchor: [300, 180], pivot: [298, 180], hand: [15, 70],
