@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../../web/assets/trio')
 K = 3
 INK = (40, 36, 38, 255)
-X0, X1, TOP, EDGE, FACE, FADE = -70, 330, 314, 346, 64, 34
+X0, X1, TOP, EDGE, FACE, FADE = -206, 330, 314, 346, 64, 34     # X0：at x 380 时左端在屏幕 x −42（出画）
 TOPC, TOPH, SEAM = (178, 180, 182, 255), (206, 208, 210, 255), (132, 134, 138, 255)
 FACEC = [(118, 120, 126), (108, 110, 116), (126, 128, 134), (100, 102, 108)]
 MORTAR = (80, 82, 88, 255)
