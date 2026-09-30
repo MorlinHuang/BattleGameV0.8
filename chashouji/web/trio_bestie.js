@@ -387,6 +387,23 @@ const TRIO_BESTIE = {
       atk: { kind: 'whip', seq: [['wind', 0.3], ['throw', 0.44, 'fire'], ['follow', 0.3]], from: [258, 14], phases: [0.14, 0.08, 0.22],
              whip: { w: 14, taper: 0.35, amp: 30, waves: 1.3, hz: 3, color: '#e0303a', edge: 'rgba(110,10,20,.9)' }, gap: [0.9, 1.3] },
     },
+    G10: {      // 粉蓝双马尾坏女孩（小丑女式）：踩着红蓝轮滑压低身子冲进来、单脚一转、横刹停住；球棒扛在肩上吐舌头，举过头顶抡出去（3D 棒球棍打着转飞）
+      face: +1,
+      sheet: { src: 'assets/trio/G10_harley.webp', cell: [316, 407], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'spin', 'stop', 'idle2'] },
+      /* 锚点 = 两只轮滑鞋轮子着地中点：按前脚红轮滑鞋配准、缩放也按它（scale_by fixed：wind 仰头时按头找缩放会缩成 0.87）；残差 0.14 px */
+      anchor: [188.5, 401.4], at: [250, 1030, 0.86], pivot: [188, 401], leanK: 0,
+      depth: 0.8, recipe: 'star',
+      /* 轮滑（ride）：压低冲刺 → 单脚转一圈 → 横刹后仰（露面后换两次帧）；离场转身滑走 */
+      enter: { kind: 'ride', T: 1.0, tilt: 0.1, seq: [['cruise', 0.4], ['spin', 0.3], ['stop', 0.3, 'land'], ['idle', 9]], sq: 0.07 },
+      exit: { frame: 'cruise', flip: true },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
+      /* 3D 棒球棍（道具表 7.1：prop_bat r 32 cell 98 scale 1.09）：待机扛在右肩拳头上慢慢转（次级摆动）；
+         wind 两拳举过头顶、棍在那一刻离手（后排：出手点在女生头顶以上），throw 帧是甩完张开的手 */
+      atk: { kind: 'throw', item: 'bat', r: 32, atlas: { src: 'assets/trio/prop_bat.webp', n: 36, cols: 6, cell: 98, scale: 1.09 },
+             seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.35]],
+             hold: { idle: [236, 108], wind: [88, 4] },
+             T: 0.55, arc: 0.25, spin: 5.7, idleSpin: 0.8, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
+    },
 
     /* ---- 上方（左上，男女主头顶以下；样板 G11） ---- */
     G15: {      // 船头红发少女（泰坦尼克 Rose 式）：站在一截白色船头上从左边平着滑出来，捂着心口 → 张开双臂"飞"；举起心形蓝宝石项链一抛（3D）砸他
