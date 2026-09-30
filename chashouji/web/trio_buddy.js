@@ -376,6 +376,23 @@ const TRIO_BUDDY = {
              T: 0.5, arc: 0.3, spin: 6.3, idleSpin: 0.5, stretch: 0.03, gap: [0.6, 1.0] },
     },
 
+    B15: {      // 白发蒙眼最强：右上一道紫白闪光凭空浮现，盘腿悬浮、手插兜；手指举过头顶聚起一颗紫色光球，往前一弹射过去，收势勾起眼罩露一只蓝眼
+      face: -1,
+      sheet: { src: 'assets/trio/B15_gojo.webp', cell: [235, 319], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'fold', 'reveal', 'settle', 'idle2'] },
+      /* 上方；悬浮，锚点 = 盘着的腿最低处。剪影面积 2.20 万（上方对格格 2.09 万）。[880, 730]：同组 B8 在场帧外扩 4px 相交 0 */
+      anchor: [137.3, 318.9], at: [880, 730, 1], pivot: [137, 319], leanK: 0.2,
+      depth: 0.5, recipe: 'bloom',
+      /* 凭空浮现：紫白闪光里淡入（抱臂低头）→ 抬头张开双手 → 手插兜落定 */
+      enter: { kind: 'appear', fx: 'flash', color: [200, 160, 255], fade: 0.3, T: 0.8, seq: [['fold', 0.35], ['reveal', 0.3], ['settle', 0.15, 'land'], ['idle', 9]], sq: 0.05 },
+      exit: { frame: 'fold' },
+      idle: { frame: 'idle', breathe: [0.012, 0.8, 0.4] },
+      flex: { idle: [[160, 5, 290, 45, 'b', 3, 0.8]] },   // 冲天白发顶：底边钉住，发梢颤
+      /* 紫色光球（raw/orb_src.png，part.py w 140；平面贴图，圆的，转着飞）：wind 帧聚在举起的指尖上方，throw 帧指尖一弹射出去 */
+      atk: { kind: 'throw', item: 'orb', prop: 'assets/trio/B15_orb.webp', scale: 0.5,
+             seq: [['wind', 0.35], ['throw', 0.1, 'fire'], ['follow', 0.45]], hold: { wind: [86, -20], throw: [0, 90] },
+             T: 0.4, arc: 0.1, spin: 8, stretch: 0.03, gap: [0.6, 1.0] },
+    },
+
     B18: {      // 摇扇才子：从右上墙头后面一蹿翻上来、坐定；背后插着题诗折扇，伸手抽出来一甩，3D 折扇旋着飞过去
       face: -1,
       sheet: { src: 'assets/trio/B18_tangbohu.webp', cell: [279, 375], cols: 4, names: ['idle', 'raise', 'wind', 'throw', 'follow', 'leap', 'land', 'idle2'] },
