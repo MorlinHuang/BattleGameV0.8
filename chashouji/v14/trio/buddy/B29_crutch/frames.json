@@ -1,0 +1,82 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "auto",
+   "frames": [
+    "idle",
+    "wind",
+    "throw",
+    "follow"
+   ]
+  },
+  {
+   "src": "raw/walk_gen1_x121.png",
+   "screen": "auto",
+   "frames": [
+    "walk1",
+    "walk2",
+    "walk3",
+    "walk4",
+    "stop",
+    "idle2"
+   ]
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  102,
+  16,
+  247,
+  157
+ ],
+ "fixed": [
+  340,
+  580,
+  432,
+  645
+ ],
+ "size": [
+  "h",
+  290
+ ],
+ "anchor": [
+  288,
+  626
+ ],
+ "scale": [
+  0.95,
+  1.05
+ ],
+ "loose": [
+  "walk1",
+  "walk2",
+  "walk3",
+  "walk4",
+  "stop"
+ ],
+ "walkfix": {
+  "ref": "walk2",
+  "band": 16,
+  "min_w": 20,
+  "chain": [
+   [
+    "front",
+    "back"
+   ],
+   [
+    "back",
+    "back"
+   ],
+   [
+    "front",
+    "back"
+   ],
+   [
+    "back",
+    "back"
+   ]
+  ],
+  "offset": -12
+ }
+}

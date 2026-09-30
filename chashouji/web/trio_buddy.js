@@ -80,7 +80,7 @@ const TRIO_BUDDY = {
       enter: { kind: 'roll', seq: [['headspin', 0.3], ['windmill', 0.25], ['freeze', 9, 'land']], sq: 0.1 },   // 翻滚进场时帧也在换：头转 → 风车 → 落地定格（压扁）
       exit: { frame: 'windmill' },
       idle: { frame: 'idle', breathe: [0.018, 0.9, 0] },
-      flex: { idle: [[186, 70, 220, 120, 'l', 5, 1.4]], follow: [[186, 70, 220, 120, 'l', 5, 1.4]] },   // 头巾结的两条飘带：结那头钉住，梢往外甩
+      flex: { idle: [[186, 70, 220, 120, 'l', 5, 1.4]], follow: [[195, 40, 264, 115, 'l', 5, 1.4]] },   // 头巾结的两条飘带：结那头钉住，梢往外甩
       atk: { kind: 'throw', item: 'cassette', r: 22, atlas: { src: 'assets/trio/prop_cassette.webp', n: 36, cols: 6, cell: 84, scale: 1.31 },
              seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.3]],
              hold: { idle: [232, 118], wind: [248, 72], throw: [28, 128] },
@@ -128,7 +128,7 @@ const TRIO_BUDDY = {
       enter: { kind: 'dash', seq: [['dash', 0.45], ['skid', 0.15, 'land'], ['guard', 9]], sq: 0.1 },
       exit: { frame: 'dash' },
       idle: { frame: 'idle', breathe: [0.02, 0.9, 0] },
-      flex: { idle: [[212, 180, 245, 224, 'l', 5, 1.2]], follow: [[212, 180, 245, 224, 'l', 5, 1.2]] },   // 腰带的两条尾巴：结那头钉住
+      flex: { idle: [[212, 180, 245, 224, 'l', 5, 1.2]], follow: [[200, 150, 260, 242, 'l', 5, 1.2]] },   // 腰带的两条尾巴：结那头钉住
       /* 出手帧（throw）的时长 = beam.fire：波轰满 0.6 秒才收 */
       atk: { kind: 'beam', seq: [['wind', 0.45], ['throw', 0.6, 'fire'], ['follow', 0.3]],
              hold: { wind: [215, 160], throw: [38, 85] }, gap: [0.45, 0.8], stretch: 0.03,
@@ -181,12 +181,123 @@ const TRIO_BUDDY = {
       exit: { frame: 'pushed' },
       idle: { frame: 'idle', breathe: [0.02, 0.9, 0] },
       /* 次级摆动：手里的鼠标一直慢慢转（3D 图集） */
-      atk: { kind: 'throw', item: 'mouse', r: 22, atlas: { src: 'assets/trio/prop_mouse.webp', n: 36, cols: 6, cell: 88, scale: 1.37 },
+      atk: { kind: 'throw', item: 'mouse', r: 22, atlas: { src: 'assets/trio/prop_mouse.webp', n: 36, cols: 6, cell: 88, scale: 1.46 },
              seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
              hold: { idle: [66, 168], wind: [76, 12], throw: [28, 88], follow: [80, 92] },
              tether: { w: 2.5, color: '#2a2d33' },
              T: 0.45, arc: 0.2, spin: 7, idleSpin: 1.6, stretch: 0, gap: [0.5, 0.9], onHit: 'bounce' },
     },
+    B6: {       // 上海滩（礼帽长风衣白围巾）：竖着衣领、一手插兜慢步走进来；站定捏着一枚 3D 银元把玩，手举过头顶一弹，银元翻着飞过去
+      face: -1,
+      sheet: { src: 'assets/trio/B6_shanghai.webp', cell: [394, 521], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'stop', 'idle2'] },
+      /* 后排地面：站在男生身后右边。原想用 B5 的 [740, 1070]，同组 B27 蹲滑的头和锅铲会碰上（外扩 4px 相交 851px），退到 1040 后在场四帧 × B27 在场五帧相交 0 */
+      anchor: [152.8, 506.2], at: [740, 1040, 0.83], pivot: [153, 506], leanK: 0,
+      depth: 0.8, recipe: 'star',
+      /* 慢步走：两腿都是黑西裤，生图两次、改图一次都没把接地腿换过来（颜色一样也看不出换没换），四张取同一张生图里的四格。
+         钉脚：buddy/walkfix.py 按"继续着地那只脚"把四帧横向对齐（-25 / +6 / -24 / 0 → 以 walk1 为 0），stride = 一个循环四次换帧鞋位差之和 / 2。
+         dist 必须是步长（stride / 2 × s）的整数倍：引擎每步走 dist / 步数，默认距离 357 / 5 步 = 71.4 ≠ 78.2，换帧时脚滑 6.8px（胶片实测 +6.9 / +7.7） */
+      enter: { kind: 'walk', fps: 5, bob: 4, stride: 188.5, dist: 391.2, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
+      exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 7, flip: true, T: 0.8 },
+      idle: { frame: 'idle', breathe: [0.012, 0.8] },
+      flex: { idle: [[253, 215, 330, 323, 'l', 5, 1.0]] },   // 围巾尾：靠身子那头钉住、梢往后飘
+      /* 手举过头顶弹：出手点 [28, 15] 在帽顶以上（后排出手从男生头顶翻过去，规范 6.4） */
+      atk: { kind: 'throw', item: 'coin', r: 20, atlas: { src: 'assets/trio/prop_coin.webp', n: 36, cols: 6, cell: 63, scale: 1.13 },
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.4]], hold: { wind: [56, 300], throw: [28, 15] },   // 待机不拿：3D 银元侧着转到 90° 时是一块黑盘子，比捏着的手指还大
+             T: 0.5, arc: 0.3, spin: 6.3, stretch: 0.03, gap: [0.6, 1.0] },
+    },
+
+    B7: {       // 卷发大少：踩着电动平衡车滑进来、甩头发、急刹后仰，站在车上伸手指人；把一张红纸条举过头顶一甩，贴在她身上
+      face: -1,
+      sheet: { src: 'assets/trio/B7_f4.webp', cell: [332, 461], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'swerve', 'brake', 'idle2'] },
+      /* 后排地面；平衡车画在帧里，锚点 = 车底中点。[740, 1040]：同组 B25 在场四帧相交 0（1070 时 234px） */
+      anchor: [168.8, 453.1], at: [740, 1040, 0.83], pivot: [169, 453], leanK: 0,
+      depth: 0.8, recipe: 'feather',
+      enter: { kind: 'ride', T: 1.0, tilt: 0.1, seq: [['cruise', 0.4], ['swerve', 0.3], ['brake', 9, 'land']], sq: 0.08 },   // 插兜滑行 → 甩头发拐弯 → 急刹后仰
+      exit: { frame: 'cruise', flip: true },
+      idle: { frame: 'idle', breathe: [0.012, 0.8] },
+      flex: { idle: [[118, 8, 210, 55, 'b', 4, 0.8]] },   // 爆炸卷发顶：底边（头皮）钉住，发顶颤
+      /* 纸条在 wind 帧举过头顶那一刻离手（fire 段仍是 wind 帧，出手点 [97, 14] 在头顶以上），throw 帧是甩完的手 */
+      atk: { kind: 'throw', item: 'paper', prop: 'assets/trio/B7_redslip.webp', scale: 0.45,
+             seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.4]], hold: { wind: [97, 14] },
+             T: 0.5, arc: 0.25, spin: 5, gap: [0.6, 1.0], onHit: 'wear' },
+    },
+
+    B8: {       // 光头伐木工：被身后看不见的熊追着倒退跑进来、猛回头急刹；攥着松果举过头顶狠狠砸过去
+      face: -1,
+      sheet: { src: 'assets/trio/B8_logger.webp', cell: [463, 479], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'skid', 'idle2'] },
+      /* 后排地面。[740, 1040]：同组 B26 在场四帧相交 0（1070 时 542px）。格子 463 宽是急刹那格两臂张开撑出来的，人本身 ~250 */
+      anchor: [265.3, 466.8], at: [740, 1040, 0.83], pivot: [265, 467], leanK: 0,
+      depth: 0.8, recipe: 'debris',
+      /* 倒退跑：身子朝右（看着追来的熊）、腿往左倒着蹬；最后一步换成急刹回头（skid 落地压一下）。
+         跑：过渡帧腾空，没有哪只脚跨着换帧一直着地，不做钉脚平移（硬对齐要来回平移 ±97px，人一抽一抽）；stride = walk1 两只靴前沿横距（规范第九节 G6 跑步的取法） */
+      enter: { kind: 'walk', fps: 12, bob: 10, stride: 188, dist: 624.2, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.5], ['skid', 9, 'land']], sq: 0.08 },
+      exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 12, flip: true, T: 0.6 },
+      idle: { frame: 'idle', breathe: [0.014, 1.1] },
+      /* 3D 松果（500273c 返工：上尖下圆 + 人字齿鳞片），r / cell / scale 照 docs/待办.md 的返工交接。
+         松果在 wind 帧举过头顶那一刻离手（fire 段仍是 wind 帧，出手点 [184, 22] 在头顶以上），throw 帧是砸完的手。
+         arc 0.45：高高抛过去、最后一段近乎竖着砸下来 —— arc 0.22 时拔河拉近那几格，落点前最后一段斜着擦过男生脸框左沿（probescan 192 格里 3 格 61~199px） */
+      atk: { kind: 'throw', item: 'pinecone', r: 26, atlas: { src: 'assets/trio/prop_pinecone.webp', n: 36, cols: 6, cell: 76, scale: 1.25 },
+             seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.4]], hold: { idle: [177, 160], wind: [184, 22] },
+             T: 0.5, arc: 0.45, spin: 6.3, idleSpin: 1.5, gap: [0.5, 0.9] },   // 不写 bounce：弹开是往回蹦，会擦过男生的脸（组 2 B27 实测 149px）
+    },
+
+    B18: {      // 摇扇才子：从右上墙头后面一蹿翻上来、坐定；背后插着题诗折扇，伸手抽出来一甩，3D 折扇旋着飞过去
+      face: -1,
+      sheet: { src: 'assets/trio/B18_tangbohu.webp', cell: [279, 375], cols: 4, names: ['idle', 'raise', 'wind', 'throw', 'follow', 'leap', 'land', 'idle2'] },
+      /* 锚点 = 撑在墙头上的那只手 = 墙头那一行。上方槽位：剪影面积 3.94 万 × 0.72² = 2.04 万（格格 2.09 万 −2%）。
+         [890, 630]：和别的上方角色（B11 y 620）同一高度，把 y 400 一带留给叠第二组时的上方备用位（SLOT2 = 往上 210）；原来放 y 520 正好占了它。
+         背后的扇子右沿到 x 958 不出画；和同组 B6 在场四帧 × B18 在场六帧剪影外扩 4px 相交 0 */
+      anchor: [194.8, 211.6], at: [890, 630, 0.72], pivot: [195, 212], leanK: 0.3,
+      depth: 0.5, recipe: 'feather',
+      /* 从墙头那一行后面升上来（线以下剪掉），蹿上来 → 落座（压一下）→ 坐定；淡入 0.35 秒内是 leap，之后换 land */
+      enter: { kind: 'appear', rise: 220, cut: 212, T: 0.8, seq: [['leap', 0.4], ['land', 0.2, 'land'], ['idle', 9]], sq: 0.08 },
+      exit: { frame: 'leap' },
+      idle: { frame: 'idle', breathe: [0.016, 0.9, 0.4] },
+      /* 挂件层：墙头瓦檐（buddy/B18_tangbohu/raw/wall.png，下接一截渐隐白墙）垫在人后面；背后斜插的折扇（定妆拆的那一层 ref/B18_fan.png）跟着轻晃，
+         抽出来以后（wind 起手里是 3D 扇、throw / follow 扔出去了）不画 */
+      parts: [
+        { src: 'assets/trio/B18_wall.webp', pivot: [165, 14], z: -1, at: { idle: [195, 212, 0], raise: [195, 212, 0], wind: [195, 212, 0], throw: [195, 212, 0], follow: [195, 212, 0], leap: [195, 212, 0], land: [195, 212, 0], idle2: [195, 212, 0] } },
+        { src: 'assets/trio/B18_fan.webp', pivot: [38, 87], z: -1, at: { idle: [202, 133, 0], raise: [202, 133, 0], land: [209, 144, 0], idle2: [202, 133, 0] }, sway: [0.05, 0.7, 0] },
+      ],
+      atk: { kind: 'throw', item: 'fan', r: 30, atlas: { src: 'assets/trio/prop_fan.webp', n: 36, cols: 6, cell: 92, scale: 1.10 },
+             seq: [['raise', 0.2], ['wind', 0.25], ['throw', 0.1, 'fire'], ['follow', 0.35]], hold: { wind: [191, 29], throw: [8, 78] },
+             T: 0.5, arc: 0.15, spin: 6.3, gap: [0.6, 1.0] },
+    },
+
+    B28: {      // 西游胖和尚（八戒式）：背着九齿钉耙蹲着一扭一扭挪进来，一屁股坐下；抱着 3D 西瓜腆肚子，举过头顶砸过去，砸中红瓤带籽溅开
+      face: -1,
+      sheet: { src: 'assets/trio/B28_pig.webp', cell: [256, 268], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'plop', 'idle2'] },
+      /* 地板前排，锚点 = 屁股着地那一点。剪影面积 2.71 万（樱木 +2%）；各帧剪影最低一行屏幕 y 最大 1325 */
+      anchor: [113.3, 265.0], at: [830, 1325, 1], pivot: [113, 265], leanK: 0,
+      depth: 1.3, recipe: 'splash',
+      /* 蹲着挪：步子小、慢（fps 5）；最后一步换成一屁股坐下（plop 落地压扁），坐定 = idle。钉脚：walkfix.py 横向对齐（平移 -3 / 0 / -4 / 0），stride = 四次换帧鞋位差之和 / 2。
+         两条腿都是黑灯笼裤白袜，接地帧换没换腿看不出，四张取同一张生图里的四格 */
+      enter: { kind: 'walk', fps: 5, bob: 5, stride: 129.5, dist: 324, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.8], ['plop', 9, 'land']], sq: 0.14 },   // dist = 5 步：前 4 步走完一个循环，第 5 步是一屁股坐下
+      exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 6, flip: true, T: 0.8 },
+      idle: { frame: 'idle', breathe: [0.02, 0.9, 0] },
+      atk: { kind: 'throw', item: 'watermelon', r: 30, atlas: { src: 'assets/trio/prop_watermelon.webp', n: 36, cols: 6, cell: 98, scale: 1.17 },
+             seq: [['wind', 0.35], ['throw', 0.1, 'fire'], ['follow', 0.4]], hold: { idle: [112, 150], wind: [135, 15], throw: [35, 105] },
+             T: 0.5, arc: 0.25, spin: 6.3, idleSpin: 0.6, stretch: 0, gap: [0.6, 1.0] },
+    },
+
+    B29: {      // 东北卖拐大叔：军大衣雷锋帽，拄着拐一瘸一拐挪进来，举着拐吆喝推销；抡起拐杖甩过去，3D 拐杖翻着飞
+      face: -1,
+      sheet: { src: 'assets/trio/B29_crutch.webp', cell: [302, 331], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'stop', 'idle2'] },
+      /* 地板前排（站着弓腰），锚点 = 两脚之间的地面。剪影面积 2.85 万（樱木 +8%，含帧里的拐）。at.y 1326：各帧剪影最低一行屏幕 y 最大 1333.2（1328 时 1335.2，超 1.2）。
+         拐杖在 idle / wind / 走路帧里画着（拄着、推销、抡起来），throw 帧手空了、飞出去的是 3D 拐杖 */
+      anchor: [192.3, 320.8], at: [830, 1326, 1], pivot: [192, 321], leanK: 0,
+      depth: 1.3, recipe: 'thud',
+      /* 瘸：步长恒定（引擎一帧一步），瘸靠 walk3 伤腿着地时身子下沉、压着拐（审查第三轮第 4 条）；bob 跟帧。
+         拄拐的过渡帧也是一前一后两脚着地（后脚撑着），钉脚按手写的换帧链对齐（walkfix.py，平移 +18 / -12 / -9 / -48）；dist = 6 步 × 59.25 */
+      enter: { kind: 'walk', fps: 5, bob: 12, stride: 118.5, dist: 355.5, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
+      exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 6, flip: true, T: 0.8 },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
+      flex: { idle: [[100, 33, 180, 68, 'b', 3, 0.8]] },   // 雷锋帽顶的毛：底边钉住，帽顶颤
+      atk: { kind: 'throw', item: 'crutch', r: 34, atlas: { src: 'assets/trio/prop_crutch.webp', n: 36, cols: 6, cell: 118, scale: 1.24 },
+             seq: [['wind', 0.35], ['throw', 0.1, 'fire'], ['follow', 0.4]], hold: { throw: [18, 75] },
+             T: 0.5, arc: 0.2, spin: 6.3, stretch: 0.02, gap: [0.6, 1.0] },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     B12: {      // 草帽船长：扒在右边屏幕壁上，橡皮手臂伸长弹她脑门
       face: -1, src: 'assets/world/trio_straw.webp', at: [960, 620, 1], anchor: [300, 180], pivot: [298, 180], hand: [15, 70],

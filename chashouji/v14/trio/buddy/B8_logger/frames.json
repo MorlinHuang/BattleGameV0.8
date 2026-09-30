@@ -1,0 +1,58 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "auto",
+   "frames": [
+    "idle",
+    "wind",
+    "throw",
+    "follow"
+   ]
+  },
+  {
+   "src": "raw/act_b1_x122.png",
+   "screen": "auto",
+   "frames": [
+    "walk1",
+    "walk2",
+    "walk3",
+    "walk4",
+    "skid",
+    "idle2"
+   ]
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  25,
+  16,
+  198,
+  165
+ ],
+ "fixed": [
+  185,
+  560,
+  300,
+  655
+ ],
+ "size": [
+  "h",
+  430
+ ],
+ "anchor": [
+  165,
+  654
+ ],
+ "scale": [
+  0.95,
+  1.05
+ ],
+ "loose": [
+  "walk1",
+  "walk2",
+  "walk3",
+  "walk4",
+  "skid"
+ ]
+}

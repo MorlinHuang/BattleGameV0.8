@@ -1,7 +1,7 @@
 {
  "sheets": [
   {
-   "src": "raw/act_c1.png",
+   "src": "raw/act_a2_split.png",
    "screen": "auto",
    "frames": [
     "idle",
@@ -11,22 +11,14 @@
    ]
   },
   {
-   "src": "raw/act_a1.png",
-   "screen": "auto",
-   "frames": [
-    "idle1",
-    "raise",
-    "throw1",
-    "follow1"
-   ]
-  },
-  {
-   "src": "raw/act_b1.png",
+   "src": "raw/walk_gen1_x131.png",
    "screen": "auto",
    "frames": [
     "walk1",
     "walk2",
-    "swing",
+    "walk3",
+    "walk4",
+    "stop",
     "idle2"
    ]
   }
@@ -39,22 +31,32 @@
   125
  ],
  "fixed": [
-  190,
-  590,
-  300,
-  705
+  200,
+  615,
+  296,
+  703
  ],
  "size": [
   "h",
-  400
+  440
  ],
  "anchor": [
   160,
-  738
+  720
  ],
- "check": [],
  "scale": [
-  0.97,
-  1.03
- ]
+  0.95,
+  1.05
+ ],
+ "loose": [
+  "walk1",
+  "walk2",
+  "walk3",
+  "walk4",
+  "stop"
+ ],
+ "walkfix": {
+  "ref": "walk1",
+  "band": 16
+ }
 }

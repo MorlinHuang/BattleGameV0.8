@@ -1,0 +1,12 @@
+在场锚点漂移（noshake=1 胶片，规范 8.3，验收 ≤ 2 px）。drift.py <胶片> 12 <图集> <格> 4 0 <框> <at> <anchor> 16 id=.. names=.. robust=0.08
+框 = 不动部位（格内像素）：B6 后脚 176,468,232,515；B7 平衡车 70,412,268,456；B8 后靴 278,430,358,472；B18 撑墙头的手 + 大腿 150,170,250,235；
+B28 两腿 4,225,210,264；B29 后脚 213,285,258,327。
+
+B6  B6_M（wind→throw→follow→idle）最大 0.56；B6_M_idle（12 格 idle）drift.py 第 1 格读到 12.98（残差 0.064，被背景拐走），
+    同一段用相位相关复核后脚 745,985,815,1052：12 格最大 0.20 px（第 1、2 格鞋逐像素相减几乎全黑）
+B7  B7_M（wind→throw→follow）drift.py 第 1 格 2.27（残差 0.071：男生短裤挡住半块平衡车），相位相关复核平衡车 660,1006,820,1043：12 格最大 1.30；
+    B7_M_idle（idle）最大 0.34
+B8  B8_M（idle→wind→throw→follow，skid / idle2 帧名改正、重 build 后重拍）最大 1.17
+B18 B18_M_atk（raise→wind→throw→follow，站位改到 [890,630,0.72] 前拍的，读数和站位无关）最大 0.51；B18_M（follow→idle，终版站位）最大 0.28
+B28 B28_M（wind→throw→follow→idle）最大 1.07；B28_M_idle 最大 0.62
+B29 B29_M（idle→wind→throw，终版 at y 1326）最大 0.23
