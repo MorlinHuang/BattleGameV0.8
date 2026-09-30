@@ -67,6 +67,9 @@ const P = {
   /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
      来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
   loopFps: 8,
+  /* 换档的过渡帧（world.json 的 tweens，v14/tween/）播放速度（格/秒）。站 → 跪 4 格 × 1/10 秒 = 0.4 秒，
+     比 stageHold 短，播完之前不会再换档。往回换（跪 → 站）同一组倒着播。 */
+  tweenFps: 10,
   /* 被拉倒的三档各只有一张图（循环帧还没画），靠上下颠一下假装领先方在走。
      这是占位：等循环帧画出来就删掉。bobHz 是每秒几步，bobPx 是颠多高
      （落后方贴着地，只有领先方在迈步，所以颠得比站着走小）。 */
@@ -158,6 +161,7 @@ const FX = {
   phoneX: MID, phoneY: 750,          // 手机在屏幕上的位置 —— 弹幕打它、气泡从它冒
   struggle: 1,                       // 僵持度 0~1，气泡的冒出节奏读它
   gaitPh: 0,                         // 步态相位（循环数，带小数），只随位移变
+  tween: null,                       // 正在播的过渡帧（按播放顺序），换档那一刻由 startTween 定，播完照常进循环/步态
 
   hitX: 0, hitV: 0,                  // 角色被推开的位移与速度
   tint: [255, 255, 255], tintA: 0,   // 命中染色
@@ -356,6 +360,16 @@ function pickPose(prev, bias, held) {
   return next === 0 ? 'n' : (lvl === 0 ? side : prev[0]) + STAGES[next - 1];
 }
 
+/* 从 prev 档换到 next 档要播的过渡帧。world.json 的 tweens[档] = { from, frames }：frames 是从 from 往这一档
+   按顺序的中间姿势；反方向（这一档 → from）倒着播。没有过渡帧的两档之间照旧硬切。 */
+function tweenOf(prev, next) {
+  const tw = WORLD && WORLD.tweens;
+  if (!tw) return null;
+  if (tw[next] && tw[next].from === prev) return tw[next].frames;
+  if (tw[prev] && tw[prev].from === next) return [...tw[prev].frames].reverse();
+  return null;
+}
+
 function derive(dt) {
   if (S.phase === 'over') {
     S.overT += dt;
@@ -370,13 +384,20 @@ function derive(dt) {
   const back = Math.sign(bias) !== Math.sign(dist) && Math.abs(bias) >= P.kneelAt;
   const sev = back || Math.abs(bias) >= Math.abs(dist) ? bias : dist;
   const pose = pickPose(FX.pose, sev, FX.poseT >= P.stageHold);
-  if (pose !== FX.pose) { FX.pose = pose; FX.poseT = 0; } else FX.poseT += dt;
+  if (pose !== FX.pose) {
+    FX.tween = tweenOf(FX.pose, pose);
+    FX.pose = pose; FX.poseT = 0; FX.gaitPh = 0;     // 步态从这一档的原图（第 0 格）起步，接得上过渡帧的最后一格
+  } else FX.poseT += dt;
 
-  /* 这一帧用哪张图。僵持走时间循环；被拉倒的各档有步态帧的（world.json 的 gaits）
+  /* 这一帧用哪张图。刚换档先播过渡帧；僵持走时间循环；被拉倒的各档有步态帧的（world.json 的 gaits）
      走步态循环；还没画步态的先靠颠步（bob）假装在走。 */
   const gait = WORLD && WORLD.gaits && WORLD.gaits[FX.pose];
-  if (FX.pose === 'n') {
-    FX.frame = LOOP_N[Math.floor(FX.poseT * P.loopFps) % LOOP_N.length];
+  const tweenT = FX.tween ? FX.tween.length / P.tweenFps : 0;
+  if (FX.poseT < tweenT) {
+    FX.frame = FX.tween[Math.floor(FX.poseT * P.tweenFps)];
+    FX.bob = 0;
+  } else if (FX.pose === 'n') {
+    FX.frame = LOOP_N[Math.floor((FX.poseT - tweenT) * P.loopFps) % LOOP_N.length];   // 过渡播完从 n0 起循环
     FX.bob = 0;
   } else if (gait) {
     // 往赢的那一方拖 = 正着走（倒退）；被拽回来 = 倒着播（往前走）
@@ -2683,6 +2704,21 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       FX.gaitPh = (i + 0.5) / g.length;
       derive(0);
     }, (i) => `${FX.frame}`);
+    return;
+  }
+
+  /* ?tweenstrip=aK 把某一档的过渡帧连同首尾两档摊开：上一档 → t1 … tN → 这一档，
+     看每一格往下掉得匀不匀、赢方有没有横跳。 */
+  if (Q.has('tweenstrip')) {
+    const name = Q.get('tweenstrip') || 'aK', tw = WORLD.tweens[name];
+    const g = [tw.from === 'n' ? 'n0' : tw.from, ...tw.frames, name];
+    const p = { a: 62, b: 38 }[name[0]];
+    filmstrip(g.length, (i) => {
+      S.p = p; S.pos = 0; S.vel = 0; derive(0);
+      FX.frame = g[i];
+      const m = WORLD.poses[FX.frame];
+      FX.phoneX = FX.pairX + FX.hitX + (m.phone[0] - m.ax); FX.phoneY = GROUND + (m.phone[1] - m.ay);
+    }, (i) => g[i]);
     return;
   }
 
