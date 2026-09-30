@@ -203,7 +203,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B11_mask.webp', cell: [215, 301], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'crawl1', 'crawl2', 'arrive', 'idle2'] },
       /* 锚点 = 贴墙的那只鞋（右屏边）；剪影面积 2.31 万（格格 2.09 万 +10%） */
-      anchor: [203.9, 167.8], at: [952, 580, 1], pivot: [204, 168],
+      anchor: [203.9, 167.8], at: [952, 560, 1], pivot: [204, 168],
       leanK: 0.4,   // 挂在墙上的人前后倾打折：转轴就是贴墙那一点，幅度大了手脚离墙
       depth: 0.5, recipe: 'petal',
       enter: { kind: 'crawl', seq: [['crawl1', 0.15], ['crawl2', 0.15], ['crawl1', 0.15], ['crawl2', 0.15], ['arrive', 9]] },   // 一步一耸爬进来（crawl 的耸动 5 个半周期，换帧跟着它）→ 压帽檐到位
@@ -344,7 +344,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B13_sword.webp', cell: [257, 333], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'swoop', 'brake', 'settle', 'idle2', 'sword'] },
       /* 上方；锚点 = 两脚鞋底中点（踩在剑上）。剪影面积 2.12 万（上方槽位对格格 2.09 万）。画布宽 960：人最右伸出锚点 98 px；
          [850, 680]：同组 B7 在场帧外扩 4px 相交 0（730 时 throw 前伸的手压到 B7 头 556 px） */
-      anchor: [155.2, 317.3], at: [830, 560, 1], pivot: [155, 317], leanK: 0.3,
+      anchor: [155.2, 317.3], at: [750, 540, 0.94], pivot: [155, 317], leanK: 0.3,
       depth: 0.5, recipe: 'thud',
       /* 脚下的剑是挂件层（raw/sword_plain.png，part.py w 240），画在人后、鞋底压在剑身上；每帧按两只鞋底连线摆（角度 = 连线斜率） */
       parts: [{ src: 'assets/trio/B13_sword_ride.webp', pivot: [120, 10], z: -1, sway: [0.02, 0.7, 0],
@@ -366,7 +366,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B14_miner.webp', cell: [240, 286], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'dig', 'step', 'land', 'idle2'] },
       /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 2.52 万，s 0.91 → 2.09 万（上方对格格）。画布宽 960：最右伸出锚点 97 px，x 855 */
-      anchor: [130.9, 275.0], at: [855, 640, 0.91], pivot: [131, 275], leanK: 0.2,
+      anchor: [130.9, 275.0], at: [835, 640, 0.91], pivot: [131, 275], leanK: 0.2,
       depth: 0.5, recipe: 'debris',
       /* 挖墙钻出：从方块墙上沿（cut 279 = 靴底那一行）后面升上来 + 灰土烟；升的时候是挖墙的一拳（dig），升到位跨出来（step）、落地（land） */
       enter: { kind: 'appear', rise: 200, cut: 279, fx: 'smoke', color: [150, 125, 95], T: 0.8, seq: [['dig', 0.35], ['step', 0.25], ['land', 0.15, 'land'], ['idle', 9]], sq: 0.08 },
@@ -385,7 +385,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B15_gojo.webp', cell: [235, 319], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'fold', 'reveal', 'settle', 'idle2'] },
       /* 上方；悬浮，锚点 = 盘着的腿最低处。剪影面积 2.20 万（上方对格格 2.09 万）。[880, 730]：同组 B8 在场帧外扩 4px 相交 0 */
-      anchor: [137.3, 318.9], at: [880, 710, 1], pivot: [137, 319], leanK: 0.2,
+      anchor: [137.3, 318.9], at: [860, 670, 1], pivot: [137, 319], leanK: 0.2,
       depth: 0.5, recipe: 'hollow',   // 紫色光球命中（trio.js TRIO_RECIPE，3566a8a）；原 bloom 是档 4 戒指盒绽放，带爱心金星，和名单"手指弹出紫色光球"不符
       /* 凭空浮现：紫白闪光里淡入（抱臂低头）→ 抬头张开双手 → 手插兜落定 */
       enter: { kind: 'appear', fx: 'flash', color: [200, 160, 255], fade: 0.3, T: 0.8, seq: [['fold', 0.35], ['reveal', 0.3], ['settle', 0.15, 'land'], ['idle', 9]], sq: 0.05 },
@@ -403,7 +403,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B16_gold.webp', cell: [287, 341], cols: 4, names: ['idle', 'wind', 'hitA', 'hitB', 'assemble', 'land', 'victory', 'idle2'] },
       /* 上方；锚点 = 两脚中间的地面（站在墙沿）。剪影面积 s 1 时 2.92 万，s 0.85 → 2.11 万（上方对格格）。
          画布宽 960：披风最右伸出锚点 133 px，x ≤ 822。[820, 670]：同组 B5 在场帧外扩 4px 相交 0（740 时 B5 wind 举棍过头相交 1039 px），同组 B24 相交 0 */
-      anchor: [127.2, 337.5], at: [820, 670, 0.85], pivot: [127, 337], leanK: 0.2,
+      anchor: [127.2, 337.5], at: [800, 670, 0.85], pivot: [127, 337], leanK: 0.2,
       depth: 0.5, recipe: 'star',
       /* 圣衣拼身：金光里淡入（张开双臂、圣衣刚合上）→ 单膝落在墙沿（land 压扁）→ 起身举拳 */
       enter: { kind: 'appear', fx: 'flash', color: [255, 210, 80], fade: 0.3, T: 0.9, seq: [['assemble', 0.35], ['land', 0.25, 'land'], ['victory', 0.3], ['idle', 9]], sq: 0.08 },
@@ -423,7 +423,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B17_wolf.webp', cell: [232, 324], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'plunge', 'bounce', 'settle', 'idle2'] },
       /* 上方；倒挂，锚点 = 两只脚踝（绳子拴的那一点）。剪影面积 s 1 时 1.72 万，s 1.05 → 1.89 万（上方对格格 −10%）。
          [830, 370]：同组 B10 收势双手举过头顶，y 470 时相交 5223 px；370 时在场帧外扩 4px 相交 0。画布宽 960：人最右伸出锚点 119 px */
-      anchor: [116.3, 6.5], at: [830, 290, 1.05], pivot: [116, -660], leanK: 0,
+      anchor: [116.3, 6.5], at: [810, 290, 1.05], pivot: [116, -660], leanK: 0,
       depth: 0.5, recipe: 'thud',
       /* 倒挂垂下：顺着绳从上面掉下来（伸直俯冲）→ 冲过头弹回（张开手脚）→ 稳住；绳子引擎画，拴在脚踝 line */
       enter: { kind: 'drop', len: 700, line: [116, 6], T: 0.8, w: 3, fill: '#8a6a44', edge: 'rgba(60,40,20,.9)',
@@ -442,7 +442,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B19_ultra.webp', cell: [225, 318], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'transform', 'land', 'rise', 'idle2'] },
       /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 1.85 万，s 1.06 → 2.08 万（上方对格格）。
          [850, 700]：同组 B3（820, 1040）在场帧（含 aim0~10）、B30 外扩 4px 相交 0；720 时 follow 举拳 × B3 wind 相交 398 px。画布宽 960：最右伸出锚点 93 px */
-      anchor: [99.1, 311.8], at: [830, 700, 1.06], pivot: [99, 312], leanK: 0.2,
+      anchor: [99.1, 311.8], at: [810, 680, 1.06], pivot: [99, 312], leanK: 0.2,
       depth: 0.5, recipe: 'water',
       /* 变身闪光：白光里淡入（冲天拳）→ 落地一蹲 → 起身 */
       enter: { kind: 'appear', fx: 'flash', color: [230, 240, 255], fade: 0.3, T: 0.9, seq: [['transform', 0.35], ['land', 0.25, 'land'], ['rise', 0.2], ['idle', 9]], sq: 0.08 },
@@ -460,7 +460,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B20_monk.webp', cell: [259, 316], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'drift', 'wobble', 'settle', 'idle2'] },
       /* 上方；酒坛画在帧里（两张条都按酒坛配准），锚点 = 坛底中点。剪影面积 s 1 时 3.24 万（含酒坛），s 0.8 → 2.07 万（上方对格格）。
          [860, 680]：同组 B2（820, 1040，含 aim 帧）、B28 在场帧外扩 4px 相交 0（700 时 settle × B2 wind 36 px）。画布宽 960：最右伸出锚点 83 px */
-      anchor: [120.6, 310.9], at: [860, 660, 0.8], pivot: [121, 311], leanK: 0.2,
+      anchor: [120.6, 310.9], at: [840, 640, 0.8], pivot: [121, 311], leanK: 0.2,
       depth: 0.5, recipe: 'splash',
       /* 坐酒坛飘下来：从右上斜着飘（坛前倾、两腿翘起）→ 坛往后一晃抓住坛盖 → 坐稳 */
       enter: { kind: 'fly', from: [380, -420], T: 0.9, air: 0.9, tilt: 0.1, seq: [['drift', 0.4], ['wobble', 0.3], ['settle', 0.2, 'land'], ['idle', 9]], sq: 0.06 },
@@ -538,7 +538,7 @@ const TRIO_BUDDY = {
          出手：收拳蓄力 → 换回伸拳那一帧、橡皮手臂从手腕伸出去弹她脑门（punch：拳头那一块画在伸出去的地方）→ 缩回来 */
       face: -1,
       sheet: { src: 'assets/trio/B12_straw.webp', cell: [305, 360], cols: 2, names: ['idle', 'wind'] },
-      anchor: [300, 180], at: [960, 580, 1], pivot: [298, 180], leanK: 0.6,   // 绕扒墙的那只手前后倾：蓄力往后、出拳往前甩；y 620 → 580（遮挡判据第二版重扫：后排 B6 挪到 x 820 后，620 时她被挡）
+      anchor: [300, 180], at: [940, 560, 1], pivot: [298, 180], leanK: 0.6,   // 绕扒墙的那只手前后倾：蓄力往后、出拳往前甩；y 620 → 580（遮挡判据第二版重扫：后排 B6 挪到 x 820 后，620 时她被挡）
       depth: 0.5, enter: 'spring', recipe: 'star',
       idle: { frame: 'idle', breathe: [0.014, 0.9, 0.4] },
       atk: { kind: 'punch', seq: [['wind', 0.3], ['idle', 0.62, 'fire']],
