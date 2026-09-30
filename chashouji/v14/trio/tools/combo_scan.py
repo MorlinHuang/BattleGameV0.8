@@ -40,6 +40,11 @@
      一只靴子只占剪影 2~3%，8% 和躯干框都量不到；脚被盖住读成踩空、被戳穿）。只看人自己的剪影，不含 fixed 场景层（墙沿 / 石檐是布景）。
   9. 场景层（fixed 挂件：墙沿、石檐、墙头）格内坐标跟 at 走。cfg.at 那一版里按设计出画的那一边（scene_of），挪了 at 以后仍要出画，缩进画里的像素算出画 ——
      suggest 不会再建议出一截悬空的墙头。
+  10. 跨边同屏（2026-10-01 主控，修12 方案 A：G18 挪到 at x 496、锚点越过中线）：两边同时送礼，闺蜜、哥们两组同屏。锚点越过中线的人
+     （CROSS：闺蜜 at x > W/2、哥们 at x < W/2）对另一边全员逐对判（第 1 条口径，不放宽：跨边没有"自家主角"）+ 合计（两组六人 + 两个主角，
+     画在他前面的每个槽位各取一人，只在跟他有交叠的人里组合）。画的先后：depth 小的先画；depth 一样时哥们先画（main.js CREWS = 哥们、闺蜜，
+     sort 稳定），闺蜜在前。场景层（墙沿、石檐）跟人同一个 depth 画（drawBody → drawScene），挡别人时算进这个人的遮挡范围。
+     读数写在 bestie / buddy 矩阵文件末尾（cross_section）。
   另外：人名单直接取 cast（按 depth 分槽，不再取 groups：组表只剩诊断用），ride 在场前后溜（enter.roll）的人按 ±幅度 三个位置都判。
 
   帧序列（cfg.sheet）：屏幕点 = at + (格内点 − anchor) × s（trio.js place()，在场时没有位移）
@@ -52,7 +57,7 @@
 
 用法（在 chashouji 下）：python3 v14/trio/tools/combo_scan.py [buddy|bestie|all] [--only=B1,B2,...] [--nosuggest]
   → shots/trio_std/组合遮挡矩阵_<边>.txt；头框映射缓存 /tmp/combo_heads.json"""
-import json, os, subprocess, sys
+import itertools, json, os, subprocess, sys
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
@@ -781,6 +786,73 @@ def keep_best(side, D, r):
     return at, j[2], j[4], j[5]
 
 
+def scene_blob(c, at):
+    """fixed 场景层（trio.js drawScene）按 at 贴到屏幕上的剪影 → [Blob]"""
+    out = []
+    for q in c.get('parts', []):
+        if not q.get('fixed'): continue
+        a = q['at'] if isinstance(q['at'], list) else next(iter(q['at'].values()))
+        x, y = at[0] + (a[0] - c['anchor'][0]) * at[2], at[1] + (a[1] - c['anchor'][1]) * at[2]
+        out.append(render(alpha(os.path.join(WEB, q['src'])), x - q['pivot'][0] * at[2], y - q['pivot'][1] * at[2], at[2], a[2] if len(a) > 2 else 0.0, (x, y)))
+    return out
+
+
+def cross_section(D, built):
+    """第 10 条跨边同屏：built {边: (ids, ppl)} → 文本（锚点越过中线的人 × 另一边全员；没有这样的人也写一行）"""
+    other = {'buddy': 'bestie', 'bestie': 'buddy'}
+    order = lambda side, r: (DEPTH[built[side][1][r].slot], side == 'bestie')          # 画的先后（小的先画）
+    occ = {}                                                                           # 挡别人时的样子：人 + 自己的场景层
+    def as_front(side, r):
+        if (side, r) not in occ:
+            p = built[side][1][r]; sc = scene_blob(D[side]['cast'][r], D[side]['cast'][r]['at'])
+            occ[(side, r)] = p if not sc else Person(f'{r}+场景层', p.slot, p.kind, p.frames + [Frame('场景层', b, rect(0, 0, 1, 1), b) for b in sc], roll_of(D[side]['cast'][r]))
+        return occ[(side, r)]
+    def worst_total(side, r):
+        """r 当后面那人：画在他前面的每个（边, 槽位）各取一人（只取跟他有交叠的；不交叠的哪一个都一样，记作空）+ 两个主角，所有组合里最坏的合计"""
+        back = built[side][1][r]; CP = [(built[side][1][c], (0, 0)) for c in CP_IDS]
+        slots = []
+        for sd in ('buddy', 'bestie'):
+            ids = built[sd][0]
+            for sl in DEPTH:
+                if sd == side and sl == back.slot: continue
+                cand = [q for q in ids[sl] if order(sd, q) > order(side, r)]
+                if not cand: continue
+                hit = [(sd, q) for q in cand if ov(back.all_g, (0, 0), as_front(sd, q).all_g, (0, 0))]
+                slots.append(hit + ([None] if len(hit) < len(cand) else []))
+        worst = (0.0, '', ())
+        for combo in itertools.product(*slots):
+            fr = [x for x in combo if x]
+            t_ = total(back, (0, 0), [(as_front(*x), (0, 0)) for x in fr] + CP)
+            if t_[0] > worst[0]: worst = (t_[0], t_[1], tuple(q for _, q in fr))
+        return worst
+    out, nbad, npair = [], 0, 0
+    movers = [(sd, r) for sd in ('buddy', 'bestie') for sl in built[sd][0] for r in built[sd][0][sl]
+              if (D[sd]['cast'][r]['at'][0] > W / 2) == (sd == 'bestie')]
+    out.append(f'\n== 跨边同屏（第 10 条：锚点越过中线的人 × 另一边全员，两组同时在场；口径同第 1 条，头框 0 / 认人点 0 / 一对一 ≤ {RATIO:.0%} / 合计 ≤ 各自上限）：'
+               + ('没有锚点越过中线的人' if not movers else '、'.join(f'{r}（{sd} at {D[sd]["cast"][r]["at"]}）' for sd, r in movers)))
+    for sd, r in movers:
+        od = other[sd]; ids_o, ppl_o = built[od]; me = built[sd][1][r]
+        out.append(f'  {r} × {"哥们" if od == "buddy" else "闺蜜"}全员（行：谁在后面 × 谁在前面；场景层算进前面那人）：')
+        for sl in ('top', 'ground', 'floor'):
+            cells = []
+            for q in ids_o[sl]:
+                if order(od, q) < order(sd, r): back, bs, front, fs_ = ppl_o[q], od, as_front(sd, r), sd
+                else: back, bs, front, fs_ = me, sd, as_front(od, q), od
+                j = judge(back, (0, 0), front, (0, 0)); ok = ok_cell(j); npair += 1; nbad += not ok
+                cells.append(f'{back.rid}在{front.rid.split("+")[0]}后 {fmt(j)}')
+            out.append(f'    {sl:>6}：' + '；'.join(cells))
+        cp = built[sd][1]; j = judge(me, (0, 0), cp[OWN[od]], (0, 0))
+        out.append(f'    {OWN[od]}（{r} 在他后面，认人点 0 口径）：{fmt(j, True, False)}')
+        npair += 1; nbad += not ok_cell(j, True, False)
+        rows = [(sd, r)] + [(od, q) for sl in ids_o for q in ids_o[sl] if order(od, q) < order(sd, r)
+                            and ov(ppl_o[q].all_g, (0, 0), as_front(sd, r).all_g, (0, 0))]
+        for bsd, br in rows:
+            w = worst_total(bsd, br); lim = built[bsd][1][br].lim; nbad += w[0] > lim
+            out.append(f'    合计 {br} 当后面那人（两组六人 + 主角里画在他前面的）：最坏 {w[0]:.1%}（帧 {w[1] or "-"}，前面 {"、".join(w[2]) or "只有主角"}）/ 上限 {lim:.0%}{" ✗" if w[0] > lim else ""}')
+    out.append(f'  跨边结论：{npair} 对 + 合计，不过 {nbad}')
+    return '\n'.join(out)
+
+
 def rescan(side, D, at):
     """按建议站位重贴每人全部在场帧，一对一 + 合计 + 出画全部复核"""
     ids, ppl = build(side, D, at)
@@ -799,7 +871,7 @@ if __name__ == '__main__':
     for side in (['buddy', 'bestie'] if which == 'all' else [which]):
         txt, ids, ppl = scan(side, D)
         print(txt, flush=True)
-        if '--nosuggest' in sys.argv: continue
+        if '--nosuggest' in sys.argv: print(cross_section(D, {sd: build(sd, D) for sd in ('buddy', 'bestie')})); continue
         sg, at = suggest(side, D, ids, ppl, fixed_ids=[r for r in ppl if only and r not in only], start=start)
         n, badp, ng, badg, oc, kmin = rescan(side, D, at)
         if ids['ground']:
@@ -819,5 +891,6 @@ if __name__ == '__main__':
                ''.join(f'\n  ✗ {r} 在 {c} 后面：{fmt(j, c in CP_IDS, back_rule(side, SLOT.get(D[side]["cast"][r].get("depth")))[0] == c)}（最坏帧 {j[1]}' + (f'；最差一项 {j[5]}' if j[5] else '') + '）' for r, c, j in badp) +
                ''.join(f'\n  ✗ 合计 {r}（组 {g}）{t_[0]:.1%}' for r, g, t_ in badg[:30]) + ''.join(f'\n  ✗ 出画 {r}' for r in oc) +
                '\n' + exempt_line(*build(side, D, at)))
+        sg += '\n' + cross_section(D, {sd: build(sd, D) for sd in ('buddy', 'bestie')})
         p = os.path.join(ROOT, 'shots/trio_std', f'组合遮挡矩阵_{side}.txt')
         open(p, 'w').write(txt + '\n' + sg + '\n'); print(sg)

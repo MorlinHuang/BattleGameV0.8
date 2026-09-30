@@ -443,7 +443,7 @@ const TRIO_BESTIE = {
       face: +1,
       sheet: { src: 'assets/trio/G18_mu.webp', cell: [335, 351], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'leap', 'land', 'rise', 'idle2'] },
       /* 锚点 = 前脚厚底靴鞋底：出手四帧按这只靴子配准（残差 0.17 px）。人那一层 idle 剪影 2.80 万 × 0.88² ≈ 2.17 万（上方样板 G11 2.06 万） */
-      anchor: [273.7, 323.2], at: [380, 600, 0.8], pivot: [273, 323], leanK: 0,
+      anchor: [273.7, 323.2], at: [496, 640, 0.88], pivot: [273, 323], leanK: 0,
       depth: 0.5, recipe: 'petal',
       /* 从左上画外抛物线跃下（腾空收腿张臂）→ 单膝落在墙沿上（压扁）→ 起身张臂 → 亮相待机 */
       enter: { kind: 'leap', from: [-320, -380], h: 120, air: 0.5, T: 0.9, seq: [['leap', 0.5], ['land', 0.2, 'land'], ['rise', 0.14], ['idle', 9]], sq: 0.1 },
@@ -451,8 +451,8 @@ const TRIO_BESTIE = {
       idle: { frame: 'idle', breathe: [0.014, 0.7, 0] },
       /* 墙沿场景层（bestie/G18_mu/ledge.py 程序画一截城墙顶：青砖墙顶面 + 错缝墙面、下半截渐隐），fixed 钉在世界里、左端出画。
          墙顶面是一条带（3/4 侧身，远脚 y 323、近脚 y 346）：前沿 = 格内 y 346 = land 单膝 / 脚尖、idle / rise 后脚的最低一行，后沿 314。
-         左端格内 x −206：at x 260 → 380 后墙往左接长 136，左端仍在屏幕 x −42 出画 */
-      parts: [{ src: 'assets/trio/G18_ledge.webp', pivot: [0, 0], z: -1, fixed: true, at: [-206, 314, 0] },
+         左端格内 x −340：at x 260 → 380 后墙往左接长 136；修12 落脚区（G8 蓄力瞄男主的冰锥扫过左靴）人挪到 at x 496、墙再接长 134，左端仍在屏幕 x −44 出画 */
+      parts: [{ src: 'assets/trio/G18_ledge.webp', pivot: [0, 0], z: -1, fixed: true, at: [-340, 314, 0] },
               /* 翎子、靠旗是定妆拆好的两层（ref/G18_feathers.png、G18_flags.png，part.py 按人那一层同一个比例 330/1424 缩）：都在人身后。
                  pivot：翎子 = 两根翎管插进盔头的那一点、靠旗 = 四根旗杆在背上并拢的插座。每帧的 at = idle 上的位置 + 这一帧的头相对 idle 的位移（头模板匹配） */
               { src: 'assets/trio/G18_flags.webp', pivot: [73.9, 118.5], z: -1, sway: [0.04, 0.7, 0],
