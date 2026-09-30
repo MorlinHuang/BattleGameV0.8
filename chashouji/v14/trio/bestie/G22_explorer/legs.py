@@ -6,6 +6,11 @@
 配准按屁股 + 大腿（fixed），四帧的小腿本来就在同一处，只是模型每格画得略有出入（均差 5~10 / 255），统一用 idle 的反而更一致。
 切口在小腿中段（y = CUT）：挂件绕切口正中转，sway 给小（0.05 rad），切口两侧最多错开 ~1 px，被描边盖住。
 
+切口两层**重叠 OV 行、重叠处硬边**（审查签字 G22）：两层要是正好在 CUT 对接，画的时候两条边都被双线性取样成半透明，
+叠起来透出底色，两条小腿横着一道 1 px 暗线（M_g22_idle 第 1261 行 221,180,145，上下行 252,213,170）。
+所以人那一层的残端往上多留 OV 行（压在挂件下面），挂件最下 OV 行和残端这 OV 行的 alpha 一律二值化成 0 / 255：
+挂件底边的半透明边落在残端的实心上，残端顶边的半透明边藏在挂件的实心下面，哪条边都透不出底色。
+
 **frames.py build 之后必须再跑一遍这个**（build 会重写图集）：
   python3 v14/trio/bestie/G22_explorer/legs.py
 → 改写 web/assets/trio/G22_explorer.webp（清掉四帧的小腿）、出 web/assets/trio/G22_legs.webp，打印 cfg.parts。"""
@@ -14,14 +19,17 @@ import numpy as np
 from PIL import Image
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../../web/assets/trio')
-CW, CH, COLS = 467, 185, 4
+CW, CH, COLS = 466, 183, 4
 FRAMES = ['idle', 'wind', 'throw', 'follow']          # 图集前四格（在场帧）
 LEG = (0, 0, 150, 100)                                 # 小腿 + 靴子（输出像素）；下沿 = 切口
 CUT = LEG[3]
+OV = 4                                                 # 两层在切口处重叠几行
 
 atlas = np.array(Image.open(os.path.join(WEB, 'G22_explorer.webp')).convert('RGBA'))
 x0, y0, x1, y1 = LEG
 part = atlas[y0:y1, x0:x1].copy()                     # idle 在第 0 格
+hard = lambda a: np.where(a > 128, 255, 0).astype(np.uint8)
+part[-OV:, :, 3] = hard(part[-OV:, :, 3])             # 挂件最下 OV 行：硬边
 ys, xs = np.nonzero(part[..., 3] > 8)
 if not len(xs): raise SystemExit('idle 帧的 LEG 框里没有小腿 —— 图集是不是没重新 build 过、或者已经清过了')
 bx0, by0, bx1 = xs.min(), ys.min(), xs.max() + 1
@@ -31,6 +39,7 @@ Image.fromarray(part[by0:, bx0:bx1]).save(os.path.join(WEB, 'G22_legs.webp'), 'W
 for i, fn in enumerate(FRAMES):
     cx, cy = (i % COLS) * CW, (i // COLS) * CH
     atlas[cy + y0:cy + y1, cx + x0:cx + x1, 3] = 0
+    atlas[cy + y1 - OV:cy + y1, cx + x0:cx + x1] = part[-OV:]          # 残端往上多留 OV 行（= 挂件最下 OV 行，已是硬边），压在挂件下面
 Image.fromarray(atlas).save(os.path.join(WEB, 'G22_explorer.webp'), 'WEBP', quality=90, method=6)
 at = [round(float(pivot[0] + bx0 + x0), 1), float(CUT)]
 print(f"→ G22_legs.webp {bx1 - bx0}x{CUT - by0}；cfg.parts：{{ src: 'assets/trio/G22_legs.webp', pivot: {pivot}, z: 1, "

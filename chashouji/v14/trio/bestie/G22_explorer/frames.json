@@ -41,5 +41,9 @@
  "anchor": [
   450,
   362
+ ],
+ "loose": [
+  "crawl1",
+  "crawl2"
  ]
 }

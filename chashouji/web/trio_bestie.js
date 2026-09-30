@@ -47,7 +47,7 @@ const TRIO_BESTIE = {
       /* 发带下面那截飘带：上沿钉住，下端左右甩（框只有上沿压着飘带，其余三边透明） */
       flex: { idle: [[100, 62, 150, 86, 't', 8, 1.2]] },
       atk: { kind: 'beam', seq: [['raise', 0.34], ['throw', 0.4, 'fire'], ['follow', 0.3]],
-             hold: { throw: [350, 80] }, stretch: 0.03, gap: [1.0, 1.4],
+             hold: { raise: [145, 125], throw: [350, 80] }, stretch: 0.03, gap: [1.0, 1.4],   // raise：两只手掌收在腰侧之间那一点（蓄力球画在这）
              /* 气浪：比悟空的光线粗一倍（排山倒海是一堵墙推过去，不是一根线）；最外一层暗红给它在暖色客厅上描个边 */
              beam: { fire: 0.38, drip: 0.1, ball: 40, glow: [255, 170, 70], edge: [220, 60, 30],
                      layers: [[84, [170, 30, 20], 0.3], [64, [255, 90, 40], 0.6], [42, [255, 160, 70], 0.85], [20, [255, 230, 160], 1], [7, [255, 255, 255], 1]] } },
@@ -72,19 +72,19 @@ const TRIO_BESTIE = {
     },
     G22: {      // 麻花辫探险家（劳拉式）：左下角匍匐爬进来（左右肘交替）趴定，举相机拍照取证，闪光晃他的眼，照片飞出来
       face: +1,
-      sheet: { src: 'assets/trio/G22_explorer.webp', cell: [467, 185], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'crawl1', 'crawl2', 'land', 'idle2'] },
-      anchor: [228.8, 152.6], at: [200, 1314, 1], pivot: [228, 152],
+      sheet: { src: 'assets/trio/G22_explorer.webp', cell: [466, 183], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'crawl1', 'crawl2', 'land', 'idle2'] },
+      anchor: [223.0, 152.6], at: [200, 1314, 1], pivot: [223, 152],
       leanK: 0,   // 趴着的人不整体前后倾（同樱木）
       depth: 1.3, recipe: 'star',
       enter: { kind: 'creep', seq: [['crawl1', 0.14], ['crawl2', 0.14], ['crawl1', 0.14], ['crawl2', 0.14], ['land', 0.1, 'land'], ['idle', 9]], sq: 0.08 },
       exit: { frame: 'crawl2' },
       idle: { frame: 'idle', breathe: [0.02, 0.7, 0] },   // 趴着：只竖向起伏
       /* 翘起来的两条小腿 + 靴子是挂件层（bestie/G22_explorer/legs.py 从 idle 拆出来，四个在场帧里原处已清掉）：
-         绕小腿中段的切口来回晃 = 趴着懒洋洋晃脚。爬的帧（腿平放）不画 */
-      parts: [{ src: 'assets/trio/G22_legs.webp', pivot: [62, 96], z: 1, sway: [0.06, 0.6, 0],
-                at: { idle: [105, 100, 0], wind: [105, 100, 0], throw: [105, 100, 0], follow: [105, 100, 0] } }],
+         绕小腿中段的切口来回晃 = 趴着懒洋洋晃脚。爬的帧（腿平放）不画。切口两层重叠 4 行、重叠处硬边（不然叠出一道 1 px 暗线） */
+      parts: [{ src: 'assets/trio/G22_legs.webp', pivot: [61.5, 96], z: 1, sway: [0.06, 0.6, 0],
+                at: { idle: [99.5, 100, 0], wind: [99.5, 100, 0], throw: [99.5, 100, 0], follow: [99.5, 100, 0] } }],
       atk: { kind: 'camera', seq: [['wind', 0.3], ['throw', 0.12, 'fire'], ['follow', 0.35]],
-             hold: { throw: [430, 50] }, stretch: 0, gap: [1.0, 1.4] },
+             hold: { throw: [424, 50] }, stretch: 0, gap: [1.0, 1.4] },
     },
 
     G24: {      // 宫斗贵妃（华妃式）：侧卧着从左下角滑进来、撑肘起身扶正旗头，弹出一枚金护甲砸他 —— 赏"一丈红"（打中炸红粉）
