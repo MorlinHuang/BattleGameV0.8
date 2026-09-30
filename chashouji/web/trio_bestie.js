@@ -449,6 +449,24 @@ const TRIO_BESTIE = {
              hold: { wind: [132, 16], throw: [318, 72] },
              T: 0.55, arc: 0.18, spin: 5.7, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
+    G14: {      // 金发剑之公主（希瑞式）：左上一道蓝白闪光里举剑变身现身，剑指前方、扛剑站定；双手举剑过头一劈，金色剑光斩在他身上
+      face: +1,
+      sheet: { src: 'assets/trio/G14_shera.webp', cell: [335, 433], cols: 4, names: ['idle', 'wind', 'throw', 'follow'] },
+      /* 锚点 = 前脚金靴底：按这只靴子配准、缩放也按它（scale_by fixed：按头找时 idle 比其余三帧小一圈），残差 0.18 px。
+         剑是她自己的（不飞出去），画在帧里；剪影约 3.5 万格内像素 × 0.77² ≈ 2.07 万屏幕像素，同 G11 */
+      anchor: [222.4, 425.4], at: [190, 660, 0.77], pivot: [222, 425], leanK: 0.3,
+      depth: 0.5, recipe: 'star',
+      /* 闪电变身（appear 闪光，蓝白）：淡入时双手举剑指天（变身），淡入完剑指前方 → 扛剑站定（淡入后换两次帧） */
+      enter: { kind: 'appear', fx: 'flash', color: [200, 230, 255], fade: 0.3, seq: [['wind', 0.35], ['follow', 0.3, 'land'], ['idle', 9]], sq: 0.05 },
+      exit: { frame: 'wind' },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
+      /* 身后飘着的长金发 + 红披风：身子那一侧（右边）钉住，往左飘（框上、下、左三边透明） */
+      flex: { idle: [[0, 143, 106, 336, 'r', 12, 0.9]] },
+      /* 剑光（slash，引擎画在他身上）：举剑过头 → 劈下，出手段 0.3 秒盖住两道（gap 0.12 + 划出） */
+      atk: { kind: 'slash', seq: [['wind', 0.32], ['throw', 0.3, 'fire'], ['follow', 0.35]],
+             slash: { n: 2, gap: 0.12, len: 240, w: 20, life: 0.5, color: [255, 215, 110], ang: -0.6, spread: 0.2 },
+             gap: [0.9, 1.3] },
+    },
     G16: {      // 狐尾妖姬（妲己式）：一团狐火橙烟里九条白尾巴裹着她现身，伸个懒腰、托腮一笑；掌心托一团青蓝狐火，举过头顶甩出去
       face: +1,
       sheet: { src: 'assets/trio/G16_daji.webp', cell: [288, 401], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wrap', 'stretch', 'lean', 'idle2'] },
