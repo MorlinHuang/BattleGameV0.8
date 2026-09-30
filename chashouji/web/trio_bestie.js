@@ -449,6 +449,24 @@ const TRIO_BESTIE = {
              hold: { wind: [132, 16], throw: [318, 72] },
              T: 0.55, arc: 0.18, spin: 5.7, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
+    G16: {      // 狐尾妖姬（妲己式）：一团狐火橙烟里九条白尾巴裹着她现身，伸个懒腰、托腮一笑；掌心托一团青蓝狐火，举过头顶甩出去
+      face: +1,
+      sheet: { src: 'assets/trio/G16_daji.webp', cell: [288, 401], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wrap', 'stretch', 'lean', 'idle2'] },
+      /* 九尾宝座画在每一帧里：按交叠的大腿 + 臀配准（残差 0.27 px），scale_by sheet（wind 仰头按头找会放大到 1.15、stretch 缩到 0.85）。
+         锚点 = 最低点（鞋 / 裙摆）。人（不算白尾巴）约 3.2 万格内像素 × 0.8² ≈ 2.05 万屏幕像素，同 G11 */
+      anchor: [159.6, 383.7], at: [175, 690, 0.8], pivot: [159, 383], leanK: 0.3,
+      depth: 0.5, recipe: 'bloom',
+      /* 九尾托着出现（appear 烟，狐火橙）：淡入时尾巴裹着身子只露眼睛 → 淡入完伸懒腰 → 托腮坐定 → 待机（淡入后换两次帧） */
+      enter: { kind: 'appear', fx: 'smoke', color: [255, 140, 50], seq: [['wrap', 0.35], ['stretch', 0.25], ['lean', 0.2, 'land'], ['idle', 9]], sq: 0.04 },
+      exit: { frame: 'wrap' },
+      idle: { frame: 'idle', breathe: [0.014, 0.7, 0] },
+      /* 狐火是平面图（bestie/G16_daji/raw/foxfire_src.png 抠出来，100 px × 0.45）：待机浮在托起的掌心上打旋（次级摆动）；
+         wind 举过头顶 → throw 甩出去、一路打着旋（道具表：狐火是光效，不做 3D） */
+      atk: { kind: 'throw', item: 'foxfire', prop: 'assets/world/trio_g16_foxfire.webp', scale: 0.45,
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             hold: { idle: [272, 92], wind: [207, 0], throw: [272, 86] },
+             T: 0.5, arc: 0.2, spin: 10, idleSpin: 6, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
+    },
     G20: {      // 复古歌后（邓丽君式）：坐在一弯金月亮上从正上方缓缓降下来，挥手 → 张开双臂唱 → 坐定捂心口轻唱；指尖捏一枚月牙镖举过头顶一弹，打着转飞过去
       face: +1,
       sheet: { src: 'assets/trio/G20_teresa.webp', cell: [234, 338], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wave', 'sing', 'bow', 'idle2'] },
