@@ -113,6 +113,14 @@ function Crew(cfg) {
     return b;                              // 新来的人（续时间 / 叫回的返回 undefined）：main.js 据此决定要不要先放出场视频
   }
 
+  /* 给场上这个人续一段 T.spray（三人组叠第二组后同一份 Crew 里站两个人，续时间要按人续，summon 满员时续的是剩余最短的那个）。
+     他已经在离场 / 不在了返回 false */
+  function extend(b) {
+    if (!bs.includes(b) || b.t > sprayEnd(b)) return false;
+    b.spray += T.spray; renew(b);
+    return true;
+  }
+
   /* 场上没人用的形象（下标） */
   function freeSkins() { return cfg.skins.map((_, i) => i).filter(i => !bs.some(b => b.skin === i)); }
 
@@ -523,7 +531,7 @@ function Crew(cfg) {
     };
     return { solid: box(MEASURE.solid), glow: box(MEASURE.glow) };
   }
-  return { init, load, summon, update, items, active, reset, peek, measure, cfg };
+  return { init, load, summon, extend, update, items, active, reset, peek, measure, cfg };
 }
 /* measure 的两个阈值（alpha 0~255）。glow 32 = 外发光 1/8 不透明：再淡的那圈在明亮客厅底图上已经看不出来
    （贴图里 alpha 16 那圈比 32 那圈只往外多 ~12 贴图像素，肉眼分不出边）。 */
@@ -655,7 +663,7 @@ const Buddy = Crew({
   skins: [1,                        // skate1 棕发护目镜花短裤红滑板
           4, 5, 7],                 // skate4 金箍浪子（至尊宝）/ skate5 格格府贝勒（五阿哥）/ skate7 红发宿敌（八神庵）
   T: { enter: 0.55, spray: 3.2, exit: 0.5 },
-  max: 1, gap: 0.3,
+  max: 2, gap: 0.3,                 // 三人组叠第二组时后排站两个（trio.js TRIO.EXTRA），各占一排
   /* 三人组里只站后排（下面两排前排不用了：前景地板是 trio.js 趴着 / 半跪的那一个）。
      三排在男生身后（被男生挡住），两排在他前面（2026-09-29 用户："哥们出现的位置不一定是男生后面，也可以出现在前面，
      注意近大远小和遮挡"；"前面最多可以站两个"）：前排脚底往下（crew.js pose：抬高 = (地面 − 视平线) × (1 − d)，d > 1 就是往下），
@@ -694,13 +702,14 @@ const MIST = {
           6, 7],                    // src7 蓝发发明家（自制喷雾器）/ src8 月光水手少女
   anim: { pulse: [0.42, 0.14], kick: [0.12, 0.05, 10], lean: 0.08, bob: [3, 2.6] },
   T: { enter: 0.55, spray: 3.2, exit: 0.5 },
-  max: 1, gap: 0.3,                 // 三人组里的一个：再送续时间
+  max: 2, gap: 0.3,                 // 三人组里的一个：再送续时间；叠第二组时后排站两个（trio.js TRIO.EXTRA）
   /* 同哥们（Buddy.rows、k）：三排在女生身后，两排在她前面（2026-09-29 用户："闺蜜也是一样的逻辑"）—— 脚往下、画在女生之上；
      前排只站左半边（r 0.5~1，人往屏幕左沿靠）。k 0.85：d = 1 时闺蜜跟女生一样高（她站得直、脚下有平衡车，k = 1 高出一截）。 */
   k: 0.85,
   /* 三人组里只站最远那一排：她身前的女主往后仰、长发甩到左边，近两排整个人被女主挡住（2026-09-29 三人组胶片）；
      远排小、脚底高，头露在女主的头发上方 */
-  rows: [[0.68, 0.74]],
+  /* 叠第二组时第二个人站更远一排（0.60~0.64）：更小、脚底更高，头照样露在女主头发上方 */
+  rows: [[0.68, 0.74], [0.60, 0.64]],
   aim: { lo: -0.7, hi: 0.35, rate: 2.4, follow: 10 },
   sweep: { a: [0.3, 0.15], w: [1.3, 3.1] },
   zone: null,
