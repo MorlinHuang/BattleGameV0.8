@@ -9,3 +9,12 @@ Bottom-right (follow-through): right arm swung down across her body, blowing a k
 Generous empty space between cells, nothing overlaps another cell, nothing cropped.
 Background MUST be pure flat chroma green #00FF00 single solid color, no gradient, no shadow, no ground, no text, no panel borders.
 ## act_b1（slide / land / wind / idle2）：一只脚踩在输液架轮座上蹲着滑 / 跳下来跪定 / strong wind-up / idle
+
+## 实际出图（2026-09-30 05:32 服务恢复后）
+- act_a1 = edited-1790746547003-1（参考图：定妆铺绿底 /tmp/G25_bg.png —— 透明定妆直接传回 422 一次）。上面 A 条原文改了三处才过：
+  "LOW KNEELING POSE" → "LOW CROUCH"、去掉 "short" / "thigh-high"、idle 去掉 "as if tapping a syringe"、wind 改 "fist closed as if about to throw a dart"。
+  模型把输液架画在她**前面（右边）**、她左手扶着 —— 出手时手臂从架子前面甩过去，读得清，没重生。
+- act_b1 = edited-1790746703136-2（参考图 act_a1 + 定妆绿底）：ride（一只脚踩轮座、一腿后踢、双手握杆）/ hop（跳下来）/ wind2 / idle2。
+  提示词："She rides the IV drip stand like a scooter, one foot standing on the wheeled base, the other leg kicked out behind her … hops off the stand to the right …"
+  另一张背景出了深色渐变（抠不干净），弃。
+- 两张条的 wind 都只是拳头举到肩上，幅度不够大；出手段用 A 条的 wind（蓄力 0.28 秒 → throw 甩到最前，幅度够认）。

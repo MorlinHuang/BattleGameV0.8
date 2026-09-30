@@ -104,6 +104,25 @@ const TRIO_BESTIE = {
              hold: { wind: [127, 34], throw: [421, 59] },
              T: 0.5, arc: 0.2, spin: 12, stretch: 0, gap: [1.0, 1.4], onHit: 'bounce' },
     },
+    G25: {      // 大针筒护士：踩着输液架轮座从左下角滑进来、跳下来半跪扶着输液架，甩一支巨型针筒飞镖，扎在他头上
+      face: +1,
+      sheet: { src: 'assets/trio/G25_nurse.webp', cell: [314, 352], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'ride', 'hop', 'wind2', 'idle2'] },
+      anchor: [192.3, 348.5], at: [185, 1330, 1], pivot: [192, 348],
+      leanK: 0,   // 半跪：整体前后倾会把着地的膝盖和脚带起来
+      depth: 1.3, recipe: 'rouge',
+      /* 输液架画在帧里（她一直扶着）：进场踩在轮座上滑、跳下来落成半跪 */
+      enter: { kind: 'slide', seq: [['ride', 0.42], ['hop', 0.14], ['idle', 9, 'land']], sq: 0.1 },
+      exit: { frame: 'ride' },
+      idle: { frame: 'idle', breathe: [0.016, 0.8, 0] },
+      /* 前脚鞋尖点地：脚踝钉住（'l'），往右越翘越高（框上、右、下三边透明） */
+      flex: { idle: [[228, 315, 258, 351, 'l', 7, 1.0]] },
+      /* 巨型针筒：tools/3d/syringe.py 3D 转盘；扎在头上那一支用平面图（onHit 'wear' 只画 prop） */
+      atk: { kind: 'throw', item: 'syringe', r: 36, atlas: { src: 'assets/trio/prop_syringe.webp', n: 36, cols: 6, cell: 128, scale: 1.10 },
+             prop: 'assets/world/trio_g25_syringe.webp',
+             seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.3]],
+             hold: { idle: [118, 100], wind: [100, 82], throw: [297, 119] },
+             T: 0.5, arc: 0.15, spin: 6.3, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'wear' },
+    },
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
