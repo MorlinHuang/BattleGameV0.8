@@ -142,6 +142,24 @@ const TRIO_BESTIE = {
              beam: { fire: 0.45, drip: 0.1, ball: 30, glow: [120, 255, 150], edge: [20, 120, 60],
                      layers: [[40, [20, 120, 60], 0.3], [28, [60, 200, 100], 0.6], [16, [140, 255, 170], 0.9], [6, [240, 255, 240], 1]] } },
     },
+    G26: {      // 蝴蝶发饰剑士（蝴蝶忍式）：从左上轻轻一跃、张开蝴蝶羽织落地蹲下，挥袖放出一群毒蝴蝶扑过去
+      face: +1,
+      sheet: { src: 'assets/trio/G26_shinobu.webp', cell: [333, 316], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'leap', 'land', 'wind2', 'idle2'] },
+      anchor: [179.0, 311.1], at: [175, 1330, 1], pivot: [179, 311],
+      leanK: 0,   // 蹲着：整体前后倾会把着地的木屐带起来
+      depth: 1.3, recipe: 'petal',
+      /* 轻跳落地：h 小（身形轻），腾空张开羽织 → 脚尖点地 → 蹲下 */
+      enter: { kind: 'leap', h: 70, air: 0.45, sq: 0.1, seq: [['leap', 0.45], ['land', 0.14, 'land'], ['idle', 9]] },
+      exit: { frame: 'leap' },
+      idle: { frame: 'idle', breathe: [0.018, 0.75, 0] },
+      /* 羽织袖子垂下的那一角（蝴蝶翅尖）：顶钉住（'t'），框左、右、下三边透明 */
+      flex: { idle: [[78, 210, 120, 257, 't', 7, 0.9]] },
+      /* 毒蝴蝶：tools/3d/butterfly.py 3D 转盘齐射件，一次放 5 只；待机时指尖停着一只 */
+      atk: { kind: 'throw', item: 'butterfly', r: 22, n: 5, atlas: { src: 'assets/trio/prop_butterfly.webp', n: 36, cols: 6, cell: 76, scale: 1.13 },
+             seq: [['wind2', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.3]],
+             hold: { idle: [153, 62], wind2: [53, 67], throw: [326, 50] },
+             T: 0.6, arc: 0.3, spin: 5.2, idleSpin: 0.5, stretch: 0.03, gap: [1.0, 1.4] },
+    },
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
