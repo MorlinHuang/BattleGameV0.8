@@ -88,6 +88,24 @@ const TRIO_BESTIE = {
              hold: { throw: [430, 50] }, stretch: 0, gap: [1.0, 1.4] },
     },
 
+    G24: {      // 宫斗贵妃（华妃式）：侧卧着从左下角滑进来、撑肘起身扶正旗头，弹出一枚金护甲砸他 —— 赏"一丈红"（打中炸红粉）
+      face: +1,
+      sheet: { src: 'assets/trio/G24_huafei.webp', cell: [490, 193], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'slide', 'land', 'wind2', 'idle2'] },
+      anchor: [353.1, 181.8], at: [240, 1325, 1], pivot: [353, 181],
+      leanK: 0,   // 侧卧：整体前后倾会把贴地的腿翘起来
+      depth: 1.3, recipe: 'rouge',
+      enter: { kind: 'slide', seq: [['slide', 0.45], ['land', 0.16, 'land'], ['idle', 9]], sq: 0.1 },
+      exit: { frame: 'slide' },
+      idle: { frame: 'idle', breathe: [0.016, 0.7, 0] },   // 躺着：只竖向起伏，不横向补（贴地的脚不左右挪）
+      /* 两只脚尖懒洋洋地翘：小腿钉住（'l'），往右越翘越高（框上、右、下三边透明） */
+      flex: { idle: [[448, 125, 489, 192, 'l', 7, 0.8]] },
+      /* 金护甲：bestie/tools/prop_nailguard.py 程序画的（她手指上的护甲跟手指叠着，抠不出来） */
+      atk: { kind: 'throw', item: 'nailguard', prop: 'assets/world/trio_g24_nailguard.webp', scale: 0.45,
+             seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.3]],
+             hold: { wind: [127, 34], throw: [421, 59] },
+             T: 0.5, arc: 0.2, spin: 12, stretch: 0, gap: [1.0, 1.4], onHit: 'bounce' },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
