@@ -1,0 +1,1 @@
+{"cell": [434, 421], "cols": 4, "frames": ["idle", "wind", "follow", "ride", "brake", "aim0", "aim1", "aim2", "aim3", "aim4", "aim5", "aim6", "aim7", "aim8", "aim9", "aim10"], "anchor": [265.3, 415.6], "residual": 0, "head": [158, 25, 291, 103], "ref": "idle", "src": "crewframes.py"}

@@ -429,7 +429,8 @@ def cmd_build(d, spec):
     for i, fn in enumerate(names): atlas.paste(outs[fn], ((i % cols) * cw, (i // cols) * ch))
     os.makedirs(OUT, exist_ok=True)
     atlas.save(os.path.join(OUT, f'{name}.webp'), 'WEBP', quality=90, method=6)
-    meta = {'cell': [cw, ch], 'cols': cols, 'frames': names, 'anchor': tr(spec['anchor']), 'residual': round(float(worst), 2)}
+    meta = {'cell': [cw, ch], 'cols': cols, 'frames': names, 'anchor': tr(spec['anchor']), 'residual': round(float(worst), 2),
+            'head': ohb, 'ref': spec['ref']}                   # 参考帧头框（输出像素）：combo_scan.py 判"头被挡"用
     with open(os.path.join(OUT, f'{name}.json'), 'w') as f: json.dump(meta, f, ensure_ascii=False)
     kb = os.path.getsize(os.path.join(OUT, f'{name}.webp')) // 1024
     print(f'→ web/assets/trio/{name}.webp（{atlas.width}x{atlas.height}，{kb}KB，{cols} 列）')

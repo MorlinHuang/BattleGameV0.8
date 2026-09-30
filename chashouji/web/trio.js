@@ -61,7 +61,8 @@ const bezDir = (p0, c, p2, e) => Math.atan2((1 - e) * (c[1] - p0[1]) + e * (p2[1
           tether 手和丢出去的东西连一根线；onHit 另有 net 网兜、freeze 冻住。throw / camera / beam / punch 帧序列和单张立绘都能用，
           whip 抽打 / rush 连打（残影）/ slash 斩痕 / spray 喷只有帧序列（fire() 起头、stepFx 按时间推）。持续型的出手帧时长要盖住它
    parts  帧序列：挂件层（扇子、靠旗、翎子这类单独拆出来随动作甩的东西）[{ src, pivot: [x, y] 挂件图上挂住的点, z: -1 画在人后 / 1 人前,
-          at: { 帧: [x, y, 角度] } 这一帧挂在哪（格内像素）、没写的帧不画, sway: [幅度 rad, 每秒几次, 跟摆] }]（v14/trio/tools/part.py 出图）
+          at: { 帧: [x, y, 角度] } 这一帧挂在哪（格内像素）、没写的帧不画, sway: [幅度 rad, 每秒几次, 跟摆] }]（v14/trio/tools/part.py 出图）；
+          fixed: true = 场景层（墙头这类布景）：at 写一个 [x, y, 角度]，钉在世界里，不跟人位移 / 升起 / 淡入 / 剪切（drawScene）
    recipe 打中炸什么（main.js RECIPE 的键） */
 function Act(cfg) {
   const F = cfg.face, A = cfg.atk, SH = cfg.sheet || null;
@@ -92,7 +93,7 @@ function Act(cfg) {
   const TE = WK ? WK.n / WK.fps : E.T || TRIO.T.enter, TX = (cfg.exit && cfg.exit.T) || TRIO.T.exit;   // 这个人进场 / 离场用几秒（走进来的要比扑进来的慢）
   let img = null, prop = null, atlas = null, o = {}, b = null;
   const PARTS = (SH && cfg.parts) || [], partImg = [];
-  const shots = [], marks = [];
+  const shots = [], marks = [], jets = [];     // jets：水枪 / 喷雾喷出去的水滴、雾团（atk.kind 'jet'，stepJet）
   let iceBuf = null;                            // 冻住的冰壳先画在这上面（drawMark）                 // 飞出去的东西、挂在人身上的记号
   /* 帧序列的出手：seq 里第几帧是出手帧、之前一共蓄力几秒、整段几秒 */
   const FI = SH && A.seq ? A.seq.findIndex(q => q[2] === 'fire') : -1;
@@ -165,8 +166,8 @@ function Act(cfg) {
   /* 从现在起 lead 秒后起手，一整下（ACT）能不能在离场前收完 */
   const room = (lead) => b.t + lead + ACT <= TE + b.stay;
   const active = () => !!b;
-  const busy = () => !!b || shots.length > 0 || marks.length > 0;
-  function reset() { b = null; shots.length = 0; marks.length = 0; }
+  const busy = () => !!b || shots.length > 0 || marks.length > 0 || jets.length > 0;
+  function reset() { b = null; shots.length = 0; marks.length = 0; jets.length = 0; }
 
   /* 此刻的摆放：锚点在屏幕 (x, y)，画多大 s，整个人绕 rc（屏幕点）转 rot。 */
   function place() {
@@ -289,6 +290,7 @@ function Act(cfg) {
   function update(dt) {
     for (let i = shots.length - 1; i >= 0; i--) if (!stepShot(shots[i], dt)) shots.splice(i, 1);
     for (let i = marks.length - 1; i >= 0; i--) if ((marks[i].t += dt) > marks[i].life) marks.splice(i, 1);
+    if (jets.length) stepDrops(dt);
     if (!b) return;
     if (b.wait > 0) { b.wait -= dt; return; }
     b.t += dt;
@@ -331,7 +333,7 @@ function Act(cfg) {
   /* 此刻画哪一帧：出手动作 > 进场序列 > 离场帧 > 秋千蹬腿 > 待机 */
   function frameName() {
     const t = b.t, T = TRIO.T, se = TE + b.stay;
-    if (b.clip) return seqFrame(A.seq, b.clip.t, A.fps);
+    if (b.clip) { const f = seqFrame(A.seq, b.clip.t, A.fps); return f === 'aim' ? aimFrame() : f; }
     if (t < TE && E.seq) return seqFrame(E.seq, t, E.fps);
     if (t > se && cfg.exit) { const X = cfg.exit.frame; return Array.isArray(X) ? X[Math.floor((t - se) * (cfg.exit.fps || E.fps || 10)) % X.length] : X; }
     if (cfg.swing && cfg.swing.pump) {
@@ -398,6 +400,7 @@ function Act(cfg) {
     if (A.kind === 'whip') { b.wh = { t: 0, hit: false, u: rnd(0.15, 0.7) }; return; }
     if (A.kind === 'rush') { b.ru = { t: 0, n: 0 }; return; }
     if (A.kind === 'spray') { b.sp = { t: 0, e: 0, h: 0, u: rnd(0.2, 0.7) }; return; }
+    if (A.kind === 'jet') { b.jt = { t: 0, e: 0 }; b.hitCd = 0; return; }
     if (A.kind === 'punch') { b.pk = { t: 0, hit: false }; return; }
     if (A.kind === 'slash') {
       const Q = A.slash, u = rnd(0.2, 0.6);
@@ -509,6 +512,7 @@ function Act(cfg) {
 
   /* ---- 帧序列的近身 / 连续攻击（fire() 起头，这里按时间推；不跟 clip 绑，收势帧里抽出去的鞭子照样收回来） ---- */
   function stepFx(dt) {
+    if (A.kind === 'jet') stepJet(dt);
     if (b.pk) advancePunch(dt);
     if (b.wh) {                                                  // 抽打：甩出去（phases[0]）→ 抽到那一下打中 → 停 → 收回
       const W = b.wh, Ph = A.phases; W.t += dt;
@@ -542,6 +546,95 @@ function Act(cfg) {
       if (S.t > Q.dur + (Q.T || 0.3)) b.sp = null;
     }
   }
+  /* ---- 喷（atk.kind 'jet'：crew.js 滑板哥们的水枪、平衡车闺蜜的防狼喷雾迁过来，2026-10-01）----
+     跟 crew.js 同一套：瞄的是对方身上一个一直在扫的点（sweep 两个不公约的正弦），落点平滑跟随（aim.follow），
+     由落点按出口速度 V、重力 G 反解要的仰角，枪口按转速上限 aim.rate 转过去；水滴 / 雾团**沿枪口此刻的仰角、以 V 射出**，
+     之后按 drag、G 自己飞，碰到落点那一列 / 对方轮廓前沿（o.front）就溅开（o.onDrip），每 hitEvery 秒补一下命中反馈。
+     帧：枪口转到哪个角度就画 aim.frames 里角度最近的那一帧（crewframes.py 按原立绘转出来的，每帧的喷口 aim.nozzle[帧] = [x, y, 仰角]）；
+     水滴从那一帧的喷口出去、方向用连续的角度（帧与帧差 0.07~0.1 rad，差出来的那一点看不出）。
+     jet.pulse [按几秒, 松几秒]（喷雾"呲—呲—"一段段按）：每按下一下后坐（画 aim.kick 里同角度的那一帧，kick 衰减 jet.kickDecay）。
+     画法沿用 crew.js 的 drawStream（水柱）/ drawMist（雾）—— crew.js 还在（档 4 用），index.html 里它在 trio.js 之前 */
+  const J = A.kind === 'jet' ? A.jet : null, AIM = J ? A.aim : null;
+  const AIMS = AIM ? AIM.frames.map(f => AIM.nozzle[f][2]) : [];
+  function aimIdx() {
+    const a = b.ja ?? AIMS[AIMS.length >> 1];                   // 还没瞄过（这一帧先画、后 update）按中间那一帧
+    let k = 0; for (let i = 1; i < AIMS.length; i++) if (Math.abs(AIMS[i] - a) < Math.abs(AIMS[k] - a)) k = i;
+    return k;
+  }
+  function aimFrame() { const k = aimIdx(); return AIM.kick && b.kick > 0.5 ? AIM.kick[k] : AIM.frames[k]; }
+  /* 出口速度 V、重力 G，打中 (dx, dy) 要的仰角（低弹道；够不着按 45°）—— crew.js elevation */
+  function elevation(dx, dy) {
+    const D = Math.abs(dx), h = -dy, v2 = J.V * J.V, g = J.G;
+    if (g === 0) return Math.atan2(h, D);
+    const disc = v2 * v2 - g * (g * D * D + 2 * h * v2);
+    return disc >= 0 ? Math.atan((v2 - Math.sqrt(disc)) / (g * D)) : Math.PI / 4;
+  }
+  function stepJet(dt) {
+    const se = TE + b.stay;
+    if (b.ja == null) { b.ja = AIMS[Math.floor(AIMS.length / 2)]; b.kick = 0; b.jseq = 0; b.hitCd = 0; }
+    b.hitCd -= dt; b.kick *= Math.exp(-(J.kickDecay || 10) * dt);
+    /* 瞄：在场就一直瞄（蓄力那一下之后第一帧枪口就在对的角度上） */
+    const tt = b.t + b.ph, sw = AIM.sweep;
+    const u = Math.min(1, Math.max(0, 0.5 + sw.a[0] * Math.sin(tt * sw.w[0]) + sw.a[1] * Math.sin(tt * sw.w[1] + 1.3)));
+    const raw = b.t <= se && o.aim(u);
+    if (raw) {
+      const k = b.jtg ? 1 - Math.exp(-dt * AIM.follow) : 1;
+      b.jtg = b.jtg ? [b.jtg[0] + (raw[0] - b.jtg[0]) * k, b.jtg[1] + (raw[1] - b.jtg[1]) * k, raw[2]] : raw;
+    }
+    const P = place(), nz = (f) => { const q = AIM.nozzle[f]; return P.at(q); };
+    if (b.jtg) {
+      const m = nz(AIM.frames[aimIdx()]);
+      const want = Math.max(AIMS[0], Math.min(AIMS[AIMS.length - 1], elevation(b.jtg[0] - m[0], b.jtg[1] - m[1])));
+      b.ja += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.ja));
+    }
+    b.jm = null;
+    const S = b.jt;
+    if (!S) return;
+    S.t += dt;
+    const dur = A.seq[FI][1];
+    if (S.t > dur) { b.jt = null; return; }
+    if (J.pulse) {                                               // 一段段按：松开那一下不出雾；每次按下后坐一震
+      const cyc = J.pulse[0] + J.pulse[1], ph = S.t % cyc;
+      if (Math.floor(S.t / cyc) !== Math.floor((S.t - dt) / cyc) || S.t <= dt) b.kick = 1;
+      if (ph > J.pulse[0]) { S.e = 0; return; }
+    }
+    const fn = frameName(), m = b.jm = AIM.nozzle[fn] ? nz(fn) : nz(AIM.frames[aimIdx()]);
+    S.e += dt * J.rate;
+    /* 一帧攒够几个就出几个，每个按它实际该出口的时刻补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩（crew.js 同） */
+    while (S.e >= 1) {
+      S.e -= 1;
+      const age = S.e / J.rate, a = b.ja + rnd(-1, 1) * (J.spread || 0), v = J.V * (1 + rnd(-1, 1) * (J.vJit || 0));
+      const vx = F * v * Math.cos(a), vy = -v * Math.sin(a);
+      jets.push({ x: m[0] + vx * age, y: m[1] + vy * age + 0.5 * J.G * age * age, vx, vy: vy + J.G * age, t: age, u, seq: b.jseq++, j: Math.random() });
+    }
+  }
+  /* 水滴 / 雾团飞、碰没碰到（crew.js update + hitTest）：落点第三项 'top'（对方倒地）按这一列的上沿判；
+     站着的：飞到落点那一列、上下 miss 以内算正中（snap 给了就把溅开的点收到落点上下 snap 以内）；打偏的碰到对方轮廓前沿也溅开 */
+  function stepDrops(dt) {
+    const past = (d, x) => (F < 0 ? d.x <= x : d.x >= x);
+    for (let i = jets.length - 1; i >= 0; i--) {
+      const d = jets[i];
+      if (J.drag) { const k = Math.exp(-J.drag * dt); d.vx *= k; d.vy *= k; }
+      d.vy += J.G * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.t += dt;
+      const tg = o.aim(d.u);
+      let h = null;
+      if (tg && tg[2] === 'top') { const top = o.top && o.top(d.x); if (top != null && d.y >= top) h = [d.x, top]; }
+      else if (tg && past(d, tg[0]) && Math.abs(d.y - tg[1]) < J.miss) h = [tg[0], J.snap == null ? d.y : tg[1] + Math.max(-J.snap, Math.min(J.snap, d.y - tg[1]))];
+      else { const fr = o.front && o.front(d.y); if (fr != null && past(d, fr)) h = [fr, d.y]; }
+      if (h) {
+        jets.splice(i, 1);
+        if (o.onDrip) o.onDrip(h[0], h[1]);
+        if (b && b.hitCd <= 0) { hit(h[0], h[1]); b.hitCd = J.hitEvery; }
+      } else if (d.y > o.ground()) { jets.splice(i, 1); if (J.floor && o.onDrip) o.onDrip(d.x, o.ground()); }
+      else if (d.t > J.life || d.x < -80 || d.x > 1040) jets.splice(i, 1);
+    }
+  }
+  function drawJets(ctx) {
+    ctx.save();
+    if (J.draw === 'mist') drawMist(ctx, jets); else drawStream(ctx, jets, b && b.jm ? { m: b.jm } : null);
+    ctx.restore();
+  }
+
   /* 拳头伸出去多少（0 = 在手腕上、1 = 到落点）：伸 easeOut、回来带一点过冲（橡皮） */
   function punchK() {
     if (!b || !b.pk) return 0;
@@ -588,12 +681,13 @@ function Act(cfg) {
     if (!b || b.wait > 0 || !img) return;
     const P = place(), [x0, y0] = P.at([0, 0]);
     if (EK === 'rope') drawSling(ctx, P);
+    drawScene(ctx, -1);
     ctx.save();
     if (P.rot) { ctx.translate(P.rc[0], P.rc[1]); ctx.rotate(P.rot); ctx.translate(-P.rc[0], -P.rc[1]); }
     if (P.spin) { ctx.translate(P.sc[0], P.sc[1]); ctx.rotate(P.spin); ctx.translate(-P.sc[0], -P.sc[1]); }
     if (SH) {
       const fn = frameName(), T = TRIO.T, se = TE + b.stay, [ax, ay] = P.at(cfg.anchor);
-      if (cfg.ropes) drawSwing(ctx, P, fn);
+      if (cfg.ropes) (cfg.ropes.ends ? drawSwing(ctx, P, fn) : drawRopes(ctx, P));   // ropes.x：绳子和座板画在帧里（G12，原单张立绘），引擎只接上帧顶到转轴那一截
       if (EK === 'drop') drawLine(ctx, P);
       /* 离场掉头（exit.flip）：绕锚点左右翻过来，走出去是背朝她 / 他走的 */
       if (b.t > se && cfg.exit && cfg.exit.flip) { ctx.translate(ax, 0); ctx.scale(-1, 1); ctx.translate(-ax, 0); }
@@ -619,6 +713,7 @@ function Act(cfg) {
       drawParts(ctx, P, fn, 1);
       if (b.ammo && A.hold && A.hold[fn]) drawHeld(ctx, P, fn);
       ctx.restore();
+      drawScene(ctx, 1);
       if (EK === 'appear' && E.fx && ap < 1) appearFx(ctx, P, ap);
       return;
     }
@@ -708,12 +803,30 @@ function Act(cfg) {
   function drawParts(ctx, P, fn, z) {
     PARTS.forEach((q, i) => {
       const im = partImg[i], a = q.at[fn];
-      if (!im || !a || (q.z || 1) !== z) return;
+      if (!im || !a || q.fixed || (q.z || 1) !== z) return;
       /* 跟摆：身子（秋千 / 荡）以角速度 P.w 转，挂着的东西跟不上，相对身子往反方向拖 */
       const sw = q.sway || [0, 0, 0], ang = a[2] + sw[0] * Math.sin(b.t * 6.2832 * sw[1] + b.ph) - (sw[2] || 0) * P.w;
       const [x, y] = P.at([a[0], a[1]]);
       ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
       ctx.drawImage(im, -q.pivot[0] * P.s, -q.pivot[1] * P.s, im.width * P.s, im.height * P.s);
+      ctx.restore();
+    });
+  }
+  /* 场景层挂件（parts 里 fixed: true，B18 的墙头）：是布景不是人身上的东西 —— 钉在 at 的世界位置（at 写一个 [x, y, 角度]，或者照旧按帧写、取当前帧没有就取第一项），
+     不跟进场位移 / rise 的 dy、不跟前后倾 / 呼吸 / 离场翻转、不被 rise 的 cut 剪、不跟人的淡入。人从它后面升上来、坐在它上面。
+     自己只在整段露面的头尾各 SCENE_FADE 秒淡入淡出（整面墙一帧冒出来太硬），在场 1。z −1 画在人之前（身后），1 画在人之后 */
+  const SCENE_FADE = 0.12;
+  function drawScene(ctx, z) {
+    if (!PARTS.some(q => q.fixed)) return;
+    const [ax, ay, s] = b.at, fn = SH ? frameName() : null, end = TE + b.stay + TX;
+    const al = Math.max(0, Math.min(1, b.t / SCENE_FADE, (end - b.t) / SCENE_FADE));
+    PARTS.forEach((q, i) => {
+      const im = partImg[i];
+      if (!im || !q.fixed || (q.z || 1) !== z) return;
+      const a = Array.isArray(q.at) ? q.at : q.at[fn] || Object.values(q.at)[0];
+      ctx.save(); ctx.globalAlpha *= al;
+      ctx.translate(ax + (a[0] - cfg.anchor[0]) * s, ay + (a[1] - cfg.anchor[1]) * s); ctx.rotate(a[2] || 0);
+      ctx.drawImage(im, -q.pivot[0] * s, -q.pivot[1] * s, im.width * s, im.height * s);
       ctx.restore();
     });
   }
@@ -1042,8 +1155,12 @@ function Act(cfg) {
   }
 
   function items() {
-    if (!b || b.wait > 0 || !img) return [];
-    return [{ s: b.depth, draw: drawBody }];
+    const out = [];
+    if (b && b.wait <= 0 && img) out.push({ s: b.depth, draw: drawBody });
+    /* 水柱 / 雾紧跟在本人之后画（从他枪口出来、盖在他身上），跟人一样在主角身后 —— 水从主角身后穿过去、碰到对方轮廓被挡住，
+       "被挡住的那一截"本身就读成打中了（crew.js items 同一个道理）。人走了、水还在飞的照样画 */
+    if (jets.length) out.push({ s: cfg.depth + 1e-6, draw: drawJets });
+    return out;
   }
   /* 此刻在哪一段：wait 等着上 / enter 进场 / on 在场 / exit 离场（胶片标格用：出手中途离场这种冲突只看帧名分不出来） */
   const phase = () => (!b ? null : b.wait > 0 ? 'wait' : b.t < TE ? 'enter' : b.t <= TE + b.stay ? 'on' : 'exit');
@@ -1106,32 +1223,25 @@ function star5(ctx, R, r) {
 /* 秋千绳的默认样子（数据文件里 { ...ROPE, ... } 再覆写） */
 const ROPE = { w: 7, y: 0, fill: '#c9a36a', edge: 'rgba(70,45,20,.85)', wood: ['#b07a42', '#d9a468', 'rgba(90,55,25,.6)'] };
 
-/* 三人组（自由组合，2026-10-01）。ground = 后排地面那个 crew.js 的 Crew（哥们 Buddy / 闺蜜 Bestie，滑板 / 平衡车的老角色还没迁成帧序列），
-   data = trio_buddy.js / trio_bestie.js：{ ground: { 名单编号: Crew 的形象下标 }, cast: { 名单编号: cfg }, groups: [{ name, ground, top, floor }] }。
-   每次送礼：三个槽位各自从本边名单里（groups 里这个槽位出现过的编号）独立随机抽一人；**名单里还没做出来的人**（cast / ground 里都没有）不参与抽，
-   一个槽位一个人都没有就空着。在场时再送：在场的人各自续一段（Act 正在离场的叫回来；Crew 的人已经在走就让他走，这个槽位另抽一人），
-   空出来的槽位随机补人，不抽此刻还在场上（含正在离场）的人。
+/* 三人组（自由组合，2026-10-01）。data = trio_buddy.js / trio_bestie.js：{ cast: { 名单编号: cfg }, groups: [{ name, ground, top, floor }] }。
+   后排地面原来的 crew.js 滑板哥们 / 平衡车闺蜜（B1~B4、G1~G3）2026-10-01 迁成了帧序列（crewframes.py + atk.kind 'jet'），全都是 Act。
+   每次送礼：三个槽位各自从本边名单里（groups 里这个槽位出现过的编号）独立随机抽一人；**名单里还没做出来的人**（cast 里没有）不参与抽，
+   一个槽位一个人都没有就空着。在场时再送：在场的人各自续一段（正在离场的叫回来），空出来的槽位随机补人，不抽此刻还在场上（含正在离场）的人。
    组表 groups 线上不用，只给诊断：pick（?buddy=<组号 1~10>）按组表召那一组；?buddy=B5.B13.B23 直接按三个人召（各自落到名单里他那个槽位）。 */
-function Trio(ground, data) {
+function Trio(data) {
   const acts = {};
   for (const [id, c] of Object.entries(data.cast)) acts[id] = Act({ id, ...c });
-  const who = (id, slot) => (id == null ? null : id in data.ground ? { m: ground, sk: data.ground[id], slot, id } : acts[id] ? { m: acts[id], slot, id } : null);
+  const who = (id, slot) => (acts[id] ? { m: acts[id], slot, id } : null);
   const slotOf = {};
   for (const g of data.groups) for (const k of TRIO.SLOTS) if (g[k] != null) slotOf[g[k]] = k;
   const pool = Object.fromEntries(TRIO.SLOTS.map(k => [k, Object.keys(slotOf).filter(id => slotOf[id] === k).map(id => who(id, k)).filter(Boolean)]));
   const groups = data.groups.map((g, i) => ({ no: i + 1, name: g.name, mem: TRIO.SLOTS.map(k => who(g[k], k)).filter(Boolean) }));
-  const all = [ground, ...Object.values(acts)];
-  /* cur[槽位] = 这个槽位这一趟的人 { m, sk, slot, id, b }；一个人在场 = 他那一趟的 b 还在 m 里（含正在离场）。
-     滑板哥们 / 平衡车闺蜜几个人同在一份 Crew 里，只能按 b / 形象分，不能看 m.active() */
+  const all = Object.values(acts);
+  /* cur[槽位] = 这个槽位这一趟的人 { m, slot, id }；在场 = m.active()（含正在离场） */
   let cur = {};
-  const live = (x) => !!x && !!x.b && x.m.peek().includes(x.b);
-  const onStage = (x) => (x.m.extend ? x.m.peek().some(b => b.skin === x.sk) : x.m.active());
-  const room = (x) => (x.m.extend ? x.m.peek().length < x.m.cfg.max : true);
-  const come = (x, wait) => { const b = x.m.summon(x.sk, wait); if (b) x.b = b; return x; };
-  /* 续：Act 在场 / 离场中再 summon 就是续 / 叫回；Crew 按这个人续，他已经在走（extend 返回 false）就让他走 */
-  const stay = (x) => (x.m.extend ? x.m.extend(x.b) : (x.m.summon(x.sk), true));
+  const live = (x) => !!x && x.m.active();
   const draw = (k) => {
-    const c = pool[k].filter(x => !onStage(x) && room(x));
+    const c = pool[k].filter(x => !x.m.active());
     return c.length ? { ...c[Math.floor(Math.random() * c.length)] } : null;
   };
   const stagger = () => [...TRIO.STAGGER].sort(() => Math.random() - 0.5);
@@ -1143,14 +1253,16 @@ function Trio(ground, data) {
     return mem.length ? Object.fromEntries(mem.map(x => [x.slot, { ...x }])) : null;
   }
   return {
-    groups, pool, all, acts: Object.values(acts),
+    groups, pool, all, acts: all,
     summon(pick) {
       const st = stagger();
       if (TRIO.SLOTS.some(k => live(cur[k]))) {
+        /* 在场的续（Act.summon：在场加一份时间、离场中叫回来），空槽补人 */
         TRIO.SLOTS.forEach((k, i) => {
-          if (live(cur[k]) && stay(cur[k])) return;
+          if (live(cur[k])) { cur[k].m.summon(); return; }
           const x = draw(k);
-          cur[k] = x && come(x, st[i]);
+          cur[k] = x;
+          if (x) x.m.summon(null, st[i]);
         });
         return;
       }
@@ -1158,7 +1270,7 @@ function Trio(ground, data) {
       cur = {};
       TRIO.SLOTS.forEach((k, i) => {
         const x = f ? f[k] : draw(k);
-        if (x) cur[k] = come(x, st[i]);
+        if (x) { cur[k] = x; x.m.summon(null, st[i]); }
       });
     },
     current: () => cur,

@@ -1426,10 +1426,10 @@ const SHOP = {
    同日删掉黑蛛女特工、内裤外穿侠、二郎·打码神，加嫦娥、后羿） */
 const G4L = CrewGroup([Baisu, Truth, Change]);   // 查岗党：白娘子 / 真相女神 / 嫦娥
 const G4R = CrewGroup([Fahai, Demon, Houyi, Sister]);    // 灭迹党：法海 / 灭迹恶魔 / 后羿 / 绿茶妹妹
-/* 档 3 三人组（trio.js）：一次送礼三个槽位 —— 后排地面（帧序列，或 crew.js 滑板哥们 / 平衡车闺蜜的老角色）、上方、前景地板 ——
+/* 档 3 三人组（trio.js）：一次送礼三个槽位 —— 后排地面、上方、前景地板（全是帧序列；滑板哥们 / 平衡车闺蜜 2026-10-01 从 crew.js 迁过来）——
    各自从本边名单里独立随机抽一人（2026-10-01 改自由组合）。角色在 trio_buddy.js / trio_bestie.js（美术维护）；在场再送 = 在场的续、空槽补人 */
-const BuddyTrio = Trio(Buddy, TRIO_BUDDY);
-const BestieTrio = Trio(Bestie, TRIO_BESTIE);
+const BuddyTrio = Trio(TRIO_BUDDY);
+const BestieTrio = Trio(TRIO_BESTIE);
 const ACTS = [...BuddyTrio.acts, ...BestieTrio.acts];
 const CREW = { buddy: BuddyTrio, bestie: BestieTrio, g4L: G4L, g4R: G4R };
 const CREWS = [...BuddyTrio.all, ...BestieTrio.all, ...G4L.members, ...G4R.members];   // 每帧更新 / 画的全部帮手（重置走 CREW：组要连轮换顺序一起归零）
@@ -2318,16 +2318,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const x = frontAt(y, -1);
     return x == null ? null : [x, y];
   }
-  Buddy.init({
-    W, ground: () => GROUND + FX.bob, horizon,
-    zone: () => [Math.min(FX.phoneX + 100, W - 420), W + 90],
-    target: girlAim,
-    top: girlTop,
-    down: girlDown,
-    front: (y) => offArm(y) ? null : frontAt(y, -1),   // 打偏的碰她身体轮廓也溅开；手机那行不算
-    onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
-    onHit: (x, y, first) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE.water, x),
-  });
   /* 天上掉东西（rain.js）：target(u) = 挨砸那个人身上第 u 那一列的上沿（bodyAt，跪下、被拖倒都跟着走），
      top(x) = 这一列的上沿（落到这里就算砸中）。砸中按礼物分量 power 爆（重的档 2、轻的档 1），爆点颜色跟着东西走。
      榴莲鞋雨（查岗党档 2）砸男生：榴莲白、鞋红 / 粉 / 黑。臭袜子足球（灭迹党档 2）砸女生：足球黑白、袜子灰绿臭气。 */
@@ -2348,25 +2338,23 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      到往下 0.05 个半径乱晃；他跪下、趴下，脸跟着走。
      不取下半张脸：男生被拖倒时脸朝下贴地，伸出去的胳膊正好横在下半张脸前面，爆点全落在胳膊上。
      front 给 null：没打中脸的雾就散掉，不在身体轮廓上爆 —— 雾本来就不是砸的东西，碰胳膊炸开读成打胳膊。 */
-  Bestie.init({
-    W, ground: () => GROUND + FX.bob, horizon,
-    zone: () => [Math.max(FX.phoneX - 60, 420), -40],   // 女生身后到屏幕左沿很窄，只许出画 40
-    target: boyAim,
-    front: () => null,
-    onSplash: (x, y) => RECIPE.pepper.drip(x, y, -1),
-    onHit: (x, y, first) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE.pepper, x),
-  });
 
-  /* 三人组里的新角色（trio.js）：哥们侧打女生（落点同水枪哥们 girlAim），闺蜜侧打男生的脸（同喷雾闺蜜 boyAim）。
-     第一下按档 3 力度，之后每下轻补。shield = 自己这边主角的脸框：后排的人出手要从他 / 她头顶翻过去，不横穿脸 */
+  /* 三人组（trio.js）：哥们侧打女生（girlAim），闺蜜侧打男生的脸（boyAim）。第一下按档 3 力度，之后每下轻补。
+     shield = 自己这边主角的脸框：后排的人出手要从他 / 她头顶翻过去，不横穿脸。
+     水枪 / 喷雾（atk.kind 'jet'，原 crew.js 滑板哥们 / 平衡车闺蜜，2026-10-01 迁成帧序列）每颗水滴 / 雾团碰到就 onDrip 溅一下；
+     水打偏了碰到她身体轮廓前沿也溅开（front，手机那一行不算）、她倒地按上沿判（top）；雾 front 给 null（见 boyAim 上面的注释） */
   for (const a of BuddyTrio.acts) a.init({
     face: () => faceOf('a'), shield: () => faceOf('b'), aim: girlAim, ground: () => GROUND + FX.bob,
+    top: girlTop, front: (y) => offArm(y) ? null : frontAt(y, -1),
     onHit: (x, y, first, rc) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE[rc], x),
     onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
+    onDrip: (x, y) => RECIPE.water.drip(x, y, +1),
   });
   for (const a of BestieTrio.acts) a.init({
     face: () => faceOf('b'), shield: () => faceOf('a'), aim: boyAim, ground: () => GROUND + FX.bob,
+    front: () => null,
     onHit: (x, y, first, rc) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE[rc], x),
+    onDrip: (x, y) => RECIPE.pepper.drip(x, y, -1),
   });
 
   /* ---- 档 4 的站位 ----
@@ -2464,8 +2452,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   const [sprOK, shpOK] = await Promise.all([
     Ammo.loadSprites(Q0.get('v'), noSpr),
     Particles.loadShapes(Q0.get('v'), noSpr),
-    Buddy.load(Q0.get('v'), noSpr),
-    Bestie.load(Q0.get('v'), noSpr),
     ...ACTS.map(a => a.load(Q0.get('v'), noSpr)),
     ...[...G4L.members, ...G4R.members].map(c => c.load(Q0.get('v'), noSpr)),
     DurianRain.load(Q0.get('v'), noSpr),
@@ -2844,7 +2830,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       (window.trioFrames = window.trioFrames || []).push(tf);
       render();
       const ph = Object.fromEntries(ACTS.filter(a => a.frame()).map(a => [a.cfg.id, a.phase()]));   // 这一格谁在进场 / 在场 / 离场
-      (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last, ph });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
+      /* 喷（atk.kind 'jet'）的瞄准：[编号, 枪口仰角, 平滑后的落点, 喷口]（喷着的时候才有喷口） */
+      const jet = ACTS.filter(a => a.peek()[0] && a.peek()[0].ja != null).map(a => { const b = a.peek()[0]; return [a.cfg.id, +b.ja.toFixed(3), b.jtg && b.jtg.slice(0, 2).map(Math.round), b.jm && b.jm.map(Math.round)]; });
+      (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last, ph, jet });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 168, 26);

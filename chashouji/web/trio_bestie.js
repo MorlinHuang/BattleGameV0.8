@@ -350,6 +350,23 @@ const TRIO_BESTIE = {
              hold: { wind: [84, 16], throw: [316, 86] },
              T: 0.4, arc: 0.12, spin: 14, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
+    G8: {       // 冰雪女王（艾莎式）：踮着脚一路滑冰滑进来（燕式滑行 → 踮脚转一圈 → 急停），掌心上浮着一根冰锥；把冰锥举过头顶一掷，打中他的头冻出一层冰壳
+      face: +1,
+      sheet: { src: 'assets/trio/G8_elsa.webp', cell: [564, 469], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'glide', 'twirl', 'stop', 'idle2'] },
+      /* 锚点 = 前脚水晶鞋底：出手四帧按这只鞋配准（残差 0.46 px）；滑冰三帧 loose（横按头、竖按脚底） */
+      anchor: [371.5, 459.1], at: [240, 1020, 0.85], pivot: [371, 459], leanK: 0,
+      depth: 0.8, recipe: 'water',
+      /* 滑冰（ride）：燕式单脚滑行 → 踮脚转一圈 → 急停站稳（露面后换两次帧）；离场转身滑出去 */
+      enter: { kind: 'ride', T: 1.0, tilt: 0.08, seq: [['glide', 0.4], ['twirl', 0.3], ['stop', 0.3, 'land'], ['idle', 9]], sq: 0.06 },
+      exit: { frame: 'glide', flip: true },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
+      /* 冰锥是平面图（bestie/G8_elsa/raw/icicle_src.png 抠出来，150 px 长 × 0.6）：待机浮在伸出去的掌心上慢慢转（次级摆动）；
+         wind 帧右手举过头顶、冰锥在掌心上方那一刻离手（后排：出手点在女生头顶以上），throw 帧是甩出去的手 */
+      atk: { kind: 'throw', item: 'icicle', prop: 'assets/world/trio_g8_icicle.webp', scale: 0.6,
+             seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.35]],
+             hold: { idle: [455, 100], wind: [380, -4] },
+             T: 0.45, arc: 0.15, spin: 9, idleSpin: 1.5, stretch: 0.03, gap: [0.9, 1.3], onHit: 'freeze' },
+    },
 
     /* ---- 上方（左上，男女主头顶以下；样板 G11） ---- */
     G15: {      // 船头红发少女（泰坦尼克 Rose 式）：站在一截白色船头上从左边平着滑出来，捂着心口 → 张开双臂"飞"；举起心形蓝宝石项链一抛（3D）砸他
@@ -398,11 +415,18 @@ const TRIO_BESTIE = {
 
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
-      face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 230, 1],   /* 2026-10-01 自由组合：原 y 360 秋千荡下来压后排地面的头，抬 130（组合遮挡矩阵_bestie 建议站位） */
-      anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
+      /* 2026-10-01 迁成帧序列（引擎负责人）：idle = 原单张立绘（手心朝上托着），kiss = 同一张画布上只局部重绘右臂（指尖送到唇边，
+         v14/trio/bestie/G12_fairy/inp/，inpaint_paste.py：框外是原图像素，纱一点没动）。绳子、座板画在帧里（ropes.x：引擎只接帧顶往上那一截）。
+         出手：荡到最前面之前 kiss（手送到唇边）→ 换回托掌那一帧、两颗爱心从掌心飞出去（飞吻） */
+      face: +1,
+      sheet: { src: 'assets/trio/G12_fairy.webp', cell: [280, 420], cols: 2, names: ['idle', 'kiss'] },
+      at: [165, 230, 1],   /* 2026-10-01 自由组合：原 y 360 秋千荡下来压后排地面的头，抬 130（组合遮挡矩阵_bestie 建议站位） */
+      anchor: [145, 0], pivot: [145, -480], leanK: 1,
       depth: 0.5, enter: 'swing', recipe: 'rouge', ropes: { ...ROPE, x: [100, 190], fill: '#a7864f' },
       swing: { a0: 1.3, a: 0.12, tau: 0.5, w: 2.4 },
-      atk: { kind: 'throw', item: 'heart', n: 2, color: [255, 70, 130], T: 0.55, arc: 0.1, spin: 0, onHit: 'lips' },
+      idle: { frame: 'idle', breathe: [0.012, 0.8, 0.4] },
+      atk: { kind: 'throw', item: 'heart', n: 2, color: [255, 70, 130], T: 0.55, arc: 0.1, spin: 0, onHit: 'lips',
+             seq: [['kiss', 0.42], ['idle', 0.3, 'fire']], hold: { idle: [238, 115] } },
     },
   },
 
