@@ -2812,13 +2812,17 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       const tf = ACTS.filter(a => a.frame()).map(a => `${a.cfg.id}:${a.frame()}`);
       (window.trioFrames = window.trioFrames || []).push(tf);
       render();
-      (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
+      const ph = Object.fromEntries(ACTS.filter(a => a.frame()).map(a => [a.cfg.id, a.phase()]));   // 这一格谁在进场 / 在场 / 离场
+      (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last, ph });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 168, 26);
       o.fillStyle = '#fff'; o.font = '600 15px system-ui';
       o.fillText(`+${Math.round(el * 1000)}ms 弹${Ammo.count()} 粒${Particles.count()}`, dx + 8, 18);
-      if (tf.length) { o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 50, 20 + 11 * tf.join(' ').length, 24); o.fillStyle = '#9ef'; o.fillText(tf.join(' '), dx + 8, 67); }
+      if (tf.length) {
+        const lb = tf.map(x => (ph[x.split(':')[0]] === 'exit' ? x + '·离场' : x)).join(' ');
+        o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 50, 20 + 11 * lb.length, 24); o.fillStyle = '#9ef'; o.fillText(lb, dx + 8, 67);
+      }
       if (i === 0) {
         o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 26, 168, 24);
         o.fillStyle = '#ffd36b';

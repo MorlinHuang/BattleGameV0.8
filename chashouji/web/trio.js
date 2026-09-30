@@ -105,6 +105,13 @@ function Act(cfg) {
   const FI = SH && A.seq ? A.seq.findIndex(q => q[2] === 'fire') : -1;
   const LEAD = FI > 0 ? A.seq.slice(0, FI).reduce((a, q) => a + q[1], 0) : 0;
   const CLIP = SH && A.seq ? A.seq.reduce((a, q) => a + q[1], 0) : 0;
+  /* 带线的东西（A.tether）飞出去、弹开掉完之前还连在手上：还在线上的那一只（钉在地板上的不算，线不画它） */
+  const FALL = 0.9;                                              // 打中弹开以后掉多久（stepShot）
+  const onLine = (s) => !!A.tether && s.kind === A.item && s.stuck == null;
+  /* 一整下出手从起头到收完要几秒：帧序列 = 整段 seq；出拳 = 伸停回；单张立绘发波 = 聚光 + 轰；带线的还要等东西飞到、弹开掉完（线才收回手上）。
+     离场前装不下一整下就不起手 —— 起了手再离场，要么整张摆着出手姿势滑出去，要么半截收掉硬切成离场帧（规范 §离场与出手） */
+  const ACT = Math.max(SH && A.seq ? CLIP : A.kind === 'punch' ? A.phases.reduce((a, q) => a + q, 0) : A.kind === 'beam' ? A.beam.charge + A.beam.fire : 0,
+                       A.tether ? LEAD + A.T * 1.1 + (A.onHit === 'bounce' || A.onHit === 'heart' ? FALL : 0) : 0);
   /* 东西从哪出去：帧序列 = 出手帧那一格的 hold 点；单张立绘 = hand */
   const handPt = (P) => pt(P, SH ? A.from || A.hold[A.seq[FI][0]] : cfg.hand);   // 帧序列可以直接给 atk.from（出手帧是循环帧、手里不画东西的：连打、抽打、喷）
   /* 手此刻在哪：当前帧写了 hold 就用它（蓄力时手在腰侧、甩线时手在跟着动），没写就退回出手点 */
@@ -146,6 +153,7 @@ function Act(cfg) {
     if (b && b.wait <= 0) {
       const out = Math.min(1, (b.t - TE - b.stay) / TX);
       b.t = (1 - Math.pow(out, 2 / 3)) * TE; b.stay = TRIO.T.stay; b.first = true; b.landed = false;
+      b.cd = rnd(0.15, 0.4);                                     // 和头一次来一样落地后隔一下才出手（离场前最后一下没起手，cd 可能早就 ≤ 0）
       return;
     }
     b = { t: 0, wait, stay: TRIO.T.stay, first: true, cd: rnd(0.15, 0.4), lean: 0, snap: 0, ph: Math.random() * 6,
@@ -154,6 +162,8 @@ function Act(cfg) {
           at: slot ? slot.at : cfg.at, depth: slot ? slot.depth : cfg.depth };                 // 这一趟站哪、排多远
     return b;
   }
+  /* 从现在起 lead 秒后起手，一整下（ACT）能不能在离场前收完 */
+  const room = (lead) => b.t + lead + ACT <= TE + b.stay;
   const active = () => !!b;
   const busy = () => !!b || shots.length > 0 || marks.length > 0;
   function reset() { b = null; shots.length = 0; marks.length = 0; }
@@ -291,12 +301,12 @@ function Act(cfg) {
     if (A.kind === 'punch') { stepPunch(dt, on); return; }
     if (A.kind === 'beam') { stepBeam(dt, on); return; }
     /* 丢东西 / 拍照：秋千荡到最前面那一下出手（荡到高处抛）；其余按间隔，出手前 wind 秒往后蓄力 */
-    if (!on) { b.lean *= Math.exp(-8 * dt); return; }
+    if (!on || (EK !== 'swing' && !room(Math.max(0, b.cd)))) { b.lean *= Math.exp(-8 * dt); return; }
     if (EK === 'swing') {
       const S = cfg.swing, ph = (S.w * b.t) % 6.2832, prev = b.prevPh; b.prevPh = ph;
       const to = (Math.PI - ph + 6.2832) % 6.2832;                        // 离最前面（cos = −1）还差多少相位
       b.lean = to < 1.2 ? -F * L.wind * (1 - to / 1.2) : b.lean * Math.exp(-8 * dt);
-      if (prev < Math.PI && ph >= Math.PI) fire();
+      if (prev < Math.PI && ph >= Math.PI && room(0)) fire();
       return;
     }
     b.cd -= dt;
@@ -343,6 +353,7 @@ function Act(cfg) {
     stepFx(dt);
     b.hang += (A.idleSpin || 0) * dt;                           // 拿在手里的球慢慢转（手指拨着玩）
     if (b.pop < 1) b.pop = Math.min(1, b.pop + dt / TRIO.pop);
+    reload();
     if (!A.seq) return;
     if (!b.clip) {
       b.lean *= Math.exp(-8 * dt);
@@ -351,14 +362,14 @@ function Act(cfg) {
         /* 秋千：算好提前量，让"出手"那一帧正好落在荡到最前面（cos = −1）那一刻 */
         const S = cfg.swing, ph = (S.w * b.t) % 6.2832, tf = ((Math.PI - ph + 6.2832) % 6.2832) / S.w, prev = b.tf;
         b.tf = tf;
-        if (prev != null && prev >= LEAD && tf < LEAD) {
+        if (prev != null && prev >= LEAD && tf < LEAD && b.ammo && room(tf - LEAD)) {
           b.clip = { t: LEAD - tf, fired: false };
           if (A.kind === 'beam') b.bm = { ph: 'charge', t: b.clip.t, dr: 0, u: rnd(0.1, 0.8) };
         }
         return;
       }
       b.cd -= dt;
-      if (b.cd <= 0) b.clip = { t: 0, fired: false };
+      if (b.cd <= 0 && b.ammo && room(0)) b.clip = { t: 0, fired: false };
       if (b.clip && A.kind === 'beam') b.bm = { ph: 'charge', t: 0, dr: 0, u: rnd(0.1, 0.8) };   // 发波：蓄力那几帧手心聚光
       return;
     }
@@ -371,7 +382,11 @@ function Act(cfg) {
     /* 蓄力那几帧整个人再往后倾一点（帧上画的动作 + 一点整体惯性），出手那一下往前甩 */
     if (i < FI) b.lean = -F * L.wind * LK * Math.min(1, C.t / LEAD);
     if (!C.fired && i >= FI) { C.fired = true; b.lean = 0; b.snap = F * L.snap * LK; b.sq = -(A.stretch || 0.05); fire(); b.ammo = false; }
-    if (C.t >= CLIP) { b.clip = null; b.bm = null; b.cd = rnd(A.gap ? A.gap[0] : 0.5, A.gap ? A.gap[1] : 0.8); b.ammo = true; b.pop = 0; }
+    if (C.t >= CLIP) { b.clip = null; b.bm = null; b.cd = rnd(A.gap ? A.gap[0] : 0.5, A.gap ? A.gap[1] : 0.8); reload(); }
+  }
+  /* 手里重新冒出一个：出手动作收完、带线的那一只也收回来了（还在线上就不画手里这只，不然同时两只） */
+  function reload() {
+    if (!b.ammo && !b.clip && !shots.some(onLine)) { b.ammo = true; b.pop = 0; }
   }
 
   function fire() {
@@ -448,7 +463,7 @@ function Act(cfg) {
     mark(s.x, s.y);
     if (A.onHit === 'wear' && f) { for (const m of marks) if (m.kind === 'wear') m.life = Math.min(m.life, m.t + 0.25); marks.push({ kind: 'wear', t: 0, life: 2.6, a: rnd(-0.3, 0.3) }); return false; }
     if (A.onHit === 'bounce' || A.onHit === 'heart') {                      // 弹开：往回、往上蹦，转着掉下去
-      s.fall = 0.9; s.vx = -Math.sign(s.vx || -F) * rnd(160, 320); s.vy = -rnd(420, 620); s.spin = (A.spin || 6) * (s.vx > 0 ? 1 : -1);
+      s.fall = FALL; s.vx = -Math.sign(s.vx || -F) * rnd(160, 320); s.vy = -rnd(420, 620); s.spin = (A.spin || 6) * (s.vx > 0 ? 1 : -1);
       return true;
     }
     return false;
@@ -469,7 +484,7 @@ function Act(cfg) {
   function stepPunch(dt, on) {
     const P = A.phases;
     if (!b.pk) {
-      if (!on) { b.lean *= Math.exp(-8 * dt); return; }
+      if (!on || !room(Math.max(0, b.cd))) { b.lean *= Math.exp(-8 * dt); return; }
       b.cd -= dt;
       b.lean = b.cd < A.wind ? -F * TRIO.lean.wind * (1 - Math.max(0, b.cd) / A.wind) : b.lean * Math.exp(-8 * dt);
       if (b.cd <= 0) { b.pk = { t: 0, hit: false }; b.lean = 0; b.snap = F * TRIO.lean.snap; }
@@ -539,7 +554,7 @@ function Act(cfg) {
     if (!b.bm) { if (!on) return; b.bm = { ph: 'rest', t: rnd(0, 0.3), dr: 0, u: 0.5 }; }
     const S = b.bm, B = A.beam;
     S.t += dt;
-    if (S.ph === 'rest') { if (on && S.t >= B.rest) { S.ph = 'charge'; S.t = 0; } return; }
+    if (S.ph === 'rest') { if (on && S.t >= B.rest && room(0)) { S.ph = 'charge'; S.t = 0; } return; }
     if (S.ph === 'charge') {
       b.lean = -F * TRIO.lean.wind * 0.6 * Math.min(1, S.t / B.charge);
       if (S.t >= B.charge) { S.ph = 'fire'; S.t = 0; S.dr = 0; S.hit = false; S.u = rnd(0.1, 0.8); b.lean = 0; b.snap = F * TRIO.lean.snap; }
@@ -808,7 +823,7 @@ function Act(cfg) {
     const P = place(), h = holdPt(P), Q = A.tether;
     ctx.save(); ctx.lineCap = 'round';
     for (const s of shots) {
-      if (s.kind !== A.item || s.stuck != null) continue;
+      if (!onLine(s)) continue;
       const d = Math.hypot(s.x - h[0], s.y - h[1]), slack = s.fall != null ? d * 0.25 : d * 0.06, c = over(h, [s.x, s.y], Math.max(h[1], s.y) + slack, Q.w || 2.5);
       ctx.strokeStyle = Q.color || '#222'; ctx.lineWidth = Q.w || 2.5;
       ctx.beginPath(); ctx.moveTo(h[0], h[1]); ctx.quadraticCurveTo(c[0], c[1], s.x, s.y); ctx.stroke();
@@ -1027,7 +1042,9 @@ function Act(cfg) {
     if (!b || b.wait > 0 || !img) return [];
     return [{ s: b.depth, draw: drawBody }];
   }
-  return { init, load, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), frame: () => (b && SH ? frameName() : null), cfg };
+  /* 此刻在哪一段：wait 等着上 / enter 进场 / on 在场 / exit 离场（胶片标格用：出手中途离场这种冲突只看帧名分不出来） */
+  const phase = () => (!b ? null : b.wait > 0 ? 'wait' : b.t < TE ? 'enter' : b.t <= TE + b.stay ? 'on' : 'exit');
+  return { init, load, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), frame: () => (b && SH ? frameName() : null), phase, cfg };
 }
 
 /* ---- 程序画的小东西 ---- */
