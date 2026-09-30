@@ -268,6 +268,15 @@ def sheet_person(c, at):
     else:
         im = np.array(Image.open(os.path.join(WEB, c['src'])).convert('RGBA'))
         cells = [('立绘', im)]; heads = {'立绘': est_head(im[..., 3] > 40)}; idents = {'立绘': []}
+    # 手里可能有这件东西的帧（= 运行时 b.ammo 可能为 true）：出手帧 fire() 那一格起手里就空了，要等动作收完、扔出去的那件回来才有（trio.js reload）。
+    # 只出现在出手帧及之后的帧（follow、throw……）手里一定是空的；出手前的蓄力帧、待机 / 进场 / 离场帧都可能拿着。
+    # 标了 ammo 的挂件（手里那一件本身）和手持道具（hold）都只在这些帧里算
+    seq = A.get('seq', []); fi = next((i for i, q in enumerate(seq) if q[2:] == ['fire']), None)
+    nm = lambda qs: {f for q in qs for f in (q[0] if isinstance(q[0], list) else [q[0]])}
+    E_ = c.get('enter'); X_ = (c.get('exit') or {}).get('frame')
+    free = {c['idle']['frame']} | (nm(E_['seq']) if isinstance(E_, dict) and E_.get('seq') else set()) | set(X_ if isinstance(X_, list) else [X_] if X_ else []) \
+           | ({(sw or {}).get('pump', {}).get(k) for k in ('fwd', 'back')} if (sw or {}).get('pump') else set())
+    empty = (nm(seq[fi:]) - nm(seq[:fi]) - free) if fi is not None else set()
     # 挂件（场景层 fixed 不算人）、道具
     parts = []
     for q in c.get('parts', []) if c.get('sheet') else []:
@@ -288,11 +297,11 @@ def sheet_person(c, at):
         extra = []
         for q, pm in parts:
             a = q['at'].get(f)
-            if not a: continue
+            if not a or (q.get('ammo') and f in empty): continue
             x, y = P(a[:2]); sway = (q.get('sway') or [0])[0]
             pb = [render(pm, x - q['pivot'][0] * s, y - q['pivot'][1] * s, s, ang, (x, y)) for ang in {a[2] - sway, a[2], a[2] + sway}]
             extra += [('挂件 ' + os.path.basename(q['src']).rsplit('.', 1)[0], b) for b in pb]
-        if R and A.get('hold', {}).get(f) and not any(q[2:] == ['fire'] and q[0] == f for q in A.get('seq', [])):   # 出手帧东西已离手
+        if R and A.get('hold', {}).get(f) and f not in empty:   # 出手帧起东西已离手
             hx, hy = P(A['hold'][f]); rr = int(round(R))
             yy, xx = np.mgrid[-rr:rr + 1, -rr:rr + 1]
             extra.append(('手持道具', Blob(xx * xx + yy * yy <= rr * rr, int(round(hx)) - rr, int(round(hy)) - rr)))

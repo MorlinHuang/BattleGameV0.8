@@ -209,6 +209,11 @@ function Act(cfg) {
   /* 带线的东西（A.tether）飞出去、弹开掉完之前还连在手上：还在线上的那一只（钉在地板上的不算，线不画它） */
   const FALL = 0.9;                                              // 打中弹开以后掉多久（stepShot）
   const onLine = (s) => !!A.tether && s.kind === A.item && s.stuck == null;
+  /* 挂件里标了 ammo 的，就是手里那一件本身（G10 肩上的球棒、G5 胯上的算盘 = 甩出去的同一件）：世上只有一件。
+     扔出去以后它在飞、弹开、往下掉的整段都还"不在手上"，要等它消失才回到手里 —— 不像篮球、绣球那样收完动作手里就再冒出一个。 */
+  const ONE = PARTS.some(q => q.ammo);
+  /* 这一发还没回到手上：带线的还连在线上；只有一件的，飞出去的那件还在画面上 */
+  const away = (s) => s.kind === A.item && (ONE || onLine(s));
   /* 一整下出手从起头到收完要几秒：帧序列 = 整段 seq；出拳 = 伸停回；单张立绘发波 = 聚光 + 轰；带线的还要等东西飞到、弹开掉完（线才收回手上）。
      离场前装不下一整下就不起手 —— 起了手再离场，要么整张摆着出手姿势滑出去，要么半截收掉硬切成离场帧（规范 §离场与出手） */
   const ACT = Math.max(SH && A.seq ? CLIP : A.kind === 'punch' ? A.phases.reduce((a, q) => a + q, 0) : A.kind === 'beam' ? A.beam.charge + A.beam.fire : 0,
@@ -498,9 +503,12 @@ function Act(cfg) {
     if (!C.fired && i >= FI) { C.fired = true; b.lean = 0; b.snap = F * L.snap * LK; b.sq = -(A.stretch ?? 0.05); fire(); b.ammo = false; }
     if (C.t >= CLIP) { b.clip = null; b.bm = null; b.cd = rnd(A.gap ? A.gap[0] : 0.5, A.gap ? A.gap[1] : 0.8); reload(); }
   }
-  /* 手里重新冒出一个：出手动作收完、带线的那一只也收回来了（还在线上就不画手里这只，不然同时两只） */
+  /* b.ammo = 此刻手里有没有这件东西：出手帧 fire() 那一格变 false；出手动作收完、扔出去的那件也回来了（away 见上）才变回 true，
+     从小长大（pop）。手里没有就不起手（stepFrames），拿在手里的（drawHeld）、标了 ammo 的挂件（drawParts）都只在 true 时画 —— 和飞出去的那件严格互斥 */
   function reload() {
-    if (!b.ammo && !b.clip && !shots.some(onLine)) { b.ammo = true; b.pop = 0; }
+    if (!b.ammo && !b.clip && !shots.some(away)) { b.ammo = true; b.pop = 0; if (ONE) b.cd = Math.max(b.cd, TRIO.pop + 0.25); }
+    /* 只有一件的：要等它落完才回到手上，那时冷却早走完了 —— 不留这一拍就回手即扔、肩上那根只闪一格。长到原大再拿稳一拍才起下一手。
+       别的道具在动作收完那一刻就回手，冷却刚按 gap 重设，不动它们的节奏 */
   }
 
   function fire() {
@@ -936,10 +944,11 @@ function Act(cfg) {
     PARTS.forEach((q, i) => {
       const im = partImg[i], a = q.at[fn];
       if (!im || !a || q.fixed || (q.z || 1) !== z) return;
+      if (q.ammo && !b.ammo) return;                          // 手里那一件本身：扔出去了、还没回来（reload）就不画
       /* 跟摆：身子（秋千 / 荡）以角速度 P.w 转，挂着的东西跟不上，相对身子往反方向拖 */
       const sw = q.sway || [0, 0, 0], ang = a[2] + sw[0] * Math.sin(b.t * 6.2832 * sw[1] + b.ph) - (sw[2] || 0) * P.w;
-      const [x, y] = P.at([a[0], a[1]]);
-      ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+      const [x, y] = P.at([a[0], a[1]]), k = q.ammo && b.pop < 1 ? backOut(b.pop) : 1;   // 回到手上那一下从握点长出来（同 drawHeld）
+      ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.scale(k, k);
       ctx.drawImage(im, -q.pivot[0] * P.s, -q.pivot[1] * P.s, im.width * P.s, im.height * P.s);
       ctx.restore();
     });
