@@ -6,3 +6,6 @@
 - 进场 appear flash 金色，seq 换 assemble → land → victory；出手 rush（光速拳）：残影 = hitA / hitB 前伸拳头（box 在 frames 预览上量），金色速度线，n 6。
 - 站位 [820,670,0.85]：s 1 剪影 2.92 万 → 0.85 时 2.11 万；画布宽 960，披风最右伸出锚点 133 px，x ≤ 822；
   同组 B5（wind 举棍过头）在场帧外扩 4px 相交 0，B24 相交 0。
+
+## 场景层（2026-09-30，审查第七批打回）
+墙面 web/assets/trio/B16_ledge.webp 由 ../make_ledges.py 程序画（上沿要精确落在脚底那一行，生图对不齐），cfg parts fixed: true, z: -1。

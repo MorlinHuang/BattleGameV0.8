@@ -12,7 +12,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B1_surfer.webp', cell: [434, 421], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 415.6], at: [814, 1040, 0.83], pivot: [265.3, 415.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
+      anchor: [265.3, 415.6], at: [820, 1040, 0.83], pivot: [265.3, 415.6], leanK: 0,   // 锚点 = 滑板着地那一点
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -28,7 +28,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B2_zhizunbao.webp', cell: [434, 424], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 418.6], at: [814, 1040, 0.83], pivot: [265.3, 418.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
+      anchor: [265.3, 418.6], at: [820, 1040, 0.83], pivot: [265.3, 418.6], leanK: 0,   // 锚点 = 滑板着地那一点
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -44,7 +44,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B3_beile.webp', cell: [434, 419], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [265.3, 413.6], at: [814, 1040, 0.83], pivot: [265.3, 413.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
+      anchor: [265.3, 413.6], at: [820, 1040, 0.83], pivot: [265.3, 413.6], leanK: 0,   // 锚点 = 滑板着地那一点
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -60,7 +60,7 @@ const TRIO_BUDDY = {
       face: -1,
       /* crewframes.py：crew.js 在用的分层原图按 crew.js 的转轴合成（外形、配色、脸不变）；at.s 0.83 时和 crew.js 原来一样大 */
       sheet: { src: 'assets/trio/B4_yagami.webp', cell: [442, 458], cols: 4, names: ['idle', 'wind', 'follow', 'ride', 'brake', 'aim0', 'aim1', 'aim2', 'aim3', 'aim4', 'aim5', 'aim6', 'aim7', 'aim8', 'aim9', 'aim10'] },
-      anchor: [273.3, 452.6], at: [814, 1040, 0.83], pivot: [273.3, 452.6], leanK: 0,   // 锚点 = 滑板着地那一点；x 820 → 814：在场前后溜 ±8.9 px 时滑板右头不出画（遮挡判据第二版）
+      anchor: [273.3, 452.6], at: [820, 1040, 0.83], pivot: [273.3, 452.6], leanK: 0,   // 锚点 = 滑板着地那一点
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
       enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
@@ -367,8 +367,11 @@ const TRIO_BUDDY = {
       /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 2.52 万，s 0.91 → 2.09 万（上方对格格）。画布宽 960：最右伸出锚点 97 px，x 855 */
       anchor: [130.9, 275.0], at: [855, 740, 0.91], pivot: [131, 275], leanK: 0.2,
       depth: 0.5, recipe: 'debris',
-      /* 挖墙钻出：从脚底那条线后面升上来 + 灰土烟；升的时候是挖墙的一拳（dig），升到位跨出来（step）、落地（land） */
-      enter: { kind: 'appear', rise: 200, fx: 'smoke', color: [150, 125, 95], T: 0.8, seq: [['dig', 0.35], ['step', 0.25], ['land', 0.15, 'land'], ['idle', 9]], sq: 0.08 },
+      /* 挖墙钻出：从方块墙上沿（cut 279 = 靴底那一行）后面升上来 + 灰土烟；升的时候是挖墙的一拳（dig），升到位跨出来（step）、落地（land） */
+      enter: { kind: 'appear', rise: 200, cut: 279, fx: 'smoke', color: [150, 125, 95], T: 0.8, seq: [['dig', 0.35], ['step', 0.25], ['land', 0.15, 'land'], ['idle', 9]], sq: 0.08 },
+      /* 场景层：方块墙（buddy/make_ledges.py 程序画，顶排草方块 / 土 / 石头，块边 44，右边一块被挖空 = 他钻出来的洞），fixed 钉在世界里、不跟 rise 升也不被 cut 剪；
+         上沿 = 图第 0 行 = 各帧靴底最低一行 278 的下一行（接触 0 px），左端格内 x 20，右边出画 */
+      parts: [{ src: 'assets/trio/B14_wall.webp', pivot: [0, 0], z: -1, fixed: true, at: { idle: [20, 279, 0], wind: [20, 279, 0], throw: [20, 279, 0], follow: [20, 279, 0], dig: [20, 279, 0], step: [20, 279, 0], land: [20, 279, 0], idle2: [20, 279, 0] } }],
       exit: { frame: 'dig' },
       idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
       /* 泥土方块（3D，道具表 r 30 cell 125 scale 1.49）：待机拿在身前的拳头里、wind 托过头顶、throw 帧甩出去那一刻离手 */
@@ -403,6 +406,8 @@ const TRIO_BUDDY = {
       depth: 0.5, recipe: 'star',
       /* 圣衣拼身：金光里淡入（张开双臂、圣衣刚合上）→ 单膝落在墙沿（land 压扁）→ 起身举拳 */
       enter: { kind: 'appear', fx: 'flash', color: [255, 210, 80], fade: 0.3, T: 0.9, seq: [['assemble', 0.35], ['land', 0.25, 'land'], ['victory', 0.3], ['idle', 9]], sq: 0.08 },
+      /* 场景层：神殿石檐（buddy/make_ledges.py：白大理石檐板 + 金线脚 + 齿饰 + 横楣，下面渐隐），fixed；上沿 = 靴底 / 跪地膝盖最低一行 337~338，右边出画 */
+      parts: [{ src: 'assets/trio/B16_ledge.webp', pivot: [0, 0], z: -1, fixed: true, at: { idle: [0, 338, 0], wind: [0, 338, 0], hitA: [0, 338, 0], hitB: [0, 338, 0], assemble: [0, 338, 0], land: [0, 338, 0], victory: [0, 338, 0], idle2: [0, 338, 0] } }],
       exit: { frame: 'assemble' },
       idle: { frame: 'idle', breathe: [0.012, 0.8, 0.4] },
       /* 光速拳：收拳蓄力 0.3 秒 → 两拳交替 0.6 秒，每 0.1 秒一道拳影（hitA / hitB 前伸那只拳头）飞过去、金色速度线 → 举拳 */

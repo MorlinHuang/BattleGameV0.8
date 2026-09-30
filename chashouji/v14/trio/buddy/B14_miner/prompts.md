@@ -5,3 +5,6 @@
 - frames.json：scale_by sheet；dig / step / land 进 loose。配准残差 0.31 px。
 - 进场 appear rise 200 + 灰土色烟（从脚底那条线后面升上来）；出手 3D 泥土方块 prop_dirtblock（r 30 cell 125 scale 1.49），待机也拿在手里（hold.idle），recipe debris。
 - 站位 [880,740,0.91]：s 1 时剪影 2.52 万，0.91 → 2.09 万；和同组 B23 在场帧相交 0（B1 是 crew.js 老角色，不在 cast 里）。
+
+## 场景层（2026-09-30，审查第七批打回）
+墙面 web/assets/trio/B14_wall.webp 由 ../make_ledges.py 程序画（上沿要精确落在脚底那一行，生图对不齐），cfg parts fixed: true, z: -1。
