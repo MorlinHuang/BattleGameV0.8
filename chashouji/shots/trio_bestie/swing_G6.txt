@@ -1,0 +1,5 @@
+G6 idle 格 / 脸 dy（呼吸）/ 后脑卷发（x145~172）竖向重心（跟头对齐后）/ 像素数: [(1, np.float64(-0.0), np.float64(740.1), 184), (2, np.float64(-1.7), np.float64(740.4), 205), (3, np.float64(-1.5), np.float64(740.1), 198), (4, np.float64(0.4), np.float64(739.4), 198), (5, np.float64(3.3), np.float64(738.9), 197), (6, np.float64(6.0), np.float64(738.3), 193), (7, np.float64(7.2), np.float64(738.9), 194)]
+卷发竖向重心峰峰 2.1 px
+卷发梢 x150~156 竖向重心（跟头对齐后） [np.float64(741.0), np.float64(742.7), np.float64(742.5), np.float64(739.5), np.float64(736.0), np.float64(733.5), np.float64(733.5)] 峰峰 9.2 px
+卷发梢 x152~160 竖向重心（跟头对齐后） [np.float64(742.4), np.float64(743.1), np.float64(742.2), np.float64(740.0), np.float64(737.4), np.float64(736.1), np.float64(736.5)] 峰峰 7.0 px
+卷发梢 x156~164 竖向重心（跟头对齐后） [np.float64(742.4), np.float64(742.9), np.float64(742.2), np.float64(740.7), np.float64(739.4), np.float64(738.4), np.float64(739.5)] 峰峰 4.5 px

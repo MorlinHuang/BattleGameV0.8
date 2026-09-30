@@ -260,9 +260,30 @@ const TRIO_BESTIE = {
              T: 0.55, arc: 0.25, spin: 5.7, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
 
+    G6: {       // 平底锅主妇（蜡笔小新妈式）：额头冒青筋、围裙拖鞋气冲冲跑进来，攥着平底锅；把锅举过头顶抡出去，3D 平底锅"当"地砸在他头上
+      face: +1,
+      sheet: { src: 'assets/trio/G6_misae.webp', cell: [316, 403], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4'] },
+      /* 锚点 = 前脚拖鞋鞋底：出手四帧按这只拖鞋配准（残差 0.31 px）。脚底 y 1040（同组地板 G30 头顶 1057），站姿高约 350 px */
+      anchor: [220.6, 397.1], at: [250, 1040, 0.88], pivot: [220, 397], leanK: 0,
+      depth: 0.8, recipe: 'thud',
+      /* 气冲冲跑进来：跑步条四帧出自同一张底图（raw/walk_base.png；walk3 的两臂用蒙版重绘成和 walk1 反过来：近手往前捶、远手甩到背后，raw/act_b1.png）。
+         每秒 12 帧、一步一伏 10 px。stride 175：相邻两帧着地那只拖鞋的鞋跟前进 82 / 92 / 86 / 90（格内像素），取平均 87.5 × 2；同一只脚换帧差 ≤ 5.5 格内（≤ 4.8 屏幕 px） */
+      enter: { kind: 'walk', fps: 12, bob: 10, stride: 175, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
+      exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 12, flip: true, T: 0.6 },
+      idle: { frame: 'idle', breathe: [0.016, 0.9, 0] },
+      /* 后脑勺那一撮卷发往后（左）甩：根在右边（钉右），框上、下、左三边透明 */
+      flex: { idle: [[108, 34, 128, 88, 'r', 9, 1.0]] },
+      /* 平底锅照道具表 3D：r 30 cell 91 scale 1.08，转速 π / T。待机攥在右拳里（慢慢晃着转），蓄力举过头顶（后排：出手点在女生头顶以上），出手后叉腰喘粗气 */
+      atk: { kind: 'throw', item: 'pan', r: 30, atlas: { src: 'assets/trio/prop_pan.webp', n: 36, cols: 6, cell: 91, scale: 1.08 },
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             hold: { idle: [218, 212], wind: [120, 6], throw: [296, 72] },
+             T: 0.55, arc: 0.3, spin: 5.7, idleSpin: 0.5, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
-      face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
+      face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 230, 1],   /* 2026-10-01 自由组合：原 y 360 秋千荡下来压后排地面的头，抬 130（组合遮挡矩阵_bestie 建议站位） */
+      anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
       depth: 0.5, enter: 'swing', recipe: 'rouge', ropes: { ...ROPE, x: [100, 190], fill: '#a7864f' },
       swing: { a0: 1.3, a: 0.12, tau: 0.5, w: 2.4 },
       atk: { kind: 'throw', item: 'heart', n: 2, color: [255, 70, 130], T: 0.55, arc: 0.1, spin: 0, onHit: 'lips' },

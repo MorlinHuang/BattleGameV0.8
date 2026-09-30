@@ -2,7 +2,7 @@
 用法：python3 walkheel.py <胶片(无后缀)...> -- <图集> <cellW>x<cellH> <帧名,...> <id> <s> <鞋框 json>
 鞋框 json：{"walk1": {"front": [x0,y0,x1,y1], "rear": [...]}, ...}（格内像素，面朝右：左沿是鞋跟）
 打印每格每只鞋的屏幕 x（鞋跟），同一帧名连续格的 Δ，以及换帧时同一只着地脚前后的差（配对写在 PAIRS）。"""
-import sys, json, numpy as np
+import sys, os, json, numpy as np
 from PIL import Image
 from scipy.signal import fftconvolve
 i = sys.argv.index('--'); films = sys.argv[1:i]
@@ -23,6 +23,7 @@ def find(I, fn, box, y0, y1):
     if 0 < xx < num.shape[1] - 1:
         a, b, c = num[yy, xx - 1], num[yy, xx], num[yy, xx + 1]; d = a - 2 * b + c; dx = 0.5 * (a - c) / d if d > 0 else 0
     return xx + dx, num[yy, xx]
+Y = [int(v) for v in os.environ.get('WALK_Y', '900,1100').split(',')]   # 竖向搜索窗（屏幕 y）：只框脚那一带，别让模板拐到主角的衣服上
 rows = []
 for f in films:
     I = np.asarray(Image.open(f + '.png').convert('RGB')).astype(float) / 255; fr = json.load(open(f + '.json'))
@@ -32,7 +33,7 @@ for f in films:
         if not fn or fn[0] not in SH: continue
         fn = fn[0]; out = {}
         for foot, box in SH[fn].items():
-            x, e = find(I[:, k * 960:(k + 1) * 960], fn, box, 900, 1100)
+            x, e = find(I[:, k * 960:(k + 1) * 960], fn, box, *Y)
             out[foot] = round(float(x), 1)
         rows.append((f, k + 1, fn, out)); print(k + 1, fn, out)
 print('== 同一帧名连续格（着地鞋 Δ）')
