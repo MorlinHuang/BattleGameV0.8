@@ -481,7 +481,7 @@ const TRIO_BUDDY = {
          抽出来以后（wind 起手里是 3D 扇、throw / follow 扔出去了）不画 */
       parts: [
         { src: 'assets/trio/B18_wall.webp', pivot: [165, 14], z: -1, fixed: true, at: { idle: [195, 212, 0], raise: [195, 212, 0], wind: [195, 212, 0], throw: [195, 212, 0], follow: [195, 212, 0], leap: [195, 212, 0], land: [195, 212, 0], idle2: [195, 212, 0] } },   // 场景层（引擎负责人 2026-10-01）：墙头钉在世界里，人从它后面升上来
-        { src: 'assets/trio/B18_fan.webp', pivot: [38, 87], z: -1, at: { idle: [202, 133, 0], raise: [202, 133, 0], land: [209, 144, 0], idle2: [202, 133, 0] }, sway: [0.05, 0.7, 0] },
+        { src: 'assets/trio/B18_fan.webp', pivot: [38, 87], z: -1, at: { idle: [202, 133, 0], raise: [202, 133, 0], leap: [207, 172, 0], land: [209, 144, 0], idle2: [202, 133, 0] }, sway: [0.05, 0.7, 0] },
       ],
       atk: { kind: 'throw', item: 'fan', r: 45, atlas: { src: 'assets/trio/prop_fan.webp', n: 36, cols: 6, cell: 126, scale: 1.06 },   // 3D 扇返工（引擎负责人 2026-10-01）：白纸水墨 + 红穗，长边 73~94px ≈ 背后那把
              seq: [['raise', 0.2], ['wind', 0.25], ['throw', 0.1, 'fire'], ['follow', 0.35]], hold: { wind: [191, 29], throw: [8, 78] },

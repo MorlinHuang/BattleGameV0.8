@@ -1,0 +1,5 @@
+B18 扇子挂件 at 补 leap（审查_签字 第六批 / 第八轮 B18 打回项）
+图集 B18_tangbohu.webp 里头巾（开运算去描边后顶部 25 行的质心）：leap (152.9,120.9)  land (155.3,92.9)  → 头 leap→land Δ = (+2.4, −28.0)
+扇子 at：land [209,144] → leap 取 [207,172]，Δ = (+2, −28)；和头的位移之差 0.4 px（格内），× 0.72 = 0.3 屏幕 px，规定 ≤ 头位移 + 3 px
+胶片 B18修_enter.jpg（ammosc=1 ammoms=70 ammoskip=0 buddy=B18，errors []）：格 1~6 leap，7~9 land，10~12 idle；
+放大 B18修_leap扇_enter格3-12放大.jpg：肩膀露出墙头起（格 4）背上就有扇，格 6→7 换 land 时扇跟着头一起下落，没有冒出来
