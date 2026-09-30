@@ -280,6 +280,25 @@ const TRIO_BESTIE = {
              T: 0.55, arc: 0.3, spin: 5.7, idleSpin: 0.5, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
 
+    G7: {       // 黑裙荆棘杀手（约尔式）：一团暗紫黑烟里蹲着现身、起身撩发，温柔地笑；手指夹着玫瑰护手的细刺刀举过头顶甩出去
+      face: +1,
+      sheet: { src: 'assets/trio/G7_yor.webp', cell: [330, 411], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'crouch', 'rise', 'emerge', 'idle2'] },
+      /* 锚点 = 前脚高跟靴：出手四帧按这只靴子配准（残差 0.19 px）。脚底 y 1000（同组地板 G26 头顶 1021，最低点 1018 不叠），站姿高约 290 px */
+      anchor: [247.7, 385.4], at: [260, 1000, 0.88], pivot: [247, 385], leanK: 0,
+      depth: 0.8, recipe: 'petal',
+      /* 阴影一闪：淡入（0.35 秒）时蹲着低头，淡入完起身撩发 → 站起张手 → 待机（淡入结束后换了两次帧） */
+      enter: { kind: 'appear', fx: 'smoke', color: [60, 20, 70], seq: [['crouch', 0.35], ['rise', 0.18], ['emerge', 0.14, 'land'], ['idle', 9]], sq: 0.05 },
+      exit: { frame: 'crouch' },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
+      /* 身后的长发梢连同垂着的后手一起慢慢晃（根在右边钉住；框上、下、左三边透明） */
+      flex: { idle: [[9, 98, 66, 212, 'r', 5, 0.8]] },
+      /* 细刺刀是平面图（bestie/G7_yor/raw/knife_src.png 抠出来，180 px 长 × 0.5）：手指夹着举过头顶（后排：出手点在女生头顶以上）→ 甩出去打着转飞 */
+      atk: { kind: 'throw', item: 'knife', prop: 'assets/world/trio_g7_knife.webp', scale: 0.5,
+             seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             hold: { wind: [84, 16], throw: [316, 86] },
+             T: 0.4, arc: 0.12, spin: 14, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 230, 1],   /* 2026-10-01 自由组合：原 y 360 秋千荡下来压后排地面的头，抬 130（组合遮挡矩阵_bestie 建议站位） */
