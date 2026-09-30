@@ -3,7 +3,7 @@
  * 素材借用现成三个样板的图集（B5 截拳道、B21 樱木、G11 格格），只为测进场 / 出手的写法本身；每个测试角色单独一组，?buddy= / ?bestie= 按组号召。 */
 'use strict';
 (() => {
-  const b5 = TRIO_BUDDY.cast.B5, b21 = TRIO_BUDDY.cast.B21, g11 = TRIO_BESTIE.cast.G11;
+  const b5 = TRIO_BUDDY.cast.B5, b21 = TRIO_BUDDY.cast.B21, b22 = TRIO_BUDDY.cast.B22, b27 = TRIO_BUDDY.cast.B27, g11 = TRIO_BESTIE.cast.G11;
   const { ropes, swing, enter: _e1, exit: _x1, parts: _p1, ...g } = g11;      // 格格去掉秋千，只借她的帧
   const { enter: _e2, exit: _x2, ...b } = b5;
   TRIO_BUDDY.cast = {
@@ -18,9 +18,23 @@
     /* 哥3 跳落（从右边画外一个抛物线跳进来、砸地压扁）+ 丢东西冻住 */
     T3: { ...b21, enter: { kind: 'leap', h: 160, air: 0.4, sq: 0.12, seq: [['dive', 0.4], ['flop', 0.12, 'land'], ['slide', 0.2], ['idle', 9]] },
           atk: { ...b21.atk, onHit: 'freeze' } },
+    /* 哥4 B22 蓄力球跟着蓄力帧的手：只比正式数据多一个 hold.wind（wind 帧双手合在腰侧那一点） */
+    T8: { ...b22, atk: { ...b22.atk, hold: { ...b22.atk.hold, wind: [216, 160] } } },
+    /* 哥5 3D 道具走图集只看 atlas、不看 item：B27 的牛丸把 item 写成真名 */
+    T9: { ...b27, atk: { ...b27.atk, item: 'meatball' } },
+    /* 哥6 走路一帧一步（stride = walk1 接地帧两脚距离，格内像素） */
+    T10: { ...b5, enter: { ...b5.enter, stride: 190 } },
+    B5: b5,                                               // 原数据（没写 stride）单独一组：量走路钉脚不被同组别人挡
+    /* 哥7 / 哥8 / 哥9 后排出手从男生头顶翻过去：丢东西带线（借樱木的 3D 篮球）、喷、连打。
+       出手点按规范写在举过头顶的那只手上（B5 wind 帧举棍的拳头 [270, 25]）—— 路只管中间那段，出发点得美术画高 */
+    T11: { ...b5, atk: { ...b21.atk, seq: [['wind', 0.3], ['hitA', 0.3, 'fire'], ['taunt', 0.4]], hold: {}, from: [270, 25], tether: { w: 2.5, color: '#6a4b2a' }, onHit: null, gap: [0.5, 0.8] } },
+    T13: { ...b5, atk: { ...b5.atk, from: [270, 25] } },
+    T12: { ...b5, atk: { kind: 'spray', seq: [['wind', 0.3], ['hitA', 0.7, 'fire'], ['taunt', 0.4]], from: [270, 25], spray: { dur: 0.6, rate: 90, T: 0.3, tick: 0.15, color: [120, 200, 255], r: 18, spread: 0.14 }, gap: [0.5, 0.8] } },
   };
   TRIO_BUDDY.ground = {};
-  TRIO_BUDDY.groups = [{ name: '骑+抽打', ground: 'T1' }, { name: '闪现+伸缩拳', ground: 'T2' }, { name: '跳落+冻住', floor: 'T3' }];
+  TRIO_BUDDY.groups = [{ name: '骑+抽打', ground: 'T1' }, { name: '闪现+伸缩拳', ground: 'T2' }, { name: '跳落+冻住', floor: 'T3' },
+                       { name: '蓄力球在手上', floor: 'T8' }, { name: '图集不认 item', floor: 'T9' },
+                       { name: '走路钉脚', ground: 'T10' }, { name: '走路钉脚（原数据）', ground: 'B5' }, { name: '后排丢+带线', ground: 'T11' }, { name: '后排喷', ground: 'T12' }, { name: '后排连打', ground: 'T13' }];
 
   const hold = g11.atk.hold, fire4 = (d) => [['raise', 0.12], ['wind', 0.22], ['throw', d, 'fire'], ['follow', 0.3]];
   TRIO_BESTIE.cast = {

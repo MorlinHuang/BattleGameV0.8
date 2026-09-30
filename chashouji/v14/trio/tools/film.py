@@ -20,6 +20,7 @@ async def main(q, out):
         await pg.locator('#stage canvas').screenshot(path=out)
         tf = await pg.evaluate('window.trioFrames || []')
         with open(out.rsplit('.', 1)[0] + '.json', 'w') as f: json.dump(tf, f, ensure_ascii=False)
+        with open(out.rsplit('.', 1)[0] + '_faces.json', 'w') as f: json.dump(await pg.evaluate('window.trioFaces || []'), f)   # 每格两个主角的脸框
         print('errors', errs[:5])
         for i, r in enumerate(tf): print(f'格{i + 1:2d}', ' '.join(r))
         await b.close()

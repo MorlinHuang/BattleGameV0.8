@@ -336,6 +336,26 @@ function startMatch() {
    rooms 三间房各多宽、center 客厅正中（= 0 米）在世界里的横坐标、
    poses 每张贴图的尺寸、锚点（外框中点或脚的质心 × 脚底线）、手机位置。 */
 let WORLD = null;
+/* 胶片诊断 ?trioprobe=1：每格把三人组的出手（drawOver）单独再画一遍到探针画布上，数落在**自己这边主角脸框**里的像素
+   （哥们 → 男生 faceOf('b')，闺蜜 → 女生 faceOf('a')）。后排出手不许横穿自己主角的脸，这个数应当是 0。胶片分支记进 window.trioFaces 的 hit */
+let trioProbe = null;
+function probeTrio(m) {
+  const c = trioProbe, x = c.getContext('2d');
+  const hits = {};
+  for (const [side, who, key] of [['B', 'b', 'B'], ['G', 'a', 'G'], ['B', 'a', 'Bt']]) {   // Bt = 哥们的出手压在女生（要打的那个）脸上：对照，砸中那几格应当 > 0
+    const f = faceOf(who);
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, c.width, c.height); x.setTransform(m);
+    for (const a of (side === 'B' ? BuddyTrio : BestieTrio).acts) a.drawOver(x);
+    if (!f) continue;
+    const p0 = m.transformPoint(new DOMPoint(f[0] - f[2], f[1] - f[2])), p1 = m.transformPoint(new DOMPoint(f[0] + f[2], f[1] + f[2]));
+    const bx = Math.max(0, Math.floor(p0.x)), by = Math.max(0, Math.floor(p0.y)), bw = Math.min(c.width, Math.ceil(p1.x)) - bx, bh = Math.min(c.height, Math.ceil(p1.y)) - by;
+    if (bw <= 0 || bh <= 0) continue;
+    const d = x.getImageData(bx, by, bw, bh).data;
+    let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 16) n++;
+    hits[key] = n;
+  }
+  c.last = hits;
+}
 
 /* 僵持循环：5 张来回放成 8 格 —— 手机从正中往左拽过去、回来、往右、回来。
    这是拔河里"谁也没占上风"的样子：一直在使劲、一直在来回，但哪头也没赢。 */
@@ -2307,14 +2327,14 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   });
 
   /* 三人组里的新角色（trio.js）：哥们侧打女生（落点同水枪哥们 girlAim），闺蜜侧打男生的脸（同喷雾闺蜜 boyAim）。
-     第一下按档 3 力度，之后每下轻补。 */
+     第一下按档 3 力度，之后每下轻补。shield = 自己这边主角的脸框：后排的人出手要从他 / 她头顶翻过去，不横穿脸 */
   for (const a of BuddyTrio.acts) a.init({
-    face: () => faceOf('a'), aim: girlAim, ground: () => GROUND + FX.bob,
+    face: () => faceOf('a'), shield: () => faceOf('b'), aim: girlAim, ground: () => GROUND + FX.bob,
     onHit: (x, y, first, rc) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE[rc], x),
     onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
   });
   for (const a of BestieTrio.acts) a.init({
-    face: () => faceOf('b'), aim: boyAim, ground: () => GROUND + FX.bob,
+    face: () => faceOf('b'), shield: () => faceOf('a'), aim: boyAim, ground: () => GROUND + FX.bob,
     onHit: (x, y, first, rc) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE[rc], x),
   });
 
@@ -2613,6 +2633,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     drawStains(ac);
     for (const it of crew) if (near(it)) it.draw(ac);
     for (const a of ACTS) a.drawOver(ac);        // 三人组扔出去的东西、挂在人身上的记号、橡皮手臂、气功波：盖在主角之上
+    if (trioProbe) probeTrio(ac.getTransform());
     if (dim > 0) {
       drawIntroDim(ac, dim, 'source-atop');
       cctx.save(); cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.drawImage(actorBuf, 0, 0); cctx.restore();
@@ -2741,6 +2762,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* ?noshake=1 关掉命中震屏：量三人组的锚点漂移用（v14/trio/tools/drift.py）—— 震屏把整个角色层一起晃，最多 30px，会混进读数 */
     if (Q.get('noshake') === '1') Particles.addShake = () => {};
     TRIO.still = Q.get('trioswing') === '0';
+    if (Q.get('trioprobe') === '1') { trioProbe = document.createElement('canvas'); trioProbe.width = cvCh.width; trioProbe.height = cvCh.height; }
     S.auto = false; S.t = 3.0;
     for (let k = 0; k < 150; k++) derive(1 / 60);
 
@@ -2790,6 +2812,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       const tf = ACTS.filter(a => a.frame()).map(a => `${a.cfg.id}:${a.frame()}`);
       (window.trioFrames = window.trioFrames || []).push(tf);
       render();
+      (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 168, 26);

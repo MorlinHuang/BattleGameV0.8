@@ -29,6 +29,7 @@
 
     python3 measure_volume.py <图集目录>              # 量已打包的 webp，八件横着比
     python3 measure_volume.py --frames <帧目录> <件名> # 量刚渲出来的 PNG 序列，改完立刻能看
+    python3 measure_volume.py --frames <帧目录> <件名> <r>   # 还没进 ENGINE 表的新件：给屏幕半径 r，scale 从帧并集反算
 """
 import sys, os, math
 import numpy as np
@@ -48,7 +49,7 @@ ENGINE = {   # 件名: (cell, scale, r, spin, 每次齐射几颗)
     'meatball': (68, 1.27, 18, 6.3, 1),      # 三人组 B27 食神的牛丸（飞 0.5 秒转半圈）
     'dumbbell': (75, 1.08, 24, 6.3, 1),      # 三人组 B25 健身教练的哑铃
     'cassette': (84, 1.31, 22, 6.3, 1),      # 三人组 B24 霹雳舞的磁带
-    'mouse': (88, 1.39, 22, 6.3, 1),      # 三人组 B26 电竞宅男的有线鼠标
+    'mouse': (88, 1.37, 22, 6.3, 1),      # 三人组 B26 电竞宅男的有线鼠标（按键版，结构密度 32%）
 }
 N, COLS, FPS = 36, 6, 60
 SZ = 96          # 统一缩到这个边长再比，快且不影响结论
@@ -139,13 +140,23 @@ def elong(m):
     return math.sqrt(max(w[1], 1e-9) / max(w[0], 1e-9))
 
 
+def frames_engine(d, r, spin=6.3):
+    """帧目录模式下还没进 ENGINE 表的件：scale 从帧的并集反算（同 pack_atlas.py），r 由命令行给。"""
+    import glob
+    fs = [np.array(Image.open(f))[..., 3] > 8 for f in sorted(glob.glob(os.path.join(d, '*.png')))]
+    u = np.any(fs, axis=0)
+    ys, xs = np.where(u)
+    side = max(xs.max() - xs.min(), ys.max() - ys.min()) + 1
+    return (0, side / (u.shape[0] * 2.0 / 3.3), r, spin, 1)
+
+
 def run(d, names, frames_dir=None):
     print('%-8s %7s %8s %6s %7s %7s %7s %7s' %
           ('件', '结构密度', '屏幕结构量', '贴纸残', '面积变', '细长变', '屏幕px', '每帧跳'))
     print('-' * 68)
     rows = []
     for nm in names:
-        cell, scale, r, spin, _ = ENGINE[nm]
+        cell, scale, r, spin, _ = ENGINE[nm] if nm in ENGINE else frames_engine(frames_dir, R_ARG)
         p = frames_dir or os.path.join(d, nm + '_atlas.webp')
         if not os.path.exists(p):
             continue
@@ -180,7 +191,8 @@ def run(d, names, frames_dir=None):
 
 if __name__ == '__main__':
     a = sys.argv[1:]
-    if a[:1] == ['--frames']:
+    if a[:1] == ['--frames']:            # --frames <帧目录> <件名> [r]：不在 ENGINE 表里的件要给 r（引擎里的屏幕半径）
+        R_ARG = float(a[3]) if len(a) > 3 else None
         run('', [a[2]], frames_dir=a[1])
     else:
         run(a[0] if a else '.', a[1:] or list(ENGINE))

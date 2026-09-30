@@ -93,4 +93,6 @@ ring.scale = (L * 0.99, W * 1.0, 1)                 # 比壳那一圈略大，�
 prim('cylinder', 'cable', vertices=12, radius=0.07, depth=0.34, location=(-L - 0.1, 0, -0.02), rotation=(0, math.pi / 2, 0))
 
 ob = join_all(body)
+bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')      # 手拼的网格面朝向不一定一致：Toon 明暗靠法线，统一朝外
+bpy.ops.mesh.normals_make_consistent(inside=False); bpy.ops.object.mode_set(mode='OBJECT')
 render_turntable('mouse', active=ob, lean=50, tilt=0.3, roll=0.25, screen_r=22)
