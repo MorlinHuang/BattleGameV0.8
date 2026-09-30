@@ -360,12 +360,14 @@ const TRIO_BESTIE = {
       enter: { kind: 'ride', T: 1.0, tilt: 0.08, seq: [['glide', 0.4], ['twirl', 0.3], ['stop', 0.3, 'land'], ['idle', 9]], sq: 0.06 },
       exit: { frame: 'glide', flip: true },
       idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
-      /* 冰锥是平面图（bestie/G8_elsa/raw/icicle_src.png 抠出来，150 px 长 × 0.6）：待机浮在伸出去的掌心上慢慢转（次级摆动）；
-         wind 帧右手举过头顶、冰锥在掌心上方那一刻离手（后排：出手点在女生头顶以上），throw 帧是甩出去的手 */
+      /* 次级摆动：垂着的左手指尖下吊着一片雪花（part.py 出图 40 px，挂点在上沿、像坠子一样来回摆 ±0.35 rad，下沿 ≈ 15 px） */
+      parts: [{ src: 'assets/trio/G8_snowflake.webp', pivot: [20, 2], z: 1, sway: [0.35, 0.7, 0], at: { idle: [250, 280, 0], idle2: [250, 280, 0] } }],
+      /* 冰锥是平面图（bestie/G8_elsa/raw/icicle_src.png 抠出来，150 px 长 × 0.6，尖朝右）：待机浮在伸出去的掌心上、尖指着他（aim）；
+         wind 帧右手举过头顶、冰锥在掌心上方那一刻离手（后排：出手点在女生头顶以上），尖朝前直飞；throw 帧是甩出去的手 */
       atk: { kind: 'throw', item: 'icicle', prop: 'assets/world/trio_g8_icicle.webp', scale: 0.6,
              seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.35]],
              hold: { idle: [455, 100], wind: [380, -4] },
-             T: 0.45, arc: 0.15, spin: 9, idleSpin: 1.5, stretch: 0.03, gap: [0.9, 1.3], onHit: 'freeze' },
+             T: 0.45, arc: 0.15, spin: 0, aim: true, stretch: 0.03, gap: [0.9, 1.3], onHit: 'freeze' },
     },
 
     /* ---- 上方（左上，男女主头顶以下；样板 G11） ---- */

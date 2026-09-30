@@ -1,0 +1,50 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "magenta",
+   "frames": [
+    "idle",
+    "wind",
+    "hitA",
+    "hitB"
+   ]
+  },
+  {
+   "src": "raw/act_b1.png",
+   "screen": "magenta",
+   "frames": [
+    "assemble",
+    "land",
+    "victory",
+    "idle2"
+   ]
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  170,
+  20,
+  310,
+  150
+ ],
+ "fixed": [
+  20,
+  500,
+  490,
+  605
+ ],
+ "size": [
+  "h",
+  280
+ ],
+ "anchor": [
+  255,
+  600
+ ],
+ "loose": [
+  "assemble",
+  "land"
+ ],
+ "scale_by": "sheet"
+}

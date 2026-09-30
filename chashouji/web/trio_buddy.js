@@ -341,8 +341,9 @@ const TRIO_BUDDY = {
     B13: {      // 仙剑少年：踩着飞剑从右上斜着俯冲下来、后仰刹住、站稳悬停；剑指举过头顶召出一把蓝光飞剑，剑指一点，飞剑拖着蓝光射过去
       face: -1,
       sheet: { src: 'assets/trio/B13_sword.webp', cell: [257, 333], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'swoop', 'brake', 'settle', 'idle2', 'sword'] },
-      /* 上方；锚点 = 两脚鞋底中点（踩在剑上）。剪影面积 2.12 万（上方槽位对格格 2.09 万）。[880, 730]：同组 B7 在场帧外扩 4px 相交 0（settle 进场帧 × B7 throw 1 px） */
-      anchor: [155.2, 317.3], at: [880, 730, 1], pivot: [155, 317], leanK: 0.3,
+      /* 上方；锚点 = 两脚鞋底中点（踩在剑上）。剪影面积 2.12 万（上方槽位对格格 2.09 万）。画布宽 960：人最右伸出锚点 98 px；
+         [850, 680]：同组 B7 在场帧外扩 4px 相交 0（730 时 throw 前伸的手压到 B7 头 556 px） */
+      anchor: [155.2, 317.3], at: [850, 680, 1], pivot: [155, 317], leanK: 0.3,
       depth: 0.5, recipe: 'thud',
       /* 脚下的剑是挂件层（raw/sword_plain.png，part.py w 240），画在人后、鞋底压在剑身上；每帧按两只鞋底连线摆（角度 = 连线斜率） */
       parts: [{ src: 'assets/trio/B13_sword_ride.webp', pivot: [120, 10], z: -1, sway: [0.02, 0.7, 0],
@@ -363,8 +364,8 @@ const TRIO_BUDDY = {
     B14: {      // 方块头矿工：从右上墙里一拳一拳挖出来、跨出来落地；托起一块泥土方块举过头顶甩出去，3D 方块翻着砸过去
       face: -1,
       sheet: { src: 'assets/trio/B14_miner.webp', cell: [240, 286], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'dig', 'step', 'land', 'idle2'] },
-      /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 2.52 万，s 0.91 → 2.09 万（上方对格格） */
-      anchor: [130.9, 275.0], at: [880, 740, 0.91], pivot: [131, 275], leanK: 0.2,
+      /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 2.52 万，s 0.91 → 2.09 万（上方对格格）。画布宽 960：最右伸出锚点 97 px，x 855 */
+      anchor: [130.9, 275.0], at: [855, 740, 0.91], pivot: [131, 275], leanK: 0.2,
       depth: 0.5, recipe: 'debris',
       /* 挖墙钻出：从脚底那条线后面升上来 + 灰土烟；升的时候是挖墙的一拳（dig），升到位跨出来（step）、落地（land） */
       enter: { kind: 'appear', rise: 200, fx: 'smoke', color: [150, 125, 95], T: 0.8, seq: [['dig', 0.35], ['step', 0.25], ['land', 0.15, 'land'], ['idle', 9]], sq: 0.08 },
@@ -391,6 +392,24 @@ const TRIO_BUDDY = {
       atk: { kind: 'throw', item: 'orb', prop: 'assets/trio/B15_orb.webp', scale: 0.5,
              seq: [['wind', 0.35], ['throw', 0.1, 'fire'], ['follow', 0.45]], hold: { wind: [86, -20], throw: [0, 90] },
              T: 0.4, arc: 0.1, spin: 8, stretch: 0.03, gap: [0.6, 1.0] },
+    },
+
+    B16: {      // 黄金圣衣战士：右上金光一闪、圣衣合身张开双臂，单膝落地、起身举拳；收拳蓄力，一串金色光速拳影砸过去
+      face: -1,
+      sheet: { src: 'assets/trio/B16_gold.webp', cell: [287, 341], cols: 4, names: ['idle', 'wind', 'hitA', 'hitB', 'assemble', 'land', 'victory', 'idle2'] },
+      /* 上方；锚点 = 两脚中间的地面（站在墙沿）。剪影面积 s 1 时 2.92 万，s 0.85 → 2.11 万（上方对格格）。
+         画布宽 960：披风最右伸出锚点 133 px，x ≤ 822。[820, 670]：同组 B5 在场帧外扩 4px 相交 0（740 时 B5 wind 举棍过头相交 1039 px），同组 B24 相交 0 */
+      anchor: [127.2, 337.5], at: [820, 670, 0.85], pivot: [127, 337], leanK: 0.2,
+      depth: 0.5, recipe: 'star',
+      /* 圣衣拼身：金光里淡入（张开双臂、圣衣刚合上）→ 单膝落在墙沿（land 压扁）→ 起身举拳 */
+      enter: { kind: 'appear', fx: 'flash', color: [255, 210, 80], fade: 0.3, T: 0.9, seq: [['assemble', 0.35], ['land', 0.25, 'land'], ['victory', 0.3], ['idle', 9]], sq: 0.08 },
+      exit: { frame: 'assemble' },
+      idle: { frame: 'idle', breathe: [0.012, 0.8, 0.4] },
+      /* 光速拳：收拳蓄力 0.3 秒 → 两拳交替 0.6 秒，每 0.1 秒一道拳影（hitA / hitB 前伸那只拳头）飞过去、金色速度线 → 举拳 */
+      atk: { kind: 'rush', seq: [['wind', 0.3], [['hitA', 'hitB'], 0.6, 'fire'], ['victory', 0.4]], fps: 10, from: [14, 110],
+             rush: { n: 6, every: 0.1, T: 0.1, line: '#ffd84a',
+                     ghost: [{ frame: 'hitA', box: [12, 96, 75, 124] }, { frame: 'hitB', box: [14, 121, 77, 149] }] },
+             gap: [0.7, 1.1], stretch: 0.03 },
     },
 
     B18: {      // 摇扇才子：从右上墙头后面一蹿翻上来、坐定；背后插着题诗折扇，伸手抽出来一甩，3D 折扇旋着飞过去
