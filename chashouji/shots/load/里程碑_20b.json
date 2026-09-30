@@ -1,0 +1,1 @@
+{"mbps": 20.0, "rtt": 50.0, "marks": {"raf": 9743.5, "frame": 9744.400000095367, "painted": 9863.799999952316, "click": 9863.900000095367, "boot": 9863.900000095367, "navStart": 0, "rx_at_frame": 7164404}, "paint": [["first-paint", 2464], ["first-contentful-paint", 2464]], "nav": {"dcl": 2469.5, "load": 2472.5999999046326}, "errors": []}
