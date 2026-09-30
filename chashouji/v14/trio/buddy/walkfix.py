@@ -6,7 +6,7 @@
 怎么对：一个循环四次换帧里继续着地的那只脚：接地帧前脚 → 过渡帧支撑脚 → 下一个接地帧后脚 → 过渡帧支撑脚 → 回到接地帧前脚…
 四次的格内位移加起来 = 2 × stride（跟各帧怎么平移无关），所以 stride = 总和 / 2；再给每帧一个横向平移，让四次都正好 = stride/2。
 量哪一点：鞋贴地那一段（剪影最低 band px）的前沿（朝左走 = 左端；倒退跑的人脚尖朝右，也是往左走，同样取左端）。
-"edge": "pivot"（B5 起用）：量整只鞋，前脚落地那一下钉鞋跟、后脚踮起那一下钉鞋尖（审查第四轮 3：接地时脚尖会转）。
+"edge": "pivot"（B5 起用）：量整只鞋（深色；"shoe": "blue" 改认蓝人字拖），前脚落地那一下钉鞋跟、后脚踮起那一下钉鞋尖（审查第四轮 3：接地时脚尖会转）。
 过渡帧两只脚常并在一起，取贴地的那一块整个的左端。
 用法：python3 walkfix.py <角色目录>   （读 frames.json 的 walkfix: {"ref": 平移为 0 的那一帧（= 进场最后一步那一帧，走完换待机时人不跳）, "band": 16, "min_w": 鞋至少多宽（滤掉拐杖尖）, "chain": 可选}，改 web/assets/trio/<名>.webp，打印 stride）"""
 import sys, os, json
@@ -37,7 +37,11 @@ if cfg.get('edge') == 'pivot':
     def feet(f):
         x0, y0 = box(f); c = A[y0:y0 + ch, x0:x0 + cw].astype(int); a = c[..., 3] > 128
         yb = np.nonzero(a.any(1))[0].max()
-        dark = a & (c[..., :3].max(2) < 70); dark[:yb - cfg.get('shoe_h', 90)] = False
+        if cfg.get('shoe') == 'blue':      # 蓝人字拖（B10）
+            dark = a & (c[..., 2] > 120) & (c[..., 0] < 90) & (c[..., 2] > c[..., 1] + 30)
+        else:
+            dark = a & (c[..., :3].max(2) < 70)
+        dark[:yb - cfg.get('shoe_h', 90)] = False
         lab, k = ndimage.label(ndimage.binary_opening(dark)); out = []
         for q in range(1, k + 1):
             ys, xs = np.nonzero(lab == q)

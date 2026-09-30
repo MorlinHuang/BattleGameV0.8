@@ -1,0 +1,12 @@
+B10 麻将大叔 walk 钉脚（进场只走 walk1→2→3→4 一圈，第 5 步是 plop，所以要量的换帧只有三次）（shoepin.py shoe=blue body=none，临时副本页 at [480,1330,0.83]，只召 B10，ms40）
+前脚落地→支撑钉鞋跟、支撑→后脚踮起钉鞋尖；验收 ≤ 6 px
+  B10_ms40_a 格5→6 walk1→walk2 鞋跟 784 → 785  Δx +1   （鞋 [(np.int64(724), np.int64(784)), (np.int64(855), np.int64(911))] → [(np.int64(702), np.int64(741)), (np.int64(725), np.int64(785))]）
+  B10_ms40_a 格10→11 walk2→walk3 鞋尖 725 → 724  Δx -1   （鞋 [(np.int64(702), np.int64(741)), (np.int64(725), np.int64(785))] → [(np.int64(590), np.int64(653)), (np.int64(724), np.int64(782))]）
+  B10_ms40_c 格4→5 walk2→walk3 鞋尖 725 → 724  Δx -1   （鞋 [(np.int64(702), np.int64(741)), (np.int64(725), np.int64(785))] → [(np.int64(590), np.int64(653)), (np.int64(724), np.int64(782))]）
+  B10_ms40_c 格9→10 walk3→walk4 鞋跟 653 → 653  Δx +0   （鞋 [(np.int64(590), np.int64(653)), (np.int64(724), np.int64(782))] → [(np.int64(590), np.int64(653))]）
+换帧最大 |Δx| 1
+同一帧名连续格（walkpin.py）：
+B10_mahjong：同一帧名连续格 最大 |Δx| 0.00（18 对）；换帧 最大 |Δx| 6.31（4 次）
+
+坐下（plop，cellshift −80 已挪到站位）→ idle：马扎中心屏幕 x 一致（B10_ms40_b 格 3 / 4）
+在场漂移 drift.py 马扎 235,305,325,395：B10_M idle/wind/throw/follow 最大 1.07 px（正式页 at 740,1020）

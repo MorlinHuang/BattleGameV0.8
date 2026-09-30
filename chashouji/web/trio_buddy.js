@@ -258,6 +258,24 @@ const TRIO_BUDDY = {
              T: 0.5, arc: 0.45, spin: 6.3, idleSpin: 1.5, gap: [0.5, 0.9] },   // 不写 bounce：弹开是往回蹦，会擦过男生的脸（组 2 B27 实测 149px）
     },
 
+    B10: {      // 麻将大叔：拎着折起来的小马扎晃着肚子走进来，把马扎一撑一屁股坐下；捏两张麻将举过头顶一甩，3D 麻将翻着砸过去，喊"胡了"
+      face: -1,
+      sheet: { src: 'assets/trio/B10_mahjong.webp', cell: [473, 425], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'plop', 'idle2'] },
+      /* 后排地面，锚点 = 两只人字拖中间的地面。坐在马扎上待机、出手（条 1 按马扎配准）。[740, 1020]：同组 B29 在场各帧外扩 4px 相交 0（1040 时 wind 371 px） */
+      anchor: [277.0, 419.4], at: [740, 1020, 0.83], pivot: [277, 419], leanK: 0,
+      depth: 0.8, recipe: 'thud',
+      /* 走进来：四帧同一张底图（walk1 / walk2 生图，walk3 / walk4 蒙版重绘腿和手臂），马扎四帧都在近侧手：后 → 胯边 → 前 → 胯边。
+         stride 159.5（walkfix pivot，蓝人字拖；walk1 / walk3 鞋尖距 158 / 161），5 步 × 66.19 = 330.96；第 5 步换成一屁股坐下（plop），
+         plop 在图集里已经往前挪了一步（cellshift −80），坐下那一刻马扎就落在站位上，换待机不跳 */
+      enter: { kind: 'walk', fps: 6, bob: 6, stride: 159.5, dist: 330.96, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.66667], ['plop', 9, 'land']], sq: 0.12 },
+      exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 7, flip: true, T: 0.8 },
+      idle: { frame: 'idle', breathe: [0.016, 0.8] },
+      /* wind 帧捏着牌的拳头举过头顶（拳顶 y 3，头顶 y 62），两张一起离手 */
+      atk: { kind: 'throw', item: 'mahjong', n: 2, r: 20, atlas: { src: 'assets/trio/prop_mahjong.webp', n: 36, cols: 6, cell: 77, scale: 1.37 },
+             seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.45]], hold: { wind: [201, 8] },
+             T: 0.5, arc: 0.35, spin: 6.3, stretch: 0.03, gap: [0.6, 1.0] },
+    },
+
     B18: {      // 摇扇才子：从右上墙头后面一蹿翻上来、坐定；背后插着题诗折扇，伸手抽出来一甩，3D 折扇旋着飞过去
       face: -1,
       sheet: { src: 'assets/trio/B18_tangbohu.webp', cell: [279, 375], cols: 4, names: ['idle', 'raise', 'wind', 'throw', 'follow', 'leap', 'land', 'idle2'] },
@@ -273,7 +291,7 @@ const TRIO_BUDDY = {
       /* 挂件层：墙头瓦檐（buddy/B18_tangbohu/raw/wall.png，下接一截渐隐白墙）垫在人后面；背后斜插的折扇（定妆拆的那一层 ref/B18_fan.png）跟着轻晃，
          抽出来以后（wind 起手里是 3D 扇、throw / follow 扔出去了）不画 */
       parts: [
-        { src: 'assets/trio/B18_wall.webp', pivot: [165, 14], z: -1, at: { idle: [195, 212, 0], raise: [195, 212, 0], wind: [195, 212, 0], throw: [195, 212, 0], follow: [195, 212, 0], leap: [195, 212, 0], land: [195, 212, 0], idle2: [195, 212, 0] } },
+        { src: 'assets/trio/B18_wall.webp', pivot: [165, 14], z: -1, fixed: true, at: [195, 212, 0] },   // 场景层（引擎负责人 2026-10-01）：墙头钉在世界里，人从它后面升上来
         { src: 'assets/trio/B18_fan.webp', pivot: [38, 87], z: -1, at: { idle: [202, 133, 0], raise: [202, 133, 0], land: [209, 144, 0], idle2: [202, 133, 0] }, sway: [0.05, 0.7, 0] },
       ],
       atk: { kind: 'throw', item: 'fan', r: 30, atlas: { src: 'assets/trio/prop_fan.webp', n: 36, cols: 6, cell: 92, scale: 1.10 },
