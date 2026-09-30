@@ -184,7 +184,7 @@ const TRIO_BESTIE = {
       depth: 1.3, recipe: 'star',
       /* 开合跳：jump1 并腿落地 → jump2 腾空张开 → jump3 开腿落地、双臂举成 V → jump4 腾空合拢（偶数帧接地、奇数帧 bob 抬起，规范第九节 G28）。
          stride = 每跳前进的距离（格内像素）：接地 → 腾空 → 接地换两次帧，每次前进 stride / 2 */
-      enter: { kind: 'walk', fps: 6, bob: 20, stride: 110, seq: [[['jump1', 'jump2', 'jump3', 'jump4'], 9]] },
+      enter: { kind: 'walk', fps: 6, bob: 40, stride: 110, seq: [[['jump1', 'jump2', 'jump3', 'jump4'], 9]] },
       exit: { frame: ['jump1', 'jump2', 'jump3', 'jump4'], fps: 8, flip: true, T: 0.8 },
       idle: { frame: 'idle', breathe: [0.014, 0.9] },
       /* 呼啦圈：引擎 3D 转盘（道具表 r 36 cell 108 scale 1.07），待机顶在指尖上转；套在他头上那只用图集第 4 格（压扁的椭圆）当平面图。

@@ -10,6 +10,9 @@ frames.json 的 check "前脚" 量的）。fixed 只能按一条腿配：按后�
 所以改成**局部横向拉伸**：膝盖以上不动（y < Y0），往下到 Y1 渐渐加到整段位移 D，Y1 以下整体平移 D；
 横向只动 X0 右边（X0~X1 渐入），跪地的后腿、裙摆不受影响。小腿轮廓是连续弯过去的，没有接缝。
 
+wind 的前鞋鞋尖在原图里就被画布右沿截掉了（raw/act_a1.png 第 684~708 行白到 x 1023，审查签字 G27）：挪完之后
+把 idle 那只前鞋（脚踝以下）盖到 wind 上，脚踝 SY0~SY1 这几行竖向渐变（光小腿皮肤，没有轮廓线）；横向先按鞋跟那一截配准。
+
 **frames.py build 之后必须再跑一遍这个**（build 会重写图集）：
   python3 v14/trio/bestie/G27_shancai/fixleg.py
 """
@@ -41,5 +44,17 @@ for fn, D in SHIFT.items():
     a = out[..., 3:4]
     out[..., :3] = np.where(a > 0, out[..., :3] * 255 / np.maximum(a, 1e-3), 0)
     atlas[oy:oy + CH, ox:ox + CW] = out
+# wind 前鞋鞋尖：换成 idle 的鞋
+SX0, SX1, SY0, SY1 = 165, 262, 266, 278           # 前脚一带（后面跪地的腿在 x < 150）；脚踝渐变带
+idle, wind = atlas[0:CH, 0:CW], atlas[0:CH, CW:2 * CW]
+heel = lambda c, d: c[282:300, 172 + d:212 + d, 3]
+dx = min(range(-3, 4), key=lambda d: np.abs(heel(wind, 0) - heel(idle, d)).sum())   # wind 鞋跟 = idle 鞋跟往右挪 −dx
+src = np.roll(idle, -dx, axis=1)
+w = np.clip((yy - SY0) / (SY1 - SY0), 0, 1); w = (w * w * (3 - 2 * w))[..., None] * ((xx >= SX0) & (xx < SX1))[..., None]
+pa, pb = wind[..., :3] * wind[..., 3:] / 255, src[..., :3] * src[..., 3:] / 255
+al = wind[..., 3:] * (1 - w) + src[..., 3:] * w
+rgb = (pa * (1 - w) + pb * w) * 255 / np.maximum(al, 1e-3)
+atlas[0:CH, CW:2 * CW] = np.dstack([np.where(al > 0, rgb, 0), al])
+print(f'→ wind 前鞋换成 idle 的鞋（鞋跟配准 dx {dx}）')
 Image.fromarray(atlas.clip(0, 255).astype(np.uint8)).save(path, 'WEBP', quality=90, method=6)
 print('→ G27_shancai.webp：', ', '.join(f'{k} 前腿右移 {v}px' for k, v in SHIFT.items()))
