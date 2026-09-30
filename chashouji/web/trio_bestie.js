@@ -449,6 +449,24 @@ const TRIO_BESTIE = {
              hold: { wind: [132, 16], throw: [318, 72] },
              T: 0.55, arc: 0.18, spin: 5.7, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
+    G20: {      // 复古歌后（邓丽君式）：坐在一弯金月亮上从正上方缓缓降下来，挥手 → 张开双臂唱 → 坐定捂心口轻唱；指尖捏一枚月牙镖举过头顶一弹，打着转飞过去
+      face: +1,
+      sheet: { src: 'assets/trio/G20_teresa.webp', cell: [234, 338], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wave', 'sing', 'bow', 'idle2'] },
+      /* 月亮画在每一帧里（进场载具）：按月亮背弧配准、缩放也按月亮（scale_by fixed），残差 0.15 px；锚点 = 月亮弯里的中心。
+         人（不算月亮）约 2.5 万格内像素 × 0.9² ≈ 2.06 万屏幕像素，同 G11 */
+      anchor: [105.5, 181.5], at: [150, 560, 0.9], pivot: [105, 181], leanK: 0.3,
+      depth: 0.5, recipe: 'bloom',
+      /* 月亮降下（fly，从正上方）：一手扶月尖一手挥 → 张开双臂仰头唱 → 坐定（露面后换两次帧） */
+      enter: { kind: 'fly', from: [0, -720], air: 0.9, tilt: 0.03, seq: [['wave', 0.45], ['sing', 0.35], ['idle', 9, 'land']], sq: 0.04 },
+      exit: { frame: 'wave' },
+      idle: { frame: 'idle', breathe: [0.014, 0.7, 0] },
+      /* 月牙镖是平面图（bestie/G20_teresa/raw/crescent_src.png 抠出来，110 px 宽 × 0.5）：待机托在伸出去的掌心上慢慢转（次级摆动）；
+         wind 捏着举过头顶 → throw 手腕一弹、从手里飞出去，平面内打着转飞（2D 转就是它本来的样子，道具表 7.1） */
+      atk: { kind: 'throw', item: 'crescent', prop: 'assets/world/trio_g20_crescent.webp', scale: 0.5,
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             hold: { idle: [222, 80], wind: [170, 4], throw: [224, 52] },
+             T: 0.5, arc: 0.2, spin: 12, idleSpin: 3, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
+    },
 
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
