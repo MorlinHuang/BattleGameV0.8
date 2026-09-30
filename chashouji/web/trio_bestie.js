@@ -195,6 +195,28 @@ const TRIO_BESTIE = {
              hold: { idle: [84, 40], wind: [27, 196], throw: [295, 114] },
              T: 0.55, arc: 0.25, spin: 5.7, idleSpin: 2.5, stretch: 0.03, gap: [1.0, 1.4], onHit: 'wear' },
     },
+    G29: {      // 打狗棒女侠（黄蓉式）：撑着打狗棒从左上一跃、棒子点地荡进来落成蹲，竹棒伸缩着捅过去
+      face: +1,
+      sheet: { src: 'assets/trio/G29_huangrong.webp', cell: [309, 339], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'vault', 'swing', 'land', 'idle2'] },
+      anchor: [188.4, 331.7], at: [180, 1328, 1], pivot: [188, 331],
+      leanK: 0,   // 蹲着、一只手撑地：整体前后倾会把撑地的手和靴子带起来
+      depth: 1.3, recipe: 'thud',
+      /* 撑棒跃进：双手握棒顶腾空（vault）→ 收腿荡过去（swing）→ 落地蹲下单手撑地（land）→ 待机 */
+      enter: { kind: 'leap', h: 120, air: 0.45, sq: 0.1, seq: [['vault', 0.25], ['swing', 0.2], ['land', 0.14, 'land'], ['idle', 9]] },
+      exit: { frame: 'vault' },
+      idle: { frame: 'idle', breathe: [0.018, 0.75, 0] },
+      /* 打狗棒：定妆拆好的挂件层（bestie/ref/G29_staff.png → tools/part.py h 281），挂点 = 握棒处（棒长 80% 那一点）。
+         待机 / 落地：握在举起的左拳里、斜靠在背后；腾空两帧：双手握棒顶、棒子往下（转 π，荡的那帧更竖）；
+         wind / throw / follow 不画（这几帧手里画着一截短竹棒，捅出去的就是它） */
+      parts: [{ src: 'assets/trio/G29_staff.webp', pivot: [107, 222], z: -1, sway: [0.04, 0.7, 0],
+                at: { idle: [120, 117, 0], land: [111, 195, 0], vault: [182, 12, 3.1416], swing: [170, 80, 3.44] } }],
+      /* 伸缩棒（帧序列 punch）：棒头从 throw 帧里抠，伸出去的"管子"填竹子色；收势 = 收棒回腰（用 wind 帧）——
+         A 条 follow（棒扛肩）那格两腿站位画得不一样（配准残差 6.7 px），不上场 */
+      atk: { kind: 'punch', seq: [['wind', 0.3], ['throw', 0.55, 'fire'], ['wind', 0.25]],
+             fist: [270, 145, 308, 163], fistC: [290, 154], wrist: [262, 157], armW: 8,
+             skin: '#6cbf45', skinShade: 'rgba(40,110,30,.55)', skinEdge: '#1f3d12', fistZ: 1.3, phases: [0.16, 0.12, 0.22],
+             stretch: 0, gap: [1.0, 1.4] },
+    },
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],

@@ -22,3 +22,11 @@ Bottom-left (landing): landing in a deep crouch, right foot forward, left knee j
 Bottom-right (idle): exactly like the top-left pose of the reference sheet.
 Generous empty space between cells, nothing overlaps another cell, nothing cropped.
 Background MUST be pure flat magenta #FF00FF single solid color, no gradient, no shadow, no ground, no text, no panel borders.
+
+## 实际出图（2026-09-30）
+- act_a1 = edited-1790748151131-1（06:02，参考图 = G29_body 铺品红底 /tmp/G29_body_bg.png；上面 A 条原文照用），另一张存 act_a1_alt.png。
+- act_b1 = edited-1790748291522-1（参考图 act_a1 + body 铺底；上面 B 条原文照用），另一张存 act_b1_alt.png。
+- **A 条 follow（棒扛肩）那格两腿站位画得不一样**（按 idle 的腿配准残差 6.7 px，不动部位匹配 0.54）：不上场，收势用 wind（收棒回腰）。
+- fixed 框下沿停在 545（格内原图像素）：idle / wind / throw 左手撑地、follow 手搭膝，手进了框会把配准拐走（第一版 7.84 px）。
+- 竹棒挂件：`python3 tools/part.py bestie/ref/G29_staff.png G29_staff h 281`（281 = 定妆里棒子包围盒高 1291 × 人那一层定妆高 1157 → 帧里 252 的比例）。
+  挂点 [107, 222] = 棒长 80% 处（握棒的地方）；腾空两帧转 π（双手握棒顶、棒子朝下点地）。
