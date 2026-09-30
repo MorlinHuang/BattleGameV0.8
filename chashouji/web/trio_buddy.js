@@ -276,6 +276,28 @@ const TRIO_BUDDY = {
              T: 0.5, arc: 0.35, spin: 6.3, stretch: 0.03, gap: [0.6, 1.0] },
     },
 
+    B13: {      // 仙剑少年：踩着飞剑从右上斜着俯冲下来、后仰刹住、站稳悬停；剑指举过头顶召出一把蓝光飞剑，剑指一点，飞剑拖着蓝光射过去
+      face: -1,
+      sheet: { src: 'assets/trio/B13_sword.webp', cell: [257, 333], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'swoop', 'brake', 'settle', 'idle2', 'sword'] },
+      /* 上方；锚点 = 两脚鞋底中点（踩在剑上）。剪影面积 2.12 万（上方槽位对格格 2.09 万）。[880, 730]：同组 B7 在场帧外扩 4px 相交 0（settle 进场帧 × B7 throw 1 px） */
+      anchor: [155.2, 317.3], at: [880, 730, 1], pivot: [155, 317], leanK: 0.3,
+      depth: 0.5, recipe: 'thud',
+      /* 脚下的剑是挂件层（raw/sword_plain.png，part.py w 240），画在人后、鞋底压在剑身上；每帧按两只鞋底连线摆（角度 = 连线斜率） */
+      parts: [{ src: 'assets/trio/B13_sword_ride.webp', pivot: [120, 10], z: -1, sway: [0.02, 0.7, 0],
+                at: { idle: [157, 316, 0.12], wind: [157, 316, 0.116], throw: [159, 319, 0.139], follow: [167, 316, 0.153],
+                      swoop: [171, 320, 0.077], brake: [148, 319, 0.093], settle: [141, 322, 0.071], idle2: [160, 316, 0.085] } },
+              /* 召剑：wind 帧飞剑悬在举起的剑指上方（同一张飞剑贴图，出手那帧就不画了，由 rush 残影接着飞出去） */
+              { src: 'assets/trio/B13_sword_fly.webp', pivot: [165, 24], z: 1, sway: [0.04, 2.2, 0], at: { wind: [120, -14, 0] } }],
+      enter: { kind: 'fly', from: [420, -420], T: 0.8, air: 0.8, tilt: 0.12, seq: [['swoop', 0.4], ['brake', 0.25], ['settle', 0.15, 'land'], ['idle', 9]], sq: 0.06 },   // 俯冲 → 后仰刹住 → 站稳
+      exit: { frame: 'swoop' },
+      idle: { frame: 'idle', breathe: [0.014, 0.9, 0.4] },
+      /* 飞剑（raw/sword_fly.png，蓝光拖尾画在贴图里、剑尖朝左）走 rush 残影：图集末尾那格 'sword'（add_sword_cell.py），残影按图原样水平画，剑尖一直朝前。
+         throw 的平面道具朝向是随机的（b.hang），拖尾会横着 / 倒着飞，所以不用 throw。剑指点出去那一刻（throw 帧指尖 [4, 96]）射出 */
+      atk: { kind: 'rush', seq: [['wind', 0.35], ['throw', 0.3, 'fire'], ['follow', 0.4]], from: [4, 96],
+             rush: { n: 1, every: 0.1, T: 0.26, line: '#9ef', ghost: { frame: 'sword', box: [3, 148, 254, 185], z: 1.4 } },
+             gap: [0.6, 1.0], stretch: 0.03 },
+    },
+
     B18: {      // 摇扇才子：从右上墙头后面一蹿翻上来、坐定；背后插着题诗折扇，伸手抽出来一甩，3D 折扇旋着飞过去
       face: -1,
       sheet: { src: 'assets/trio/B18_tangbohu.webp', cell: [279, 375], cols: 4, names: ['idle', 'raise', 'wind', 'throw', 'follow', 'leap', 'land', 'idle2'] },
