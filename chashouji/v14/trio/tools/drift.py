@@ -14,6 +14,9 @@
   python3 drift.py f_gege_stay.png 12 web/assets/trio/G11_gege.webp 315x343 4 0 60,188,130,214 170,640,1 128,212.3 12 pivot=128,-530 rot=0.25
 再给 id=<名单编号> names=<帧名,逗号分隔（图集顺序）>：读胶片旁边 film.py 写的 <胶片>.json，每一格按这一格实际画的那一帧取模板
 （出手帧和待机帧的轮廓不一样，拿 idle 当模板去比出手帧，残差大、位置也会被拐走）。参考帧下标只在 json 里没记这个人时用。
+再给 robust=<tau>（如 0.08）：每个像素的平方差截在 tau —— 后排地面的人站在主角身后、不动的脚常被主角的腿挡住一块，
+不截的话残差比别人大两个数量级、位置被挡的那块拐走（B5 前脚：不截 4.15 px，截了见 漂移实测.txt）。
+  python3 drift.py 改_B5_atk.jpg 12 web/assets/trio/B5_jkd.webp 423x482 4 0 130,440,215,480 800,1158,0.85 260.7,478.1 16 id=B5 names=idle,wind,hitA,hitB,walk1,walk2,walk3,taunt robust=0.08
 """
 import sys
 import numpy as np
@@ -41,7 +44,26 @@ def sub(a, b, c):
     return 0.0 if abs(d) < 1e-12 else 0.5 * (a - c) / d
 
 
+def search_robust(tile, tc, m, cx, cy, tau):
+    """同 search，但每个像素的平方差截在 tau：人被前景挡住的那几块（后排的人站在主角身后，脚被主角的腿挡住）
+    只贡献一个固定上限，不会把位置拐走。逐个整数平移算（窗口小，够快）"""
+    h, w = m.shape
+    ix, iy = int(round(cx - w / 2)), int(round(cy - h / 2))
+    E = np.full((2 * R + 1, 2 * R + 1), np.inf)
+    for dy in range(-R, R + 1):
+        for dx in range(-R, R + 1):
+            y0, x0 = iy + dy, ix + dx
+            if y0 < 0 or x0 < 0 or y0 + h > tile.shape[0] or x0 + w > tile.shape[1]: continue
+            d = ((tile[y0:y0 + h, x0:x0 + w] - tc) ** 2).sum(-1)
+            E[dy + R, dx + R] = np.minimum(d, tau)[m].mean()
+    y, x = np.unravel_index(np.argmin(E), E.shape)
+    fy = sub(E[y - 1, x], E[y, x], E[y + 1, x]) if 0 < y < E.shape[0] - 1 else 0
+    fx = sub(E[y, x - 1], E[y, x], E[y, x + 1]) if 0 < x < E.shape[1] - 1 else 0
+    return x + fx - R + (ix - (cx - w / 2)), y + fy - R + (iy - (cy - h / 2)), E[y, x]
+
+
 def search(tile, tc, m, cx, cy):
+    if 'robust' in kw: return search_robust(tile, tc, m, cx, cy, float(kw['robust']))
     """模板中心应在 (cx, cy)，±R 里找带遮罩平方差最小的位置 → (dx, dy, 误差)。
     Σm(I−T)² = Σm·I² − 2Σ(m·T)·I + Σm·T²，前两项是相关，用 FFT 一次算完整个窗口"""
     h, w = m.shape

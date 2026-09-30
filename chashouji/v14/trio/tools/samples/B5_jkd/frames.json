@@ -1,0 +1,51 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "magenta",
+   "frames": [
+    "idle",
+    "wind",
+    "hitA",
+    "hitB"
+   ]
+  },
+  {
+   "src": "raw/act_b1_fix.png",
+   "screen": "magenta",
+   "frames": [
+    "walk1",
+    "walk2",
+    "walk3",
+    "taunt"
+   ]
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  160,
+  18,
+  300,
+  145
+ ],
+ "fixed": [
+  50,
+  600,
+  250,
+  700
+ ],
+ "size": [
+  "h",
+  440
+ ],
+ "anchor": [
+  270,
+  693
+ ],
+ "loose": [
+  "walk1",
+  "walk2",
+  "walk3",
+  "taunt"
+ ]
+}

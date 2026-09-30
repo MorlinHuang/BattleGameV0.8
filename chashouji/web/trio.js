@@ -42,19 +42,23 @@ const rnd = (a, b) => a + Math.random() * (b - a);
    at [x, y, s] 锚点落在屏幕哪、画多大；anchor 贴图上的锚点（帧序列：所有帧共用；扒墙的手脚、趴着的肚皮、秋千座板中心）
    pivot  前后倾 / 秋千摆绕的点（贴图像素，秋千是绳子顶端，在贴图外面）；leanK 前后倾打几折（帧序列里动作已经画在帧上，默认 1）
    depth  远近（< 1 主角身后，> 1 主角之前），main.js 按它跟别的帮手一起排
-   enter  进场方式：crawl 爬 / spring 弹 / slide 扑地滑 / dive 腾空扑地再滑 / dash 斜冲 / roll 翻滚 / creep 匍匐 / swing 荡
-          帧序列：enter { kind, seq: [[帧, 秒, 'land'?], ...], h: 腾空多高, air: 腾空几秒 }；exit { frame }
+   enter  进场方式：crawl 爬 / spring 弹 / slide 扑地滑 / dive 腾空扑地再滑 / dash 斜冲 / roll 翻滚 / creep 匍匐 / swing 荡 /
+          walk 走（跑）/ ride 骑、滑 / fly 飞下 / leap 跳落（fly、leap 同一条路：from 起点、h 抛物线高、air 几秒到）/ drop 倒挂垂下 /
+          appear 原地出现（fx 闪光 / 烟，rise 从一条线后面升上来）/ rope 横绳（ends 两头屏幕点、touch 压绳点）。见 place()
+          帧序列：enter { kind, T: 几秒, seq: [[帧或帧数组, 秒, 'land'?], ...], fps, ... }；exit { frame（可为数组）, T, fps, flip }
    idle   帧序列：{ frame: 待机帧, breathe: [胀缩幅度, 每秒几次, 横向补偿 (默认 0.4)] }；flex { 帧: [[x0, y0, x1, y1, 't'|'l', 幅度, 每秒几次, 跟摆], ...] }
-   atk    攻击：{ kind: 'throw' | 'punch' | 'beam' | 'camera', ... }，见 update。帧序列的 throw：seq [[帧, 秒, 'fire'?], ...]、
-          hold { 帧: [x, y] } 东西拿在哪（出手帧那一格就是出手点）、atlas 3D 转盘图集 { src, n, cols, cell, scale }（没有就用 prop 平面图）。
-          帧序列支持 throw / camera / beam（蓄力帧手心聚光、出手帧开轰 beam.fire 秒，出手帧的时长要 ≥ beam.fire）；punch（伸缩手臂）只有单张立绘
+   atk    攻击：{ kind: 'throw' | 'punch' | 'beam' | 'camera' | 'whip' | 'rush' | 'slash' | 'spray', ... }。帧序列：seq [[帧或帧数组, 秒, 'fire'?], ...]、
+          hold { 帧: [x, y] } 东西拿在哪（出手帧那一格就是出手点）或 from [x, y]、atlas 3D 转盘图集 { src, n, cols, cell, scale }（没有就用 prop 平面图）、
+          tether 手和丢出去的东西连一根线；onHit 另有 net 网兜、freeze 冻住。throw / camera / beam / punch 帧序列和单张立绘都能用，
+          whip 抽打 / rush 连打（残影）/ slash 斩痕 / spray 喷只有帧序列（fire() 起头、stepFx 按时间推）。持续型的出手帧时长要盖住它
    parts  帧序列：挂件层（扇子、靠旗、翎子这类单独拆出来随动作甩的东西）[{ src, pivot: [x, y] 挂件图上挂住的点, z: -1 画在人后 / 1 人前,
           at: { 帧: [x, y, 角度] } 这一帧挂在哪（格内像素）、没写的帧不画, sway: [幅度 rad, 每秒几次, 跟摆] }]（v14/trio/tools/part.py 出图）
    recipe 打中炸什么（main.js RECIPE 的键） */
 function Act(cfg) {
   const F = cfg.face, A = cfg.atk, SH = cfg.sheet || null;
   const LK = cfg.leanK != null ? cfg.leanK : 1;
-  const EK = typeof cfg.enter === 'string' ? cfg.enter : cfg.enter.kind;   // 进场方式（帧序列的 enter 是 { kind, seq, ... }）
+  const E = typeof cfg.enter === 'string' ? { kind: cfg.enter } : cfg.enter, EK = E.kind;   // 进场方式（帧序列的 enter 是 { kind, seq, ... }）
+  const TE = E.T || TRIO.T.enter, TX = (cfg.exit && cfg.exit.T) || TRIO.T.exit;          // 这个人进场 / 离场用几秒（走进来的要比扑进来的慢）
   let img = null, prop = null, atlas = null, o = {}, b = null;
   const PARTS = (SH && cfg.parts) || [], partImg = [];
   const shots = [], marks = [];                 // 飞出去的东西、挂在人身上的记号
@@ -63,7 +67,7 @@ function Act(cfg) {
   const LEAD = FI > 0 ? A.seq.slice(0, FI).reduce((a, q) => a + q[1], 0) : 0;
   const CLIP = SH && A.seq ? A.seq.reduce((a, q) => a + q[1], 0) : 0;
   /* 东西从哪出去：帧序列 = 出手帧那一格的 hold 点；单张立绘 = hand */
-  const handPt = (P) => pt(P, SH ? A.hold[A.seq[FI][0]] : cfg.hand);
+  const handPt = (P) => pt(P, SH ? A.from || A.hold[A.seq[FI][0]] : cfg.hand);   // 帧序列可以直接给 atk.from（出手帧是循环帧、手里不画东西的：连打、抽打、喷）
   const texW = () => (SH ? SH.cell[0] : img ? img.width : 300), texH = () => (SH ? SH.cell[1] : img ? img.height : 300);
 
   function init(opt) { o = opt; }
@@ -79,11 +83,11 @@ function Act(cfg) {
 
   /* 来一个（wait 秒后才开始进场）；在场再送 = 续一份时间，下一下按礼物力度打 */
   function summon(_sk, wait = 0) {
-    if (b && b.t <= TRIO.T.enter + b.stay) { b.stay += TRIO.T.stay; b.first = true; return; }
+    if (b && b.t <= TE + b.stay) { b.stay += TRIO.T.stay; b.first = true; return; }
     /* 正在离场又被叫住：从现在退到的地方倒着走回来。离场退出去 out²，进场还差 (1 − u)³（easeOut），两者相等处接上 */
     if (b && b.wait <= 0) {
-      const out = Math.min(1, (b.t - TRIO.T.enter - b.stay) / TRIO.T.exit);
-      b.t = (1 - Math.pow(out, 2 / 3)) * TRIO.T.enter; b.stay = TRIO.T.stay; b.first = true; b.landed = false;
+      const out = Math.min(1, (b.t - TE - b.stay) / TX);
+      b.t = (1 - Math.pow(out, 2 / 3)) * TE; b.stay = TRIO.T.stay; b.first = true; b.landed = false;
       return;
     }
     b = { t: 0, wait, stay: TRIO.T.stay, first: true, cd: rnd(0.15, 0.4), lean: 0, snap: 0, ph: Math.random() * 6,
@@ -97,12 +101,12 @@ function Act(cfg) {
 
   /* 此刻的摆放：锚点在屏幕 (x, y)，画多大 s，整个人绕 rc（屏幕点）转 rot。 */
   function place() {
-    const [ax, ay, s] = cfg.at, t = b.t, T = TRIO.T, se = T.enter + b.stay;
+    const [ax, ay, s] = cfg.at, t = b.t, T = TRIO.T, se = TE + b.stay;
     const off = texW() * s + 30;                         // 整个人挪出画外要多远
     let dx = 0, dy = 0, rot = 0, spin = 0, w = 0;
-    const u = Math.min(1, t / T.enter), out = t > se ? Math.min(1, (t - se) / T.exit) : 0;
+    const u = Math.min(1, t / TE), out = t > se ? Math.min(1, (t - se) / TX) : 0;
     /* 进场 k：1 = 还在画外、0 = 到位；离场按 u² 退回画外（往来的方向回去） */
-    const k = t < T.enter ? 1 - (EK === 'spring' ? backOut(u) : easeOut(u)) : out * out;
+    const k = t < TE ? 1 - (EK === 'spring' ? backOut(u) : easeOut(u)) : out * out;
     const sd = F > 0 ? -1 : 1;                           // 画外在哪边：闺蜜在左、哥们在右
     switch (EK) {
       case 'crawl':   // 扒着屏幕边爬进来：一步一耸
@@ -112,7 +116,7 @@ function Act(cfg) {
       case 'slide':   // 飞身扑地：从下角斜着滑进来，头略朝下
         dx = sd * off * k; dy = 110 * k; rot = sd * 0.12 * k; break;
       case 'dive': {  // 腾空扑地（帧序列）：前 air 秒在空中（抛物线落到地板、头略朝下），之后贴着地滑到位；离场贴地倒滑出去
-        const E = cfg.enter, q = Math.min(1, t / E.air);
+        const q = Math.min(1, t / E.air);
         dx = sd * off * k;
         if (t < E.air) { dy = -E.h * (1 - q * q); rot = sd * 0.08 * (1 - q); }
         break;
@@ -123,18 +127,52 @@ function Act(cfg) {
         dx = sd * off * k; dy = 220 * k; spin = -sd * 6.2832 * k; break;
       case 'creep':   // 匍匐爬进来：贴着地一耸一耸
         dx = sd * off * k; dy = -Math.abs(Math.sin(u * Math.PI * 6)) * 6 * (1 - u); break;
+      case 'walk':    // 走 / 跑（帧序列，enter.seq 里写一段循环帧）：从自己那侧画外横着走进来，越走越慢一点停住；
+      case 'ride': {  // 骑 / 滑（平衡车、电动车、滑冰、轮滑）：同一条路，匀减速滑到位，身子往来的方向仰（tilt）、轮子压地细颤
+        const ride = EK === 'ride';
+        dx = sd * (E.dist || off) * (t < TE ? 1 - (ride ? easeOut(u) : 1.25 * u - 0.25 * u * u) : out * out);
+        const moving = t < TE || t > se;
+        /* 走：一步一伏，脚着地最低、两脚交错（passing）最高 —— 循环帧每两帧一步，按 enter.fps 对上 */
+        if (!ride && moving) dy = -Math.abs(Math.sin(Math.PI * t * (E.fps || 8) / 2)) * (E.bob != null ? E.bob : 6) * s;
+        if (ride) { rot = sd * (E.tilt != null ? E.tilt : 0.08) * (t < TE ? 1 - u : out); if (moving) dy = Math.sin(t * 31) * 0.8 * s; }
+        break;
+      }
+      case 'leap':    // 跳落（跃下单膝、撑棒跃进、轻跳落地）：从 from 出发，抛物线（顶点比直线高 h）在 air 秒落到位；落地那一帧 seq 标 'land' 压扁
+      case 'fly': {   // 飞下 / 飘下（御剑、酒坛、月亮、无人机、船头）：同一条路、h 0、减速滑到位。离场都原路倒回去
+        const fly = EK === 'fly', air = E.air || TE, h = E.h != null ? E.h : fly ? 0 : 160;
+        const fr = E.from || (fly ? [sd * off * 0.6, -720] : [sd * off, 0]);   // 起点 = 锚点的屏幕位置 + from（屏幕像素）
+        const q = t <= se ? Math.min(1, t / air) : 1 - out * out, e = fly ? easeOut(q) : q;
+        dx = fr[0] * (1 - e); dy = fr[1] * (1 - e) - h * 4 * q * (1 - q); rot = sd * (E.tilt || 0) * (1 - e);
+        break;
+      }
+      case 'drop': {  // 倒挂垂下：顺着一根丝 / 绳从上面掉下来，冲过头再弹回（蹦极）；在场绕 pivot（绳顶，画外）轻轻荡；离场被拽回去
+        dy = -(E.len || 700) * (t < TE ? 1 - backOut(u) : out * out);
+        if (t >= TE && t <= se) rot = (E.sway != null ? E.sway : 0.04) * Math.sin(t * 1.7 + b.ph);
+        break;
+      }
+      case 'appear':  // 原地出现（闪现、变身、钻出、坐上墙头）：不走位，显形在 drawBody（淡入 + 由小弹大，或从一条线后面升上来）+ 闪光 / 烟
+        if (E.rise) dy = E.rise * s * (t < TE ? 1 - easeOut(u) : out * out);
+        break;
+      case 'rope': {  // 横绳：一根两头系在 ends（屏幕点）的绳，人躺 / 坐在绳上从自己那侧滑进来，在场随绳上下颠、来回荡；离场滑回去
+        dx = sd * off * k;
+        if (t >= TE && t <= se) {
+          const sw = E.sway != null ? E.sway : 14;
+          dx += Math.sin((t - TE) * 1.6 + b.ph) * sw * s; dy = -Math.abs(Math.cos((t - TE) * 1.6 + b.ph)) * sw * 0.3 * s; rot = Math.sin((t - TE) * 1.6 + b.ph) * 0.03;
+        }
+        break;
+      }
       case 'swing': { // 秋千从画外荡进来：摆角大、慢慢收到小幅来回，一直荡着；离场荡回画外
-        const S = cfg.swing, A0 = TRIO.still && t >= T.enter ? 0 : S.a + (S.a0 - S.a) * Math.exp(-t / S.tau);
+        const S = cfg.swing, A0 = TRIO.still && t >= TE ? 0 : S.a + (S.a0 - S.a) * Math.exp(-t / S.tau);
         rot = -sd * A0 * Math.cos(S.w * t) + (-sd) * 1.5 * out * out;
         w = sd * A0 * S.w * Math.sin(S.w * t);            // 摆的角速度（流苏跟摆、蹬腿换帧用）
         break;
       }
     }
     /* 在场：单张立绘整个人上下浮 2px 当呼吸。帧序列的人不浮 —— 呼吸是绕锚点的胀缩（drawBody），锚点（贴地的肚皮、压着座板的屁股）不能动 */
-    if (!SH && t >= T.enter && t <= se) dy += Math.sin(t * 2.2 + b.ph) * 2 * s;
+    if (!SH && t >= TE && t <= se) dy += Math.sin(t * 2.2 + b.ph) * 2 * s;
     if (!TRIO.still) rot += b.lean + b.snap;
     const at = (q) => [ax + dx + (q[0] - cfg.anchor[0]) * s, ay + dy + (q[1] - cfg.anchor[1]) * s];
-    return { at, s, rot, spin, w, rc: at(cfg.pivot), sc: at([texW() / 2, texH() / 2]) };
+    return { at, s, rot, spin, w, dy, rc: at(cfg.pivot), sc: at([texW() / 2, texH() / 2]) };
   }
   /* 贴图上的点 q 此刻在屏幕哪（含整个人的倾角） */
   function pt(P, q) {
@@ -165,11 +203,11 @@ function Act(cfg) {
     if (!b) return;
     if (b.wait > 0) { b.wait -= dt; return; }
     b.t += dt;
-    const T = TRIO.T, se = T.enter + b.stay;
-    if (b.t >= se + T.exit) { b = null; return; }
-    if (!b.landed && b.t >= T.enter) { b.landed = true; if (o.onLand) { const P = place(); o.onLand(...P.at(cfg.anchor), EK); } }
+    const T = TRIO.T, se = TE + b.stay;
+    if (b.t >= se + TX) { b = null; return; }
+    if (!b.landed && b.t >= TE) { b.landed = true; if (o.onLand) { const P = place(); o.onLand(...P.at(cfg.anchor), EK); } }
     b.snap *= Math.exp(-TRIO.lean.decay * dt);
-    const on = b.t >= T.enter && b.t <= se;
+    const on = b.t >= TE && b.t <= se;
     const L = TRIO.lean;
     if (SH) { stepFrames(dt, on); return; }
     if (A.kind === 'punch') { stepPunch(dt, on); return; }
@@ -194,29 +232,37 @@ function Act(cfg) {
     for (let i = 0; i < seq.length; i++) { a += seq[i][1]; if (t < a) return i; }
     return seq.length - 1;
   }
+  /* seq 里 t 秒时画哪一帧。一段的帧名可以是数组 = 这一段里按 fps 循环（走路 [walk1, walk2, walk3, walk2]、连打 [hitA, hitB]） */
+  function seqFrame(seq, t, fps) {
+    let a = 0, i = 0;
+    for (; i < seq.length - 1 && t >= a + seq[i][1]; i++) a += seq[i][1];
+    const f = seq[i][0];
+    return Array.isArray(f) ? f[Math.floor(Math.max(0, t - a) * (fps || 10)) % f.length] : f;
+  }
   /* 此刻画哪一帧：出手动作 > 进场序列 > 离场帧 > 秋千蹬腿 > 待机 */
   function frameName() {
-    const t = b.t, T = TRIO.T, se = T.enter + b.stay;
-    if (b.clip) return A.seq[seqAt(A.seq, b.clip.t)][0];
-    if (t < T.enter && cfg.enter.seq) return cfg.enter.seq[seqAt(cfg.enter.seq, t)][0];
-    if (t > se && cfg.exit) return cfg.exit.frame;
+    const t = b.t, T = TRIO.T, se = TE + b.stay;
+    if (b.clip) return seqFrame(A.seq, b.clip.t, A.fps);
+    if (t < TE && E.seq) return seqFrame(E.seq, t, E.fps);
+    if (t > se && cfg.exit) { const X = cfg.exit.frame; return Array.isArray(X) ? X[Math.floor((t - se) * (cfg.exit.fps || E.fps || 10)) % X.length] : X; }
     if (cfg.swing && cfg.swing.pump) {
       /* 荡秋千：往前荡时伸腿（kick）、往后荡时收腿（tuck）—— 换帧正好落在摆到两头、人一瞬间停住的时候，硬切看不出跳。
          荡得小了（< min rad）就不蹬了，坐着待机 */
       const S = cfg.swing, P = S.pump, A0 = S.a + (S.a0 - S.a) * Math.exp(-t / S.tau);
       /* place：rot = F·A0·cos(wt)（sd = −F），往前荡 ⇔ −F·dθ/dt = A0·w·sin(wt) > 0 */
-      if ((A0 >= P.min && !(TRIO.still && t >= T.enter)) || t > se) return Math.sin(S.w * t) > 0 ? P.fwd : P.back;
+      if ((A0 >= P.min && !(TRIO.still && t >= TE)) || t > se) return Math.sin(S.w * t) > 0 ? P.fwd : P.back;
     }
     return cfg.idle.frame;
   }
   function stepFrames(dt, on) {
     const L = TRIO.lean, fn = frameName();
     if (fn !== b.fn) {                                          // 换帧那一下：落地压扁
-      const q = !b.clip && b.t < TRIO.T.enter && cfg.enter.seq ? cfg.enter.seq[seqAt(cfg.enter.seq, b.t)] : null;
-      if (q && q[2] === 'land') b.sq = cfg.enter.sq || 0.1;
+      const q = !b.clip && b.t < TE && E.seq ? E.seq[seqAt(E.seq, b.t)] : null;
+      if (q && q[2] === 'land') b.sq = E.sq || 0.1;
       b.fn = fn;
     }
     b.sq *= Math.exp(-TRIO.sq.decay * dt);
+    stepFx(dt);
     b.hang += (A.idleSpin || 0) * dt;                           // 拿在手里的球慢慢转（手指拨着玩）
     if (b.pop < 1) b.pop = Math.min(1, b.pop + dt / TRIO.pop);
     if (!A.seq) return;
@@ -257,6 +303,16 @@ function Act(cfg) {
     b.lean = 0; b.snap = F * TRIO.lean.snap * LK;
     const P = place();
     if (A.kind === 'camera') { flash(P); return; }
+    /* 帧序列的近身 / 连续攻击：出手帧开始，后面由 stepFx 按时间推（出手那一段 seq 的时长要盖住它） */
+    if (A.kind === 'whip') { b.wh = { t: 0, hit: false, u: rnd(0.15, 0.7) }; return; }
+    if (A.kind === 'rush') { b.ru = { t: 0, n: 0 }; return; }
+    if (A.kind === 'spray') { b.sp = { t: 0, e: 0, h: 0, u: rnd(0.2, 0.7) }; return; }
+    if (A.kind === 'punch') { b.pk = { t: 0, hit: false }; return; }
+    if (A.kind === 'slash') {
+      const Q = A.slash, u = rnd(0.2, 0.6);
+      for (let i = 0; i < Q.n; i++) shots.push({ kind: 'slash', t: -i * Q.gap, u: u + rnd(-0.12, 0.12), ang: Q.ang + rnd(-1, 1) * Q.spread + (i % 2 ? Math.PI * 0.12 : 0) });
+      return;
+    }
     if (A.kind === 'beam') {                                     // 帧序列的发波（单张立绘的走 stepBeam，不经过这里）
       b.bm.ph = 'fire'; b.bm.t = 0; b.bm.dr = 0;
       const tg = o.aim(b.bm.u); if (tg) hit(tg[0], tg[1]);
@@ -271,6 +327,30 @@ function Act(cfg) {
     if (s.fall) {                                                         // 打中以后弹开 / 掉下去
       s.vy += 1800 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.ang += s.spin * dt; s.fall -= dt;
       return s.fall > 0;
+    }
+    if (s.kind === 'ghost') {                                             // 连打的残影：easeOut 冲到落点，到了打一下，再淡掉
+      s.t += dt;
+      const tg = o.aim(s.u); if (tg) s.p2 = tg;
+      if (!s.p2) return false;
+      if (!s.hit && s.t >= s.T) {
+        s.hit = true; hit(s.p2[0], s.p2[1]);
+        if (s.i === 0) { mark(s.p2[0], s.p2[1]); if (A.rush.text) marks.push({ kind: 'text', t: 0, life: 0.7, s: A.rush.text, j: rnd(-1, 1) }); }
+      }
+      return s.t < s.T + 0.14;
+    }
+    if (s.kind === 'slash') {                                             // 斩痕：一道弧光在落点划出来（0.07 秒），划到那一下打中，之后淡掉
+      s.t += dt;
+      if (s.t < 0) return true;
+      if (!s.p) s.p = o.aim(s.u);
+      if (!s.p) return false;
+      if (!s.hit && s.t >= 0.05) { s.hit = true; hit(s.p[0], s.p[1]); mark(s.p[0], s.p[1]); }
+      return s.t < (A.slash.life || 0.45);
+    }
+    if (s.kind === 'puff') {                                              // 喷出去的一团雾：直线飞、越飞越大越淡，飞过头就减速散开
+      s.t += dt;
+      if (s.t > s.life * 0.55) { const q = Math.exp(-6 * dt); s.vx *= q; s.vy *= q; }
+      s.x += s.vx * dt; s.y += s.vy * dt;
+      return s.t < s.life;
     }
     if (s.kind === 'photo') {                                             // 相机吐出来的照片：往上一蹦、晃着落下
       s.vy += 700 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.ang += s.spin * dt; s.t += dt;
@@ -290,14 +370,23 @@ function Act(cfg) {
     /* 到了：打中。后续看是什么东西 */
     hit(s.x, s.y);
     const f = o.face();
-    if (A.onHit === 'heart' && f) marks.push({ kind: 'heart', t: 0, life: 1.3, dx: rnd(-0.3, 0.3), j: Math.random() });
-    if (A.onHit === 'lips' && f) marks.push({ kind: 'lips', t: 0, life: 6, u: (s.x - f[0]) / f[2], v: (s.y - f[1]) / f[2], a: rnd(-0.5, 0.5) });
+    mark(s.x, s.y);
     if (A.onHit === 'wear' && f) { for (const m of marks) if (m.kind === 'wear') m.life = Math.min(m.life, m.t + 0.25); marks.push({ kind: 'wear', t: 0, life: 2.6, a: rnd(-0.3, 0.3) }); return false; }
     if (A.onHit === 'bounce' || A.onHit === 'heart') {                      // 弹开：往回、往上蹦，转着掉下去
       s.fall = 0.9; s.vx = -Math.sign(s.vx || -F) * rnd(160, 320); s.vy = -rnd(420, 620); s.spin = (A.spin || 6) * (s.vx > 0 ? 1 : -1);
       return true;
     }
     return false;
+  }
+
+  /* 打中之后留在他 / 她身上的记号（onHit）：heart 头上冒爱心 / lips 口红印（x, y = 打中那一点）/ net 网兜罩住头 / freeze 冻住（脸上结冰） */
+  function mark(x, y) {
+    const f = o.face();
+    if (!f) return;
+    if (A.onHit === 'heart') marks.push({ kind: 'heart', t: 0, life: 1.3, dx: rnd(-0.3, 0.3), j: Math.random() });
+    if (A.onHit === 'lips' && x != null) marks.push({ kind: 'lips', t: 0, life: 6, u: (x - f[0]) / f[2], v: (y - f[1]) / f[2], a: rnd(-0.5, 0.5) });
+    if (A.onHit === 'net') { for (const m of marks) if (m.kind === 'net') m.life = Math.min(m.life, m.t + 0.2); marks.push({ kind: 'net', t: 0, life: 2.4, a: rnd(-0.25, 0.25) }); }
+    if (A.onHit === 'freeze') { for (const m of marks) if (m.kind === 'ice') m.life = Math.min(m.life, m.t + 0.2); marks.push({ kind: 'ice', t: 0, life: 1.8, j: Math.random() * 6 }); }
   }
 
   /* 出拳（草帽）：拳头顺着手臂方向"咻"地伸到她脑门、停一下、弹回来。手臂 = 腕 → 拳头之间画一截肉色的橡皮管。
@@ -311,13 +400,53 @@ function Act(cfg) {
       if (b.cd <= 0) { b.pk = { t: 0, hit: false }; b.lean = 0; b.snap = F * TRIO.lean.snap; }
       return;
     }
-    const k = b.pk; k.t += dt;
+    if (!advancePunch(dt)) b.cd = rnd(A.gap[0], A.gap[1]);
+  }
+  /* 拳头往外伸 → 伸到那一刻打中（头上绕星星）→ 停 → 弹回；收完返回 false（b.pk 清掉） */
+  function advancePunch(dt) {
+    const P = A.phases, k = b.pk; k.t += dt;
     if (!k.hit && k.t >= P[0]) {
       k.hit = true;
       const tg = o.aim(0);
       if (tg) { hit(tg[0], tg[1]); marks.push({ kind: 'stars', t: 0, life: 1.1, j: Math.random() }); }
     }
-    if (k.t >= P[0] + P[1] + P[2]) { b.pk = null; b.cd = rnd(A.gap[0], A.gap[1]); }
+    if (k.t >= P[0] + P[1] + P[2]) { b.pk = null; return false; }
+    return true;
+  }
+
+  /* ---- 帧序列的近身 / 连续攻击（fire() 起头，这里按时间推；不跟 clip 绑，收势帧里抽出去的鞭子照样收回来） ---- */
+  function stepFx(dt) {
+    if (b.pk) advancePunch(dt);
+    if (b.wh) {                                                  // 抽打：甩出去（phases[0]）→ 抽到那一下打中 → 停 → 收回
+      const W = b.wh, Ph = A.phases; W.t += dt;
+      if (!W.hit && W.t >= Ph[0]) { W.hit = true; const tg = o.aim(W.u); if (tg) { hit(tg[0], tg[1]); mark(); } }
+      if (W.t >= Ph[0] + Ph[1] + Ph[2]) b.wh = null;
+    }
+    if (b.ru) {                                                  // 连打：每 every 秒从手上飞出一个残影（拳影 / 腿影 / 棍影），到了算一下
+      const R = b.ru, Q = A.rush; R.t += dt;
+      while (R.n < Q.n && R.t >= R.n * Q.every) {
+        shots.push({ kind: 'ghost', t: 0, T: Q.T || 0.1, p0: handPt(place()), u: rnd(0.1, 0.85), i: R.n, j: rnd(-1, 1) });
+        R.n++;
+      }
+      if (R.n >= Q.n) b.ru = null;
+    }
+    if (b.sp) {                                                  // 喷：dur 秒里每秒 rate 团雾从手上喷向落点，雾头到了之后每 tick 秒算一下
+      const S = b.sp, Q = A.spray; S.t += dt; S.e += dt * Q.rate;
+      const P = place(), h = handPt(P), tg = o.aim(S.u);
+      while (S.e >= 1 && S.t <= Q.dur) {
+        S.e -= 1;
+        if (!tg) continue;
+        const a = Math.atan2(tg[1] - h[1], tg[0] - h[0]) + rnd(-1, 1) * (Q.spread || 0.12), d = Math.hypot(tg[0] - h[0], tg[1] - h[1]);
+        const v = d / (Q.T || 0.3) * rnd(0.85, 1.1);
+        shots.push({ kind: 'puff', x: h[0], y: h[1], vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0, life: (Q.T || 0.3) * rnd(1.3, 1.8), j: Math.random() });
+      }
+      if (tg && S.t >= (Q.T || 0.3) + S.h * Q.tick && S.t <= Q.dur + (Q.T || 0.3)) {
+        if (S.h === 0 || !o.onSplash) hit(tg[0], tg[1]); else o.onSplash(tg[0], tg[1]);
+        if (S.h === 0) mark();
+        S.h++;
+      }
+      if (S.t > Q.dur + (Q.T || 0.3)) b.sp = null;
+    }
   }
   /* 拳头伸出去多少（0 = 在手腕上、1 = 到落点）：伸 easeOut、回来带一点过冲（橡皮） */
   function punchK() {
@@ -356,36 +485,96 @@ function Act(cfg) {
   function drawBody(ctx) {
     if (!b || b.wait > 0 || !img) return;
     const P = place(), [x0, y0] = P.at([0, 0]);
+    if (EK === 'rope') drawSling(ctx, P);
     ctx.save();
     if (P.rot) { ctx.translate(P.rc[0], P.rc[1]); ctx.rotate(P.rot); ctx.translate(-P.rc[0], -P.rc[1]); }
     if (P.spin) { ctx.translate(P.sc[0], P.sc[1]); ctx.rotate(P.spin); ctx.translate(-P.sc[0], -P.sc[1]); }
     if (SH) {
-      const fn = frameName();
+      const fn = frameName(), T = TRIO.T, se = TE + b.stay, [ax, ay] = P.at(cfg.anchor);
       if (cfg.ropes) drawSwing(ctx, P, fn);
+      if (EK === 'drop') drawLine(ctx, P);
+      /* 离场掉头（exit.flip）：绕锚点左右翻过来，走出去是背朝她 / 他走的 */
+      if (b.t > se && cfg.exit && cfg.exit.flip) { ctx.translate(ax, 0); ctx.scale(-1, 1); ctx.translate(-ax, 0); }
+      /* 原地出现：淡入、由小弹大（从一条线后面升上来的按那条线剪掉线以下）；离场反过来 */
+      const ap = EK === 'appear' ? appearK() : 1;
+      if (EK === 'appear') {
+        ctx.globalAlpha *= Math.min(1, ap * 1.6);
+        /* 升上来的：只在升 / 降的时候剪，线默认在人的最低点（锚点往下 texH − anchor.y），在场不剪 */
+        if (E.rise && (b.t < TE || b.t > se)) { const [, cy] = P.at([0, E.cut != null ? E.cut : texH()]); ctx.beginPath(); ctx.rect(-1e4, -1e4, 3e4, 1e4 + cy - P.dy); ctx.clip(); }   // 线不跟着人升（- dy）
+        else { const z = 0.8 + 0.2 * backOut(ap); ctx.translate(ax, ay); ctx.scale(z, z); ctx.translate(-ax, -ay); }
+      }
       /* 呼吸 + 挤压：绕锚点竖向胀缩（横向反着补 breathe[2] 份，默认 0.4，体积不变；趴着的人给 0 —— 不然贴地的脚跟着左右挪）。
          只在待着的时候呼吸，进场离场不呼吸 */
-      const [ax, ay] = P.at(cfg.anchor), br = cfg.idle.breathe, T = TRIO.T;
+      const br = cfg.idle.breathe;
       let k = b.sq;
-      if (br && b.t >= T.enter && b.t <= T.enter + b.stay) k -= br[0] * Math.sin(b.t * 6.2832 * br[1] + b.ph);
+      if (br && b.t >= TE && b.t <= TE + b.stay) k -= br[0] * Math.sin(b.t * 6.2832 * br[1] + b.ph);
       ctx.translate(ax, ay); ctx.scale(1 + k * (br && br[2] != null ? br[2] : 0.4), 1 - k); ctx.translate(-ax, -ay);
       drawParts(ctx, P, fn, -1);
+      const pk = A.kind === 'punch' && punchK() > 0.001;
+      if (pk) clipFist(ctx, P, x0, y0);                        // 出拳：拳头那一块不画在原处（drawOver 画在伸出去的地方）
       drawFrame(ctx, P, fn);
+      if (pk) ctx.restore();
       drawParts(ctx, P, fn, 1);
       if (b.ammo && A.hold && A.hold[fn]) drawHeld(ctx, P, fn);
       ctx.restore();
+      if (EK === 'appear' && E.fx && ap < 1) appearFx(ctx, P, ap);
       return;
     }
     if (cfg.ropes) drawRopes(ctx, P);
     const pk = A.kind === 'punch' && punchK() > 0.001;
-    if (pk) {                                               // 出拳时拳头那一块不画在原处（drawOver 画在伸出去的地方）
-      const [fx0, fy0, fx1, fy1] = A.fist;
-      ctx.save(); ctx.beginPath();
-      ctx.rect(x0 - 1e4, y0 - 1e4, 3e4, 3e4);
-      ctx.rect(x0 + fx1 * P.s, y0 + fy0 * P.s, (fx0 - fx1) * P.s, (fy1 - fy0) * P.s);   // 反向的矩形：挖掉
-      ctx.clip('evenodd');
-    }
+    if (pk) clipFist(ctx, P, x0, y0);                      // 出拳时拳头那一块不画在原处（drawOver 画在伸出去的地方）
     ctx.drawImage(img, x0, y0, img.width * P.s, img.height * P.s);
     if (pk) ctx.restore();
+    ctx.restore();
+  }
+  function clipFist(ctx, P, x0, y0) {
+    const [fx0, fy0, fx1, fy1] = A.fist;
+    ctx.save(); ctx.beginPath();
+    ctx.rect(x0 - 1e4, y0 - 1e4, 3e4, 3e4);
+    ctx.rect(x0 + fx1 * P.s, y0 + fy0 * P.s, (fx0 - fx1) * P.s, (fy1 - fy0) * P.s);   // 反向的矩形：挖掉
+    ctx.clip('evenodd');
+  }
+  /* 原地出现显形到几成（0 没有 → 1 全出来）：进场 0 → 1（前 fade 秒），离场反过来 */
+  function appearK() {
+    const se = TE + b.stay, fa = E.fade || 0.35;
+    return b.t < TE ? Math.min(1, b.t / fa) : b.t > se ? Math.max(0, 1 - (b.t - se) / Math.min(TX, fa)) : 1;
+  }
+  /* 出现时的特效（画在人之上）：flash 一圈亮光 + 八道光芒；smoke 一圈烟团往外散（钻出、阴影一闪）。颜色 E.color */
+  function appearFx(ctx, P, ap) {
+    const [cx, cy] = P.sc, c = E.color || [255, 240, 180], R = Math.max(texW(), texH()) * P.s * 0.55, a = 1 - ap;
+    ctx.save();
+    if (E.fx === 'flash') {
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * (0.6 + ap));
+      g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(0.35, `rgba(${c[0]},${c[1]},${c[2]},${0.8 * a})`); g.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R * (0.6 + ap), 0, 6.2832); ctx.fill();
+      ctx.globalAlpha = a; ctx.fillStyle = '#fff'; ctx.translate(cx, cy); ctx.rotate(ap * 0.8); star4(ctx, R * (0.9 + ap), R * 0.05);
+      ctx.rotate(Math.PI / 4); star4(ctx, R * (0.5 + ap * 0.6), R * 0.04);
+    } else {
+      for (let i = 0; i < 9; i++) {
+        const q = i * 0.698 + b.ph, d = R * (0.25 + 0.7 * ap), r = R * (0.22 + 0.25 * ap) * (0.8 + 0.4 * ((i * 7) % 3) / 2);
+        ctx.globalAlpha = 0.75 * a; ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+        ctx.beginPath(); ctx.arc(cx + Math.cos(q) * d, cy + Math.sin(q) * d * 0.8 + R * 0.25, r, 0, 6.2832); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  /* 倒挂垂下的丝 / 绳：从 enter.line（贴图上系住的点，默认 pivot 正下方的脚）一直拉到绳顶（pivot 那么高，画外），跟人一起荡 */
+  function drawLine(ctx, P) {
+    const L = E.line || [cfg.pivot[0], 0], a = P.at(L), c = P.at([L[0], cfg.pivot[1]]);
+    ctx.lineCap = 'round';
+    for (const [w, col] of [[(E.w || 3) + 2, E.edge || 'rgba(60,60,70,.7)'], [E.w || 3, E.fill || '#f2f2f2']]) {
+      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]); ctx.stroke();
+    }
+  }
+  /* 横绳：ends 两个屏幕点之间一根绳，被人压在 enter.touch（贴图上压着绳的点）那里往下坠成两段弧；画在人之下 */
+  function drawSling(ctx, P) {
+    const [e0, e1] = E.ends, m = pt(P, E.touch), sag = (E.sag || 18);
+    ctx.save(); ctx.lineCap = 'round';
+    for (const [w, col] of [[(E.w || 6) + 3, E.edge || 'rgba(70,45,20,.85)'], [E.w || 6, E.fill || '#e9dcc0']]) {
+      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(e0[0], e0[1]);
+      ctx.quadraticCurveTo((e0[0] + m[0]) / 2, Math.max(e0[1], m[1]) + sag, m[0], m[1]);
+      ctx.quadraticCurveTo((m[0] + e1[0]) / 2, Math.max(e1[1], m[1]) + sag, e1[0], e1[1]); ctx.stroke();
+    }
     ctx.restore();
   }
   /* 画图集里的一帧。flex 区域不在原处画，按条带错位重画：钉住的那一边（'t' 顶 / 'l' 左）位移为 0、越往外越大（r^1.5），
@@ -411,12 +600,13 @@ function Act(cfg) {
       }
     }
   }
-  /* 挂件层：这一帧挂在 at[帧] 那一点、先转到帧上写的角度，再按 sway 甩（正弦 + 跟着秋千的摆往后拖）。z 选画在人后还是人前 */
+  /* 挂件层：这一帧挂在 at[帧] 那一点、先转到帧上写的角度，再按 sway 甩（正弦 + 跟着秋千的摆往后拖，rad）。z 选画在人后还是人前 */
   function drawParts(ctx, P, fn, z) {
     PARTS.forEach((q, i) => {
       const im = partImg[i], a = q.at[fn];
       if (!im || !a || (q.z || 1) !== z) return;
-      const sw = q.sway || [0, 0, 0], ang = a[2] + sw[0] * Math.sin(b.t * 6.2832 * sw[1] + b.ph) + (sw[2] || 0) * P.w;
+      /* 跟摆：身子（秋千 / 荡）以角速度 P.w 转，挂着的东西跟不上，相对身子往反方向拖 */
+      const sw = q.sway || [0, 0, 0], ang = a[2] + sw[0] * Math.sin(b.t * 6.2832 * sw[1] + b.ph) - (sw[2] || 0) * P.w;
       const [x, y] = P.at([a[0], a[1]]);
       ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
       ctx.drawImage(im, -q.pivot[0] * P.s, -q.pivot[1] * P.s, im.width * P.s, im.height * P.s);
@@ -486,15 +676,68 @@ function Act(cfg) {
   }
 
   function drawOver(ctx) {
+    if (A.tether && b && b.wait <= 0 && img) drawTether(ctx);
     for (const s of shots) drawShot(ctx, s);
     const f = o.face();
     for (const m of marks) drawMark(ctx, m, f);
     if (!b || b.wait > 0 || !img) return;
     if (A.kind === 'punch' && punchK() > 0.001) drawArm(ctx);
     if (A.kind === 'beam' && b.bm && b.bm.ph !== 'rest') drawBeam(ctx);
+    if (b.wh) drawWhip(ctx);
+  }
+
+  /* 抽打：手 → 落点一根软的长条（鞭、红绸、铃索、链子），甩出去时沿着它有一道波往前走、中段往下坠，末端可挂一截硬的（tip：棍 / 铃 / 剑尖）。
+     A.whip { w 粗, taper 末端细到几成, amp 波幅 px, waves 几道波, hz, color, edge, tip: [长, 粗, 颜色] } */
+  function drawWhip(ctx) {
+    const W = b.wh, Ph = A.phases, Q = A.whip, P = place(), h = handPt(P), tg = o.aim(W.u) || h, t = W.t;
+    const e = t < Ph[0] ? easeOut(t / Ph[0]) : t < Ph[0] + Ph[1] ? 1 : 1 - Math.pow(Math.min(1, (t - Ph[0] - Ph[1]) / Ph[2]), 2);
+    const dx = tg[0] - h[0], dy = tg[1] - h[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L, N = 22;
+    const pts = [];
+    for (let i = 0; i <= N; i++) {
+      const f = i / N, w = Math.sin(Math.PI * f) * (Q.amp || 24) * (1.2 - e) * Math.sin(6.2832 * (f * (Q.waves || 1.5) - t * (Q.hz || 4)));
+      const sag = Math.sin(Math.PI * f) * L * 0.08 * (1 - e * 0.6);
+      pts.push([h[0] + dx * f * e + nx * w, h[1] + dy * f * e + ny * w + sag]);
+    }
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const [grow, col] of [[4, Q.edge || 'rgba(40,20,10,.85)'], [0, Q.color || '#c0302a']]) {
+      ctx.strokeStyle = col;
+      for (let i = 0; i < N; i++) {
+        ctx.lineWidth = (Q.w || 8) * P.s * (1 - (1 - (Q.taper != null ? Q.taper : 0.5)) * i / N) + grow;
+        ctx.beginPath(); ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[i + 1][0], pts[i + 1][1]); ctx.stroke();
+      }
+    }
+    if (Q.tip) {                                                   // 末端那一截硬的，顺着最后一段的方向
+      const [tl, tw, tc] = Q.tip, a = pts[N], c = pts[N - 2], ang = Math.atan2(a[1] - c[1], a[0] - c[0]);
+      ctx.translate(a[0], a[1]); ctx.rotate(ang);
+      ctx.lineWidth = tw * P.s + 4; ctx.strokeStyle = Q.edge || 'rgba(40,20,10,.85)'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(tl * P.s, 0); ctx.stroke();
+      ctx.lineWidth = tw * P.s; ctx.strokeStyle = tc; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(tl * P.s, 0); ctx.stroke();
+      ctx.lineWidth = tw * P.s * 0.3; ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.beginPath(); ctx.moveTo(tl * P.s * 0.15, -tw * P.s * 0.2); ctx.lineTo(tl * P.s * 0.85, -tw * P.s * 0.2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  /* 带线的东西（鼠标、流星锤）：手 → 飞出去的那个东西之间一根线，飞的时候绷直、弹开时松下来往下坠。A.tether { w, color } */
+  function drawTether(ctx) {
+    const P = place(), fn = SH ? frameName() : null, h = SH && A.hold && A.hold[fn] ? pt(P, A.hold[fn]) : handPt(P), Q = A.tether;
+    ctx.save(); ctx.lineCap = 'round';
+    for (const s of shots) {
+      if (s.kind !== A.item || s.stuck != null) continue;
+      const d = Math.hypot(s.x - h[0], s.y - h[1]), slack = s.fall != null ? d * 0.25 : d * 0.06;
+      ctx.strokeStyle = Q.color || '#222'; ctx.lineWidth = Q.w || 2.5;
+      ctx.beginPath(); ctx.moveTo(h[0], h[1]); ctx.quadraticCurveTo((h[0] + s.x) / 2, Math.max(h[1], s.y) + slack, s.x, s.y); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function drawShot(ctx, s) {
+    if (s.kind === 'ghost') { drawGhost(ctx, s); return; }
+    if (s.kind === 'slash') { drawSlash(ctx, s); return; }
+    if (s.kind === 'puff') {
+      const Q = A.spray, c = Q.color, u = s.t / s.life, r = (Q.r || 14) * (0.8 + 2.6 * u);   // 越飞越大：一股雾是个锥
+      const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+      g.addColorStop(0, `rgba(255,255,255,${0.5 * (1 - u)})`); g.addColorStop(0.35, `rgba(${c[0]},${c[1]},${c[2]},${0.8 * (1 - u)})`); g.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, 6.2832); ctx.fill();
+      return;
+    }
     const a = s.stuck != null ? Math.min(1, ((A.stick || 2.2) - s.stuck) / 0.4) : s.fall != null ? Math.min(1, s.fall / 0.3) : 1;
     ctx.save(); ctx.globalAlpha = a; ctx.translate(s.x, s.y);
     if (s.kind === 'photo') { drawPhoto(ctx, s); ctx.restore(); return; }
@@ -508,6 +751,42 @@ function Act(cfg) {
     const w = prop.width * A.scale, h = prop.height * A.scale;
     const ox = s.kind === 'rose' ? -w * 0.12 : -w / 2;   // 玫瑰以花头为中心（钉住时花朝上、茎扎进地板）
     ctx.drawImage(prop, ox, -h / 2, w, h);
+    ctx.restore();
+  }
+
+  /* 连打的残影：从手冲到落点，一路拖三道越来越淡的影子；影子是出手帧里的一块（A.rush.ghost { frame, box }，拳头 / 腿 / 棍） */
+  function drawGhost(ctx, s) {
+    if (!s.p2) return;
+    const Q = A.rush, G = Array.isArray(Q.ghost) ? Q.ghost[s.i % Q.ghost.length] : Q.ghost, [bx0, by0, bx1, by1] = G.box, i = SH.names.indexOf(G.frame), [cw, ch] = SH.cell;
+    const sx = (i % SH.cols) * cw + bx0, sy = Math.floor(i / SH.cols) * ch + by0, sc = cfg.at[2] * (G.z || 1.1), w = (bx1 - bx0) * sc, hh = (by1 - by0) * sc;
+    const e = easeOut(Math.min(1, s.t / s.T)), fade = s.t > s.T ? 1 - (s.t - s.T) / 0.14 : 1;
+    const p2 = [s.p2[0] + s.j * 18, s.p2[1] + s.j * 14];
+    ctx.save();
+    for (let k = 3; k >= 0; k--) {
+      const q = Math.max(0, e - k * 0.12), x = lerp(s.p0[0], p2[0], q), y = lerp(s.p0[1], p2[1], q);
+      ctx.globalAlpha = Math.max(0, fade) * (k ? 0.22 / k : 0.8);
+      ctx.drawImage(img, sx, sy, bx1 - bx0, by1 - by0, x - w / 2, y - hh / 2, w, hh);
+    }
+    if (s.t < s.T + 0.06) {                                        // 速度线
+      ctx.globalAlpha = 0.6 * Math.max(0, fade); ctx.strokeStyle = Q.line || '#fff'; ctx.lineWidth = 2;
+      const x = lerp(s.p0[0], p2[0], e), y = lerp(s.p0[1], p2[1], e), a = Math.atan2(p2[1] - s.p0[1], p2[0] - s.p0[0]);
+      for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(x - Math.cos(a) * 60 + k * 8 * Math.sin(a), y - Math.sin(a) * 60 - k * 8 * Math.cos(a)); ctx.lineTo(x - Math.cos(a) * 15, y - Math.sin(a) * 15); ctx.stroke(); }
+    }
+    ctx.restore();
+  }
+  /* 斩痕：落点上一道月牙形弧光，0.07 秒从一头划到另一头，停一下淡掉。A.slash { n, gap, len, w, color, ang, spread } */
+  function drawSlash(ctx, s) {
+    if (s.t < 0 || !s.p) return;
+    const Q = A.slash, c = Q.color, R = Q.len / 2, life = Q.life || 0.45, draw = Math.min(1, s.t / 0.07), fade = Math.min(1, (life - s.t) / (life * 0.5));
+    ctx.save(); ctx.translate(s.p[0], s.p[1]); ctx.rotate(s.ang); ctx.globalAlpha = Math.max(0, fade);
+    const a0 = -0.9, a1 = a0 + 1.8 * draw;
+    /* 深色托底一圈（亮底图 + 命中爆点上，光靠亮色读不出来，skill chashouji-fx：实体靠轮廓）→ 外晕 → 本色 → 白芯 */
+    for (const [w, col] of [[Q.w * 1.35, 'rgba(15,30,70,.55)'], [Q.w * 2.2, `rgba(${c[0]},${c[1]},${c[2]},.35)`], [Q.w, `rgba(${c[0]},${c[1]},${c[2]},.95)`], [Q.w * 0.35, 'rgba(255,255,255,1)']]) {
+      ctx.fillStyle = col; ctx.beginPath();                          // 月牙：外弧 R、内弧往里收 w（两头尖）
+      ctx.arc(0, R * 0.4, R, a0 - Math.PI / 2, a1 - Math.PI / 2);
+      ctx.arc(0, R * 0.4 + w, R - w * 0.2, a1 - Math.PI / 2, a0 - Math.PI / 2, true);
+      ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -533,7 +812,8 @@ function Act(cfg) {
     /* 拳头：从贴图里抠那一块，放大一点（远处也认得出是拳头），转到手臂末端的方向 */
     const [fx0, fy0, fx1, fy1] = A.fist, c = A.fistC, z = s * A.fistZ;
     ctx.translate(fx, fy); ctx.rotate(ang - rest + P.rot);
-    ctx.drawImage(img, fx0, fy0, fx1 - fx0, fy1 - fy0, (fx0 - c[0]) * z, (fy0 - c[1]) * z, (fx1 - fx0) * z, (fy1 - fy0) * z);
+    const fi = SH ? SH.names.indexOf(A.seq[FI][0]) : 0, ox = SH ? (fi % SH.cols) * SH.cell[0] : 0, oy = SH ? Math.floor(fi / SH.cols) * SH.cell[1] : 0;   // 帧序列：拳头从出手帧那一格抠
+    ctx.drawImage(img, ox + fx0, oy + fy0, fx1 - fx0, fy1 - fy0, (fx0 - c[0]) * z, (fy0 - c[1]) * z, (fx1 - fx0) * z, (fy1 - fy0) * z);
     ctx.restore();
   }
 
@@ -592,6 +872,39 @@ function Act(cfg) {
       const w = Math.sin(m.t * 9) * 0.25 * Math.exp(-m.t * 2.5);
       ctx.translate(f[0], f[1] - f[2] * 0.95); ctx.rotate(m.a * 0.4 + w + F * 0.15);
       if (prop) { const W = f[2] * 3.0, H = W * prop.height / prop.width; ctx.drawImage(prop, -W / 2, -H * 0.55, W, H); }
+    } else if (m.kind === 'text') {                         // 连打的喊声字（"啊哒"）：在头顶一侧弹出来、抖、淡掉
+      const pop = backOut(Math.min(1, m.t / 0.15)), sz = Math.max(40, f[2] * 1.3) * pop;
+      ctx.globalAlpha = 1 - Math.max(0, (u - 0.6) / 0.4);
+      ctx.translate(f[0] + (0.8 + 0.3 * m.j) * f[2] * -F, f[1] - f[2] * 2.6);   // 头顶斜上方、往喊的人那边偏（命中的闪光在脸上，别压着） ctx.rotate(-0.15 + m.j * 0.1 + Math.sin(m.t * 60) * 0.03 * (1 - u));
+      ctx.font = `900 ${Math.max(1, sz)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = sz * 0.18; ctx.strokeStyle = 'rgba(30,10,0,.95)'; ctx.strokeText(m.s, 0, 0);
+      ctx.fillStyle = '#ffd21a'; ctx.fillText(m.s, 0, 0);
+    } else if (m.kind === 'net') {                          // 网兜：从上面罩下来扣在头上，网眼随着晃
+      const drop = easeOut(Math.min(1, m.t / 0.18)), R = f[2] * 1.5, w = Math.sin(m.t * 8) * 0.12 * Math.exp(-m.t * 2);
+      ctx.globalAlpha = Math.min(1, (m.life - m.t) / 0.3);
+      ctx.translate(f[0], f[1] - f[2] * 0.3 - (1 - drop) * f[2] * 3); ctx.rotate(m.a * 0.3 + w);
+      ctx.save(); ctx.beginPath(); ctx.ellipse(0, 0, R, R * 1.05, 0, 0, 6.2832); ctx.clip();
+      ctx.strokeStyle = 'rgba(245,238,215,.95)'; ctx.lineWidth = 2.2;
+      for (let k = -6; k <= 6; k++) {
+        ctx.beginPath(); ctx.moveTo(k * R / 3 - R, -R); ctx.lineTo(k * R / 3 + R, R); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(k * R / 3 + R, -R); ctx.lineTo(k * R / 3 - R, R); ctx.stroke();
+      }
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(90,60,30,.95)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(0, R * 0.55, R * 0.95, R * 0.3, 0, 0, 6.2832); ctx.stroke();
+    } else if (m.kind === 'ice') {                          // 冻住：脸上一层冰蓝，周围一圈冰棱，最后化开淡掉
+      const grow = easeOut(Math.min(1, m.t / 0.12)), R = f[2] * 1.3 * grow;
+      ctx.globalAlpha = Math.min(1, (m.life - m.t) / 0.5);
+      const g = ctx.createRadialGradient(f[0], f[1], 0, f[0], f[1], R * 1.3);
+      g.addColorStop(0, 'rgba(210,245,255,.75)'); g.addColorStop(0.7, 'rgba(120,200,255,.5)'); g.addColorStop(1, 'rgba(120,200,255,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f[0], f[1], R * 1.3, 0, 6.2832); ctx.fill();
+      ctx.translate(f[0], f[1]);
+      for (let k = 0; k < 7; k++) {
+        const a = m.j + k * 0.8976, L = R * (0.7 + 0.35 * ((k * 5) % 3) / 2);
+        ctx.save(); ctx.rotate(a);
+        ctx.fillStyle = 'rgba(225,248,255,.9)'; ctx.strokeStyle = 'rgba(40,110,170,.9)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(R * 0.5, -5); ctx.lineTo(R * 0.5 + L, 0); ctx.lineTo(R * 0.5, 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
     } else if (m.kind === 'stars') {                        // 被弹脑门：头上绕一圈小星星
       const n = 4, R = f[2] * 1.1;
       ctx.globalAlpha = 1 - Math.max(0, (u - 0.6) / 0.4);

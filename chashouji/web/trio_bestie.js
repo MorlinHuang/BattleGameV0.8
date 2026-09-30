@@ -14,7 +14,9 @@ const TRIO_BESTIE = {
       face: +1,
       sheet: { src: 'assets/trio/G11_gege.webp', cell: [315, 343], cols: 4, names: ['idle', 'raise', 'throw', 'follow', 'wind', 'tuck', 'kick', 'idle2'] },
       anchor: [128, 212.3], at: [170, 640, 1], pivot: [128, -530], leanK: 0.5,
-      depth: 0.5, enter: 'swing', recipe: 'bloom',
+      depth: 0.5, recipe: 'bloom',
+      /* 进场：0.4 秒从左上画外露面时收着腿俯冲（tuck），0.6 秒荡到最低点（摆角过零）伸腿（kick）往前荡，0.75 秒接出手 */
+      enter: { kind: 'swing', seq: [['tuck', 0.6], ['kick', 9]] },
       /* 绳子、座板由引擎画（帧里的座板已抠掉）：ends 座板两头、grip 这一帧哪只手握着绳 [左手, 右手]、board 座板的框 */
       ropes: { ...ROPE, ends: [[50, 207], [208, 207]], board: [44, 205, 214, 222], flowers: '#f59ab8',
                grip: { idle: [[49, 63]], raise: [[44, 63]], throw: [[69, 76]], follow: [[57, 60]], wind: [[25, 72]],
@@ -22,8 +24,10 @@ const TRIO_BESTIE = {
       swing: { a0: 1.3, a: 0.13, tau: 0.45, w: 2.6, pump: { fwd: 'kick', back: 'tuck', min: 0.3 } },
       exit: { frame: 'tuck' },
       idle: { frame: 'idle', breathe: [0.014, 0.45] },
-      /* 帽子后面那根流苏：顶上钉住（'t'），跟着秋千的摆往后甩（最后一项 = 跟摆多少） */
-      flex: { idle: [[71, 38, 89, 84, 't', 2.2, 0.8, 5]], tuck: [[130, 38, 145, 84, 't', 2.2, 0.8, 5]], kick: [[50, 36, 66, 88, 't', 2.2, 0.8, 5]] },
+      /* 帽子后面那根流苏：下端贴着肩膀，画不出三边透明的 flex 框，拆成挂件层（frames.json 的 lift，帧里原位置已补画）。
+         顶上的结挂住，自己慢慢晃（0.08 rad，尖上 ±4 px），秋千摆的时候往后拖（跟摆 0.25 × 摆的角速度） */
+      parts: [{ src: 'assets/trio/G11_tassel.webp', pivot: [7, 0], z: 1, sway: [0.08, 0.8, 0.25],
+                at: { idle: [80, 30, 0], raise: [84.5, 24, 0], throw: [107, 43, 0], follow: [81, 30, 0], wind: [54.5, 39, 0], tuck: [135, 34, 0], kick: [58.5, 39, 0], idle2: [79, 34, 0] } }],
       atk: { kind: 'throw', item: 'ball', prop: 'assets/world/trio_prop_ball.webp', scale: 0.5,
              seq: [['raise', 0.12], ['wind', 0.24], ['throw', 0.1, 'fire'], ['follow', 0.3]],
              hold: { idle: [176, 172], raise: [63, 26], wind: [14, 146], throw: [277, 38] },

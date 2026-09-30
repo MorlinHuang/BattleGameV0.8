@@ -14,18 +14,35 @@ const TRIO_BUDDY = {
     B21: {      // 樱木（红发篮球少年）：右下角腾空扑地 → 砸地 → 贴地滑进来，趴着甩 3D 篮球，砸中弹开
       face: -1,
       sheet: { src: 'assets/trio/B21_sakura.webp', cell: [555, 208], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'dive', 'flop', 'slide', 'idle2'] },
-      anchor: [300.1, 199.2], at: [712, 1330, 0.95], pivot: [300, 199],   // 整个人在画面里：脚尖到 x 955、手到 428（旧立绘 812 × 1.05 脚伸出右沿 ~100px，脚翘看不见）
+      anchor: [300.1, 199.2], at: [712, 1328, 0.95], pivot: [300, 199],   // 整个人在画面里：脚尖到 x 955、手到 428、最低点（follow 帧第 205 行）1333.6（旧立绘 812 × 1.05 脚伸出右沿 ~100px，脚翘看不见）
       leanK: 0,   // 趴着的人不整体前后倾：绕肚皮转会把贴地的腿翘起来，读成一张图在转；蓄力 / 出手全靠帧
       depth: 1.3, recipe: 'thud',
       enter: { kind: 'dive', seq: [['dive', 0.3], ['flop', 0.1, 'land'], ['slide', 9]], h: 150, air: 0.3, sq: 0.12 },
       exit: { frame: 'slide' },
-      idle: { frame: 'idle', breathe: [0.022, 0.5, 0] },   // 趴着：只竖向起伏（背一起一伏），不横向补
+      idle: { frame: 'idle', breathe: [0.022, 0.9, 0] },   // 趴着：只竖向起伏（背一起一伏），不横向补；0.9 次/秒 = 两次出手之间（gap 0.45~0.8 秒 + 收势）做完一口气
       /* 两只脚懒洋洋地一翘一翘：小腿中段钉住（'l' 左边），往右越翘越高 */
       flex: { idle: [[395, 100, 555, 205, 'l', 6, 0.7]], wind: [[395, 100, 555, 205, 'l', 6, 0.7]], follow: [[395, 100, 555, 205, 'l', 6, 0.7]] },
       atk: { kind: 'throw', item: 'bball', r: 34, atlas: { src: 'assets/trio/prop_basketball.webp', n: 36, cols: 6, cell: 104, scale: 1.07 },
              seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.26]],
              hold: { idle: [86, 146], wind: [178, 18], throw: [30, 84] },
              T: 0.5, arc: 0.3, spin: 6.3, idleSpin: 1.6, stretch: 0, gap: [0.45, 0.8], onHit: 'bounce' },
+    },
+
+    /* B5 是后排地面的样板（引擎负责人 2026-09-30 临时写在这里，哥们美术接手后照规范维护）。素材：v14/trio/tools/samples/B5_jkd */
+    B5: {       // 截拳道：从右边画外晃着双节棍走进来，站定摆格斗架；连打——双节棍左右抡，一串棍影砸到她身上，"啊哒"
+      face: -1,
+      sheet: { src: 'assets/trio/B5_jkd.webp', cell: [423, 482], cols: 4, names: ['idle', 'wind', 'hitA', 'hitB', 'walk1', 'walk2', 'walk3', 'taunt'] },
+      anchor: [260.7, 478.1], at: [800, 1158, 0.85], pivot: [260, 478], leanK: 0,   // 站在男生身后右边：脚底 = 地面往上 350 × (1 − 0.9)、比主角小一圈（同 crew.js 后排的透视）
+      depth: 0.8, recipe: 'thud',
+      /* 走进来 1.3 秒：四帧一个循环（两步），每秒 7 帧；一步一伏 7 px。离场掉头（flip）走回右边画外 */
+      enter: { kind: 'walk', T: 1.3, fps: 7, bob: 7, seq: [[['walk1', 'walk2', 'walk3', 'walk2'], 9]] },
+      exit: { frame: ['walk1', 'walk2', 'walk3', 'walk2'], fps: 9, flip: true, T: 0.8 },
+      idle: { frame: 'idle', breathe: [0.012, 0.8] },
+      /* 连打：蓄力（棍举过头）0.3 秒 → 左右抡 0.6 秒（hitA / hitB 每秒 10 帧交替），每 0.1 秒一道棍影飞过去打一下 → 收势摸鼻子 */
+      atk: { kind: 'rush', seq: [['wind', 0.3], [['hitA', 'hitB'], 0.6, 'fire'], ['taunt', 0.5]], fps: 10, from: [80, 104],
+             rush: { n: 6, every: 0.1, T: 0.1, text: '啊哒',
+                     ghost: [{ frame: 'hitA', box: [0, 85, 125, 122] }, { frame: 'hitB', box: [75, 195, 190, 232] }] },
+             gap: [0.7, 1.1], stretch: 0.03 },
     },
 
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */

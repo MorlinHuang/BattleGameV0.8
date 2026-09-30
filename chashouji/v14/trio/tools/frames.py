@@ -33,6 +33,9 @@ frames.json：
   "erase": {"hsv": [[h0, h1], [s0, s1], [v0, v1]], "grow": 5, "band": 30},   可选：把引擎自己画的东西（秋千座板）按颜色抠掉
   "check": [[x0, y0, x1, y1, "脚"], ...],   可选：另外量几个本该不动的部位（输出像素），打印每帧偏多少
   "graft": [{"from": "wind", "to": ["throw"], "box": [x0, y0, x1, y1], "feather": 30}]   可选：从好的一帧把一块搬到画走样的帧上（输出像素，左边 feather 宽渐变）
+  "loose": ["walk1", ...],            可选：脚在动的帧（走路 / 跑 / 跳），不按 fixed 配：横向按头、竖向按脚底贴参考帧的地面线；残差表里不计
+  "lift": [{"name": "G11_tassel", "from": "idle", "box": {"idle": [x0, y0, x1, y1], ...}, "hsv": [[[h0, h1], [s0, s1], [v0, v1]], ...]}]
+      可选：挂着的东西碰到身体（流苏贴肩膀）时拆成挂件层（见 lift()），帧里原位置补画
 }
 """
 import json, os, sys
@@ -141,17 +144,83 @@ def tile(ims, cols, bg=(30, 30, 30)):
     return out
 
 
+def hsv(a):
+    """RGBA float（0~255）→ (色相 0~1, 饱和度, 明度)"""
+    rgb = a[..., :3] / 255
+    mx, mn = rgb.max(-1), rgb.min(-1)
+    sat = np.where(mx > 0, (mx - mn) / np.maximum(mx, 1e-6), 0)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    d = np.maximum(mx - mn, 1e-6)
+    hue = np.where(mx == r, ((g - b) / d) % 6, np.where(mx == g, (b - r) / d + 2, (r - g) / d + 4)) / 6
+    return hue, sat, mx
+
+
+def in_hsv(a, ranges):
+    """落在任一 [[h0, h1], [s0, s1], [v0, v1]] 里的像素"""
+    h, s, v = hsv(a)
+    m = np.zeros(a.shape[:2], bool)
+    for (h0, h1), (s0, s1), (v0, v1) in ranges: m |= (h >= h0) & (h <= h1) & (s >= s0) & (s <= s1) & (v >= v0) & (v <= v1)
+    return m
+
+
+def fill_in(a, hole):
+    """把 hole 里的像素从四周往里一圈一圈补（每圈取已知邻居的平均，按 alpha 预乘）：
+    挂件拆走以后，它原来挡着的地方 —— 背景那侧补成透明、贴着头发 / 肩膀那侧顺着头发 / 皮肤补上"""
+    a = a.copy(); pm = np.dstack([a[..., :3] * a[..., 3:] / 255, a[..., 3:]])
+    known = ~hole
+    pm[hole] = 0
+    k = np.ones((3, 3), np.float32)
+    while not known.all():
+        ring = ndimage.binary_dilation(known) & ~known
+        if not ring.any(): break
+        n = ndimage.convolve(known.astype(np.float32), k, mode='constant')
+        for c in range(4):
+            sm = ndimage.convolve(pm[..., c] * known, k, mode='constant')
+            pm[..., c] = np.where(ring, sm / np.maximum(n, 1), pm[..., c])
+        known |= ring
+    al = pm[..., 3]
+    # 补出来的边硬一点（半透明的一团读成脏），再在补的范围里开运算：两边往里长、在中间碰头会顶出一个小尖角（流苏压着肩膀的那一截），削掉
+    solid = ndimage.binary_opening(np.where(hole, al > 127, al > 127), structure=np.ones((3, 3)), iterations=4)
+    al = np.where(hole, np.where(solid, 255, 0), al)
+    a[..., :3] = np.where(hole[..., None], pm[..., :3] * 255 / np.maximum(pm[..., 3:], 1e-3), a[..., :3])
+    a[..., 3] = al
+    return a
+
+
+def lift(outs, L):
+    """挂件拆层（lift）：挂着的东西碰到身体（格格帽后的流苏下端贴着肩膀），flex 条带错位会把身体撕开 —— 把它从每一帧里拆出来，
+    做成挂件层（运行时 cfg.parts 按 sway 甩），帧里它原来的位置补成背景 / 头发 / 皮肤（fill_in）。
+    L = {"name", "from": 挂件图取哪一帧, "box": {帧: [x0, y0, x1, y1]} 每一帧里它在哪（输出像素，只框它，别框进身上同色的地方）,
+         "hsv": [[[h0, h1], [s0, s1], [v0, v1]], ...] 它是什么颜色（几段取并集，描边自动带上）}
+    → 挂件图 web/assets/trio/<name>.webp；打印 cfg.parts 那一条（pivot = 挂件图顶上正中，at[帧] = 那一帧里顶上正中的位置）"""
+    at, part = {}, None
+    for fn, (x0, y0, x1, y1) in L['box'].items():
+        a = np.array(outs[fn]).astype(np.float32)
+        box = np.zeros(a.shape[:2], bool); box[y0:y1, x0:x1] = True
+        core = in_hsv(a, L['hsv']) & (a[..., 3] > 60) & box
+        core = ndimage.binary_fill_holes(ndimage.binary_closing(core, iterations=2)) & box
+        dark = hsv(a)[2] < 0.45
+        m = core | (ndimage.binary_dilation(core, iterations=2) & (dark | (a[..., 3] < 250)) & box)   # 描边 + 外沿抗锯齿
+        ys, xs = np.nonzero(m)
+        top = ys.min(); cx = (xs[ys < top + 4].min() + xs[ys < top + 4].max()) / 2
+        at[fn] = [round(float(cx), 1), float(top)]
+        if fn == L['from']:
+            p = a.copy(); p[..., 3] *= m
+            part = Image.fromarray(p.clip(0, 255).astype(np.uint8), 'RGBA').crop((xs.min(), top, xs.max() + 1, ys.max() + 1))
+            piv = [round(float(cx - xs.min()), 1), 0.0]
+        outs[fn] = Image.fromarray(fill_in(a, m).clip(0, 255).astype(np.uint8), 'RGBA')
+    part.save(os.path.join(OUT, f"{L['name']}.webp"), 'WEBP', quality=92, method=6)
+    ats = ', '.join(f'{fn}: [{x}, {y}, 0]' for fn, (x, y) in at.items())
+    print(f"挂件 {L['name']}：{part.width}x{part.height} → web/assets/trio/{L['name']}.webp")
+    print(f"cfg.parts：{{ src: 'assets/trio/{L['name']}.webp', pivot: {piv}, z: 1, at: {{ {ats} }}, sway: [...] }}")
+
+
 def erase(c, E):
     """把引擎自己画的东西（秋千座板）从帧里抠掉：按 HSV 范围取色块里最大的那一块，再往外吃掉 grow 像素以内的深色描边。
     生图每格的座板长短、位置都不一样，留在帧里连播会一闪一闪；由引擎画一块固定的，绳子也正好接在它两头"""
     a = np.array(c).astype(np.float32)
-    rgb = a[..., :3] / 255
-    mx, mn = rgb.max(-1), rgb.min(-1)
-    v, sat = mx, np.where(mx > 0, (mx - mn) / np.maximum(mx, 1e-6), 0)
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-    hue = np.where(mx == r, ((g - b) / np.maximum(mx - mn, 1e-6)) % 6, np.where(mx == g, (b - r) / np.maximum(mx - mn, 1e-6) + 2, (r - g) / np.maximum(mx - mn, 1e-6) + 4)) / 6
-    (h0, h1), (s0, s1), (v0, v1) = E['hsv']
-    m = (hue >= h0) & (hue <= h1) & (sat >= s0) & (sat <= s1) & (v >= v0) & (v <= v1) & (a[..., 3] > 128)
+    v = hsv(a)[2]
+    m = in_hsv(a, [E['hsv']]) & (a[..., 3] > 128)
     m = ndimage.binary_closing(m, iterations=2)
     lab, k = ndimage.label(m)
     if not k: return c
@@ -196,6 +265,8 @@ def cmd_build(d, spec):
     head_t = gray(ref.crop(hb)); fix_t = gray(ref.crop(fb))
     lo, hi = spec.get('scale', [0.85, 1.2])
     place = {}                                          # 帧 → (缩放 s, 这一格原点落在参考帧坐标的 (tx, ty))
+    loose = set(spec.get('loose', []))
+    ref_low = np.nonzero((np.array(ref)[..., 3] > 128).any(1))[0].max()
     for fn, c in got.items():
         if fn == spec['ref']:
             place[fn] = (1.0, 0.0, 0.0, 1.0); continue
@@ -204,6 +275,13 @@ def cmd_build(d, spec):
             r = find(gray(resize(c, s)), head_t)
             if r and (best is None or r[2] > best[1]): best = (s, r[2])
         s = best[0]
+        if fn in loose:
+            # 走路这类脚在动的帧：没有"不动的部位"可配。横向按头对齐，竖向按脚底（剪影最低行）落在参考帧的地面线上
+            cs = resize(c, s); h = find(gray(cs), head_t)
+            low = np.nonzero((np.array(cs)[..., 3] > 128).any(1))[0].max()
+            place[fn] = (s, float(hb[0] - h[1]), float(ref_low - low), h[2])
+            print(f'  {fn:8s} 头缩放 {s:.2f}（匹配 {best[1]:.2f}）  loose：横按头、竖按脚底')
+            continue
         r = find(gray(resize(c, s)), fix_t)
         place[fn] = (s, fb[0] - r[1], fb[1] - r[0], r[2])
         print(f'  {fn:8s} 头缩放 {s:.2f}（匹配 {best[1]:.2f}）  不动部位匹配 {r[2]:.2f}')
@@ -224,7 +302,7 @@ def cmd_build(d, spec):
     ra = np.array(ref)[..., 3] > 8; rys, rxs = np.nonzero(ra)
     sil = (rxs.max() - rxs.min() + 1) if spec['size'][0] == 'w' else (rys.max() - rys.min() + 1)
     K = spec['size'][1] / sil
-    cw, ch = round((cx1 - cx0) * K), round((cy1 - cy0) * K)
+    cw, ch = int(round((cx1 - cx0) * K)), int(round((cy1 - cy0) * K))
     outs = {fn: im.crop((cx0, cy0, cx1, cy1)).resize((cw, ch), Image.LANCZOS) for fn, im in full.items()}
     tr = lambda p: [round(float((p[0] - bx0 - cx0) * K), 1), round(float((p[1] - by0 - cy0) * K), 1)]
     # 移植（graft）：模型偶尔把"不动的部位"本身画走样（樱木出手那格腿短一截，短裤对齐了脚尖还差 20px）—— 配准救不了，
@@ -242,6 +320,7 @@ def cmd_build(d, spec):
             rgb = (a[..., :3] * a[..., 3:] * (1 - w) + b[..., :3] * b[..., 3:] * w) / np.maximum(al, 1e-3)   # 按 alpha 加权混色
             t[y0:y1, x0:x1] = np.dstack([rgb, al])
             outs[fn] = Image.fromarray(t.clip(0, 255).astype(np.uint8), 'RGBA')
+    for L in spec.get('lift', []): lift(outs, L)
     # 自检：输出上再配准一遍，量残差（输出像素）。头的缩放比也再量一遍（1.00 = 与参考帧一样大）
     oref = outs[spec['ref']]
     ofb = [round(v) for v in tr(fb[:2]) + tr(fb[2:])]
@@ -257,6 +336,8 @@ def cmd_build(d, spec):
         r = find(win, ft)
         dx, dy = r[1] + x0 - ofb[0], r[0] + y0 - ofb[1]
         hs = max(((s2, find(gray(resize(im, s2)), htt)) for s2 in np.arange(0.9, 1.1, 0.01)), key=lambda q: q[1][2] if q[1] else -1)[0]
+        if fn in loose:                                  # 没按不动部位配，这里的数不算残差
+            print(f'  {fn:8s} （loose，不计）  头 {1 / hs:.2f}'); continue
         worst = max(worst, abs(dx), abs(dy))
         print(f'  {fn:8s} dx {dx:+5.2f} dy {dy:+5.2f}  头 {1 / hs:.2f}')
     print(f'  最大残差 {worst:.2f}px（验收 ≤ 2）')
@@ -276,7 +357,7 @@ def cmd_build(d, spec):
     for i, fn in enumerate(names): atlas.paste(outs[fn], ((i % cols) * cw, (i // cols) * ch))
     os.makedirs(OUT, exist_ok=True)
     atlas.save(os.path.join(OUT, f'{name}.webp'), 'WEBP', quality=90, method=6)
-    meta = {'cell': [cw, ch], 'cols': cols, 'frames': names, 'anchor': tr(spec['anchor']), 'residual': round(worst, 2)}
+    meta = {'cell': [cw, ch], 'cols': cols, 'frames': names, 'anchor': tr(spec['anchor']), 'residual': round(float(worst), 2)}
     with open(os.path.join(OUT, f'{name}.json'), 'w') as f: json.dump(meta, f, ensure_ascii=False)
     kb = os.path.getsize(os.path.join(OUT, f'{name}.webp')) // 1024
     print(f'→ web/assets/trio/{name}.webp（{atlas.width}x{atlas.height}，{kb}KB，{cols} 列）')

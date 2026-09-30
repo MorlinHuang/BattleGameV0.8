@@ -2,8 +2,9 @@
 画的是哪一帧（main.js 胶片分支记的 window.trioFrames）写到 <输出>.json —— drift.py 按它给每格取对应那一帧的模板。
 用法：python3 film.py "<URL 参数>" <输出.png>
   例：python3 film.py "ammostrip=12&ammoms=60&ammosc=1&ammoskip=1.4&ammogift=buddy&buddy=6&noshake=1" /tmp/f_sak.png
-页面上的 console error 会打印出来（验收要求为空）。"""
-import asyncio, json, sys
+页面上的 console error 会打印出来（验收要求为空）。
+环境变量 FILM_BASE 换页面地址（测引擎写法用的临时数据页，docs/三人组角色规范.md 第十节）。"""
+import asyncio, json, os, sys
 from playwright.async_api import async_playwright
 
 
@@ -14,7 +15,7 @@ async def main(q, out):
         errs = []
         pg.on('pageerror', lambda e: errs.append(str(e)))
         pg.on('console', lambda m: errs.append(m.text) if m.type == 'error' else None)
-        await pg.goto('http://127.0.0.1:40235/index.html?zoom=1&auto=0&' + q)
+        await pg.goto((os.environ.get('FILM_BASE') or 'http://127.0.0.1:40235/index.html') + '?zoom=1&auto=0&' + q)
         await pg.wait_for_timeout(6000)
         await pg.locator('#stage canvas').screenshot(path=out)
         tf = await pg.evaluate('window.trioFrames || []')

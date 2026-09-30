@@ -1,0 +1,1 @@
+[["B21:dive", "B11:crawl2"], ["B21:dive", "B11:crawl1"], ["B21:dive", "B11:crawl2"], ["B21:flop", "B11:arrive"], ["B21:slide", "B11:idle"], ["B21:slide", "B11:wind"], ["B21:idle", "B11:wind"], ["B21:idle", "B11:throw"], ["B21:wind", "B11:follow"], ["B21:wind", "B11:follow"], ["B21:throw", "B11:follow"], ["B21:follow", "B11:idle"]]

@@ -65,12 +65,12 @@
     "throw"
    ],
    "box": [
-    340,
+    372,
     88,
     555,
     208
    ],
-   "feather": 36
+   "feather": 20
   },
   {
    "from": "idle",
