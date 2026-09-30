@@ -395,7 +395,7 @@ const TRIO_BESTIE = {
       face: +1,
       sheet: { src: 'assets/trio/G10_harley.webp', cell: [316, 407], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'spin', 'stop', 'idle2'] },
       /* 锚点 = 两只轮滑鞋轮子着地中点：按前脚红轮滑鞋配准、缩放也按它（scale_by fixed：wind 仰头时按头找缩放会缩成 0.87）；残差 0.14 px */
-      anchor: [188.5, 401.4], at: [170, 990, 0.86], pivot: [188, 401], leanK: 0,
+      anchor: [188.5, 401.4], at: [160, 1020, 0.86], pivot: [188, 401], leanK: 0,
       depth: 0.8, recipe: 'star',
       /* 轮滑（ride）：压低冲刺 → 单脚转一圈 → 横刹后仰（露面后换两次帧）；离场转身滑走 */
       enter: { kind: 'ride', T: 1.0, tilt: 0.1, seq: [['cruise', 0.4], ['spin', 0.3], ['stop', 0.3, 'land'], ['idle', 9]], sq: 0.07 },
@@ -443,7 +443,7 @@ const TRIO_BESTIE = {
       face: +1,
       sheet: { src: 'assets/trio/G18_mu.webp', cell: [335, 351], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'leap', 'land', 'rise', 'idle2'] },
       /* 锚点 = 前脚厚底靴鞋底：出手四帧按这只靴子配准（残差 0.17 px）。人那一层 idle 剪影 2.80 万 × 0.88² ≈ 2.17 万（上方样板 G11 2.06 万） */
-      anchor: [273.7, 323.2], at: [380, 640, 0.88], pivot: [273, 323], leanK: 0,
+      anchor: [273.7, 323.2], at: [380, 600, 0.8], pivot: [273, 323], leanK: 0,
       depth: 0.5, recipe: 'petal',
       /* 从左上画外抛物线跃下（腾空收腿张臂）→ 单膝落在墙沿上（压扁）→ 起身张臂 → 亮相待机 */
       enter: { kind: 'leap', from: [-320, -380], h: 120, air: 0.5, T: 0.9, seq: [['leap', 0.5], ['land', 0.2, 'land'], ['rise', 0.14], ['idle', 9]], sq: 0.1 },
@@ -493,7 +493,7 @@ const TRIO_BESTIE = {
       sheet: { src: 'assets/trio/G14_shera.webp', cell: [335, 433], cols: 4, names: ['idle', 'wind', 'throw', 'follow'] },
       /* 锚点 = 前脚金靴底：按这只靴子配准、缩放也按它（scale_by fixed：按头找时 idle 比其余三帧小一圈），残差 0.18 px。
          剑是她自己的（不飞出去），画在帧里；剪影约 3.5 万格内像素 × 0.77² ≈ 2.07 万屏幕像素，同 G11 */
-      anchor: [222.4, 425.4], at: [170, 640, 0.77], pivot: [222, 425], leanK: 0.3,
+      anchor: [222.4, 425.4], at: [170, 520, 0.7], pivot: [222, 425], leanK: 0.3,
       depth: 0.5, recipe: 'star',
       /* 闪电变身（appear 闪光，蓝白）：淡入时双手举剑指天（变身），淡入完剑指前方 → 扛剑站定（淡入后换两次帧） */
       enter: { kind: 'appear', fx: 'flash', color: [200, 230, 255], fade: 0.3, seq: [['wind', 0.35], ['follow', 0.3, 'land'], ['idle', 9]], sq: 0.05 },
@@ -515,7 +515,7 @@ const TRIO_BESTIE = {
       sheet: { src: 'assets/trio/G16_daji.webp', cell: [288, 401], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wrap', 'stretch', 'lean', 'idle2'] },
       /* 九尾宝座画在每一帧里：按交叠的大腿 + 臀配准（残差 0.27 px），scale_by sheet（wind 仰头按头找会放大到 1.15、stretch 缩到 0.85）。
          锚点 = 最低点（鞋 / 裙摆）。人（不算白尾巴）约 3.2 万格内像素 × 0.8² ≈ 2.05 万屏幕像素，同 G11 */
-      anchor: [159.6, 383.7], at: [135, 630, 0.8], pivot: [159, 383], leanK: 0.3,
+      anchor: [159.6, 383.7], at: [275, 550, 0.8], pivot: [159, 383], leanK: 0.3,
       depth: 0.5, recipe: 'foxfire',
       /* 九尾托着出现（appear 烟，狐火橙）：淡入时尾巴裹着身子只露眼睛 → 淡入完伸懒腰 → 托腮坐定 → 待机（淡入后换两次帧） */
       enter: { kind: 'appear', fx: 'smoke', color: [255, 140, 50], seq: [['wrap', 0.35], ['stretch', 0.25], ['lean', 0.2, 'land'], ['idle', 9]], sq: 0.04 },
@@ -536,7 +536,7 @@ const TRIO_BESTIE = {
          人按臀部 + 大腿（坐在月亮上的那一块）平移到和 idle 对齐（各帧原来差 0.4~7.6 格内 px），坐在同一张月亮上的接触线各帧一致。
          frames.py 按月亮背弧配准、缩放也按月亮（scale_by fixed），锚点 = 月亮弯里的中心。
          人（不算月亮）约 2.5 万格内像素 × 0.9² ≈ 2.06 万屏幕像素，同 G11 */
-      anchor: [105.5, 181.5], at: [110, 500, 0.9], pivot: [105, 181], leanK: 0.3,
+      anchor: [105.5, 181.5], at: [110, 480, 0.9], pivot: [105, 181], leanK: 0.3,
       depth: 0.5, recipe: 'crescent',
       /* 月亮降下（fly，从正上方）：一手扶月尖一手挥 → 张开双臂仰头唱 → 坐定（露面后换两次帧） */
       enter: { kind: 'fly', from: [0, -720], air: 0.9, tilt: 0.03, seq: [['wave', 0.45], ['sing', 0.35], ['idle', 9, 'land']], sq: 0.04 },

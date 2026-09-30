@@ -7,7 +7,7 @@
   对后面那个人的**每一帧**（前面那个人取他全部在场帧的并集 —— 两人各自出手、时机不定，哪一帧碰上哪一帧都可能）：
     · 被挡剪影占比 ≤ 8%（被挡像素 / 这一帧自己的剪影像素）；
     · 头框被挡 0 px：frames.json 的 head（参考帧上量的头框，映射到图集输出像素）在每一帧里按模板重新找一次位置；前面那人外扩 4px 再比；
-    · 认人点被挡 0 px：挂件层（扇子、流苏、牛丸串……）、手里拿着的道具（hold 点、半径 = 引擎画的半径）、躯干
+    · 认人点被挡 0 px：落脚区（FOOTED 的人，见第二版第 8 条）、挂件层（扇子、流苏、牛丸串……）、手里拿着的道具（hold 点；形状按 drawHeld 的画法，见 held_shape）、躯干
       （头框下沿到"头下沿 + 45% × 头下沿到脚底"那几行、头框中心左右各 1.2 个头宽以内 —— 招牌服装都在这一块），前面那人同样外扩 4px。
   前景地板在后排地面前面，挡住后排一点脚和小腿（躯干以下）本来就对，只要不超 8%。
   尺寸下限（suggest 只在这个范围里缩）：后排 s ≥ 0.8；别的槽位 ≥ 本人现值 × 0.9。先挪位置，挪不开才缩。
@@ -35,6 +35,11 @@
      合计仍 ≤ 25%（女主比男主窄）。
      第 5、6 条只作用于"后排 × 自家主角"：两个主角分成两个遮挡物（女主 couple_a、男主 couple_b），后排对另一个主角仍是头框 0、认人点 0。
   7. 出画豁免（EXEMPT）：B11 / B12 扒着右屏边、G15 船尾接长到出画，都是设计本身；不查横向出画，出画像素照量、在矩阵"出画豁免"一行另列理由。
+  8. 落脚区（2026-10-01 主控拍板，规范第十二轮第 1 条）：站 / 跪 / 坐在支撑面上的上方的人（FOOTED：G14 G16 G18 B14 B16 B18），
+     每一帧剪影最低一行往上 40 屏幕 px 的剪影算一项认人点，前面的人外扩 4px 比，被挡 0（后排蓄力举过头顶的冰锥 / 算盘 / 外卖盒正好在支撑面那一行，
+     一只靴子只占剪影 2~3%，8% 和躯干框都量不到；脚被盖住读成踩空、被戳穿）。只看人自己的剪影，不含 fixed 场景层（墙沿 / 石檐是布景）。
+  9. 场景层（fixed 挂件：墙沿、石檐、墙头）格内坐标跟 at 走。cfg.at 那一版里按设计出画的那一边（scene_of），挪了 at 以后仍要出画，缩进画里的像素算出画 ——
+     suggest 不会再建议出一截悬空的墙头。
   另外：人名单直接取 cast（按 depth 分槽，不再取 groups：组表只剩诊断用），ride 在场前后溜（enter.roll）的人按 ±幅度 三个位置都判。
 
   帧序列（cfg.sheet）：屏幕点 = at + (格内点 − anchor) × s（trio.js place()，在场时没有位移）
@@ -49,7 +54,7 @@
   → shots/trio_std/组合遮挡矩阵_<边>.txt；头框映射缓存 /tmp/combo_heads.json"""
 import json, os, subprocess, sys
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 from scipy import ndimage
 from skimage.feature import match_template
 
@@ -66,6 +71,9 @@ CP_IDS = ('女主', '男主')                       # 两个主角各是一个�
 OWN = {'buddy': '男主', 'bestie': '女主'}         # 后排站在谁身后：只对这一个主角按第 5 / 6 条放宽，对另一个仍是认人点 0
 DEPTH = {'ground': 0.8, 'top': 0.5, 'floor': 1.3}
 SLOT = {v: k for k, v in DEPTH.items()}
+S_FLOOR = {'G14': 0.693, 'G18': 0.792}          # 缩过的人：缩放下限按缩之前的值 × 0.9 定死（G14 0.77、G18 0.88，落脚区那一轮缩的）—— 按"现值 × 0.9"算，每缩一轮下限就跟着往下漂
+FOOT_H = 40                                    # 落脚区高（屏幕 px）：规范第十二轮第 1 条
+FOOTED = ('G14', 'G16', 'G18', 'B14', 'B16', 'B18')   # 站 / 跪 / 坐在支撑面上的上方的人（规范第十一轮第 1 条要画支撑面的那几个）：脚下被挡读成踩空 / 被戳穿
 EXEMPT = {                                    # 按设计横向出画的人（不查横向出画，出画像素照样量、在矩阵里另列）：编号 → 理由
     'B11': '扒着右屏边爬进来，手和身子贴边是构图本身',
     'B12': '从右屏边弹进来扒着边，贴边是构图本身',
@@ -235,8 +243,55 @@ class Frame:
         self.items = [(n, b) for n, b in items if b.area() >= 30]
 
 
-def sheet_person(c, at):
-    """帧序列 / 单张立绘 → [Frame]（at 可以不是 cfg.at：suggest 换站位时重贴）"""
+def foot_zone(m, s):
+    """落脚区：这一帧剪影最低一行往上 FOOT_H 屏幕 px（格内 FOOT_H / s 行）以内的剪影 —— 鞋、小腿、跪地的膝、垂下来的裙摆"""
+    ys = np.nonzero(m.any(1))[0]
+    z = np.zeros_like(m)
+    if len(ys): z[max(0, int(np.floor(ys.max() + 1 - FOOT_H / s))):] = True
+    return z & m
+
+
+def disc(r, x, y):
+    rr = int(round(r)); yy, xx = np.mgrid[-rr:rr + 1, -rr:rr + 1]
+    return Blob(xx * xx + yy * yy <= rr * rr, int(round(x)) - rr, int(round(y)) - rr)
+
+
+_AIMBOX = {}
+def aim_box(side):
+    """拿在手里就指着对方的道具（atk.aim）瞄的点 = 对方主角的脸（main.js boyAim / girlAim），脸跟着拉锯姿势走，但总在对方剪影里：
+    取对方主角在场扫过的剪影外框（闺蜜打男生 couple_b、哥们打女生 couple_a）"""
+    if side not in _AIMBOX:
+        m = np.array(Image.open(os.path.join(TRIO_DIR, 'tools', f"couple_{'b' if side == 'bestie' else 'a'}.png"))) > 100
+        ys, xs = np.nonzero(m); _AIMBOX[side] = (xs.min(), ys.min(), xs.max(), ys.max())
+    return _AIMBOX[side]
+
+
+def held_shape(A, side):
+    """拿在手里的道具在屏幕上可能占的地方（trio.js drawHeld）→ 函数 (握点 x, y) → Blob：
+      · 3D 图集 / 程序画的球：按随机初始角挑格 → 任意朝向，半径 r × scale 的圆；
+      · 平面图（prop，宽 × 高 × scale，居中画）：aim 的尖头指着对方的脸 → 按握点到对方主角剪影外框四角的角度范围扫一遍（每 2°）；
+        不 aim 的转 hang × 0.2（hang = 随机 0~6 + idleSpin × t）：有 idleSpin 任意角 → 外接圆，没有就在 0~1.2 rad 里扫"""
+    if A.get('atlas'): return lambda x, y: disc(A['r'] * A['atlas']['scale'], x, y)
+    if not A.get('prop'): return (lambda x, y: disc(A['r'], x, y)) if A.get('r') else None
+    pi = Image.open(os.path.join(WEB, A['prop'])); w, h = pi.width * A.get('scale', 1), pi.height * A.get('scale', 1)
+    if not A.get('aim') and A.get('idleSpin'): return lambda x, y: disc(np.hypot(w, h) / 2, x, y)
+    tip = 0 if A.get('aim') is True else A.get('aim', 0)
+    def shape(x, y):
+        if A.get('aim'):
+            bx = aim_box(side); an = [np.arctan2(cy - y, cx - x) - tip for cx in bx[0::2] for cy in bx[1::2]]
+            a0, a1 = min(an), max(an)
+        else: a0, a1 = 0.0, 1.2
+        rr = int(np.ceil(np.hypot(w, h) / 2)) + 1
+        im = Image.new('L', (2 * rr + 1, 2 * rr + 1)); dr = ImageDraw.Draw(im)
+        for a in np.arange(a0, a1 + 1e-9, np.radians(2)).tolist() + [a1]:
+            ca, sa = np.cos(a), np.sin(a)
+            dr.polygon([(rr + px * ca - py * sa, rr + px * sa + py * ca) for px, py in ((-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2), (-w / 2, h / 2))], fill=255)
+        return Blob(np.array(im) > 0, int(round(x)) - rr, int(round(y)) - rr)
+    return shape
+
+
+def sheet_person(c, at, foot, side):
+    """帧序列 / 单张立绘 → [Frame]（at 可以不是 cfg.at：suggest 换站位时重贴）；foot：加落脚区认人点（FOOTED 的人）；side：拿在手里 aim 的道具瞄谁（held_shape）"""
     s = at[2]; ax, ay = c['anchor']
     X0, Y0 = at[0] - ax * s, at[1] - ay * s
     P = lambda q: (at[0] + (q[0] - ax) * s, at[1] + (q[1] - ay) * s)
@@ -282,16 +337,12 @@ def sheet_person(c, at):
     for q in c.get('parts', []) if c.get('sheet') else []:
         if q.get('fixed'): continue
         parts.append((q, alpha(os.path.join(WEB, q['src']))))
-    R = 0
-    if A.get('item'):
-        if A.get('atlas'): R = A['r'] * A['atlas']['scale']
-        elif A.get('prop'):
-            pi = Image.open(os.path.join(WEB, A['prop'])); R = max(pi.size) * A.get('scale', 1) / 2
-        else: R = A.get('r', 0)
+    held = held_shape(A, side) if A.get('item') else None
     out = []
     for f, cc in cells:
         m = cc[..., 3] > 40
         hb = heads[f]; t0 = torso(m, hb); t = t0.copy(); its = [('躯干', t0)]
+        if foot: fz = foot_zone(m, s); t = t | fz; its.append(('落脚区', fz))
         for tag, bx in idents[f]:
             u = _box(m.shape, bx) & m; t = t | u; its.append((tag, u))
         extra = []
@@ -301,10 +352,8 @@ def sheet_person(c, at):
             x, y = P(a[:2]); sway = (q.get('sway') or [0])[0]
             pb = [render(pm, x - q['pivot'][0] * s, y - q['pivot'][1] * s, s, ang, (x, y)) for ang in {a[2] - sway, a[2], a[2] + sway}]
             extra += [('挂件 ' + os.path.basename(q['src']).rsplit('.', 1)[0], b) for b in pb]
-        if R and A.get('hold', {}).get(f) and f not in empty:   # 出手帧起东西已离手
-            hx, hy = P(A['hold'][f]); rr = int(round(R))
-            yy, xx = np.mgrid[-rr:rr + 1, -rr:rr + 1]
-            extra.append(('手持道具', Blob(xx * xx + yy * yy <= rr * rr, int(round(hx)) - rr, int(round(hy)) - rr)))
+        if held and A.get('hold', {}).get(f) and f not in empty:   # 出手帧起东西已离手
+            extra.append(('手持道具', held(*P(A['hold'][f]))))
         for r in rots:
             body = render(m, X0, Y0, s, r, pv); head = render(_box(m.shape, hb), X0, Y0, s, r, pv)
             key = render(t, X0, Y0, s, r, pv)
@@ -344,9 +393,10 @@ def ref_person(side, rid, done):
 
 
 class Person:
-    def __init__(self, rid, slot, kind, frames, roll=0, loose=None, lim=TOTAL):
-        """roll：ride 在场前后溜的幅度（enter.roll[0] + 细抖）—— 后面的人按 −roll / 0 / +roll 三个位置判，前面的人按溜过的范围并"""
-        self.rid, self.slot, self.kind, self.frames = rid, slot, kind, frames
+    def __init__(self, rid, slot, kind, frames, roll=0, loose=None, lim=TOTAL, scene=()):
+        """roll：ride 在场前后溜的幅度（enter.roll[0] + 细抖）—— 后面的人按 −roll / 0 / +roll 三个位置判，前面的人按溜过的范围并；
+        scene：场景层（scene_of）"""
+        self.rid, self.slot, self.kind, self.frames, self.scene = rid, slot, kind, frames, scene
         self.loose = loose                           # 后排：自家主角的编号（'男主' / '女主'），对他按第二版第 5 / 6 条判；别人 None
         self.lim = lim                               # 他当后面那人时的合计上限
         self.shifts = [(-roll, 0), (0, 0), (roll, 0)] if roll else [(0, 0)]
@@ -355,13 +405,28 @@ class Person:
         self.all_g = grow(self.all)
 
 
+def scene_of(c, at):
+    """fixed 场景层（墙沿、石檐、墙头……，trio.js drawScene：格内坐标跟 at 走）在屏幕上的横向范围，和"哪一边按设计出画" →
+    [(x0, x1, 左边要出画, 右边要出画)]。哪一边要出画按 cfg.at 那一版定（G14 / G18 墙沿左端出画、B14 / B16 / B18 右端出画：读成墙从画外伸进来）；
+    挪了 at 以后那一边缩进画里，就是一截悬空的墙头，算出画不合格（out_of_canvas）"""
+    out = []
+    for q in c.get('parts', []):
+        if not q.get('fixed'): continue
+        a = q['at'] if isinstance(q['at'], list) else next(iter(q['at'].values()))
+        w = Image.open(os.path.join(WEB, q['src'])).width
+        xs = lambda A: A[0] + (a[0] - c['anchor'][0] - q['pivot'][0]) * A[2]
+        x0c, x0 = xs(c['at']), xs(at)
+        out.append((x0, x0 + w * at[2], x0c < 0, x0c + w * c['at'][2] > W))
+    return out
+
+
 def roll_of(c):
     E = c.get('enter')
     return int(round(E['roll'][0] + (E['roll'][2] if len(E['roll']) > 2 else 0))) if isinstance(E, dict) and E.get('roll') else 0
 
 
 def out_of_canvas(p, d, slot, horiz=False):
-    """在场各帧剪影出画多少 px（横向出 0~960、地板低过 1334、上方高过 200 的像素行 / 列数之和）。秋千摆到两头的那两帧不算。
+    """在场各帧剪影出画多少 px（横向出 0~960、地板低过 1334、上方高过 200 的像素行 / 列数之和）+ 场景层该出画的那一边缩进画里多少 px。秋千摆到两头的那两帧不算。
     EXEMPT 里的人不算横向；horiz=True 只量横向（给豁免那一行报读数）"""
     bad = 0
     for f in p.frames:
@@ -372,6 +437,9 @@ def out_of_canvas(p, d, slot, horiz=False):
         if horiz: continue
         if slot == 'floor': bad += max(0, y1 + d[1] - 1334)
         if slot == 'top': bad += max(0, 200 - (y0 + d[1]))
+    if not horiz:
+        for x0, x1, L, Rt in p.scene:                    # 场景层按设计出画的那一边缩进画里多少 px
+            bad += (max(0, int(np.ceil(x0 + d[0]))) if L else 0) + (max(0, int(np.ceil(W - (x1 + d[0])))) if Rt else 0)
     return bad
 
 
@@ -459,7 +527,8 @@ def build(side, D, at_over=None):
         sl = SLOT.get(c.get('depth'))
         if not sl: continue
         ids[sl].append(rid)
-        ppl[rid] = Person(rid, sl, 'sheet' if c.get('sheet') else '单张', sheet_person(c, at_over.get(rid, c['at'])), roll_of(c), *back_rule(side, sl))
+        ppl[rid] = Person(rid, sl, 'sheet' if c.get('sheet') else '单张', sheet_person(c, at_over.get(rid, c['at']), rid in FOOTED, side), roll_of(c), *back_rule(side, sl),
+                          scene_of(c, at_over.get(rid, c['at'])))
     for sl in ids: ids[sl].sort(key=lambda r: int(r[1:]))
     ppl.update(couple())
     return ids, ppl
@@ -535,7 +604,7 @@ def scan(side, D):
         out.append(f'  {r}：{n} 组超，最坏 后排 {grp[0]} / 上方 {grp[1] or "-"} / 地板 {grp[2]}，帧 {t_[1]} 合计被挡 {t_[0]:.1%}')
     oc = [(r, out_of_canvas(ppl[r], (0, 0), ppl[r].slot)) for sl in ids for r in ids[sl]]
     oc = [(r, n) for r, n in oc if n]
-    out.append('\n== 出画（在场帧剪影出 0~960 / 地板低过 1334 / 上方高过 200，逐帧像素和；豁免的人不查横向，秋千两头不算）：' +
+    out.append('\n== 出画（在场帧剪影出 0~960 / 地板低过 1334 / 上方高过 200，逐帧像素和；场景层按设计出画的那一边缩进画里也算；豁免的人不查横向，秋千两头不算）：' +
                ('、'.join(f'{r} {n}' for r, n in oc) if oc else '无'))
     out.append(exempt_line(ids, ppl))
     np_ = sum(len(ids[bk]) * (sum(len(ids[fr]) for fr in occluders(ids, bk)) + len(CP_IDS)) for bk in ('ground', 'top'))
@@ -562,7 +631,7 @@ def suggest(side, D, ids, ppl, fixed_ids=(), start=None):
     slot = {r: ppl[r].slot for r in movers}
     def scales(r):
         s0 = data['cast'][r]['at'][2]
-        lo = 0.8 if slot[r] == 'ground' else s0 * 0.9
+        lo = 0.8 if slot[r] == 'ground' else S_FLOOR.get(r, s0 * 0.9)
         ks = [s0]; v = s0
         while v - 0.02 >= lo - 1e-9: v = round(v - 0.02, 3); ks.append(v)
         if ks[-1] > lo + 1e-9 and slot[r] == 'ground': ks.append(round(lo, 3))
@@ -573,7 +642,8 @@ def suggest(side, D, ids, ppl, fixed_ids=(), start=None):
         var.setdefault(r, {})
         if s not in var[r]:
             a = data['cast'][r]['at']; c = data['cast'][r]
-            var[r][s] = ppl[r] if s == a[2] else Person(r, slot[r], ppl[r].kind, sheet_person(c, [a[0], a[1], s]), roll_of(c), ppl[r].loose, ppl[r].lim)
+            var[r][s] = ppl[r] if s == a[2] else Person(r, slot[r], ppl[r].kind, sheet_person(c, [a[0], a[1], s], r in FOOTED, side), roll_of(c), ppl[r].loose, ppl[r].lim,
+                                                                         scene_of(c, [a[0], a[1], s]))
         return var[r][s]
     cur = {r: (data['cast'][r]['at'][2], [(start or {}).get(r, data['cast'][r]['at'][0]) - data['cast'][r]['at'][0], 0]) for r in movers}
     P = lambda r, s=None, d=None: (person(r, cur[r][0] if s is None else s), cur[r][1] if d is None else d) if r not in CP_IDS else (ppl[r], [0, 0])
@@ -700,7 +770,7 @@ def keep_best(side, D, r):
     other = next(x for x in CP_IDS if x != own)
     best = None
     for s in [a0[2]] + [round(a0[2] - 0.02 * k, 3) for k in range(1, 20) if a0[2] - 0.02 * k >= 0.8 - 1e-9]:
-        p = Person(r, 'ground', '', sheet_person(c, [a0[0], a0[1], s]), roll_of(c), own, lim)
+        p = Person(r, 'ground', '', sheet_person(c, [a0[0], a0[1], s], False, side), roll_of(c), own, lim)
         xs = range(600, W + 1, 20) if side == 'buddy' else range(0, 361, 20)
         for dx, dy in ((x - a0[0], y - a0[1]) for x in xs for y in range(GROUND_Y[0], GROUND_Y[1] + 1, 20)):
             if out_of_canvas(p, (dx, dy), 'ground'): continue

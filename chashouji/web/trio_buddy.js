@@ -170,7 +170,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B30_smart.webp', cell: [287, 345], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'kneeslide', 'arrive', 'stop', 'idle2'] },
       /* 锚点 = 两膝和靴尖之间的地面；在场帧最低点屏幕 y 1333.3。名单里的发胶喷雾引擎还没有 spray，这一版只有飞梳子 */
-      anchor: [147.3, 338.7], at: [835, 1330, 0.92], pivot: [147, 338],
+      anchor: [147.3, 338.7], at: [795, 1330, 0.92], pivot: [147, 338],
       leanK: 0,   // 跪在地上：整体前后倾会把膝盖翘起来
       depth: 1.3, recipe: 'star',
       enter: { kind: 'slide', seq: [['kneeslide', 0.4], ['arrive', 0.2], ['stop', 9, 'land']], sq: 0.1 },
@@ -366,7 +366,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B14_miner.webp', cell: [240, 286], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'dig', 'step', 'land', 'idle2'] },
       /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 2.52 万，s 0.91 → 2.09 万（上方对格格）。画布宽 960：最右伸出锚点 97 px，x 855 */
-      anchor: [130.9, 275.0], at: [835, 640, 0.91], pivot: [131, 275], leanK: 0.2,
+      anchor: [130.9, 275.0], at: [835, 560, 0.91], pivot: [131, 275], leanK: 0.2,
       depth: 0.5, recipe: 'debris',
       /* 挖墙钻出：从方块墙上沿（cut 279 = 靴底那一行）后面升上来 + 灰土烟；升的时候是挖墙的一拳（dig），升到位跨出来（step）、落地（land） */
       enter: { kind: 'appear', rise: 200, cut: 279, fx: 'smoke', color: [150, 125, 95], T: 0.8, seq: [['dig', 0.35], ['step', 0.25], ['land', 0.15, 'land'], ['idle', 9]], sq: 0.08 },
@@ -403,7 +403,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B16_gold.webp', cell: [287, 341], cols: 4, names: ['idle', 'wind', 'hitA', 'hitB', 'assemble', 'land', 'victory', 'idle2'] },
       /* 上方；锚点 = 两脚中间的地面（站在墙沿）。剪影面积 s 1 时 2.92 万，s 0.85 → 2.11 万（上方对格格）。
          画布宽 960：披风最右伸出锚点 133 px，x ≤ 822。[820, 670]：同组 B5 在场帧外扩 4px 相交 0（740 时 B5 wind 举棍过头相交 1039 px），同组 B24 相交 0 */
-      anchor: [127.2, 337.5], at: [800, 670, 0.85], pivot: [127, 337], leanK: 0.2,
+      anchor: [127.2, 337.5], at: [800, 550, 0.85], pivot: [127, 337], leanK: 0.2,
       depth: 0.5, recipe: 'star',
       /* 圣衣拼身：金光里淡入（张开双臂、圣衣刚合上）→ 单膝落在墙沿（land 压扁）→ 起身举拳 */
       enter: { kind: 'appear', fx: 'flash', color: [255, 210, 80], fade: 0.3, T: 0.9, seq: [['assemble', 0.35], ['land', 0.25, 'land'], ['victory', 0.3], ['idle', 9]], sq: 0.08 },
@@ -477,7 +477,7 @@ const TRIO_BUDDY = {
       /* 锚点 = 撑在墙头上的那只手 = 墙头那一行。上方槽位：剪影面积 3.94 万 × 0.72² = 2.04 万（格格 2.09 万 −2%）。
          [890, 630]：和别的上方角色（B11 y 620）同一高度，把 y 400 一带留给叠第二组时的上方备用位（SLOT2 = 往上 210）；原来放 y 520 正好占了它。
          背后的扇子右沿到 x 958 不出画；和同组 B6 在场四帧 × B18 在场六帧剪影外扩 4px 相交 0 */
-      anchor: [194.8, 211.6], at: [890, 570, 0.72], pivot: [195, 212], leanK: 0.3,
+      anchor: [194.8, 211.6], at: [890, 490, 0.72], pivot: [195, 212], leanK: 0.3,
       depth: 0.5, recipe: 'feather',
       /* 从墙头那一行后面升上来（线以下剪掉），整段升起都是 leap，升到位那一刻（= T）换成坐定 idle，腿同一格垂到墙前。
          剪裁在 t < T 时一直生效（trio.js place / drawBody），所以 T 必须正好落在"腿翻到墙前"的那次换帧上：
