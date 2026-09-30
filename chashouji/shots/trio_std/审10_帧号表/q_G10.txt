@@ -1,0 +1,96 @@
+1.225 G11:kick G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+1.275 G11:kick G22:wind G10:idle {"B": 0, "G": 0, "Bt": 0}
+1.325 G11:kick G22:wind G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.375 G11:kick G22:wind G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.425 G11:raise G22:wind G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.475 G11:raise G22:wind G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.525 G11:raise G22:wind G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.575 G11:wind G22:throw G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.625 G11:wind G22:throw G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.675 G11:wind G22:throw G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.725 G11:wind G22:throw G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.775 G11:wind G22:throw G10:throw {"B": 0, "G": 0, "Bt": 0}
+1.825 G11:follow G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+1.875 G11:follow G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+1.925 G11:follow G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+1.975 G11:follow G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+2.025 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+2.075 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+2.125 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+2.175 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+2.225 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+2.275 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+2.325 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+2.375 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+2.425 G11:idle G22:follow G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.475 G11:idle G22:follow G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.525 G11:idle G22:follow G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.575 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.625 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.675 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.725 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.775 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.825 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.875 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.925 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+2.975 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.025 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.075 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.125 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.175 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.225 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.275 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.325 G11:idle G22:idle G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.375 G11:idle G22:wind G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.425 G11:idle G22:wind G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.475 G11:idle G22:wind G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.525 G11:idle G22:wind G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.575 G11:idle G22:wind G10:idle {"B": 0, "G": 0, "Bt": 0}
+3.625 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+3.675 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+3.725 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+3.775 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+3.825 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+3.875 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+3.925 G11:idle G22:idle G10:wind {"B": 0, "G": 0, "Bt": 0}
+3.975 G11:idle G22:wind G10:throw {"B": 0, "G": 0, "Bt": 0}
+4.025 G11:idle G22:wind G10:throw {"B": 0, "G": 0, "Bt": 0}
+4.075 G11:idle G22:wind G10:throw {"B": 0, "G": 0, "Bt": 0}
+4.125 G11:idle G22:wind G10:follow {"B": 0, "G": 0, "Bt": 0}
+4.175 G11:tuck G22:wind G10:follow {"B": 0, "G": 0, "Bt": 0}
+4.225 G11:idle G22:crawl2 G10:throw {"B": 0, "G": 0, "Bt": 0}
+4.275 G11:idle G22:crawl2 G10:throw {"B": 0, "G": 0, "Bt": 0}
+4.325 G11:idle G22:crawl2 G10:throw {"B": 0, "G": 0, "Bt": 0}
+4.375 G11:idle G22:crawl2 G10:follow {"B": 0, "G": 0, "Bt": 0}
+4.425 G11:idle G22:crawl2 G10:follow {"B": 0, "G": 0, "Bt": 0}
+4.475 G11:idle G22:crawl2 G10:follow {"B": 0, "G": 0, "Bt": 0}
+4.525 G11:idle G22:crawl2 G10:follow {"B": 0, "G": 0, "Bt": 0}
+4.575 G11:idle G22:crawl2 G10:follow {"B": 0, "G": 0, "Bt": 0}
+4.625 G11:idle G22:crawl2 G10:follow {"B": 0, "G": 0, "Bt": 0}
+4.675 G11:idle G22:crawl2 G10:idle {"B": 0, "G": 0, "Bt": 0}
+4.725 G11:idle G22:crawl2 G10:idle {"B": 0, "G": 0, "Bt": 0}
+4.775 G11:idle G10:cruise {"B": 0, "G": 0, "Bt": 0}
+4.825 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+4.875 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+4.925 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+4.975 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.025 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.075 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.125 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.175 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.225 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.275 G11:tuck G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.325  {"B": 0, "G": 0, "Bt": 0}
+5.375  {"B": 0, "G": 0, "Bt": 0}
+5.425 G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.475 G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.525 G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.575 G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.625 G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.675 G10:cruise {"B": 0, "G": 0, "Bt": 0}
+5.725  {"B": 0, "G": 0, "Bt": 0}
+5.775  {"B": 0, "G": 0, "Bt": 0}
+5.825  {"B": 0, "G": 0, "Bt": 0}
+5.875  {"B": 0, "G": 0, "Bt": 0}
+5.925  {"B": 0, "G": 0, "Bt": 0}
+5.975  {"B": 0, "G": 0, "Bt": 0}

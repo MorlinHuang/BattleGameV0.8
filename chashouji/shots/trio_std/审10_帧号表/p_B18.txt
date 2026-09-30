@@ -1,0 +1,96 @@
+1.2 B27:idle B6:walk4 B18:wind {"B": 0, "G": 0, "Bt": 0}
+1.25 B27:wind B6:walk4 B18:wind {"B": 0, "G": 0, "Bt": 0}
+1.3 B27:wind B6:walk4 B18:wind {"B": 0, "G": 0, "Bt": 0}
+1.35 B27:wind B6:walk4 B18:wind {"B": 0, "G": 0, "Bt": 0}
+1.4 B27:wind B6:walk1 B18:throw {"B": 0, "G": 0, "Bt": 0}
+1.45 B27:wind B6:walk1 B18:throw {"B": 0, "G": 0, "Bt": 0}
+1.5 B27:wind B6:walk1 B18:follow {"B": 0, "G": 0, "Bt": 0}
+1.55 B27:throw B6:walk1 B18:follow {"B": 0, "G": 0, "Bt": 0}
+1.6 B27:throw B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+1.65 B27:follow B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+1.7 B27:follow B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+1.75 B27:follow B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+1.8 B27:wind B6:follow B18:wind {"B": 0, "G": 0, "Bt": 0}
+1.85 B27:wind B6:follow B18:throw {"B": 0, "G": 0, "Bt": 0}
+1.9 B27:wind B6:follow B18:throw {"B": 0, "G": 0, "Bt": 0}
+1.95 B27:throw B6:follow B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.0 B27:throw B6:follow B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.05 B27:throw B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.1 B27:throw B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.15 B27:throw B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.2 B27:follow B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.25 B27:follow B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.3 B27:follow B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.35 B27:follow B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.4 B27:follow B6:idle B18:follow {"B": 0, "G": 0, "Bt": 0}
+2.45 B27:follow B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.5 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.55 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.6 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.65 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.7 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.75 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.8 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.85 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.9 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+2.95 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+3.0 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+3.05 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+3.1 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+3.15 B27:idle B6:idle B18:raise {"B": 0, "G": 0, "Bt": 0}
+3.2 B27:wind B6:idle B18:raise {"B": 0, "G": 0, "Bt": 0}
+3.25 B27:wind B6:idle B18:raise {"B": 0, "G": 0, "Bt": 0}
+3.3 B27:wind B6:idle B18:raise {"B": 0, "G": 0, "Bt": 0}
+3.35 B27:wind B6:idle B18:raise {"B": 0, "G": 0, "Bt": 0}
+3.4 B27:wind B6:idle B18:wind {"B": 0, "G": 0, "Bt": 0}
+3.45 B27:wind B6:idle B18:wind {"B": 0, "G": 0, "Bt": 0}
+3.5 B27:throw B6:idle B18:wind {"B": 0, "G": 0, "Bt": 0}
+3.55 B27:throw B6:idle B18:wind {"B": 0, "G": 0, "Bt": 0}
+3.6 B27:follow B6:wind B18:throw {"B": 0, "G": 0, "Bt": 0}
+3.65 B27:follow B6:wind B18:follow {"B": 0, "G": 0, "Bt": 0}
+3.7 B27:follow B6:wind B18:follow {"B": 0, "G": 0, "Bt": 0}
+3.75 B27:follow B6:wind B18:follow {"B": 0, "G": 0, "Bt": 0}
+3.8 B27:idle B6:throw B18:follow {"B": 0, "G": 0, "Bt": 2}
+3.85 B27:idle B6:throw B18:follow {"B": 0, "G": 0, "Bt": 977}
+3.9 B27:idle B6:follow B18:follow {"B": 0, "G": 0, "Bt": 23}
+3.95 B27:idle B6:follow B18:follow {"B": 0, "G": 0, "Bt": 0}
+4.0 B27:idle B6:follow B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.05 B27:idle B6:follow B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.1 B27:idle B6:follow B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.15 B27:idle B6:follow B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.2 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.25 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.3 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.35 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.4 B27:idle B6:idle B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.45 B27:idle B6:walk1 B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.5 B27:idle B6:walk1 B18:idle {"B": 0, "G": 0, "Bt": 0}
+4.55 B27:idle B6:walk1 B18:leap {"B": 0, "G": 0, "Bt": 0}
+4.6 B27:idle B6:walk2 B18:leap {"B": 0, "G": 0, "Bt": 0}
+4.65 B27:idle B6:walk2 B18:leap {"B": 0, "G": 0, "Bt": 0}
+4.7 B27:idle B6:walk2 B18:leap {"B": 0, "G": 0, "Bt": 0}
+4.75 B27:idle B6:walk3 B18:leap {"B": 0, "G": 0, "Bt": 0}
+4.8 B27:slide B6:walk1 {"B": 0, "G": 0, "Bt": 0}
+4.85 B27:slide B6:walk1 {"B": 0, "G": 0, "Bt": 0}
+4.9 B27:slide B6:walk2 {"B": 0, "G": 0, "Bt": 0}
+4.95 B27:slide B6:walk2 {"B": 0, "G": 0, "Bt": 0}
+5.0 B27:slide B6:walk2 {"B": 0, "G": 0, "Bt": 0}
+5.05 B27:slide B6:walk3 {"B": 0, "G": 0, "Bt": 0}
+5.1 B27:slide B6:walk3 {"B": 0, "G": 0, "Bt": 0}
+5.15 B27:slide B6:walk3 {"B": 0, "G": 0, "Bt": 0}
+5.2 B27:slide B6:walk4 {"B": 0, "G": 0, "Bt": 0}
+5.25 B27:slide B6:walk4 {"B": 0, "G": 0, "Bt": 0}
+5.3 B27:slide B6:walk4 {"B": 0, "G": 0, "Bt": 0}
+5.35 B6:walk1 {"B": 0, "G": 0, "Bt": 0}
+5.4 B6:walk1 {"B": 0, "G": 0, "Bt": 0}
+5.45 B6:walk2 {"B": 0, "G": 0, "Bt": 0}
+5.5 B6:walk2 {"B": 0, "G": 0, "Bt": 0}
+5.55  {"B": 0, "G": 0, "Bt": 0}
+5.6  {"B": 0, "G": 0, "Bt": 0}
+5.65  {"B": 0, "G": 0, "Bt": 0}
+5.7  {"B": 0, "G": 0, "Bt": 0}
+5.75  {"B": 0, "G": 0, "Bt": 0}
+5.8  {"B": 0, "G": 0, "Bt": 0}
+5.85  {"B": 0, "G": 0, "Bt": 0}
+5.9  {"B": 0, "G": 0, "Bt": 0}
+5.95  {"B": 0, "G": 0, "Bt": 0}
