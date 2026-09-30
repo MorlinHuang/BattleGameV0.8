@@ -39,6 +39,8 @@ def main():
     ap.add_argument('--cell', type=int, default=0, help='最终单格边长，0=不缩放')
     ap.add_argument('--cols', type=int, default=6)
     ap.add_argument('--q', type=int, default=88)
+    ap.add_argument('--aq', type=int, default=100, help='alpha 通道质量，100 = 无损（默认）。'
+                    '零件多、镂空多的件（算盘）alpha 占掉大半体积：70 时 alpha 最大误差 9/255、看不出，体积降三成')
     a = ap.parse_args()
 
     files = sorted(glob.glob(os.path.join(a.src, '*.png')))
@@ -72,7 +74,7 @@ def main():
         atlas.paste(g, ((k % a.cols) * cell, (k // a.cols) * cell))
 
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    atlas.save(a.out, 'WEBP', quality=a.q, method=6)
+    atlas.save(a.out, 'WEBP', quality=a.q, alpha_quality=a.aq, method=6)
     scale = side / (full * NOMINAL / ORTHO)
     kb = os.path.getsize(a.out) // 1024
     print('帧数 %d  渲染边长 %d  并集 %d  单格 %d  体积 %dKB' % (n, full, side, cell, kb))

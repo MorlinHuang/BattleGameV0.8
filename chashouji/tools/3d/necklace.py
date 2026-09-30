@@ -3,13 +3,15 @@
 ## 形体
 
 - "海洋之心"：一颗厚的心形蓝宝石（正反两面各两圈台阶收到顶面，刻面宝石的样子）+ 外面一圈银色包边（独立的扁环）
-  + 包边外一圈独立的小白钻（每颗一个八面体）+ 顶上一个挂环 + 一截粗银珠链。
-- 体积感来自**一颗颗独立的小白钻**和包边：转起来每颗钻各自的轮廓、跟宝石的遮挡一直在变。
-  宝石本身的刻面不产生描边（Freestyle 在这套用法下只画剪影和自遮挡线，skill 坑 2），只管"认得出"。
-- 钻石颗数按 g ≥ 2W 定：r 26 → 1 单位 ≈ 26 屏幕 px，2W = 5.6px ≈ 0.22 单位；
-  心形外圈周长 ~4.3 单位，9 颗、每颗宽 0.2 → 颗与颗之间 ~0.28 单位，不会连成一圈黑。
-- 链子不做细链（细链在 50px 上就是一根墨线），做 7 颗大银珠从挂环往上排成一个 V 字的一小截。
-- 有正面，lean 25：lean 40 时 5/12 帧转到侧对，心形缩成一根带钻的线；25 时最多偏 50°，始终认得出是心。
+  + 顶上一个挂环 + **一圈大珍珠链**（4 颗米白大珠串在一根银链上，从挂环往上绕成一个环）。
+- **审查第三轮 6.7 返工**：首版心形外面贴着包边排了 9 颗小白钻（八面体、屏幕 ~5px），每颗一圈描边、跟包边的描边并在一起，
+  外轮廓读成一圈黑疙瘩（屏幕描边 8.3px，24 件里最粗），心形像带刺的水雷；链子是 7 颗小银珠，缩到 57px 看不见。
+  改法：**小白钻去掉**（贴着外沿放多少颗都会并进外轮廓：钻与包边的缝要 ≥ 2W = 0.22 单位，整件就放不下心形了），
+  心形放大（半宽 0.55 → 0.62）、银包边加宽到 0.2 单位；链子换成 4 颗大珍珠（直径 0.38 单位 ≈ 11px），浅色、跟蓝心拉开。
+- 体积感来自包边、挂环和一颗颗独立的珍珠：转起来珠子之间、珠子和心形的遮挡一直在变。
+  宝石本身的刻面不产生描边（skill 坑 2），只管"认得出"。
+- 有正面，**lean −20**：正面最多偏 40°；取负、起始略往上抬是为了让正面一直在灯这一侧（sun 从镜头这侧右上方打，Toon 离光 ~65° 以外整面落暗，
+  见 cassette.py）：36 帧里心形正面离光最多 58°。
 - 屏幕上半径 26（G15 atk.r 按这个填）。
 
 跑：blender -b --python necklace.py -- 36 <边长> 128 <out> 1
@@ -23,9 +25,9 @@ init()
 mat('gem', '#2a6fd6')         # 宝石蓝（识别色）
 mat('gem2', '#5ea2f0')        # 顶面亮一档
 mat('silver', '#c9d0d8')
-mat('diamond', '#f4f8ff')
+mat('pearl', '#f4ecdc')      # 米白大珍珠
 
-SC = 0.55                     # 心形半宽（单位）；整件竖着 ~2.0 = NOMINAL（心 + 挂环 + 珠链）
+SC = 0.62                     # 心形半宽（单位）；整件竖着 ~2.0 = NOMINAL（心 + 挂环 + 珠链）
 NP = 40
 
 
@@ -44,14 +46,14 @@ def ring_pts(k, y):
 
 
 # 宝石：外沿（k 1.0，厚 ±0.07）→ 台阶（k 0.72，厚 ±0.16）→ 顶面（k 0.45，厚 ±0.2），正反对称；顶面用亮一档的材质
-LAY = [(1.0, 0.07), (0.72, 0.16), (0.45, 0.2)]
+LAY = [(1.0, 0.15), (0.72, 0.19), (0.45, 0.22)]      # 外沿跟包边内沿同高：两块面接平，包边内沿不出剪影线
 verts, faces, mats = [], [], []
 rings = []
 for side in (-1, 1):
     rs = []
     for k, t in LAY:
         o = len(verts); verts += ring_pts(k, side * t); rs.append(o)
-    c = len(verts); verts.append((0, side * 0.2, 0.0)); rs.append(c)
+    c = len(verts); verts.append((0, side * 0.22, 0.0)); rs.append(c)
     rings.append(rs)
 for side, rs in zip((-1, 1), rings):
     for j in range(2):
@@ -74,9 +76,11 @@ gem.data.materials.append(bpy.data.materials['gem2'])
 for p, m in zip(gem.data.polygons, mats):
     p.material_index = m
 
-# 银包边：心形外沿外面一圈扁带（外 1.14、内 0.98，厚 ±0.1），比宝石外沿厚，正面看是一圈台阶
+# 银包边：心形外沿外面一圈扁带（外 1.3 厚 ±0.11 → 内 0.98 厚 ±0.15，往里拱），内沿跟宝石外沿同高、正面接平。
+# 包边比宝石外沿厚一截的话，包边内壁在正面是一道剪影线：0.2 单位宽的银边两边各一道描边，屏幕上只剩 1px 银色（快测）
+# 外 1.14 时带宽 0.1 单位（屏幕 3px），整条被描边吃掉，心形外面是一道粗黑框（快测）；放到 0.2 单位，银色露得出来
 bv, bf = [], []
-for k, t in ((1.14, 0.1), (0.98, 0.1)):
+for k, t in ((1.3, 0.11), (0.98, 0.15)):
     bv += ring_pts(k, -t) + ring_pts(k, t)
 O, I = 0, 2 * NP
 for i in range(NP):
@@ -87,26 +91,18 @@ for i in range(NP):
            (O + NP + i, O + NP + i2, I + NP + i2, I + NP + i)]  # 背面
 add_mesh('bezel', bv, bf, 'silver')
 
-# 小白钻：沿心形外面一圈，9 颗八面体（心尖、心窝各留空）
-ND, DR = 9, 0.1
-for j in range(ND):
-    t = 2 * math.pi * (j + 0.5) / ND
-    if abs(t - math.pi) < 0.25: t += 0.3              # 心尖那一颗往旁边挪
-    x, z = heart(t)
-    cx, cz = x * SC * 1.3, z * SC * 1.3
-    v = [(cx + DR, 0, cz), (cx - DR, 0, cz), (cx, 0, cz + DR), (cx, 0, cz - DR), (cx, -DR * 0.8, cz), (cx, DR * 0.8, cz)]
-    f = [(4, 0, 2), (4, 2, 1), (4, 1, 3), (4, 3, 0), (5, 2, 0), (5, 1, 2), (5, 3, 1), (5, 0, 3)]
-    add_mesh('dia', v, f, 'diamond')
+# 挂环（心窝上方）+ 珍珠链：一根银链绕成环（细圆环，屏幕上就是一道线），6 颗大珠串在上面，最下面挂环那一段空着
+TOP = heart(0)[1] * SC * 1.3
+prim('torus', 'silver', major_radius=0.12, minor_radius=0.05, location=(0, 0, TOP + 0.12), rotation=(math.pi / 2, 0, 0))
+CR, CZ, PR = 0.52, TOP + 0.24 + 0.52, 0.19       # 链环半径、圆心高、珍珠半径
+prim('torus', 'silver', major_radius=CR, minor_radius=0.035, location=(0, 0, CZ), rotation=(math.pi / 2, 0, 0))
+for j in range(4):
+    a = math.radians(j * 60)                     # 0° / 60° / 120° / 180°：珠距 0.52，缝 0.14 单位（6 颗那一版缝 0.11，珠子并成一串黑圈，快测）
+    prim('uv_sphere', 'pearl', segments=16, ring_count=10, radius=PR, location=(CR * math.cos(a), 0, CZ + CR * math.sin(a)))
 
-# 挂环（心窝上方）+ 7 颗大银珠排成 V 字
-TOP = heart(0)[1] * SC * 1.14
-prim('torus', 'silver', major_radius=0.12, minor_radius=0.045, location=(0, 0, TOP + 0.14), rotation=(math.pi / 2, 0, 0))
-for j in range(1, 4):
-    for s in (-1, 1):
-        prim('uv_sphere', 'silver', segments=12, ring_count=8, radius=0.075, location=(s * 0.15 * j, 0, TOP + 0.24 + 0.16 * j))
-prim('uv_sphere', 'silver', segments=12, ring_count=8, radius=0.075, location=(0, 0, TOP + 0.3))
-
+bpy.ops.object.select_all(action='SELECT')           # 旋转烤进网格，join 后姿态确定（理由见 dumbbell.py）
+bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
 ob = join_all(gem)
 bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')      # 手拼的网格面朝向不一定一致：Toon 明暗靠法线，统一朝外
 bpy.ops.mesh.normals_make_consistent(inside=False); bpy.ops.object.mode_set(mode='OBJECT')
-render_turntable('necklace', active=ob, lean=25, tilt=0.3, roll=0.2, screen_r=26)
+render_turntable('necklace', active=ob, lean=-20, tilt=-0.1, roll=0.2, screen_r=26)
