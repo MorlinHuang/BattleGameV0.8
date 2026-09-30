@@ -431,6 +431,24 @@ const TRIO_BUDDY = {
              T: 0.5, arc: 0.2, spin: 1.5, stretch: 0.02, onHit: 'net', gap: [0.6, 1.0] },
     },
 
+    B19: {      // 光之巨人 cos 大叔：右上一道白光变身冲天、落地一蹲、起身双手叉腰挺肚子；胸口计时器蓄光，十字手打出一道白蓝光线
+      face: -1,
+      sheet: { src: 'assets/trio/B19_ultra.webp', cell: [225, 318], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'transform', 'land', 'rise', 'idle2'] },
+      /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 1.85 万，s 1.06 → 2.08 万（上方对格格）。
+         [850, 700]：同组 B3（820, 1040）在场帧（含 aim0~10）、B30 外扩 4px 相交 0；720 时 follow 举拳 × B3 wind 相交 398 px。画布宽 960：最右伸出锚点 93 px */
+      anchor: [99.1, 311.8], at: [850, 700, 1.06], pivot: [99, 312], leanK: 0.2,
+      depth: 0.5, recipe: 'water',
+      /* 变身闪光：白光里淡入（冲天拳）→ 落地一蹲 → 起身 */
+      enter: { kind: 'appear', fx: 'flash', color: [230, 240, 255], fade: 0.3, T: 0.9, seq: [['transform', 0.35], ['land', 0.25, 'land'], ['rise', 0.2], ['idle', 9]], sq: 0.08 },
+      exit: { frame: 'transform' },
+      idle: { frame: 'idle', breathe: [0.018, 0.8, 0.3] },
+      /* 十字光线：wind 两臂张开蓄力，蓄力球在胸口计时器上；throw 帧十字手，光从竖着那条前臂的左沿射出去（beam.fire 0.6 秒） */
+      atk: { kind: 'beam', seq: [['wind', 0.45], ['throw', 0.6, 'fire'], ['follow', 0.35]],
+             hold: { wind: [87, 128], throw: [40, 86] }, gap: [0.45, 0.8], stretch: 0.03,
+             beam: { fire: 0.6, drip: 0.1, ball: 16, glow: [180, 230, 255], edge: [40, 110, 220],
+                     layers: [[26, [40, 110, 220], 0.35], [16, [140, 210, 255], 0.8], [8, [225, 245, 255], 0.95], [3, [255, 255, 255], 1]] } },
+    },
+
     B18: {      // 摇扇才子：从右上墙头后面一蹿翻上来、坐定；背后插着题诗折扇，伸手抽出来一甩，3D 折扇旋着飞过去
       face: -1,
       sheet: { src: 'assets/trio/B18_tangbohu.webp', cell: [279, 375], cols: 4, names: ['idle', 'raise', 'wind', 'throw', 'follow', 'leap', 'land', 'idle2'] },
