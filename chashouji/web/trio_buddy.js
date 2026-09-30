@@ -386,7 +386,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B15_gojo.webp', cell: [235, 319], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'fold', 'reveal', 'settle', 'idle2'] },
       /* 上方；悬浮，锚点 = 盘着的腿最低处。剪影面积 2.20 万（上方对格格 2.09 万）。[880, 730]：同组 B8 在场帧外扩 4px 相交 0 */
       anchor: [137.3, 318.9], at: [880, 710, 1], pivot: [137, 319], leanK: 0.2,
-      depth: 0.5, recipe: 'bloom',
+      depth: 0.5, recipe: 'hollow',   // 紫色光球命中（trio.js TRIO_RECIPE，3566a8a）；原 bloom 是档 4 戒指盒绽放，带爱心金星，和名单"手指弹出紫色光球"不符
       /* 凭空浮现：紫白闪光里淡入（抱臂低头）→ 抬头张开双手 → 手插兜落定 */
       enter: { kind: 'appear', fx: 'flash', color: [200, 160, 255], fade: 0.3, T: 0.8, seq: [['fold', 0.35], ['reveal', 0.3], ['settle', 0.15, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'fold' },
