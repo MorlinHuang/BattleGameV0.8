@@ -1,0 +1,45 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "auto",
+   "frames": [
+    "idle",
+    "raise",
+    "wind",
+    "throw"
+   ]
+  },
+  {
+   "src": "raw/act_b1.png",
+   "screen": "auto",
+   "frames": [
+    "follow",
+    "leap",
+    "land",
+    "idle2"
+   ]
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  195,
+  15,
+  335,
+  150
+ ],
+ "fixed": [
+  220,
+  300,
+  400,
+  480
+ ],
+ "size": [
+  "h",
+  330
+ ],
+ "anchor": [
+  380,
+  422
+ ]
+}
