@@ -1,0 +1,7 @@
+Character animation pose sheet, 2x2 grid (4 poses), THE SAME adult swordsman as the reference sheet (short spiky moss-green hair, three gold drop earrings on left ear, black bandana on left upper arm, white T-shirt, green plaid haramaki sash, dark baggy trousers in black boots, one katana held in his teeth and one katana in each hand), EXACTLY the same character size, costume details and camera distance as the reference sheet, anime cel-shading, clean black lineart. All poses face LEFT.
+Top-left (slide): sliding fast toward the LEFT very low on his bent right knee and left foot, body leaning far forward, both arms with the blades swept straight back behind him to the right, hair and bandana ends blown back.
+Top-right (skid): braking hard, left foot digging in, body leaning back, blades still swept behind, gritted teeth.
+Bottom-left (set): landing into the low crouch, right knee touching down, arms starting to cross in front of the chest.
+Bottom-right (idle): exactly like top-left of the reference sheet — very low crouch, right knee on the ground, both arms crossed in front of his chest, hand blades pointing left and right, mouth blade pointing left.
+Generous empty space between cells, nothing overlaps another cell, nothing cropped. No slash effects, no motion lines, no dust.
+Background MUST be pure flat magenta #FF00FF single solid color, no gradient, no shadow, no floor line, no text, no panel borders.

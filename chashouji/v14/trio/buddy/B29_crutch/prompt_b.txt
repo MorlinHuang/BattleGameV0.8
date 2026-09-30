@@ -1,0 +1,7 @@
+Character animation walk-cycle sheet, 2x2 grid (4 poses), THE SAME adult man as the reference sheet (olive-green fur trapper hat with flaps down, long army-green padded overcoat with brown fur collar, gray sweater, dark trousers, brown shoes), EXACTLY the same character size, costume details and camera distance as the reference sheet, generic anime face, anime cel-shading, clean black lineart. His hands are EMPTY. In every pose he LIMPS toward the LEFT in side view with an exaggerated fake limp.
+Top-left (limp down): weight on his stiff right leg, his body dipped low and tilted, left leg dragging behind, one hand pressed on his knee, grimacing.
+Top-right (limp up): stepping up onto his good left leg, body rising high, the stiff right leg swinging forward straight, arms out for balance.
+Bottom-left (stop): standing hunched, one hand on his lower back, wiping his forehead, sneaky side glance.
+Bottom-right (idle): exactly like top-left of the reference sheet — hunched, left hand held up in front of his chest as if showing off an upright crutch, right hand gesturing toward it, sly grin.
+Generous empty space between cells, nothing overlaps another cell, nothing cropped. No motion lines.
+Background MUST be pure flat magenta #FF00FF single solid color, no gradient, no shadow, no floor line, no text, no panel borders.

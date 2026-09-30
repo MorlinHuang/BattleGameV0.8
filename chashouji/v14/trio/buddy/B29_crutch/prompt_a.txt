@@ -1,0 +1,7 @@
+Character animation pose sheet, 2x2 grid (4 poses), each pose one full-body standing drawing of THE SAME adult man as the reference image (olive-green fur-lined trapper hat with ear flaps down, long army-green padded overcoat with brown fur collar, gray sweater, dark trousers, brown shoes, lean middle-aged build), generic anime face with a sly salesman grin, anime cel-shading, clean black lineart, identical character size, identical costume details and identical camera distance in all four poses. In every pose he stands hunched over, faking a limp, facing LEFT, both feet planted on the ground in exactly the same place and same size in every cell (only arms, head and torso change). His hands are EMPTY (no crutch drawn).
+Top-left (idle): his left hand held up in front of his chest as if proudly showing off an upright wooden crutch to sell it, right hand gesturing toward it, sly grin.
+Top-right (wind-up): right arm swung high back over his right shoulder as if holding a long stick to throw, leaning back.
+Bottom-left (release): right arm whipped far forward to the LEFT, hand open, leaning forward, shouting.
+Bottom-right (follow-through): arm down, hunched, both hands rubbed together, cheeky grin.
+Generous empty space between cells, nothing overlaps another cell, nothing cropped by the image border. No motion lines.
+Background MUST be pure flat magenta #FF00FF single solid color, no gradient, no shadow, no floor line, no text, no panel borders.

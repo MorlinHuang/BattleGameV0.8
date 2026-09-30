@@ -1,0 +1,7 @@
+Character animation pose sheet, 2x2 grid (4 poses), THE SAME adult man and THE SAME big round ORANGE beanbag as the reference sheet (messy brown hair, glowing RGB gaming headset, dark eye circles, oversized light-gray hoodie, gray sweatpants, fluffy white slippers), EXACTLY the same character size, beanbag size, costume details and camera distance as the reference sheet, anime cel-shading, clean black lineart. In every pose he lies on his belly on the beanbag facing LEFT, the beanbag in exactly the same place and size in every cell. His hands are EMPTY.
+Top-left (being pushed in fast): he clings flat to the beanbag with both hands gripping its front edge, hair and hoodie strings blown backward to the right, mouth open yelling happily.
+Top-right (skid stop): the beanbag squashed, he is jolted forward, arms thrown forward to the left, legs kicked up behind him, surprised face.
+Bottom-left (settle): he flops back down onto the beanbag, stretching both arms forward lazily, yawning.
+Bottom-right (idle): exactly like top-left of the reference sheet — propped on his left elbow, right hand resting on the front of the beanbag as if gripping a computer mouse, smug grin.
+Generous empty space between cells, nothing overlaps another cell, nothing cropped. No motion lines, no speed lines.
+Background MUST be pure flat chroma green #00FF00 single solid color, no gradient, no shadow, no floor line, no text, no panel borders.

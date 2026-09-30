@@ -1,0 +1,7 @@
+Character animation pose sheet, 2x2 grid (4 poses), THE SAME cartoon pig-headed man as the reference sheet (pink pig head, big floppy ears, small black monk cap, open black robe, huge bare belly with red apron, baggy black trousers, black cloth shoes, nine-toothed iron rake strapped diagonally across his back), EXACTLY the same character size, costume details and camera distance as the reference sheet, anime cel-shading, clean black lineart. His hands are EMPTY.
+Top-left (waddle A): squatting low and waddling toward the LEFT in side view, knees bent, his LEFT foot stepping forward, belly bouncing, arms swinging, cheerful.
+Top-right (waddle B): same low squat waddle, his RIGHT foot stepping forward, belly swinging the other way.
+Bottom-left (plop): dropping down onto his bottom with a bump, both legs kicked up in the air toward the left, arms flung up, surprised.
+Bottom-right (idle): exactly like top-left of the reference sheet — sitting on the ground facing left, legs forward, both hands on top of his belly as if holding a big round watermelon.
+Generous empty space between cells, nothing overlaps another cell, nothing cropped. No motion lines.
+Background MUST be pure flat chroma green #00FF00 single solid color, no gradient, no shadow, no floor line, no text, no panel borders.

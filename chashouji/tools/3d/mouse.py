@@ -1,0 +1,96 @@
+"""有线鼠标（档 3 三人组 B26 电竞宅男，把鼠标攥着线当流星锤甩出去砸女生，2026-09-30）。
+
+## 形体
+
+- 电竞鼠标：一个前窄后宽、背上拱起的壳（缩放的球 + 顶点按长轴收窄）+ 两片独立的按键 + 一个红色大滚轮 + 壳底一圈青色 RGB 灯带
+  + 屁股上一截线头。线本身由引擎画（atk.tether），这里只留线头。
+- **按键是认鼠标的关键**：第一版没做按键（怕 36px 上叠黑），渲出来是一颗带蓝边的灰蛋，结构密度 16%。
+  现在做法同篮球：壳顶前半截的面按"左键 / 右键 / 中缝"切开，两片键各自往外挤一层厚度（键比壳高一个台阶，
+  前沿和后沿各一圈轮廓），中缝窄到两边的描边正好并成一条黑线（g < 2W 反过来用：鼠标的中缝本来就是一条线），
+  缝底下是一颗深灰内芯，滚轮嵌在缝里。
+- 壳用浅灰（#d9dde3）：黑壳跟描边色贴在一起，36px 上是一块黑砖（磁带第一版的教训）。
+- 零件不能碎：屏幕上 r 22（web/trio_buddy.js B26 atk.r），长 44px，1 单位 ≈ 22px：r 18 时灯带、滚轮都被描边吃掉，只剩一颗灰蛋（快测）。
+  灯带粗 0.32 单位（~7px）、整圈露出壳外。
+- 有正面（按键朝上那一面），lean 50：转半圈正面最多偏 100°，一半的帧看得到按键和滚轮、一半看到侧面灯带。
+
+跑：blender -b --python mouse.py -- 36 <边长> 128 <out> 1
+"""
+import sys, os, math
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from common import *
+import bpy, bmesh
+
+init()
+mat('shell', '#d9dde3')
+mat('btn', '#eef0f3')
+mat('core', '#4a4e58')
+mat('wheel', '#e0403a')
+mat('rgb', '#35d6f0')
+mat('cable', '#3a3f48')
+
+L, W, H = 1.0, 0.6, 0.55          # 半长（NOMINAL 方向）、半宽、半高；长轴 = X，前端朝 −X
+SEAM = 0.035                      # 中缝半宽（占 W 的单位）
+BTN_X = 0.12                      # 按键后沿（x < BTN_X 的壳顶是按键）
+BTN_Z = 0.12                      # 按键下沿（z > BTN_Z）
+LIFT = 0.05                       # 按键比壳高多少（台阶）
+
+
+def shape(co):
+    """单位球 → 鼠标壳：缩放、前窄后宽、底面压平"""
+    x, y, z = co.x * L, co.y * W, co.z * H
+    y *= 1 - 0.22 * (-x / L)
+    if z < -0.25: z = -0.25 - (z + 0.25) * 0.15
+    return x, y, z
+
+
+bm = bmesh.new()
+bmesh.ops.create_uvsphere(bm, u_segments=48, v_segments=24, radius=1)
+for v in bm.verts: v.co = shape(v.co)
+parts = {'body': [], 'L': [], 'R': []}
+for f in bm.faces:
+    c = f.calc_center_median()
+    if c.x < BTN_X and c.z > BTN_Z:
+        if c.y > SEAM: parts['L'].append(f)
+        elif c.y < -SEAM: parts['R'].append(f)
+        # 中缝的面删掉（露出内芯）
+    else:
+        parts['body'].append(f)
+
+
+def sub(faces, name, m, lift=0.0):
+    """把一组面拷成独立网格；lift > 0 时沿法向挤出一层厚度（按键台阶）"""
+    b2 = bmesh.new()
+    vm = {}
+    for f in faces:
+        vs = []
+        for v in f.verts:
+            if v not in vm: vm[v] = b2.verts.new(v.co)
+            vs.append(vm[v])
+        b2.faces.new(vs)
+    me = bpy.data.meshes.new(name); b2.to_mesh(me); b2.free()
+    ob = bpy.data.objects.new(name, me); bpy.context.scene.collection.objects.link(ob)
+    ob.data.materials.append(bpy.data.materials[m])
+    for p in ob.data.polygons: p.use_smooth = False
+    if lift:
+        sol = ob.modifiers.new('sol', 'SOLIDIFY'); sol.thickness = lift; sol.offset = 1.0
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.modifier_apply(modifier='sol')
+    return ob
+
+
+body = sub(parts['body'], 'body', 'shell')
+sub(parts['L'], 'btnL', 'btn', LIFT)
+sub(parts['R'], 'btnR', 'btn', LIFT)
+bm.free()
+core = prim('uv_sphere', 'core', segments=24, ring_count=12, radius=1)
+for v in core.data.vertices:
+    x, y, z = shape(v.co); v.co = (x * 0.94, y * 0.94, z * 0.94)
+# 滚轮：嵌在中缝里，露出一半
+prim('cylinder', 'wheel', vertices=20, radius=0.2, depth=0.12, location=(-0.42, 0, H * 0.86), rotation=(math.pi / 2, 0, 0))
+# RGB 灯带：底边一圈扁环
+ring = prim('torus', 'rgb', major_radius=1, minor_radius=0.16, location=(0.02, 0, -0.2))   # primitive_torus_add 不收 scale
+ring.scale = (L * 0.99, W * 1.0, 1)                 # 比壳那一圈略大，灯带整圈露在外面
+prim('cylinder', 'cable', vertices=12, radius=0.07, depth=0.34, location=(-L - 0.1, 0, -0.02), rotation=(0, math.pi / 2, 0))
+
+ob = join_all(body)
+render_turntable('mouse', active=ob, lean=50, tilt=0.3, roll=0.25, screen_r=22)
