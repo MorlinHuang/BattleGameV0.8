@@ -239,6 +239,27 @@ const TRIO_BESTIE = {
              gap: [0.8, 1.2], stretch: 0.03 },
     },
 
+    G5: {       // 客栈老板娘（佟湘玉式）：腰侧挂着大算盘、叉着腰扭着走进来，惊呼"额滴神"；摘下算盘举过头顶，一把 3D 算盘甩出去砸他
+      face: +1,
+      sheet: { src: 'assets/trio/G5_tong.webp', cell: [319, 440], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4'] },
+      /* 锚点 = 前脚（右脚）鞋底：出手四帧按这只鞋配准（残差 0.23 px）。脚底 y 1020（同组地板 G23 头顶 1028，不叠），站姿高约 350 px */
+      anchor: [190.4, 434.3], at: [230, 1020, 0.88], pivot: [190, 434], leanK: 0,
+      depth: 0.8, recipe: 'debris',
+      /* 扭腰走：走路条四帧出自同一张底图（raw/act_b1.png），walk1 / walk3 接地（两腿对调）、walk2 / walk4 过渡；左手一直叉腰，右手 后 → 中 → 前 → 中。
+         stride 119 = 相邻两帧着地那只鞋的鞋跟距离（61 / 58 / 59 / 58）× 2 的平均：每次换帧前进 59.5，同一只脚前后差 ≤ 1.5（格内像素） */
+      enter: { kind: 'walk', fps: 6, bob: 6, stride: 119, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
+      exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 8, flip: true, T: 0.8 },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
+      /* 算盘是挂件层（定妆拆层 ref/G5_abacus.png，part.py w 90）：红绳吊在左胯，绕绳头晃；举过头顶 / 甩出去那两帧不画（在手里的是 3D 算盘） */
+      parts: [{ src: 'assets/trio/G5_abacus.webp', pivot: [41, 1], z: 1, sway: [0.1, 0.9, 0],
+                at: { idle: [78, 214, 0], follow: [78, 222, 0], walk1: [84, 226, 0], walk2: [78, 226, 0], walk3: [84, 226, 0], walk4: [78, 226, 0] } }],
+      /* 两手举过头顶（后排：出手点在女生头顶以上）→ 往前甩出 → 捂胸叹气。3D 算盘照道具表 r 40 cell 115 scale 1.35，转速 π / T */
+      atk: { kind: 'throw', item: 'abacus', r: 40, atlas: { src: 'assets/trio/prop_abacus.webp', n: 36, cols: 6, cell: 115, scale: 1.35 },
+             seq: [['wind', 0.32], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             hold: { wind: [188, 32], throw: [300, 72] },
+             T: 0.55, arc: 0.25, spin: 5.7, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
+    },
+
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
