@@ -52,7 +52,7 @@ const bezDir = (p0, c, p2, e) => Math.atan2((1 - e) * (c[1] - p0[1]) + e * (p2[1
    pivot  前后倾 / 秋千摆绕的点（贴图像素，秋千是绳子顶端，在贴图外面）；leanK 前后倾打几折（帧序列里动作已经画在帧上，默认 1）
    depth  远近（< 1 主角身后，> 1 主角之前），main.js 按它跟别的帮手一起排
    enter  进场方式：crawl 爬 / spring 弹 / slide 扑地滑 / dive 腾空扑地再滑 / dash 斜冲 / roll 翻滚 / creep 匍匐（crawl、creep 帧序列：一个爬行帧一步、手 / 肘钉住，bob 奇数帧抬几 px）/ swing 荡 /
-          walk 走（跑，stride 接地帧两脚距离：一帧一步、脚钉地）/ ride 骑、滑 / fly 飞下 / leap 跳落（fly、leap 同一条路：from 起点、h 抛物线高、air 几秒到）/ drop 倒挂垂下 /
+          walk 走（跑，stride 接地帧两脚距离：一帧一步、脚钉地）/ ride 骑、滑（roll [幅度, 角速度, 细抖] 到位后还在前后溜、bob [幅度, 角速度] 一直轻浮）/ fly 飞下 / leap 跳落（fly、leap 同一条路：from 起点、h 抛物线高、air 几秒到）/ drop 倒挂垂下 /
           appear 原地出现（fx 闪光 / 烟，rise 从一条线后面升上来）/ rope 横绳（ends 两头屏幕点、touch 压绳点）。见 place()
           帧序列：enter { kind, T: 几秒, seq: [[帧或帧数组, 秒, 'land'?], ...], fps, ... }；exit { frame（可为数组）, T, fps, flip }
    idle   帧序列：{ frame: 待机帧, breathe: [胀缩幅度, 每秒几次, 横向补偿 (默认 0.4)] }；flex { 帧: [[x0, y0, x1, y1, 't'|'b'|'l'|'r' 钉住哪边, 幅度, 每秒几次, 跟摆], ...] }
@@ -224,6 +224,10 @@ function Act(cfg) {
         dx = sd * (E.dist || off) * (t < TE ? 1 - easeOut(u) : out * out);
         rot = sd * (E.tilt != null ? E.tilt : 0.08) * (t < TE ? 1 - u : out);
         if (t < TE || t > se) dy = Math.sin(t * 31) * 0.8 * s;
+        /* roll [幅度 px, 角速度, 细抖 px]：到位以后还在板上 / 车上前后溜（crew.js pose 在场那一段，老角色迁过来要保留的滑行感）；
+           从 0 起步接得上进场，离场时接着溜、叠在溜走的位移上不跳。bob [幅度 px, 角速度]：平衡车上一直轻轻浮。不写就不晃 */
+        if (E.roll && t >= TE) { const [ra, rw, rs] = E.roll; dx += Math.sin((t - TE) * rw) * ra + Math.sin(t * 47) * (rs || 0); if (t <= se) dy = -Math.abs(Math.sin(t * 31)) * 1.2; }
+        if (E.bob) dy += Math.sin(t * E.bob[1] + b.ph) * E.bob[0];
         break;
       }
       case 'leap':    // 跳落（跃下单膝、撑棒跃进、轻跳落地）：从 from 出发，抛物线（顶点比直线高 h）在 air 秒落到位；落地那一帧 seq 标 'land' 压扁
@@ -559,10 +563,22 @@ function Act(cfg) {
      画法沿用 crew.js 的 drawStream（水柱）/ drawMist（雾）—— crew.js 还在（档 4 用），index.html 里它在 trio.js 之前 */
   const J = A.kind === 'jet' ? A.jet : null, AIM = J ? A.aim : null;
   const AIMS = AIM ? AIM.frames.map(f => AIM.nozzle[f][2]) : [];
-  function aimIdx() {
-    const a = b.ja ?? AIMS[AIMS.length >> 1];                   // 还没瞄过（这一帧先画、后 update）按中间那一帧
-    let k = 0; for (let i = 1; i < AIMS.length; i++) if (Math.abs(AIMS[i] - a) < Math.abs(AIMS[k] - a)) k = i;
-    return k;
+  /* 仰角 a 落在第几档（小数：两档之间按角度线性插，出了两头按端点） */
+  function aimPos(a) {
+    const n = AIMS.length;
+    for (let i = 0; i + 1 < n; i++) {
+      const u = (a - AIMS[i]) / (AIMS[i + 1] - AIMS[i]);
+      if (u <= 1 || i + 2 === n) return i + Math.max(0, Math.min(1, u));
+    }
+    return 0;
+  }
+  const aimIdx = () => b.jk ?? AIMS.length >> 1;                 // 画哪一档：stepJet 带回差地选（还没瞄过按中间那一帧）
+  /* 连续喷口：按仰角在相邻两档的 nozzle 之间插值。反解仰角用它 —— 用"当前画的那一档"的离散喷口的话，一换档喷口跳 13~16 px、
+     要的仰角跟着反号又换回去，每 1/60 秒翻一档（极限环），水滴按来回摆的 ja 出口，水柱画成锯齿（审查第八轮 dense_B1） */
+  function nozzleAt(a, P) {
+    const q = aimPos(a), i = Math.min(Math.floor(q), AIMS.length - 2), u = q - i;
+    const n0 = AIM.nozzle[AIM.frames[i]], n1 = AIM.nozzle[AIM.frames[i + 1]];
+    return P.at([n0[0] + (n1[0] - n0[0]) * u, n0[1] + (n1[1] - n0[1]) * u]);
   }
   function aimFrame() { const k = aimIdx(); return AIM.kick && b.kick > 0.5 ? AIM.kick[k] : AIM.frames[k]; }
   /* 出口速度 V、重力 G，打中 (dx, dy) 要的仰角（低弹道；够不着按 45°）—— crew.js elevation */
@@ -586,10 +602,15 @@ function Act(cfg) {
     }
     const P = place(), nz = (f) => { const q = AIM.nozzle[f]; return P.at(q); };
     if (b.jtg) {
-      const m = nz(AIM.frames[aimIdx()]);
-      const want = Math.max(AIMS[0], Math.min(AIMS[AIMS.length - 1], elevation(b.jtg[0] - m[0], b.jtg[1] - m[1])));
+      const m = nozzleAt(b.ja, P), lo = Math.min(AIMS[0], AIMS[AIMS.length - 1]), hi = Math.max(AIMS[0], AIMS[AIMS.length - 1]);
+      const want = Math.max(lo, Math.min(hi, elevation(b.jtg[0] - m[0], b.jtg[1] - m[1])));
       b.ja += Math.max(-AIM.rate * dt, Math.min(AIM.rate * dt, want - b.ja));
     }
+    /* 选帧加回差：离开当前档 0.6 档以上才换（刚好在两档中间时不来回翻）；换完至少停 0.1 秒（落点突然反向时，
+       刚换过去的那一档下一格又换回来 = 一格闪一下），差出 1.5 档以上的大动作不等 */
+    const q = aimPos(b.ja);
+    b.jkT = (b.jkT || 0) + dt;
+    if (b.jk == null || (Math.abs(q - b.jk) >= 0.6 && (b.jkT >= 0.1 || Math.abs(q - b.jk) >= 1.5))) { b.jk = Math.round(q); b.jkT = 0; }
     b.jm = null;
     const S = b.jt;
     if (!S) return;
@@ -601,7 +622,10 @@ function Act(cfg) {
       if (Math.floor(S.t / cyc) !== Math.floor((S.t - dt) / cyc) || S.t <= dt) b.kick = 1;
       if (ph > J.pulse[0]) { S.e = 0; return; }
     }
-    const fn = frameName(), m = b.jm = AIM.nozzle[fn] ? nz(fn) : nz(AIM.frames[aimIdx()]);
+    /* 画出来的枪口（b.jm，水柱最后一段接到它上面）是这一档的喷口；水滴从连续喷口出（nozzleAt，后坐帧的偏移照加）——
+       从画的那一档出的话，每换一档出口跳 13~16 px，水柱在那里折一下（审查第八轮：极限环修掉以后换档仍会折） */
+    const fn = frameName(), base = nz(AIM.frames[aimIdx()]), drawn = b.jm = AIM.nozzle[fn] ? nz(fn) : base;
+    const c = nozzleAt(b.ja, P), m = [c[0] + drawn[0] - base[0], c[1] + drawn[1] - base[1]];
     S.e += dt * J.rate;
     /* 一帧攒够几个就出几个，每个按它实际该出口的时刻补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩（crew.js 同） */
     while (S.e >= 1) {
@@ -1179,7 +1203,7 @@ function Act(cfg) {
   }
   /* 此刻在哪一段：wait 等着上 / enter 进场 / on 在场 / exit 离场（胶片标格用：出手中途离场这种冲突只看帧名分不出来） */
   const phase = () => (!b ? null : b.wait > 0 ? 'wait' : b.t < TE ? 'enter' : b.t <= TE + b.stay ? 'on' : 'exit');
-  return { init, load, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), flying, frame: () => (b && SH ? frameName() : null), phase, cfg };
+  return { init, load, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), flying, drops: () => jets, frame: () => (b && SH ? frameName() : null), phase, cfg };
 }
 
 /* ---- 程序画的小东西 ---- */

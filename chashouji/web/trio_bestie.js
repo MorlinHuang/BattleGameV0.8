@@ -14,7 +14,7 @@ const TRIO_BESTIE = {
       anchor: [74.9, 374.3], at: [250, 1000, 0.88], pivot: [74.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点
       depth: 0.8, recipe: 'pepper',
       /* 踩着平衡车从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下罐子往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [6, 1.9, 0.9], bob: [1.8, 2.6], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'ride', T: 0.5 },
       idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
       /* 防狼喷雾（crew.js MIST 原样）：摇罐举起（wind）→ 按瞄准角挑 aim0~10、每按一下后坐换 kick0~10（"呲—呲—"），雾冲男生的脸 → 收罐（follow） */
@@ -32,7 +32,7 @@ const TRIO_BESTIE = {
       anchor: [85.9, 374.3], at: [250, 1010, 0.88], pivot: [85.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点
       depth: 0.8, recipe: 'pepper',
       /* 踩着平衡车从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下罐子往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [6, 1.9, 0.9], bob: [1.8, 2.6], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'ride', T: 0.5 },
       idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
       /* 防狼喷雾（crew.js MIST 原样）：摇罐举起（wind）→ 按瞄准角挑 aim0~10、每按一下后坐换 kick0~10（"呲—呲—"），雾冲男生的脸 → 收罐（follow） */
@@ -50,7 +50,7 @@ const TRIO_BESTIE = {
       anchor: [90.9, 374.3], at: [240, 1000, 0.88], pivot: [90.9, 374.3], leanK: 0,   // 锚点 = 平衡车着地那一点
       depth: 0.8, recipe: 'pepper',
       /* 踩着平衡车从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下罐子往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [6, 1.9, 0.9], bob: [1.8, 2.6], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'ride', T: 0.5 },
       idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
       /* 防狼喷雾（crew.js MIST 原样）：摇罐举起（wind）→ 按瞄准角挑 aim0~10、每按一下后坐换 kick0~10（"呲—呲—"），雾冲男生的脸 → 收罐（follow） */

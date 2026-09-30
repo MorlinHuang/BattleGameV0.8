@@ -15,7 +15,7 @@ const TRIO_BUDDY = {
       anchor: [265.3, 415.6], at: [820, 1040, 0.83], pivot: [265.3, 415.6], leanK: 0,   // 锚点 = 滑板着地那一点
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'ride', T: 0.5 },
       idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
       /* 水枪（crew.js Buddy.fluid 原样）：举枪（wind）→ 按瞄准角挑 aim0~10 那一帧、水柱沿枪口仰角射出去一直扫她（aim 段 2.2 秒）→ 枪口往下一甩收（follow） */
@@ -31,7 +31,7 @@ const TRIO_BUDDY = {
       anchor: [265.3, 418.6], at: [820, 1040, 0.83], pivot: [265.3, 418.6], leanK: 0,   // 锚点 = 滑板着地那一点
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'ride', T: 0.5 },
       idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
       /* 水枪（crew.js Buddy.fluid 原样）：举枪（wind）→ 按瞄准角挑 aim0~10 那一帧、水柱沿枪口仰角射出去一直扫她（aim 段 2.2 秒）→ 枪口往下一甩收（follow） */
@@ -47,7 +47,7 @@ const TRIO_BUDDY = {
       anchor: [265.3, 413.6], at: [820, 1040, 0.83], pivot: [265.3, 413.6], leanK: 0,   // 锚点 = 滑板着地那一点
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'ride', T: 0.5 },
       idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
       /* 水枪（crew.js Buddy.fluid 原样）：举枪（wind）→ 按瞄准角挑 aim0~10 那一帧、水柱沿枪口仰角射出去一直扫她（aim 段 2.2 秒）→ 枪口往下一甩收（follow） */
@@ -63,7 +63,7 @@ const TRIO_BUDDY = {
       anchor: [273.3, 452.6], at: [820, 1040, 0.83], pivot: [273.3, 452.6], leanK: 0,   // 锚点 = 滑板着地那一点
       depth: 0.8, recipe: 'water',
       /* 踩着滑板从画外滑进来（ride：减速停住、身子往来的方向仰），刹住那一下枪往上一扬（brake）；离场往后溜出去 */
-      enter: { kind: 'ride', T: 0.55, tilt: 0.06, seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
+      enter: { kind: 'ride', T: 0.55, tilt: 0.06, roll: [7.7, 1.9, 1.15], seq: [['ride', 0.42], ['brake', 0.13, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'ride', T: 0.5 },
       idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
       /* 水枪（crew.js Buddy.fluid 原样）：举枪（wind）→ 按瞄准角挑 aim0~10 那一帧、水柱沿枪口仰角射出去一直扫她（aim 段 2.2 秒）→ 枪口往下一甩收（follow） */
