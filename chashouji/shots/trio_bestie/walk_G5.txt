@@ -1,105 +1,22 @@
-G5 walk 钉脚（ammoms 40，noshake；v14/trio/bestie/tools/walkheel.py，量法同 审4_B5鞋位.py：量鞋跟）
-结论：
-- 画面里走得到的是最后两步（at.x 230、人往左伸 137 px，前 4~5 帧整个在画外）：walk1 ×5 格、walk2 ×5 格同帧 Δ 0.00 px；
-  换帧 walk1.front 105.1 → walk2.plant 103.1，Δ −2.0 px（验收 ≤ 6）。
-- 读成 0.0 的是鞋还在画外（模板贴到画布左沿），读成 490~680 的是画外时模板拐到别处（女生拖鞋 / 沙发），这两类不算。
-- 其余三处换帧在图集上按引擎步长算（stride 119，每帧前进 59.5 格内 px）：着地鞋鞋跟 walk1.front 168 → walk2 107（61）、walk2 107 → walk3.rear 49（58）、
-  walk3.front 166 → walk4 107（59）、walk4 107 → walk1.rear 49（58）：同一只脚换帧差 +1.5 / −1.5 / −0.5 / −1.5 格内 px（× 0.88 ≤ 1.3 屏幕 px）。
-== W_g5_ms40a
-1 walk2 {'plant': 518.5}
-2 walk2 {'plant': 518.5}
-3 walk2 {'plant': 518.5}
-4 walk2 {'plant': 491.9}
-5 walk2 {'plant': 491.9}
-6 walk3 {'front': 0.0, 'rear': 683.6}
-7 walk3 {'front': 0.0, 'rear': 683.6}
-8 walk3 {'front': 0.0, 'rear': 636.9}
-9 walk3 {'front': 0.0, 'rear': 636.9}
-10 walk3 {'front': 0.0, 'rear': 636.9}
-11 walk3 {'front': 0.0, 'rear': 636.9}
-12 walk4 {'plant': 0.0}
-== W_g5_ms40b
-1 walk2 {'plant': 532.8}
-2 walk3 {'front': 0.0, 'rear': 637.6}
-3 walk3 {'front': 0.0, 'rear': 637.6}
-4 walk3 {'front': 0.0, 'rear': 637.6}
-5 walk3 {'front': 0.0, 'rear': 637.6}
-6 walk3 {'front': 0.0, 'rear': 640.6}
-7 walk3 {'front': 0.0, 'rear': 640.6}
-8 walk4 {'plant': 0.0}
-9 walk4 {'plant': 0.0}
-10 walk4 {'plant': 0.0}
-11 walk4 {'plant': 0.0}
-12 walk1 {'front': 105.1, 'rear': 0.0}
-== W_g5_ms40c
-1 walk3 {'front': 0.0, 'rear': 683.6}
-2 walk3 {'front': 0.0, 'rear': 636.9}
-3 walk3 {'front': 0.0, 'rear': 636.9}
-4 walk3 {'front': 0.0, 'rear': 636.9}
-5 walk3 {'front': 0.0, 'rear': 636.9}
-6 walk4 {'plant': 0.0}
-7 walk4 {'plant': 0.0}
-8 walk4 {'plant': 0.0}
-9 walk4 {'plant': 0.0}
-10 walk1 {'front': 105.1, 'rear': 0.0}
-11 walk1 {'front': 105.1, 'rear': 0.0}
-12 walk1 {'front': 105.1, 'rear': 0.0}
+G5 walk 钉脚（2026-10-01 站位 [150, 980, 0.84]、dist 299.9 = 6 步 × 59.5 × 0.84；ammoms 40，noshake；WALK_X=0,300 WALK_Y=940,995 walkheel.py 量鞋跟）
+结论：画面里量得到的只有最后一次换帧（前面几步鞋跟在屏幕 x < 0）：W_g5_ms40d 格3→4 walk1.front 29.4 → walk2.plant 28.4，Δ −1.0 px；同帧 Δ 0.00。
+其余三次换帧按图集（walkfeet，鞋跟 = 鞋那一团左沿）：walk1.front 168 → walk2 107、walk2 107 → walk3.rear 49、walk3.front 166 → walk4 107、walk4 107 → walk1.rear 49，
+每次应退 59.5：差 −1.5 / +1.5 / +0.5 / +1.5 格内 px × 0.84 ≤ 1.26 屏幕 px（验收 ≤ 2）。
 == W_g5_ms40d
-1 walk4 {'plant': 0.0}
-2 walk4 {'plant': 0.0}
-3 walk1 {'front': 105.1, 'rear': 0.0}
-4 walk1 {'front': 105.1, 'rear': 0.0}
-5 walk1 {'front': 105.1, 'rear': 0.0}
-6 walk1 {'front': 105.1, 'rear': 0.0}
-7 walk1 {'front': 105.1, 'rear': 0.0}
-8 walk2 {'plant': 103.1}
-9 walk2 {'plant': 103.1}
-10 walk2 {'plant': 103.1}
-11 walk2 {'plant': 103.1}
-12 walk2 {'plant': 103.1}
+1 walk1 {'front': 29.4, 'rear': 23.3}
+2 walk1 {'front': 29.4, 'rear': 23.3}
+3 walk1 {'front': 29.4, 'rear': 23.3}
+4 walk2 {'plant': 28.4}
+5 walk2 {'plant': 28.4}
+6 walk2 {'plant': 28.4}
+7 walk2 {'plant': 28.4}
+8 walk2 {'plant': 28.4}
 == 同一帧名连续格（着地鞋 Δ）
-W_g5_ms40a 格1→2 walk2 {'plant': 0.0}
-W_g5_ms40a 格2→3 walk2 {'plant': 0.0}
-W_g5_ms40a 格3→4 walk2 {'plant': -26.6}
-W_g5_ms40a 格4→5 walk2 {'plant': 0.0}
-W_g5_ms40a 格6→7 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40a 格7→8 walk3 {'front': 0.0, 'rear': -46.7}
-W_g5_ms40a 格8→9 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40a 格9→10 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40a 格10→11 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40b 格2→3 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40b 格3→4 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40b 格4→5 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40b 格5→6 walk3 {'front': 0.0, 'rear': 3.0}
-W_g5_ms40b 格6→7 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40b 格8→9 walk4 {'plant': 0.0}
-W_g5_ms40b 格9→10 walk4 {'plant': 0.0}
-W_g5_ms40b 格10→11 walk4 {'plant': 0.0}
-W_g5_ms40c 格1→2 walk3 {'front': 0.0, 'rear': -46.7}
-W_g5_ms40c 格2→3 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40c 格3→4 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40c 格4→5 walk3 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40c 格6→7 walk4 {'plant': 0.0}
-W_g5_ms40c 格7→8 walk4 {'plant': 0.0}
-W_g5_ms40c 格8→9 walk4 {'plant': 0.0}
-W_g5_ms40c 格10→11 walk1 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40c 格11→12 walk1 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40d 格1→2 walk4 {'plant': 0.0}
-W_g5_ms40d 格3→4 walk1 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40d 格4→5 walk1 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40d 格5→6 walk1 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40d 格6→7 walk1 {'front': 0.0, 'rear': 0.0}
-W_g5_ms40d 格8→9 walk2 {'plant': 0.0}
-W_g5_ms40d 格9→10 walk2 {'plant': 0.0}
-W_g5_ms40d 格10→11 walk2 {'plant': 0.0}
-W_g5_ms40d 格11→12 walk2 {'plant': 0.0}
+W_g5_ms40d 格1→2 walk1 {'front': 0.0, 'rear': 0.0}
+W_g5_ms40d 格2→3 walk1 {'front': 0.0, 'rear': 0.0}
+W_g5_ms40d 格4→5 walk2 {'plant': 0.0}
+W_g5_ms40d 格5→6 walk2 {'plant': 0.0}
+W_g5_ms40d 格6→7 walk2 {'plant': 0.0}
+W_g5_ms40d 格7→8 walk2 {'plant': 0.0}
 == 换帧：同一只着地脚鞋跟前后差（验收 ≤ 6）
-W_g5_ms40a 格5→6 walk2.plant 491.9 → walk3.rear 683.6 Δ 191.7
-W_g5_ms40a 格11→12 walk3.front 0.0 → walk4.plant 0.0 Δ 0.0
-W_g5_ms40b 格1→2 walk2.plant 532.8 → walk3.rear 637.6 Δ 104.8
-W_g5_ms40b 格7→8 walk3.front 0.0 → walk4.plant 0.0 Δ 0.0
-W_g5_ms40b 格11→12 walk4.plant 0.0 → walk1.rear 0.0 Δ 0.0
-W_g5_ms40c 格5→6 walk3.front 0.0 → walk4.plant 0.0 Δ 0.0
-W_g5_ms40c 格9→10 walk4.plant 0.0 → walk1.rear 0.0 Δ 0.0
-W_g5_ms40d 格2→3 walk4.plant 0.0 → walk1.rear 0.0 Δ 0.0
-W_g5_ms40d 格7→8 walk1.front 105.1 → walk2.plant 103.1 Δ -2.0
+W_g5_ms40d 格3→4 walk1.front 29.4 → walk2.plant 28.4 Δ -1.0

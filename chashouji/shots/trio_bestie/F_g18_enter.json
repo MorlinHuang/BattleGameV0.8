@@ -1,1 +1,1 @@
-[["G25:ride", "G18:leap"], ["G25:ride", "G18:leap"], ["G25:ride", "G18:leap"], ["G25:ride", "G18:leap"], ["G25:hop", "G18:leap"], ["G25:idle", "G18:leap"], ["G25:idle", "G18:leap"], ["G25:idle", "G18:land"], ["G25:idle", "G18:land"], ["G25:wind", "G18:rise"], ["G25:wind", "G18:idle"], ["G25:throw", "G18:idle"]]
+[["G18:leap"], ["G18:leap"], ["G18:leap"], ["G18:leap"], ["G18:leap"], ["G18:leap"], ["G18:land"], ["G18:land"], ["G18:land"], ["G18:rise"], ["G18:idle"], ["G18:idle"]]

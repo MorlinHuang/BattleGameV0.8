@@ -17,3 +17,8 @@ contact A 左腿在前、右手摆到身后 / passing A / contact B 右腿在前
 ## 配准
 - ref idle，head [85,15,215,150]，fixed = 前脚那只鞋 [255,680,360,750]，anchor 鞋底 [306,745]，size h 400；walk1~4 loose。残差 0.23 px，头 0.98~1.01。
 - 算盘挂件：part.py ref/G5_abacus.png G5_abacus w 90，pivot = 红绳头 [41,1]，z 1；wind / throw 不画（手里的是 3D 算盘 prop_abacus）。
+
+## 2026-10-01 审查第五批打回：腰挂算盘换成 3D 算盘静帧
+- `abacus_part.py`：取 `prop_abacus.webp` 第 0 格（最正面、3 × 3 大珠全露），按二阶矩转正 12.5°，缩到屏幕长边 90 px（本体 87、3D 外框中位 107：+3% / −16%），上沿画 V 形红吊绳，pivot = 绳结 [55, 3]。
+- 96 px 时 follow 帧挂件下沿碰到地板 G29（combo_scan 认人点 31 px），收到 90、绳长 16 → 10。at.s 改了要重跑（S）。
+- 站位按 `shots/trio_std/建议站位_最终.md`：[150, 980, 0.84]；walk dist 写死 299.9（6 步 × 59.5 × 0.84）。

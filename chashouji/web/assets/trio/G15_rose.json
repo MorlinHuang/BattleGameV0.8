@@ -1,1 +1,1 @@
-{"cell": [362, 435], "cols": 4, "frames": ["idle", "wind", "throw", "follow", "grip", "step", "open", "idle2"], "anchor": [212.4, 367.4], "residual": 0.22, "head": [143, 27, 210, 102], "ref": "idle"}
+{"cell": [562, 435], "cols": 4, "frames": ["idle", "wind", "throw", "follow", "grip", "step", "open", "idle2"], "anchor": [412.4, 367.4], "residual": 0.22, "head": [343, 27, 410, 102], "ref": "idle", "bow": "bestie/G15_rose/bow.py：船头统一成 idle 那一份，每格左边加宽 200 接船尾"}

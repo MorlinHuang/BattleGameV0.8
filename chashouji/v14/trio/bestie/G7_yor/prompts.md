@@ -15,3 +15,7 @@ crewart.cut 品红抠 → 180 px 长 → web/assets/world/trio_g7_knife.webp（c
 
 ## 配准
 ref idle，head [270,15,380,140]，fixed = 前脚高跟靴 [395,590,500,682]，anchor [450,676]，size h 380；crouch / rise / emerge loose。残差 0.19 px。
+
+## 2026-10-01 审查第五批打回：飞刀补描边
+- `knife.py`：`raw/knife_180.png`（原 trio_g7_knife.webp）刀身银色像素往白拉 30%，alpha 外扩 3 px 垫 #2a1020 描边 → 186 × 55；cfg scale 0.5 → 0.65（屏幕刀长约 121 px，刀尖最细处连描边约 4.5 px），spin 0 + aim（刀尖朝前直飞）。
+- 站位按建议站位_最终：[220, 960, 0.88]。

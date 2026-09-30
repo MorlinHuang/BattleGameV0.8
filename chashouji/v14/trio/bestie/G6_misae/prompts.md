@@ -14,3 +14,7 @@ idle 攥拳怒瞪 / wind 右手高举过头作抓锅柄状 / throw 右臂往右�
 
 ## 配准
 ref idle，head [160,15,345,170]，fixed = 前脚拖鞋 [300,665,440,735]，anchor [370,728]，size h 380；walk1~4 loose。残差 0.31 px，头 1.00~1.01。
+
+## 2026-10-01 站位改 [170, 980, 0.88] + 换帧钉脚 ≤ 2 px
+- `walkshift.py`：按图集鞋跟解整格横移（walk1 +1 / walk2 −4 / walk3 0 / walk4 −1），换帧差 +5.5 / −4.5 / +1.5 / −2.5 → ±0.5 格内 px（0.44 屏幕 px）。按量出来的鞋跟算，重跑是 0；每次 frames.py build 之后跑。
+- walk dist 写死 308（4 步 × 87.5 × 0.88）。读数 `shots/trio_bestie/walk_G6.txt`。

@@ -1,46 +1,47 @@
-G9 walk 钉脚（ammoms 40，noshake，bestie=G9 单召；walkheel.py 量鞋跟；dist 300.3 之后）
+G9 walk 钉脚（2026-10-01 站位 [170, 970, 0.88]，s 没变、dist 300.3 不变；图集没重出，walkshift.py 不用重跑 —— 它是整格 np.roll，重跑会挪两次）
+结论：画面里量得到的换帧 W_g9_ms40b 格4→5 walk4.plant 29.4 → walk1.rear 29.2，Δ −0.2 px；W_g9_ms40a 格1~7 人还在画外（读数是模板拐到别处，不算）。
+其余换帧按图集（walkshift 之后，同上一轮 walk_G9，图集没动）：鞋跟 177→109（68）、109→40（69）…，步长 68.25：差 −0.25 / +0.75 格内 px × 0.88 ≤ 0.7 屏幕 px。
 == W_g9_ms40a
-1 walk3 {'front': 89.0, 'rear': 246.1}
-2 walk3 {'front': 89.0, 'rear': 246.1}
-3 walk3 {'front': 89.0, 'rear': 0.0}
-4 walk3 {'front': 89.0, 'rear': 0.0}
-5 walk4 {'plant': 89.4}
-6 walk4 {'plant': 89.4}
-7 walk4 {'plant': 89.4}
-8 walk4 {'plant': 89.4}
-9 walk1 {'front': 204.8, 'rear': 89.2}
-10 walk1 {'front': 204.8, 'rear': 89.2}
-11 walk1 {'front': 204.8, 'rear': 89.2}
-12 walk1 {'front': 204.8, 'rear': 89.2}
+1 walk1 {'front': 138.2, 'rear': 247.0}
+2 walk1 {'front': 138.2, 'rear': 247.0}
+3 walk2 {'plant': 156.4}
+4 walk2 {'plant': 156.4}
+5 walk2 {'plant': 156.4}
+6 walk2 {'plant': 138.7}
+7 walk2 {'plant': 138.7}
+8 walk3 {'front': 29.0, 'rear': 246.0}
+9 walk3 {'front': 29.0, 'rear': 246.0}
+10 walk3 {'front': 29.0, 'rear': 203.1}
+11 walk3 {'front': 29.0, 'rear': 203.1}
+12 walk3 {'front': 29.0, 'rear': 203.1}
 == W_g9_ms40b
-1 walk4 {'plant': 89.4}
-2 walk4 {'plant': 89.4}
-3 walk4 {'plant': 89.4}
-4 walk4 {'plant': 89.4}
-5 walk1 {'front': 204.8, 'rear': 89.2}
-6 walk1 {'front': 204.8, 'rear': 89.2}
-7 walk1 {'front': 204.8, 'rear': 89.2}
-8 walk1 {'front': 204.8, 'rear': 89.2}
-9 walk1 {'front': 204.8, 'rear': 89.2}
+1 walk4 {'plant': 29.4}
+2 walk4 {'plant': 29.4}
+3 walk4 {'plant': 29.4}
+4 walk4 {'plant': 29.4}
+5 walk1 {'front': 144.7, 'rear': 29.2}
+6 walk1 {'front': 144.8, 'rear': 29.2}
+7 walk1 {'front': 144.8, 'rear': 29.2}
+8 walk1 {'front': 144.8, 'rear': 29.2}
+9 walk1 {'front': 144.8, 'rear': 29.2}
 == 同一帧名连续格（着地鞋 Δ）
-W_g9_ms40a 格1→2 walk3 {'front': 0.0, 'rear': 0.0}
-W_g9_ms40a 格2→3 walk3 {'front': 0.0, 'rear': -246.1}
-W_g9_ms40a 格3→4 walk3 {'front': 0.0, 'rear': 0.0}
-W_g9_ms40a 格5→6 walk4 {'plant': 0.0}
-W_g9_ms40a 格6→7 walk4 {'plant': 0.0}
-W_g9_ms40a 格7→8 walk4 {'plant': 0.0}
-W_g9_ms40a 格9→10 walk1 {'front': 0.0, 'rear': 0.0}
-W_g9_ms40a 格10→11 walk1 {'front': 0.0, 'rear': 0.0}
-W_g9_ms40a 格11→12 walk1 {'front': 0.0, 'rear': 0.0}
+W_g9_ms40a 格1→2 walk1 {'front': 0.0, 'rear': 0.0}
+W_g9_ms40a 格3→4 walk2 {'plant': 0.0}
+W_g9_ms40a 格4→5 walk2 {'plant': 0.0}
+W_g9_ms40a 格5→6 walk2 {'plant': -17.7}
+W_g9_ms40a 格6→7 walk2 {'plant': 0.0}
+W_g9_ms40a 格8→9 walk3 {'front': 0.0, 'rear': 0.0}
+W_g9_ms40a 格9→10 walk3 {'front': 0.0, 'rear': -42.9}
+W_g9_ms40a 格10→11 walk3 {'front': 0.0, 'rear': 0.0}
+W_g9_ms40a 格11→12 walk3 {'front': 0.0, 'rear': 0.0}
 W_g9_ms40b 格1→2 walk4 {'plant': 0.0}
 W_g9_ms40b 格2→3 walk4 {'plant': 0.0}
 W_g9_ms40b 格3→4 walk4 {'plant': 0.0}
-W_g9_ms40b 格5→6 walk1 {'front': 0.0, 'rear': 0.0}
+W_g9_ms40b 格5→6 walk1 {'front': 0.1, 'rear': 0.0}
 W_g9_ms40b 格6→7 walk1 {'front': 0.0, 'rear': 0.0}
 W_g9_ms40b 格7→8 walk1 {'front': 0.0, 'rear': 0.0}
 W_g9_ms40b 格8→9 walk1 {'front': 0.0, 'rear': 0.0}
 == 换帧：同一只着地脚鞋跟前后差（验收 ≤ 6）
-W_g9_ms40a 格4→5 walk3.front 89.0 → walk4.plant 89.4 Δ 0.4
-W_g9_ms40a 格8→9 walk4.plant 89.4 → walk1.rear 89.2 Δ -0.2
-W_g9_ms40b 格4→5 walk4.plant 89.4 → walk1.rear 89.2 Δ -0.2
-画外的两次换帧（walk1→walk2、walk2→walk3）按图集算：鞋跟 177→109（68）、109→40（69），步长 68.25 格内 px：差 −0.25 / +0.75 格内 px（×0.88 ≤ 0.7 屏幕 px）
+W_g9_ms40a 格2→3 walk1.front 138.2 → walk2.plant 156.4 Δ 18.2
+W_g9_ms40a 格7→8 walk2.plant 138.7 → walk3.rear 246.0 Δ 107.3
+W_g9_ms40b 格4→5 walk4.plant 29.4 → walk1.rear 29.2 Δ -0.2

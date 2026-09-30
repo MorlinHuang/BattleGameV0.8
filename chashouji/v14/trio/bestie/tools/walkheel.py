@@ -24,6 +24,7 @@ def find(I, fn, box, y0, y1):
         a, b, c = num[yy, xx - 1], num[yy, xx], num[yy, xx + 1]; d = a - 2 * b + c; dx = 0.5 * (a - c) / d if d > 0 else 0
     return xx + dx, num[yy, xx]
 Y = [int(v) for v in os.environ.get('WALK_Y', '900,1100').split(',')]   # 竖向搜索窗（屏幕 y）：只框脚那一带，别让模板拐到主角的衣服上
+XW = [int(v) for v in os.environ.get('WALK_X', '0,960').split(',')]    # 横向搜索窗（屏幕 x）：G6 粉拖鞋和主角的粉短裤在同一高度，要把主角那一段切掉
 rows = []
 for f in films:
     I = np.asarray(Image.open(f + '.png').convert('RGB')).astype(float) / 255; fr = json.load(open(f + '.json'))
@@ -33,7 +34,8 @@ for f in films:
         if not fn or fn[0] not in SH: continue
         fn = fn[0]; out = {}
         for foot, box in SH[fn].items():
-            x, e = find(I[:, k * 960:(k + 1) * 960], fn, box, *Y)
+            x, e = find(I[:, k * 960 + XW[0]:k * 960 + XW[1]], fn, box, *Y)
+            x += XW[0]
             out[foot] = round(float(x), 1)
         rows.append((f, k + 1, fn, out)); print(k + 1, fn, out)
 print('== 同一帧名连续格（着地鞋 Δ）')

@@ -1,1 +1,1 @@
-[["G26:idle", "G7:idle"], ["G26:idle", "G7:wind"], ["G26:idle", "G7:wind"], ["G26:idle", "G7:wind"], ["G26:idle", "G7:wind"], ["G26:idle", "G7:throw"], ["G26:wind2", "G7:throw"], ["G26:wind2", "G7:follow"], ["G26:wind2", "G7:follow"], ["G26:wind2", "G7:follow"], ["G26:throw", "G7:follow"], ["G26:throw", "G7:follow"]]
+[["G7:wind"], ["G7:wind"], ["G7:wind"], ["G7:throw"], ["G7:throw"], ["G7:follow"], ["G7:follow"], ["G7:follow"], ["G7:follow"], ["G7:follow"], ["G7:follow"], ["G7:follow"]]
