@@ -1,0 +1,192 @@
+{
+ "side": "buddy",
+ "button": "哥们 ③",
+ "rounds": [
+  {
+   "round": 1,
+   "before": [],
+   "drawn": [
+    [
+     "ground",
+     "B10",
+     "on",
+     "follow"
+    ],
+    [
+     "top",
+     "B11",
+     "on",
+     "follow"
+    ],
+    [
+     "floor",
+     "B25",
+     "on",
+     "raise"
+    ]
+   ],
+   "shot": {
+    "file": "/tmp/r13/终审_送礼_buddy_1.png",
+    "t": 2.0,
+    "state": [
+     [
+      "ground",
+      "B10",
+      "on",
+      "throw"
+     ],
+     [
+      "top",
+      "B11",
+      "on",
+      "wind"
+     ],
+     [
+      "floor",
+      "B25",
+      "on",
+      "pop"
+     ]
+    ]
+   },
+   "errors_so_far": []
+  },
+  {
+   "round": 2,
+   "before": [
+    [
+     "ground",
+     "B10",
+     "on",
+     "idle"
+    ],
+    [
+     "top",
+     "B11",
+     "on",
+     "wind"
+    ],
+    [
+     "floor",
+     "B25",
+     "on",
+     "pop"
+    ]
+   ],
+   "drawn": [
+    [
+     "ground",
+     "B10",
+     "on",
+     "throw"
+    ],
+    [
+     "top",
+     "B11",
+     "on",
+     "idle"
+    ],
+    [
+     "floor",
+     "B25",
+     "on",
+     "pop"
+    ]
+   ],
+   "shot": {
+    "file": "/tmp/r13/终审_送礼_buddy_2.png",
+    "t": 0.99,
+    "state": [
+     [
+      "ground",
+      "B10",
+      "on",
+      "wind"
+     ],
+     [
+      "top",
+      "B11",
+      "on",
+      "throw"
+     ],
+     [
+      "floor",
+      "B25",
+      "on",
+      "pop"
+     ]
+    ]
+   },
+   "errors_so_far": []
+  },
+  {
+   "round": 3,
+   "before": [
+    [
+     "ground",
+     "B10",
+     null,
+     null
+    ],
+    [
+     "top",
+     "B11",
+     null,
+     null
+    ],
+    [
+     "floor",
+     "B25",
+     null,
+     null
+    ]
+   ],
+   "drawn": [
+    [
+     "ground",
+     "B5",
+     "on",
+     "wind"
+    ],
+    [
+     "top",
+     "B17",
+     "on",
+     "follow"
+    ],
+    [
+     "floor",
+     "B30",
+     "on",
+     "idle"
+    ]
+   ],
+   "shot": {
+    "file": "/tmp/r13/终审_送礼_buddy_3.png",
+    "t": 2.11,
+    "state": [
+     [
+      "ground",
+      "B5",
+      "on",
+      "idle"
+     ],
+     [
+      "top",
+      "B17",
+      "on",
+      "wind"
+     ],
+     [
+      "floor",
+      "B30",
+      "on",
+      "throw"
+     ]
+    ]
+   },
+   "errors_so_far": []
+  }
+ ],
+ "errors": []
+}
