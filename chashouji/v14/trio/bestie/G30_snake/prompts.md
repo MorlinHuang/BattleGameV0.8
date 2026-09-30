@@ -9,3 +9,12 @@ Bottom-right (follow-through): scepter lowered in front of her lap, satisfied sm
 Generous empty space between cells, nothing overlaps another cell, nothing cropped.
 Background MUST be pure flat magenta #FF00FF single solid color, no gradient, no shadow, no ground, no text, no panel borders.
 ## act_b1（slide / land / wind / idle2）：贴地 S 形扭滑 / 撑手坐起 / strong wind-up / idle
+
+## 实际出图（2026-09-30）
+- act_a1 = edited-1790748560026-2（06:05，参考图定妆铺品红底 /tmp/G30_bg.png，上面 A 条原文照用）。另一张 act_a1_alt 上下两行贴得太近。
+- act_b1 = edited-1790749223311-2（06:22，参考图 act_a1 + 定妆）："slither: lying fully stretched out low along the floor, gliding to the right like a snake,
+  body curved in a wavy S shape … slither B: the S curve bending the opposite way … strong wind-up: … right arm swung far back behind her head holding the scepter … idle"。
+  这张的 wind2 如意抡到脑后，比另一张（举过头顶，跟 A 条 wind 重复）好；06:07 第一次试 502。
+- **A 条左上 idle 那格头画大了 6%**（按脸框量：其余几格对它 0.91~0.94，彼此之间 ±3%）。按头缩放会把其余几格放大 6~19%（身子跟着变大，面积 33k→42k）；
+  腿和裙摆的匹配在缩放锁 1 时 0.92~0.98，说明身子本来一样大 —— frames.json 锁 `scale [0.995, 1.005]`，按身子对齐；
+  上场待机改用 follow（如意横在膝前），idle 那格不上场。以 follow 为准的头比例：wind 1.00、throw 0.97、wind2 0.97。

@@ -123,6 +123,25 @@ const TRIO_BESTIE = {
              hold: { idle: [118, 100], wind: [100, 82], throw: [297, 119] },
              T: 0.5, arc: 0.15, spin: 6.3, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'wear' },
     },
+    G30: {      // 葫芦山蛇精式妖女：像蛇一样左右扭着从左下角滑进来、斜倚坐起，举如意放一道绿光吸住他
+      face: +1,
+      sheet: { src: 'assets/trio/G30_snake.webp', cell: [497, 275], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'slither1', 'slither2', 'wind2', 'idle2'] },
+      anchor: [228.2, 276.8], at: [160, 1332, 1], pivot: [228, 276],
+      leanK: 0,   // 斜倚在地上：整体前后倾会把贴地的蛇尾裙摆翘起来
+      depth: 1.3, recipe: 'star',
+      /* 进场：贴地 S 形扭滑，两帧左右扭交替；待机用 follow（如意横在膝前）——
+         动作条左上那格 idle（如意扛肩）的头比其余几格画大了 6%（frames.json 缩放锁 1，按身子对齐），不上场 */
+      enter: { kind: 'slide', seq: [['slither1', 0.13], ['slither2', 0.13], ['slither1', 0.13], ['slither2', 0.13], ['follow', 9, 'land']], sq: 0.08 },
+      exit: { frame: 'slither2' },
+      idle: { frame: 'follow', breathe: [0.016, 0.7, 0] },
+      /* 发髻上垂下的翠玉流苏：顶钉住（'t'），框左、右、下三边透明 */
+      flex: { follow: [[250, 113, 260, 138, 't', 6, 1.1]] },
+      /* 如意画在帧里：往后抡（wind2）→ 举过头顶（wind）→ 指向他放光（throw）→ 收回膝前（follow = 待机） */
+      atk: { kind: 'beam', seq: [['wind2', 0.18], ['wind', 0.2], ['throw', 0.5, 'fire'], ['follow', 0.3]],
+             hold: { wind2: [214, 117], wind: [240, 14], throw: [482, 124] }, stretch: 0, gap: [1.0, 1.4],
+             beam: { fire: 0.45, drip: 0.1, ball: 30, glow: [120, 255, 150], edge: [20, 120, 60],
+                     layers: [[40, [20, 120, 60], 0.3], [28, [60, 200, 100], 0.6], [16, [140, 255, 170], 0.9], [6, [240, 255, 240], 1]] } },
+    },
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
     G12: {      // 紫衣仙子：秋千从左上画外荡进来，飞吻，爱心打到他脸上留下口红印（查岗证据）
       face: +1, src: 'assets/world/trio_fairy.webp', at: [165, 360, 1], anchor: [145, 0], pivot: [145, -480], hand: [238, 115],
