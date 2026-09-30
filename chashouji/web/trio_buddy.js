@@ -298,6 +298,22 @@ const TRIO_BUDDY = {
              gap: [0.6, 1.0], stretch: 0.03 },
     },
 
+    B14: {      // 方块头矿工：从右上墙里一拳一拳挖出来、跨出来落地；托起一块泥土方块举过头顶甩出去，3D 方块翻着砸过去
+      face: -1,
+      sheet: { src: 'assets/trio/B14_miner.webp', cell: [240, 286], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'dig', 'step', 'land', 'idle2'] },
+      /* 上方；锚点 = 两脚中间的地面。剪影面积 s 1 时 2.52 万，s 0.91 → 2.09 万（上方对格格） */
+      anchor: [130.9, 275.0], at: [880, 740, 0.91], pivot: [131, 275], leanK: 0.2,
+      depth: 0.5, recipe: 'debris',
+      /* 挖墙钻出：从脚底那条线后面升上来 + 灰土烟；升的时候是挖墙的一拳（dig），升到位跨出来（step）、落地（land） */
+      enter: { kind: 'appear', rise: 200, fx: 'smoke', color: [150, 125, 95], T: 0.8, seq: [['dig', 0.35], ['step', 0.25], ['land', 0.15, 'land'], ['idle', 9]], sq: 0.08 },
+      exit: { frame: 'dig' },
+      idle: { frame: 'idle', breathe: [0.012, 0.9, 0.4] },
+      /* 泥土方块（3D，道具表 r 30 cell 125 scale 1.49）：待机拿在身前的拳头里、wind 托过头顶、throw 帧甩出去那一刻离手 */
+      atk: { kind: 'throw', item: 'dirtblock', r: 30, atlas: { src: 'assets/trio/prop_dirtblock.webp', n: 36, cols: 6, cell: 125, scale: 1.49 },
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.4]], hold: { idle: [44, 72], wind: [84, -22], throw: [10, 150] },
+             T: 0.5, arc: 0.3, spin: 6.3, idleSpin: 0.5, stretch: 0.03, gap: [0.6, 1.0] },
+    },
+
     B18: {      // 摇扇才子：从右上墙头后面一蹿翻上来、坐定；背后插着题诗折扇，伸手抽出来一甩，3D 折扇旋着飞过去
       face: -1,
       sheet: { src: 'assets/trio/B18_tangbohu.webp', cell: [279, 375], cols: 4, names: ['idle', 'raise', 'wind', 'throw', 'follow', 'leap', 'land', 'idle2'] },
