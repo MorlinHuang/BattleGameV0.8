@@ -1,0 +1,1 @@
+G4 idle（M_g4_idle，ms150，noshake）飘带白色像素重心 y（x55~95、y705~772）: [(1, np.float64(753.0)), (2, np.float64(755.6)), (3, np.float64(754.4)), (4, np.float64(750.5)), (5, np.float64(746.9)), (6, np.float64(749.3)), (7, np.float64(752.5)), (8, np.float64(753.5)), (9, np.float64(751.4)), (10, np.float64(748.5))]  峰峰 8.7 px

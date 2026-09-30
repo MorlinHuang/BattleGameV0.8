@@ -1,0 +1,1 @@
+[["G21:follow", "G4:wind"], ["G21:follow", "G4:wind"], ["G21:follow", "G4:hitA"], ["G21:follow", "G4:hitA"], ["G21:follow", "G4:hitB"], ["G21:idle", "G4:hitB"], ["G21:idle", "G4:hitA"], ["G21:idle", "G4:hitB"], ["G21:idle", "G4:hitA"], ["G21:idle", "G4:hitA"], ["G21:idle", "G4:hitB"], ["G21:idle", "G4:follow"]]

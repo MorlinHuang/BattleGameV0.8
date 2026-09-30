@@ -1,0 +1,1 @@
+[["G21:roll", "G4:spin1"], ["G21:roll", "G4:spin1"], ["G21:roll", "G4:spin2"], ["G21:roll", "G4:spin2"], ["G21:roll", "G4:spin1"], ["G21:roll", "G4:spin1"], ["G21:roll", "G4:land"], ["G21:land", "G4:land"], ["G21:land", "G4:idle"], ["G21:idle", "G4:idle"], ["G21:idle", "G4:wind"], ["G21:idle", "G4:wind"]]
