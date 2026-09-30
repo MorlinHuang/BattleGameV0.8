@@ -66,7 +66,7 @@ const TRIO_BESTIE = {
       face: +1,
       sheet: { src: 'assets/trio/G11_gege.webp', cell: [315, 343], cols: 4, names: ['idle', 'raise', 'throw', 'follow', 'wind', 'tuck', 'kick', 'idle2'] },
       anchor: [128, 212.3], at: [170, 500, 1], pivot: [128, -530], leanK: 0.5,   // y 640 → 540 → 500（引擎负责人 2026-10-01，遮挡判据第二版：后排 G5 挪到 [230, 960] 以后 540 时她被挡 15.5%）
-      depth: 0.5, recipe: 'bloom',
+      depth: 0.5, recipe: 'petal',
       /* 进场：0.4 秒从左上画外露面时收着腿俯冲（tuck），0.6 秒荡到最低点（摆角过零）伸腿（kick）往前荡，0.75 秒接出手 */
       enter: { kind: 'swing', seq: [['tuck', 0.6], ['kick', 9]] },
       /* 绳子、座板由引擎画（帧里的座板已抠掉）：ends 座板两头、grip 这一帧哪只手握着绳 [左手, 右手]、board 座板的框 */
@@ -400,12 +400,18 @@ const TRIO_BESTIE = {
       enter: { kind: 'ride', T: 1.0, tilt: 0.1, seq: [['cruise', 0.4], ['spin', 0.3], ['stop', 0.3, 'land'], ['idle', 9]], sq: 0.07 },
       exit: { frame: 'cruise', flip: true },
       idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
-      /* 3D 棒球棍（道具表 7.1：prop_bat r 32 cell 98 scale 1.09）：待机扛在右肩拳头上慢慢转（次级摆动）；
-         wind 两拳举过头顶、棍在那一刻离手（后排：出手点在女生头顶以上），throw 帧是甩完张开的手 */
-      atk: { kind: 'throw', item: 'bat', r: 32, atlas: { src: 'assets/trio/prop_bat.webp', n: 36, cols: 6, cell: 98, scale: 1.09 },
+      /* 待机扛着的球棒（审查第八批打回：r 32 时只有 57 px、读成瓶子）：3D 球棒图集第 33 格的静帧做成挂件（bestie/G10_harley/bat_part.py，同 G5 算盘），
+         和飞出去的 3D 球棒同一个造型、同一个长度（屏幕 142 px ≈ 人高 0.4）；pivot = 握把离尾端 13% 那一点，挂在 idle 举到下巴前的拳头上，
+         z −1 画在人后面，拳头盖住握把 = 握在拳里。棍身竖着往前倒 16°、全长露在背景上（往后斜靠肩会大半藏在头和马尾后面，或者横过脸）。
+         手里的 3D 道具引擎是居中画、按随机初始角挑格子转的，摆不出这个姿势，所以 idle 不写 hold。sway：拳头里轻轻晃（棍头峰峰约 10 px，待机次级摆动）。
+         ammo: true = 手里有球棒才画（扔出去还在飞的时候不画第二根）—— 引擎 drawParts 要认这个字段 */
+      parts: [{ src: 'assets/trio/G10_bat.webp', pivot: [19.2, 141.2], z: -1, sway: [0.04, 0.8, 0], ammo: true, at: { idle: [228, 88, 0] } }],
+      /* 3D 棒球棍（引擎 3566a8a 重渲 prop_bat_v2：r 68 cell 168 scale 1.05，外框长边中位 117 px）：wind 两拳举过头顶、棍在那一刻离手（后排：出手点在女生头顶以上），
+         throw 帧是甩完张开的手 */
+      atk: { kind: 'throw', item: 'bat', r: 68, atlas: { src: 'assets/trio/prop_bat_v2.webp', n: 36, cols: 6, cell: 168, scale: 1.05 },
              seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.35]],
-             hold: { idle: [236, 108], wind: [88, 4] },
-             T: 0.55, arc: 0.25, spin: 5.7, idleSpin: 0.8, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
+             hold: { wind: [88, 4] },
+             T: 0.55, arc: 0.25, spin: 5.7, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
 
     /* ---- 上方（左上，男女主头顶以下；样板 G11） ---- */
@@ -418,7 +424,7 @@ const TRIO_BESTIE = {
          grip / step 两帧模型多画了一根竖栏杆（船头变形），不上场。大小：人（不算船头）剪影 × 0.75² ≈ 2.34 万（上方样板 G11 2.06 万，+14%，蓬裙占得多）。
          站位：不在 shots/trio_std/建议站位_最终.md 的改动表里，保持原位（combo_scan 复扫见 shots/trio_bestie/combo_scan_站位改后.txt） */
       anchor: [412.4, 367.4], at: [190, 565, 0.75], pivot: [412, 367], leanK: 0,
-      depth: 0.5, recipe: 'bloom',
+      depth: 0.5, recipe: 'water',
       /* 船头从左边画外平着滑进来（fly，from 在同一高度偏左、dy 小），减速到位；滑行时捂着心口 → 双臂半张 → 到位张开双臂（露面后换两次帧，最后标 land） */
       enter: { kind: 'fly', from: [-420, -30], air: 0.75, tilt: 0.04, seq: [['follow', 0.35], ['open', 0.3], ['idle', 9, 'land']], sq: 0.05 },
       exit: { frame: 'follow' },
@@ -437,7 +443,7 @@ const TRIO_BESTIE = {
       sheet: { src: 'assets/trio/G18_mu.webp', cell: [335, 351], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'leap', 'land', 'rise', 'idle2'] },
       /* 锚点 = 前脚厚底靴鞋底：出手四帧按这只靴子配准（残差 0.17 px）。人那一层 idle 剪影 2.80 万 × 0.88² ≈ 2.17 万（上方样板 G11 2.06 万） */
       anchor: [273.7, 323.2], at: [260, 660, 0.88], pivot: [273, 323], leanK: 0,
-      depth: 0.5, recipe: 'bloom',
+      depth: 0.5, recipe: 'petal',
       /* 从左上画外抛物线跃下（腾空收腿张臂）→ 单膝落在墙沿上（压扁）→ 起身张臂 → 亮相待机 */
       enter: { kind: 'leap', from: [-320, -380], h: 120, air: 0.5, T: 0.9, seq: [['leap', 0.5], ['land', 0.2, 'land'], ['rise', 0.14], ['idle', 9]], sq: 0.1 },
       exit: { frame: 'leap' },
@@ -463,7 +469,7 @@ const TRIO_BESTIE = {
       /* 锚点 = 腰臀压在绳上那一点；按伸直的那条腿 + 脚配准（残差 ≤ 2.0 px）。绳子引擎画（rope，画在人之下），帧里不画绳。
          剪影（含垂下的长发、绸带）约 4.8 万格内像素 × 0.66² ≈ 2.1 万屏幕像素，同 G11 */
       anchor: [206.5, 166.1], at: [175, 520, 0.66], pivot: [206, 166], leanK: 0.3,
-      depth: 0.5, recipe: 'bloom',
+      depth: 0.5, recipe: 'star',
       /* 横绳（rope）：躺在绳上撩着头发滑进来 → 躺定一手枕头一手搭膝（露面后换一次帧，两个姿态）；绳是黄褐麻绳 */
       enter: { kind: 'rope', ends: [[-80, 532], [470, 488]], touch: [206.5, 166.1], sag: 16, sway: 5, w: 6, fill: '#b98a4e', edge: '#5a3a1a',
                seq: [['follow', 0.45], ['idle', 9, 'land']], sq: 0.04 },
@@ -499,7 +505,7 @@ const TRIO_BESTIE = {
       /* 九尾宝座画在每一帧里：按交叠的大腿 + 臀配准（残差 0.27 px），scale_by sheet（wind 仰头按头找会放大到 1.15、stretch 缩到 0.85）。
          锚点 = 最低点（鞋 / 裙摆）。人（不算白尾巴）约 3.2 万格内像素 × 0.8² ≈ 2.05 万屏幕像素，同 G11 */
       anchor: [159.6, 383.7], at: [175, 630, 0.8], pivot: [159, 383], leanK: 0.3,
-      depth: 0.5, recipe: 'bloom',
+      depth: 0.5, recipe: 'foxfire',
       /* 九尾托着出现（appear 烟，狐火橙）：淡入时尾巴裹着身子只露眼睛 → 淡入完伸懒腰 → 托腮坐定 → 待机（淡入后换两次帧） */
       enter: { kind: 'appear', fx: 'smoke', color: [255, 140, 50], seq: [['wrap', 0.35], ['stretch', 0.25], ['lean', 0.2, 'land'], ['idle', 9]], sq: 0.04 },
       exit: { frame: 'wrap' },
@@ -520,7 +526,7 @@ const TRIO_BESTIE = {
          frames.py 按月亮背弧配准、缩放也按月亮（scale_by fixed），锚点 = 月亮弯里的中心。
          人（不算月亮）约 2.5 万格内像素 × 0.9² ≈ 2.06 万屏幕像素，同 G11 */
       anchor: [105.5, 181.5], at: [150, 500, 0.9], pivot: [105, 181], leanK: 0.3,
-      depth: 0.5, recipe: 'bloom',
+      depth: 0.5, recipe: 'crescent',
       /* 月亮降下（fly，从正上方）：一手扶月尖一手挥 → 张开双臂仰头唱 → 坐定（露面后换两次帧） */
       enter: { kind: 'fly', from: [0, -720], air: 0.9, tilt: 0.03, seq: [['wave', 0.45], ['sing', 0.35], ['idle', 9, 'land']], sq: 0.04 },
       exit: { frame: 'wave' },
