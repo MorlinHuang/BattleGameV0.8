@@ -114,7 +114,7 @@ const FxShape = (() => {
     if (fade <= 0) return;
     const H = harm(hash(s.ang * 1e4, 7), [1.7, 2.9, 4.3, 7.1]), u = s.t / life, brk = Math.max(0, (u - 0.45) / 0.55);
     const a0 = -0.9, span = 1.8, M = 26;
-    ctx.save(); ctx.translate(s.p[0], s.p[1]); ctx.rotate(s.ang); ctx.scale(1, s.flip || 1); ctx.globalAlpha = fade;
+    ctx.save(); ctx.translate(s.p[0], s.p[1]); ctx.rotate(s.ang); ctx.scale(1, s.flip || 1); ctx.globalAlpha *= fade;   // 乘调用方的透明度（剑气飞行段的残影要淡）
     const cy = R * 0.4, pt = (f, off) => { const a = a0 + span * f - Math.PI / 2, rr = R * (1 + 0.07 * n(H, f * 3, s.t * 2)) + off; return [Math.cos(a) * rr, cy + Math.sin(a) * rr]; };
     for (const [wk, col] of SLASH_L(c)) {
       ctx.fillStyle = col; ctx.beginPath();

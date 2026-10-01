@@ -95,54 +95,71 @@
  *   剑气    月牙身后一条生图能量尾（beam2 bodyB / midB，宽窄横向都抖），月牙胀缩、微抖着转
  *   拖尾    越老越往两边飘、宽窄抖、外圈软光；狐火本体换生图能量流
  *   喷雾 / 喷、秋千绳、花瓣：第一版胶片过（雾团是有体积的噪声团，绳是麻绳纹带 + 甩弯），未再改
+ *   剑气月牙：FxShape.slash 现画（原 slash.webp slash1 是圆规弧，精特3 同一条意见）
  *
- * ---------- 接入清单（给引擎；行号 = 工作区 trio.js / main.js 2026-10-01，基于 6009923 + 引擎未提交的出手方向改动，会漂，以函数名为准）----------
+ *   性能（精特2 收口，fx_lab.html ?bench=1&noold=1&ab2=7：同一页里"不加 / 加第二批"交替 7 轮取增量中位数 —— 桌面负载 40~50，
+ *   单独两次跑同一配置就差 ±0.7 ms，必须配对；分账用 &b2off=件 关掉一件看差值、&b2rep=件,5 一件画 5 遍放大）：
+ *     第二批增量（一条水柱 + 一条绸 + 一记橡皮臂 + 狐火带尾 + 三道剑气 + 水柱落点溅射）：10.8 ms → 3.65 ms（7 轮 3.60~3.95）
+ *     改前分账（ca56965）：水柱 2.6、绸 1.9、臂 1.4、狐火尾 1.0、第二批放的粒子 1.7、水柱落点溅射 1.7（逐件 flush 计时，含 flush 开销）
+ *     改后分账（配对差值）：水柱 1.1、剑气 1.0、绸 0.4（放大 5 倍测）、臂 0.35、狐火尾 0.3、溅射 ≈ 0
+ *     做了什么（贵在哪 → 怎么省）：
+ *       逐像素双线性采样（SwiftShader 下带状物开销的大头，实心填色只剩零头）→ 第二批带子 pattern 最近点采样（band 注释）
+ *       每件一张离屏层（换画布 + 整块搬运）→ 去掉：水柱 / 拖尾直接画，绸改不透明（原 0.85）
+ *       多遍叠铺（绸三遍、水柱两遍、拖尾三遍、剑气尾两遍）→ comp() 合成一张条一遍铺；绸的扭转按相位 16 档各一张
+ *       甩影逐段贴图 × 4 帧 → 每帧一整块渐变（只铺靠梢 55 %、最多 2 块）；臂 / 棒不画甩影（顺着自己的轴伸缩，叠在本体上看不出）
+ *       粒子（一颗约 37 µs）：水柱落点 drip 按模拟时间限流（DRIP_GAP）、狐火火星 70 → 30 / s、剑气沿路光粒 16 → 6、水柱出口尘团 1/3 → 1/4、水沫 j ≤ 0.2
+ *       段数：水柱每三滴一个点、绸 / 臂按弧长抽点（thin）—— 合计约 0.25 ms
+ *     软渲染下绝对值不可信、相对比可信；真机未测。第一批光束（两道 6.5 ms）仍双线性，没动（不在本轮判据里，记 docs/待办.md）
+ *
+ * ---------- 接入清单（给引擎；行号 = 工作区 trio.js / main.js 2026-10-01 精特2 收口时复核，引擎改动未提交，会漂，以函数名为准）----------
  *   dir 一律可以传三种：弧度 / null（直线）/ 控制点 [cx, cy] —— 引擎已有 dirAt(P, frameName()) 和 rayC(p0, p2, d, lam)：
  *   传 rayC 的结果最省事，件的路线和引擎判打中的那条逐点一致。
  *
  * 5. 带状物 TrioFX.ribbon(Q, style)（建 Act 时一个句柄 h）
- *      G9 G13 红 / 白绸  style 'silk'，Q = A.whip     替换 drawWhip（trio.js:1250）整个函数体的画法：
+ *      G9 G13 红 / 白绸  style 'silk'，Q = A.whip     替换 drawWhip（trio.js:1344）整个函数体的画法：
  *                         h.draw(ctx, handPt(P), c, tg, e, W.t, P.s)  —— e 照 drawWhip 第 3 行算，c = W.way ? rayC(h, tg, d, W.way.lam) : null
  *      G17 鞭剑          style 'blade'，同上
- *      B12 橡皮臂        style 'arm'，Q = A            替换 drawArm（trio.js:1415）里画手臂那一段：h.draw(ctx, wr, d, [fx, fy], 1, b.pk.t, s)（d = drawArm 第 2 行的 dirAt）；
+ *      B12 橡皮臂        style 'arm'，Q = A            替换 drawArm（trio.js:1503）里画手臂那一段：h.draw(ctx, wr, d, [fx, fy], 1, b.pk.t, s)（d = drawArm 第 2 行的 dirAt）；
  *                         拳头按 h.tip()[2] 转（替换 drawArm 里的 ang），拳头仍由引擎画
  *      G29 打狗棒        style 'bamboo'，同上
- *      调用点不变：drawOver（trio.js:1237）里 1243 drawArm / 1245 drawWhip
+ *      调用点不变：drawOver（trio.js:1331）里 1337 drawArm / 1339 drawWhip
  * 6. 秋千绳 TrioFX.rope(ctx, pts, w, fill, edge, bend)
- *      drawSwing（trio.js:1192）/ drawRopes（1227）/ drawLine（1042）里每根绳原来的 stroke 换成 rope(ctx, pts, R.w * P.s, R.fill, R.edge, bend)；
- *      bend = −摆角速度 × 14（不荡传 0）。调用点 971 / 972 / 1002 不变；座板、绳上的花照旧
+ *      drawSwing（trio.js:1286）/ drawRopes（1321）/ drawLine（1136）里每根绳原来的 stroke 换成 rope(ctx, pts, R.w * P.s, R.fill, R.edge, bend)；
+ *      bend = −摆角速度 × 14（不荡传 0）。调用点 1056 / 1057 / 1096 不变；座板、绳上的花照旧
  * 7. 水柱 / 喷雾（B1~B4 stream，G1~G3 mist）
- *      drawJets（trio.js:900）第 902 行 drawStream / drawMist 换成：
+ *      drawJets（trio.js:969）第 971 行 drawStream / drawMist 换成：
  *        h = J.draw === 'mist' ? TrioFX.mist({ life: J.life }) : TrioFX.stream()     // 建 Act 时一次
  *        h.draw(ctx, jets, b && b.jm, F > 0 ? -b.ja : Math.PI + b.ja)                 // 第 4 参 = 枪口此刻的屏幕角
  *      crew.js drawStream（580）/ drawMist（634）原样留给男女主自己的水枪；落点 main.js:2505 / 2506 / 2512 的 RECIPE.water / pepper.drip
- *      在 Object.assign(RECIPE, TrioFX.RECIPE) 之后自动是新的（pepper 是新配方）
+ *      在 Object.assign(RECIPE, TrioFX.RECIPE)（main.js:2630 预取回调里，引擎已接）之后自动是新的（pepper 是新配方）；
+ *      water.drip 按 TrioFX.update(dt) 的模拟时钟限流，引擎每帧照常调 TrioFX.update 即可
  * 8. 喷（B20 酒雾，atk.kind 'spray'）h = TrioFX.spray(A.spray)
- *      stepFx（trio.js:757）第 787 行 shots.push({ kind: 'puff', ... }) 之后：h.emit(h0, a)；
- *      drawShot（1305）第 1308 行 'puff' 分支整段换成 h.puff(ctx, s)。路照旧（puff 的 c 已经由引擎按出口方向算）
+ *      stepFx（trio.js:825）第 856 行 shots.push({ kind: 'puff', ... }) 之后：h.emit(h0, a)；
+ *      drawShot（1399）第 1402 行 'puff' 分支整段换成 h.puff(ctx, s)。路照旧（puff 的 c 已经由引擎按出口方向算）
  * 9. 剑气飞行段（B23 G14，atk.kind 'slash'）
- *      fire()（trio.js:621）slash 分支（639 行 shots.push）每道 t 起点再往前挪 FLY = 0.12；stepShot（652）'slash' 分支（668）
+ *      fire()（trio.js:683）slash 分支（707 行 shots.push）每道 t 起点再往前挪 FLY = 0.12；stepShot（721）'slash' 分支（737）
  *      s.t 跨过 −FLY 的那一帧：TrioFX.qi(handPt(P), dir, o.aim(s.u), A.slash.color, { T: FLY, len: A.slash.len, ang: s.ang, life: A.slash.life })；
- *      drawShot 1307 行 'slash' 分支不再画（刀光由 qi 到点自己放）。打中时刻不变（刀光开始后 0.05 s）
+ *      drawShot 1401 行 'slash' 分支不再画（刀光由 qi 到点自己放）。打中时刻不变（刀光开始后 0.05 s）
  * 10. 飞行物拖尾（G16 狐火 fox、G15 项链 gem、G20 月牙 moon；其他小件 trailLook(rgb, 'fire' | 'glint')）
  *      h = TrioFX.trail(TrioFX.TRAIL.fox)（cfg 里加一项 trail: 'fox' 之类，建 Act 时取）
- *      stepShot（652）飞行段算完 s.x / s.y 之后（第 699 行 s.x = nx 之后；打中弹开的 s.fall 分支 655 行也调，尾巴淡完）：h.track(s, dt)
- *      drawShot（1305）画物件之前（1316 行 ctx.save 之前）：h.draw(ctx, s)
+ *      stepShot（721）飞行段算完 s.x / s.y 之后（第 769 行 s.x = nx 之后；打中弹开的 s.fall 分支 723 行也调，尾巴淡完）：h.track(s, dt)
+ *      drawShot（1399）画物件之前（'puff' 分支之后、画物件那段之前）：h.draw(ctx, s)
  * 11. 花瓣上限（P11）：TrioFX.RECIPE.petal 已是 petals() 默认（主体 ≤ 14 片、半径 200 px、寿命 0.55~0.8 s），Object.assign 后自动生效；
  *      按人换颜色：petals({ pal: [...] }) 另挂一个名字
  *
  * 12. 精特3 去几何图元（2026-10-01，用户："光晕的圆圈、弧形的特效太规整"）：画法在 **fx.js FxShape**（正式页已加载，不依赖 trio_fx），
  *      引擎只换调用 —— 全表与胶片见 docs/美术打磨自检.md 第 5 节「几何图元盘点」：
- *        trio.js drawSlash（截图二的金色弧带）函数体 → FxShape.slash(ctx, s, A.slash)
+ *        trio.js drawSlash（截图二的金色弧带）函数体 → FxShape.slash(ctx, s, A.slash)   （工作区 trio.js:1498 引擎已换，未提交）
  *        trio.js drawGhost 速度线三根直线 → FxShape.streak（头圆尾尖）
  *        main.js drawStains 的 ctx.arc → FxShape.blob(ctx, x, y, d.r, seed)
  *      fx.js Particles 'ring'（截图一的金色椭圆环，全站 ~70 处）/ 'spark' 已在 fx.js 里换掉，引擎不用动。
  *      TrioFX.slash 本身也改成 FxShape.slash 现画（不再用 slash.webp 序列帧）
  *
- * 预取（main.js:2627 Preload.add('items', ...) 之后另登记一项，不要放进 boot 首帧关键路径）：
- *      Preload.add('trio_fx', () => TrioFX.load(V))
+ * 预取（main.js:2627 Preload.add('items', ...) 之后另登记一项，不要放进 boot 首帧关键路径）—— 工作区 main.js:2630 引擎已登记：
+ *      Preload.add('trio_fx', () => TrioFX.load(V).then(ok => { if (ok) Object.assign(RECIPE, TrioFX.RECIPE); }))
  *      assets/fx/trio/ 九张 + atlas.json，共 397 KB：rip.webp 234 KB · beam2.webp 47 KB · band.webp 18 KB · frag 14 · ring 12 · beam 12 ·
- *      slash 11 · glow 9 · dust 7 KB · atlas.json 6 KB。第二批只用 band + beam2（+ 第一批的 frag / glow / dust / slash）；
+ *      slash 11 · glow 9 · dust 7 KB · atlas.json 6 KB。第二批只用 band + beam2（+ 第一批的 frag / glow / dust）；
+ *      slash.webp 精特3 起已没有调用（斩痕、剑气月牙都改 FxShape.slash 现画），仍在 atlas.json 里随包加载（11 KB，记 docs/待办.md）；
  *      没加载完时所有件 ready() 为假直接不画（引擎照旧画的那一份就别删，按 TrioFX.ready() 二选一）
  * ====================================================================================================================== */
 'use strict';
@@ -228,6 +245,7 @@ const TrioFX = (function () {
     c = document.createElement('canvas');
     c.width = w; c.height = h;
     c.getContext('2d').putImageData(im, 0, 0);
+    c._k = key;                                          // comp() 拿它拼合成贴图的 key
     if (rampCache.size > 1600) rampCache.clear();       // 配方里颜色是离散的，正常几十条 × 冲击波序列帧 10 帧；上限防将来有人写连续随机色
     rampCache.set(key, c);
     return c;
@@ -263,7 +281,10 @@ const TrioFX = (function () {
     return p;
   }
 
+  let clock = 0, dripAt = -1;                            // 模拟时钟（顿帧时 update 不走，它也不走）；dripAt：water.drip 上一次的时刻
+  const DRIP_GAP = 0.07;
   function update(dt) {
+    clock += dt;
     for (let i = act.length - 1; i >= 0; i--) {
       const p = act[i];
       p.age += dt;
@@ -340,7 +361,9 @@ const TrioFX = (function () {
     return [q * q * x0 + 2 * q * k * cx + k * k * x1, q * q * y0 + 2 * q * k * cy + k * k * y1,
             Math.atan2(q * (cy - y0) + k * (y1 - cy), q * (cx - x0) + k * (x1 - cx))];
   }
-  /* 剑气本体 + 身后三道残影（同一张月牙，越往后越淡越小）；月牙凸面朝前：贴图里弧在上（-y），转 ang + π/2 */
+  /* 剑气本体 + 身后两道残影（同一道月牙，越往后越淡越小）；月牙凸面朝前：FxShape.slash 的弧鼓向 −y，转 ang + π/2。
+     月牙是 FxShape.slash 停在"满弧、还没碎"那一段（t 0.08 ~ 0.13）现画 —— 原来是 slash.webp 的 slash1 格，圆规画的弧（精特3 用户：弧形太规整）；
+     形状种子按 fph 变，三道剑气各不一样，飞的时候半径沿弧起伏跟着 t 动 */
   function drawFly(ctx, p, T, al) {
     if (p.tex) {                                          // 能量尾：身后 0.075 s 飞过的路铺一条生图能量流（beam2 bodyB / midB），宽窄、横向都按 wob 抖，越往后越细
       const t1 = p.age, t0 = Math.max(0, t1 - 0.075), M = 8, pts = [], hw = [], u = [];
@@ -349,16 +372,16 @@ const TrioFX = (function () {
         pts.push([x - Math.sin(a) * o, y + Math.cos(a) * o]); hw.push(p.h * 0.28 * Math.pow(f, 1.3) * (1 + 0.4 * wob(j * 55, t1, 1 + p.fph)) + 1); u.push(-tt * 2400);
       }
       ctx.setTransform(T); ctx.globalAlpha = al * 0.9;
-      band(ctx, pts, hw, u, [{ tex: p.tex }, { tex: p.tex2, ext: 0 }]);
+      band(ctx, pts, hw, u, [{ tex: comp([[p.tex, 1], [p.tex2, 1]]), smooth: true }]);   // 双线性：生图能量流宽、颗粒细，最近点在胶片上起毛；只活 0.12 s，开销零头
     }
-    for (let k = 3; k >= 0; k--) {
-      const t = p.age - k * 0.022;
+    for (let k = 2; k >= 0; k--) {                       // 两道残影（原来三道贴图；现画的月牙一道 6 次 fill，三道剑气同飞时压测多 0.2 ms）
+      const t = p.age - k * 0.03;
       if (t < 0) continue;
       const [x, y, a] = flyAt(p, t), sc = (0.7 + 0.3 * Math.min(1, t / p.T)) * (1 - k * 0.12);
       const fl = 1 + 0.09 * Math.sin(t * 61 + p.fph);       // 月牙一胀一缩、微微抖着转（一张贴图平移过去读成贴纸）
       ctx.setTransform(T); ctx.translate(x, y); ctx.rotate(a + Math.PI / 2 + 0.07 * Math.sin(t * 43 + p.fph));
-      ctx.globalAlpha = al * (k ? 0.42 / k : 1);
-      ctx.drawImage(p.img, -p.w * sc * fl / 2, -p.h * sc * 0.3, p.w * sc * fl, p.h * sc / fl);
+      ctx.globalAlpha = al * (k ? 0.42 / k : 1); ctx.scale(sc * fl, sc / fl); ctx.rotate(-p.fph);
+      FxShape.slash(ctx, { t: 0.08 + 0.4 * t, p: [0, 0], ang: p.fph, flip: 1 }, { len: p.w * 1.27, w: p.w * 0.11, color: p.rgb, life: 1 });
     }
   }
 
@@ -594,9 +617,14 @@ const TrioFX = (function () {
       ember(x, y, side, s) {
         chips(x, y + 10, side, n(6, s), ['drop1'], PAL.water, { sp0: 20, sp1: 90, up: 0, g: 800, w0: 12, w1: 16, l0: 0.5, l1: 0.9, vel: true, stretch: 0.002, jx: 40, jy: 30 });
       },
+      /* 溅两颗 + 三成一圈小水环；按模拟时间限流：离上一次 drip 不到 DRIP_GAP 秒就按比例少溅（水柱每滴都调，B1 一秒 55 滴 →
+         原来一秒 110 颗水珠、同屏多四十几颗，压测里占第二批增量的两成；光束 beamTick 0.1 s 一次的不受影响） */
       drip(x, y, side) {
-        chips(x, y, side, 2, ['drop1'], PAL.water, { sp0: 120, sp1: 300, up: 160, g: 1100, w0: 13, w1: 18, l0: 0.3, l1: 0.5, vel: true, stretch: 0.0012 });
-        if (R() < 0.3) wave(PAL.water, { x, y, s0: 8, s1: 34, life: 0.16, a: 0.8, sq: 0.78 });
+        const k = Math.min(1, (clock - dripAt) / DRIP_GAP);
+        dripAt = clock;
+        const m = 2 * k, cnt = Math.floor(m) + (R() < m % 1 ? 1 : 0);
+        if (cnt) chips(x, y, side, cnt, ['drop1'], PAL.water, { sp0: 120, sp1: 300, up: 160, g: 1100, w0: 13, w1: 18, l0: 0.3, l1: 0.5, vel: true, stretch: 0.0012 });
+        if (R() < 0.3 * k) wave(PAL.water, { x, y, s0: 8, s1: 34, life: 0.16, a: 0.8, sq: 0.78 });
       },
     }),
     /* 篮球砸中（不碎）：橙闪 + 一道大冲击波（弹的那一下）+ 速度线式的锥形火花 + 落灰；余烬是灰 */
@@ -644,7 +672,7 @@ const TrioFX = (function () {
      换成 fx.js FxShape.slash（与正式页 trio.js drawSlash 的替换同一个画法）：中线半径沿弧起伏、宽度两头收尖且鼓瘪不匀、前沿舌头、
      后半寿命从两头往中间断成碎段、外侧两缕细丝。宽 = len × 0.08（B23 230 / 18、G14 240 / 20 的比例） */
   function slash(x, y, ang, len, rgb, life = 0.45, delay = 0) {
-    spawn({ m: 'fxs', x, y, rot: ang, w: len, h: len * 0.08, rgb, life, delay, a: 1, fi: 0 });
+    spawn({ m: 'fxs', x, y, rot: ang, w: len, h: len * 0.08, rgb, life, delay, a: 1, fi: 0, fo: 1e-3 });   // 淡出由 FxShape.slash 自己管（它乘 globalAlpha）
   }
 
   /* ---------- 光束 ---------- */
@@ -836,7 +864,7 @@ const TrioFX = (function () {
           * (Ld - d < 24 ? 0.7 + 0.3 * (Ld - d) / 24 : 1) * (1 + 0.06 * Math.sin(d * 0.031 - t * 19 + li) + 0.05 * Math.sin(d * 0.073 - t * 31 + 2.1 * li) + 0.04 * Math.sin(d * 0.013 - t * 9)), (d) => (d - t * spd) / sx,
           li < 3 ? 2 : 1);                                // 外晕 / 光身 / 中层隔一个点取（段长约 52 px，宽、软，折角看不出）；芯细，按 26 px
         ctx.globalAlpha = A0 * al * k;
-        band(ctx, pts, hw, u, [{ tex: tex[li], ext: al < 1 ? 0 : 0.6 }]);
+        band(ctx, pts, hw, u, [{ tex: tex[li], ext: al < 1 ? 0 : 0.6, smooth: true }]);
         if (li === 2) {                                   // 游丝：两股绕中线螺旋，压在中层之上、芯之下。一股 = 暗边 + 亮芯两笔虚线描边，虚线偏移随时间滚（断续、往前流）——
           ctx.lineCap = 'round'; ctx.lineJoin = 'round';  // 第一版每股按段铺贴图，两道光束多出 ~100 次填充；描边一股两次调用
           const fw = Math.max(1.3, Math.min(2.6, Wm * 0.03));
@@ -918,8 +946,52 @@ const TrioFX = (function () {
      每段是一个四边形（两头用顶点法线 × 半宽，邻段共用顶点 → 边是连续的，宽度可以逐点变：绸子扭转、末梢渐细），
      四边形里按这段的局部坐标系铺 pattern：贴图 x = 沿长度的 u（调用方给每个点的 u，弧长 / 水滴序号 / 从末端量），
      贴图 y = 横截面（行 32 = 中线）。带子细到几 px 时 pattern 缩小采样会闪 —— 按屏幕宽度挑 1 / ½ / ¼ 的预缩版（mip）。
-     段与段之间往前多铺 0.6 px（ext），盖掉抗锯齿接缝；半透明的整条带子要先画到离屏层（offLayer）再整体降透明度，不然这 0.6 px 叠出一道道深线 */
+     段与段之间往前多铺 0.6 px（ext），盖掉抗锯齿接缝（所以整条带子不能再整体降透明度：0.6 px 的重叠会叠出一道道深线 —— 第二批的带子一律
+     不透明或靠贴图自带的透明度；原来绸 0.85 / 水柱 0.95 是画到离屏层再贴回，每件多一次换画布 + 整块搬运，精特2 压测时去掉）。
+     采样：第二批的带子 pattern 用最近点采样（imageSmoothingEnabled = false，passes[0].smooth 例外：第一批光束、剑气能量尾仍双线性）——
+     SwiftShader 软渲染里带状物的开销几乎全是逐像素的双线性采样（fx_lab ?bench=1&ab2=3&b2rep=stream,5 放大分账：水柱带身一帧
+     0.95 ms，改实心填色只剩零头；段数是次要的，见 thin）；贴图都是软渐变 + mip 选到接近 1:1，最近点在胶片上看不出颗粒 */
   const patCache = new WeakMap();
+  /* 合成贴图条：几张 256 × 64 的条按 [贴图, 透明度, 纵向占比 f（居中，1 = 满高）] 叠成一张，离屏一次、按 key 缓存。
+     一条带子原来要沿路铺几遍（本体 + 高光、外晕 + 芯 + 亮丝），每遍把整条带子的面积采样一次；合成后每段只铺一次，
+     观感同叠铺（叠的是同一套 u / 半宽） */
+  const compCache = new Map();
+  function comp(layers) {
+    const key = layers.map(([t, a, f = 1]) => t._k + '@' + a.toFixed(3) + '@' + f).join('|');
+    let c = compCache.get(key);
+    if (c) return c;
+    c = document.createElement('canvas'); c.width = 256; c.height = 64;
+    const g = c.getContext('2d');
+    for (const [t, a, f = 1] of layers) { if (a <= 0.004) continue; g.globalAlpha = a; g.drawImage(t, 0, 0, 256, 64, 0, 32 - 32 * f, 256, 64 * f); }
+    c._k = key;
+    if (compCache.size > 400) compCache.clear();
+    compCache.set(key, c);
+    return c;
+  }
+  /* 折线每点的法线（相邻两段法线的平均） */
+  function normals(pts) {
+    const n = pts.length, nx = new Float64Array(n), ny = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      let sx = 0, sy = 0;
+      for (const j of [i - 1, i]) {
+        if (j < 0 || j >= n - 1) continue;
+        const dx = pts[j + 1][0] - pts[j][0], dy = pts[j + 1][1] - pts[j][1], L = Math.hypot(dx, dy);
+        if (L > 1e-6) { sx += -dy / L; sy += dx / L; }
+      }
+      const L = Math.hypot(sx, sy) || 1; nx[i] = sx / L; ny[i] = sy / L;
+    }
+    return [nx, ny];
+  }
+  /* 甩影片：一帧形状铺成一整块（一次 fill，纯色），代替逐段贴图 —— 它压在本体下面、淡、只活 0.05 s，贴图的横向软边看不出来 */
+  function sheet(ctx, pts, hw, color) {
+    const n = pts.length;
+    if (n < 2) return;
+    const [nx, ny] = normals(pts);
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) { const x = pts[i][0] + nx[i] * hw[i], y = pts[i][1] + ny[i] * hw[i]; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+    for (let i = n - 1; i >= 0; i--) ctx.lineTo(pts[i][0] - nx[i] * hw[i], pts[i][1] - ny[i] * hw[i]);
+    ctx.fillStyle = color; ctx.fill();
+  }
   function mipOf(tex, lv) {
     if (!lv) return tex;
     tex._mip = tex._mip || [];
@@ -944,17 +1016,9 @@ const TrioFX = (function () {
   function band(ctx, pts, hw, u, passes, ink, inkW = 1.2, cap = true) {
     const n = pts.length;
     if (n < 2) return;
-    const nx = new Float64Array(n), ny = new Float64Array(n);
-    for (let i = 0; i < n; i++) {
-      let sx = 0, sy = 0;
-      for (const j of [i - 1, i]) {
-        if (j < 0 || j >= n - 1) continue;
-        const dx = pts[j + 1][0] - pts[j][0], dy = pts[j + 1][1] - pts[j][1], L = Math.hypot(dx, dy);
-        if (L > 1e-6) { sx += -dy / L; sy += dx / L; }
-      }
-      const L = Math.hypot(sx, sy) || 1; nx[i] = sx / L; ny[i] = sy / L;
-    }
-    const T = ctx.getTransform(), A0 = ctx.globalAlpha;
+    const [nx, ny] = normals(pts);
+    const T = ctx.getTransform(), A0 = ctx.globalAlpha, SM = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = !!passes[0].smooth;
     for (const ps of passes) {
       for (let i = 0; i < n - 1; i++) {
         const al = ps.alpha ? ps.alpha(i) : 1;
@@ -977,7 +1041,7 @@ const TrioFX = (function () {
         ctx.globalAlpha = A0 * al; ctx.fillStyle = patOf(ctx, tex, lv); ctx.fill();
       }
     }
-    ctx.setTransform(T); ctx.globalAlpha = A0;
+    ctx.setTransform(T); ctx.globalAlpha = A0; ctx.imageSmoothingEnabled = SM;
     if (ink) {
       ctx.strokeStyle = ink; ctx.lineWidth = inkW; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       ctx.beginPath();
@@ -987,31 +1051,9 @@ const TrioFX = (function () {
       ctx.stroke();
     }
   }
-  /* 离屏层：fn(g) 在一张临时画布上画（变换与 ctx 相同），画完整块按 alpha 贴回 ctx。box = 画布坐标外框 [x0, y0, x1, y1] */
-  let LAY = null;
-  function offLayer(ctx, box, alpha, fn) {
-    const T = ctx.getTransform();
-    const xs = [], ys = [];
-    for (const [x, y] of [[box[0], box[1]], [box[2], box[1]], [box[0], box[3]], [box[2], box[3]]]) { xs.push(T.a * x + T.c * y + T.e); ys.push(T.b * x + T.d * y + T.f); }
-    const X0 = Math.max(0, Math.floor(Math.min(...xs)) - 2), Y0 = Math.max(0, Math.floor(Math.min(...ys)) - 2);
-    const X1 = Math.min(ctx.canvas.width, Math.ceil(Math.max(...xs)) + 2), Y1 = Math.min(ctx.canvas.height, Math.ceil(Math.max(...ys)) + 2);
-    const w = X1 - X0, h = Y1 - Y0;
-    if (w <= 0 || h <= 0) return;
-    if (!LAY) LAY = document.createElement('canvas');
-    if (LAY.width < w || LAY.height < h) { LAY.width = Math.max(LAY.width, w); LAY.height = Math.max(LAY.height, h); }
-    const g = LAY.getContext('2d');
-    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.clearRect(0, 0, w, h);
-    g.setTransform(T.a, T.b, T.c, T.d, T.e - X0, T.f - Y0);
-    fn(g);
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha *= alpha;
-    ctx.drawImage(LAY, 0, 0, w, h, X0, Y0, w, h);
-    ctx.restore();
-  }
-  const boxOf = (pts, pad) => {
-    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-    for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-    return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
-  };
+  /* 抽点：沿弧长每隔至少 minSeg px 留一个点（头尾必留）。弹簧链 21 个点是给物理用的；画的时候一段 20~30 px 的直段看不出折，
+     每段一次 fill 有固定开销（水柱 / 绸 / 臂三处抽点合计，配对压测约 0.25 ms） */
+  const thin = (L, minSeg) => { const k = [0]; for (let i = 1; i < L.length - 1; i++) if (L[i] - L[k[k.length - 1]] >= minSeg) k.push(i); k.push(L.length - 1); return k; };
   const arcLen = (pts) => { const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])); return L; };
 
   /* ---------- 弹簧链：带状物的惯性 ----------
@@ -1047,7 +1089,7 @@ const TrioFX = (function () {
      TrioFX.ribbon(Q, style)：每个角色一个句柄（建 Act 时）。style：
        'silk'   绸（G9 红绸、G13 白绸）：Q = A.whip { w, taper, amp, waves, hz, color, edge, tip? }。带宽 = w × 1.6，沿长度扭转
                 （半宽 × |cos φ|，φ 沿长度转一圈多、随时间慢慢拧），翻到背面换反面色（红绸暗红、白绸淡灰蓝），受光面叠一条软光泽；
-                整条 0.85 透明；有 tip 的梢上挂一只金铃 sprite（G13，原 tip 是一截 12 × 9 px 的金线）
+                不透明（原来整条 0.85，要离屏层，见 band 注释）；有 tip 的梢上挂一只金铃 sprite（G13，原 tip 是一截 12 × 9 px 的金线）
        'blade'  软鞭剑（G17，金属）：Q = A.whip。剑身贴图（暗边 / 斜面 / 血槽 / 一条白刃光），螺旋甩出（中线绕一圈圈的螺旋偏移，
                 宽窄跟着螺旋相位翻），tip = 一截收尖的剑尖
        'arm'    橡皮臂（B12）：Q = A（atk 原样：armW / skin / skinShade / skinEdge）。肉色圆柱 + 褶纹（拉得越长褶越稀 = 拉伸纹），
@@ -1061,6 +1103,7 @@ const TrioFX = (function () {
        t     这一下的时钟（抽打 W.t；出拳 b.pk.t）—— 弹簧链按它推进
        s     体型 P.s
      h.tip() → [x, y, ang]：梢此刻在哪、朝哪（出拳：拳头按它转，替换 drawArm 里的 ang） */
+  const PHB = 16;
   function ribbon(Q, style = 'silk') {
     const N = 20, C = chain(N), TUBE = style === 'arm' || style === 'bamboo';
     let pals, texName, tipImg = null;
@@ -1077,10 +1120,10 @@ const TrioFX = (function () {
     }
     const ink = TUBE ? Q.skinEdge : Q.edge || 'rgba(40,20,10,.85)';
     /* 甩影（去规则：快的时候一条带子读成"一片扫过去的面"，不是一根线）：调用方时钟 t 的最近 SMEAR 秒里的几帧形状，淡淡地铺在本体下面 */
-    const SMEAR = 0.05, hist = [];
-    const smearC = TUBE ? mix(rgbOf(Q.skin), WHITE, 0.3) : mix(rgbOf(Q.color), WHITE, style === 'blade' ? 0.55 : 0.2);
-    const smearPal = [smearC, smearC, smearC, smearC];
+    const SMEAR = TUBE ? 0 : 0.05, hist = [];            // 臂 / 棒是顺着自己的轴伸缩，甩影叠在本体上看不出来（压测里却是整块面积）—— 只有绸 / 鞭剑横着扫
+    const smearC = (TUBE ? mix(rgbOf(Q.skin), WHITE, 0.3) : mix(rgbOf(Q.color), WHITE, style === 'blade' ? 0.55 : 0.2)).join(',');
     let last = null;
+    const faces = [];                                    // 扭转相位每档一张合成条（本句柄的颜色固定，算一次）
     const D = Array.from({ length: N + 1 }, () => [0, 0]);
     return {
       draw(ctx, from, dir, to, e, t, s = 1) {
@@ -1147,32 +1190,38 @@ const TrioFX = (function () {
           for (const [k, w] of [[0.5, tw * 0.85], [1, 0.4]]) { pts.push([pts[N][0] + Math.cos(tipA) * tl * k, pts[N][1] + Math.sin(tipA) * tl * k]); hw.push(w); phi.push(0); u.push(u[u.length - 1] + tl * k * 64 / (W0 * 2.6)); }
         }
         last = [pts[N][0], pts[N][1], tipA];
-        /* 甩影：先画（压在本体下面）。只画梢比这一帧挪开 6 px 以上的那几帧（停住时不花钱） */
+        /* 甩影：先画（压在本体下面）。只画梢比这一帧挪开 6 px 以上的那几帧（停住时不花钱）。每帧一整块（sheet），只铺靠梢的 55 %
+           （根几乎不动，那半截的甩影本来就看不见），沿长度由透明渐到实。每 0.03 s 记一帧、留 0.05 s = 最多 2 块（原来逐段贴图 × 4 帧 = 40 次 fill；
+           整块渐变的面积开销仍不小：压测配对差值里甩影约 0.75 ms，砍掉根那半截和第 4 块） */
         if (hist.length && t < hist[hist.length - 1].t - 1e-6) hist.length = 0;
         while (hist.length && t - hist[0].t > SMEAR) hist.shift();
-        const smT = ramp('band', 'sheen', smearPal);
         for (const g of hist) {
-          const ag = (t - g.t) / SMEAR, gp = g.pts;
-          if (ag <= 0 || Math.hypot(gp[gp.length - 1][0] - pts[N][0], gp[gp.length - 1][1] - pts[N][1]) < 6) continue;
-          ctx.save(); ctx.globalAlpha *= (style === 'silk' ? 0.55 : 0.45) * (1 - ag);
-          band(ctx, gp, g.hw, g.u, [{ tex: smT, ext: 0 }]);
-          ctx.restore();
+          const ag = (t - g.t) / SMEAR, gp = g.pts, e = gp[gp.length - 1];
+          if (ag <= 0 || Math.hypot(e[0] - pts[N][0], e[1] - pts[N][1]) < 6) continue;
+          const gr = ctx.createLinearGradient(gp[0][0], gp[0][1], e[0], e[1]), a = (style === 'silk' ? 0.3 : 0.25) * (1 - ag);
+          gr.addColorStop(0, `rgba(${smearC},0)`); gr.addColorStop(1, `rgba(${smearC},${a.toFixed(3)})`);
+          sheet(ctx, gp, g.hw, gr);
         }
-        if (!hist.length || t - hist[hist.length - 1].t >= 0.012) {
-          const gp = [], gh = [], gu = [];
-          for (let i = 0; i < pts.length; i += 2) { gp.push([pts[i][0], pts[i][1]]); gh.push(Math.max(hw[i] * 1.5, 3)); gu.push(u[i]); }
-          hist.push({ t, pts: gp, hw: gh, u: gu });
+        if (SMEAR && (!hist.length || t - hist[hist.length - 1].t >= 0.03)) {
+          const gp = [], gh = [];
+          for (let i = Math.round(N * 0.45); i < pts.length; i += 2) { gp.push([pts[i][0], pts[i][1]]); gh.push(Math.max(hw[i] * 1.05, 2)); }
+          hist.push({ t, pts: gp, hw: gh });
         }
         const body = ramp('band', texName, TUBE ? pals.body : pals.front);
-        if (TUBE) { band(ctx, pts, hw, u, [{ tex: body }], ink, 1.4); return; }
+        if (TUBE) { const k = thin(L, 32 * s); band(ctx, k.map(i => pts[i]), k.map(i => hw[i]), k.map(i => u[i]), [{ tex: body }], ink, 1.4); return; }
         const backT = ramp('band', texName, pals.back), darkT = ramp('band', texName, pals.dark), sheenT = ramp('band', 'sheen', pals.sheen);
-        const face = (i) => Math.cos((phi[i] + phi[Math.min(i + 1, phi.length - 1)]) / 2);
-        const paint = (g) => band(g, pts, hw, u, [
-          { tex: (i) => (face(i) >= 0 ? body : backT) },
-          { tex: darkT, alpha: (i) => 0.55 * (1 - Math.abs(face(i))) ** 2, ext: 0 },                    // 侧过去的那段压暗
-          { tex: sheenT, alpha: (i) => (style === 'blade' ? 0.5 : 0.85) * Math.max(0, Math.cos(phi[i] - 0.5)) ** 3, ext: 0 },   // 正对光的那段亮一条
-        ], ink, 1);
-        if (style === 'silk') offLayer(ctx, boxOf(pts, W0 + 4), 0.85, paint); else paint(ctx);
+        /* 每段按扭转相位 φ（取两端平均）挑一张合成条：正 / 反面本体 + 侧过去压暗 + 正对光亮一条。φ 量化成 PHB 档（每档 22.5°，
+           原来三遍逐段 alpha 连续变、每段 3 次 fill；现在 1 次，档间差一点点亮度，段本来就是逐段一个值） */
+        const shine = style === 'blade' ? 0.5 : 0.85;
+        const faceTex = (i, i1) => {
+          const b = ((Math.round((phi[i] + phi[i1]) / 2 / 6.2832 * PHB) % PHB) + PHB) % PHB;
+          if (!faces[b]) { const p = b * 6.2832 / PHB, f = Math.cos(p);
+            faces[b] = comp([[f >= 0 ? body : backT, 1], [darkT, 0.55 * (1 - Math.abs(f)) ** 2], [sheenT, shine * Math.max(0, Math.cos(p - 0.5)) ** 3]]); }
+          return faces[b];
+        };
+        /* 绸身抽点（每段 ≥ 20 px；鞭剑有剑尖那两个点，不抽）：21 点是给弹簧链的，扭转一圈多也只要十几段 */
+        const ki = style === 'silk' ? thin(L, 20 * s) : pts.map((_, i) => i);
+        band(ctx, ki.map(i => pts[i]), ki.map(i => hw[i]), ki.map(i => u[i]), [{ tex: (j) => faceTex(ki[j], ki[j + 1]) }], ink, 1);
         if (style === 'silk' && Q.tip) {                       // 金铃：挂在梢上、口朝下摆（顺最后一段方向 + 往下坠一点）
           tipImg = tipImg || ramp('band', 'bell', palOf(rgbOf(Q.tip[2]), 0.55, 0.6));
           const sz = Math.max(26, Q.tip[0] * s * 1.8), a = Math.atan2(Math.sin(tipA) + 1.2, Math.cos(tipA)) - Math.PI / 2;
@@ -1207,6 +1256,7 @@ const TrioFX = (function () {
      宽度 / 断开 / 水沫三条规则与 crew.js WATER 逐字相同（只换画法，命中手感不变）。落点溅射走 onDrip（RECIPE.water.drip，第一批已换）。
      h = TrioFX.stream()；drawJets 里 J.draw === 'stream' 分支：h.draw(ctx, jets, b && b.jm, dir)
        dir：出口方向（弧度，= 枪口此刻的仰角换成屏幕角 F > 0 ? −b.ja : π + b.ja）。给了就让喷口 → 第一滴那一段先沿 dir 出去（P1） */
+  const MIST = 0.2;
   const WATER = { w0: 7, w1: 20, grow: 0.3, a1: 0.55, breakT: 0.14, brk: 0.16, mist: 0.35 };
   function stream(o = {}) {
     const pal = o.pal || PAL.water;
@@ -1227,10 +1277,14 @@ const TrioFX = (function () {
         const head = n && m && Math.hypot(ps[n - 1].x - m[0], ps[n - 1].y - m[1]) < 60 ? ps[n - 1] : null;
         const lines = [];
         for (const r of runs) {
-          /* 去规则：每滴水自带一个粗细（鼓包随水往前走，不是一根等粗的管子）和一点横向偏移（越老越大：水柱在空中松开、抖） */
-          const pts = r.map(d => { const v = Math.hypot(d.vx, d.vy) || 1, o = wOf(d) * 0.22 * Math.sin(d.seq * 0.83 + 0.4) * Math.min(1, d.t / 0.15);
+          /* 去规则：每滴水自带一个粗细（鼓包随水往前走，不是一根等粗的管子）和一点横向偏移（越老越大：水柱在空中松开、抖）。
+             每三滴取一个点：水滴间距约 23 px，一段 69 px 的直段贴在抛物线上（顶点曲率半径 V² / G ≈ 1700 px）弓高不到 0.4 px，看不出折；
+             段数是逐滴的三分之一（压测配对差值里约 0.25 ms：每段一次 fill 的固定开销）。
+             所以鼓包 / 横摆的频率按三滴一个采样定：主鼓包 0.55 rad / 滴（11 滴一个，每个鼓包约 4 个点），原来 1.31（4.8 滴）隔点取是一胖一瘦的锯齿 */
+          const k = r.filter((d, i) => i % 3 === 0 || i === r.length - 1);
+          const pts = k.map(d => { const v = Math.hypot(d.vx, d.vy) || 1, o = wOf(d) * 0.22 * Math.sin(d.seq * 0.4 + 0.4) * Math.min(1, d.t / 0.15);
                                    return [d.x - d.vy / v * o, d.y + d.vx / v * o]; });
-          const hw = r.map(d => wOf(d) * 0.58 * (1 + 0.24 * Math.sin(d.seq * 1.31) + 0.12 * Math.sin(d.seq * 0.47 + 1.7))), u = r.map(d => -d.seq * 45);
+          const hw = k.map(d => wOf(d) * 0.58 * (1 + 0.24 * Math.sin(d.seq * 0.55) + 0.12 * Math.sin(d.seq * 0.23 + 1.7))), u = k.map(d => -d.seq * 45);
           if (r[0] === head) {                                 // 接到喷口；给了 dir 就先沿 dir 出去一小段
             const d0 = Math.hypot(head.x - m[0], head.y - m[1]);
             if (dir != null && d0 > 6) { pts.unshift([m[0] + Math.cos(dir) * d0 * 0.45, m[1] + Math.sin(dir) * d0 * 0.45]); hw.unshift(WATER.w0 * 0.55); u.unshift(-(head.seq + 0.55) * 45); }
@@ -1241,10 +1295,10 @@ const TrioFX = (function () {
           lines.push([pts, hw, u]);
         }
         if (lines.length) {
-          const all = [].concat(...lines.map(l => l[0]));
-          /* 水身 + 一条断续的白高光（sheen 条的亮丝沿 u 走 = 跟着水流）+ 折射暗边（实体靠轮廓：第一版没边，亮地板上是一根淡管子） */
-          const edge = `rgba(${pal[0].join(',')},.6)`;
-          offLayer(ctx, boxOf(all, 30), 0.95, (g) => { for (const [pts, hw, u] of lines) band(g, pts, hw, u, [{ tex }, { tex: hl, alpha: () => 0.7, ext: 0 }], edge, 1.3); });
+          /* 水身 + 一条断续的白高光（sheen 条的亮丝沿 u 走 = 跟着水流）合成一张条，每段铺一次 + 折射暗边（实体靠轮廓：第一版没边，
+             亮地板上是一根淡管子）。水身贴图本身半透明，直接画在 ctx 上（原来先画离屏层再 0.95 贴回：层只多一次整块搬运，接缝一样） */
+          const edge = `rgba(${pal[0].join(',')},.6)`, wt = comp([[tex, 1], [hl, 0.7]]);
+          for (const [pts, hw, u] of lines) band(ctx, pts, hw, u, [{ tex: wt }], edge, 1.3);
         }
         /* 断开的水珠、水沫：贴图水滴，顺速度画（头在前） */
         const dropA = ramp('frag', 'drop0', pal), dropB = ramp('frag', 'drop1', pal);
@@ -1257,8 +1311,8 @@ const TrioFX = (function () {
             ctx.setTransform(T); ctx.translate(d.x, d.y); ctx.rotate(sp); ctx.globalAlpha = aOf(d);
             ctx.drawImage(dropA, -w * 0.6, -w / 2, w, w);
           }
-          if (d.t >= WATER.breakT && d.j <= WATER.mist) {
-            const k = d.j / WATER.mist, off = (k - 0.5) * 2 * wOf(d) * 1.3, w = (5 + 6 * k) * CELL, vl = Math.hypot(d.vx, d.vy) || 1;
+          if (d.t >= WATER.breakT && d.j <= MIST) {          // 水沫只画 j ≤ 0.2 的（crew.js 是 0.35：每颗一次 drawImage，水柱的水滴 sprite 一帧 0.4 ms）
+            const k = d.j / MIST, off = (k - 0.5) * 2 * wOf(d) * 1.3, w = (5 + 6 * k) * CELL, vl = Math.hypot(d.vx, d.vy) || 1;
             ctx.setTransform(T); ctx.translate(d.x - d.vy / vl * off, d.y + d.vx / vl * off); ctx.rotate(sp); ctx.globalAlpha = 0.9;
             ctx.drawImage(dropB, -w * 0.6, -w / 2, w, w);
           }
@@ -1271,7 +1325,7 @@ const TrioFX = (function () {
           for (const d of ps) {
             if (d.seq <= seen) continue;
             const a = dir != null ? dir : Math.atan2(d.vy, d.vx);
-            if (d.seq % 3 === 0) spawn({ m: 'spr', img: ramp('dust', 'dust' + (d.seq % 4), pal), x: m[0] + Math.cos(a) * 8, y: m[1] + Math.sin(a) * 8,
+            if (d.seq % 4 === 0) spawn({ m: 'spr', img: ramp('dust', 'dust' + (d.seq % 4), pal), x: m[0] + Math.cos(a) * 8, y: m[1] + Math.sin(a) * 8,
               vx: Math.cos(a) * 160 + rr(-30, 30), vy: Math.sin(a) * 160 - 20, drag: 0.9, w: rr(26, 40), s0: 0.5, s1: 1.2, life: 0.28, a: 0.35, fo: 0.6 });
             if (d.j > 0.86) { const b = a + rr(-0.35, 0.35), sp = rr(300, 520);
               spawn({ m: 'vel', img: dropB, x: m[0], y: m[1], vx: Math.cos(b) * sp, vy: Math.sin(b) * sp, g: 1100, drag: 0.99, w: rr(9, 13) * CELL, h: rr(9, 13) * CELL * 0.62,
@@ -1364,16 +1418,16 @@ const TrioFX = (function () {
   function qi(from, dir, to, rgb, o = {}) {
     if (!ready()) return 0;
     const T = o.T || 0.12, pal = palOf(rgb, 0.7, 0.6), c = ctrl(from, dir, to), len = o.len || 230, w = len * 0.78, h = w * 160 / 256, dl = o.delay || 0;
-    spawn({ m: 'fly', img: ramp('slash', 'slash1', pal), tex: ramp('beam2', 'bodyB', pal), tex2: ramp('beam2', 'midB', pal), path: [from[0], from[1], c[0], c[1], to[0], to[1]], T, x: from[0], y: from[1], w, h, life: T, a: 1, fi: 0, fo: 0.01, delay: dl });
+    spawn({ m: 'fly', rgb, tex: ramp('beam2', 'bodyB', pal), tex2: ramp('beam2', 'midB', pal), path: [from[0], from[1], c[0], c[1], to[0], to[1]], T, x: from[0], y: from[1], w, h, life: T, a: 1, fi: 0, fo: 0.01, delay: dl });
     spawn({ m: 'spr', img: glow('flare', pal), x: from[0], y: from[1], w: 90, s0: 1.2, s1: 0.5, life: 0.08, fi: 0, a: 1, fo: 0.6, delay: dl, z: 1 });   // 出刀一闪
-    for (let j = 1; j <= 8; j++) {                       // 沿路：按剑气经过的时刻错开出生，留在身后往两侧散
-      const e = j / 9, k = e * (0.6 + 0.4 * e), p = bz(from, c, to, k), q = bz(from, c, to, Math.min(1, k + 0.02)), a = Math.atan2(q[1] - p[1], q[0] - p[0]);
-      for (const sd of [-1, 1]) {
+    for (let j = 1; j <= 6; j++) {                       // 沿路：按剑气经过的时刻错开出生，留在身后往两侧散
+      const e = j / 7, k = e * (0.6 + 0.4 * e), p = bz(from, c, to, k), q = bz(from, c, to, Math.min(1, k + 0.02)), a = Math.atan2(q[1] - p[1], q[0] - p[0]);
+      for (const sd of [j % 2 ? -1 : 1]) {                // 每步一颗、左右交替（原来 8 步 × 两侧：三道剑气同屏 48 颗光粒，压测里粒子是第二批增量的大头）
         const sp = rr(40, 120);
         spawn({ m: 'spr', img: glow('mote', pal), x: p[0], y: p[1], vx: Math.cos(a + sd * 1.571) * sp - Math.cos(a) * 40, vy: Math.sin(a + sd * 1.571) * sp - Math.sin(a) * 40, drag: 0.93,
-                w: rr(10, 16), s0: 1, s1: 0.3, life: rr(0.22, 0.34), a: 1, fo: 0.4, delay: dl + e * T });
+                w: rr(12, 20), s0: 1, s1: 0.3, life: rr(0.22, 0.34), a: 1, fo: 0.4, delay: dl + e * T });
       }
-      if (j % 2) spawn({ m: 'vel', img: glow('spark', pal), x: p[0], y: p[1], vx: -Math.cos(a) * rr(120, 260), vy: -Math.sin(a) * rr(120, 260), drag: 0.95, g: 200,
+      if (j % 3 === 1) spawn({ m: 'vel', img: glow('spark', pal), x: p[0], y: p[1], vx: -Math.cos(a) * rr(120, 260), vy: -Math.sin(a) * rr(120, 260), drag: 0.95, g: 200,
                          w: rr(16, 24), h: rr(5, 7), stretch: 0.0015, life: rr(0.12, 0.2), fo: 0.5, delay: dl + e * T });
     }
     if (o.slash !== false) slash(to[0], to[1], o.ang != null ? o.ang : Math.atan2(to[1] - c[1], to[0] - c[0]) + Math.PI / 2, len, rgb, o.life || 0.45, dl + T);
@@ -1400,11 +1454,11 @@ const TrioFX = (function () {
         const flying = s.fall == null && s.stuck == null;
         if (flying) {
           H.pts.push([s.x, s.y, H.t]);
-          H.acc += dt * (look.fire ? 70 : 20);
+          H.acc += dt * (look.fire ? 30 : 16);         // 每秒几颗火星 / 闪光（原来 70 / 20：一颗粒子软渲染约 37 µs，狐火一飞同屏多二十颗）
           while (H.acc >= 1) {
             H.acc -= 1;
             if (look.fire) spawn({ m: 'spr', img: glow('mote', look.pal), x: s.x + rr(-6, 6), y: s.y + rr(-6, 6), vx: -(s.vx || 0) * 0.08 + rr(-30, 30), vy: -(s.vy || 0) * 0.08 - rr(60, 150),
-                                   g: -160, drag: 0.94, w: rr(14, 24), s0: 1, s1: 0.2, life: rr(0.22, 0.38), a: 1, fo: 0.5 });
+                                   g: -160, drag: 0.94, w: rr(17, 30), s0: 1, s1: 0.2, life: rr(0.22, 0.38), a: 1, fo: 0.5 });
             else spawn({ m: 'spr', img: glow('flare', look.pal), x: s.x + rr(-8, 8), y: s.y + rr(-8, 8), vx: rr(-20, 20), vy: rr(-20, 20), drag: 0.9,
                          w: rr(14, 22), s0: 1, s1: 0.3, life: rr(0.22, 0.34), flip: 14, rot: R(), a: 1, fo: 0.5 });
           }
@@ -1429,12 +1483,13 @@ const TrioFX = (function () {
           P.push([pts[i][0] - dy / dl * o, pts[i][1] + dx / dl * o]);
           hw[i] *= 1 + (look.fire ? 0.45 : 0.3) * wob(L[i] * 3, H.t, 2.4);
         }
-        const u = L.map(d => d * 1.6 + H.t * (look.fire ? 700 : 300)), halo = hw.map(w => w * 1.9);
+        const u = L.map(d => d * 1.6 + H.t * (look.fire ? 700 : 300)), halo = hw.map(w => w * 1.6);
         const tex = ramp('band', 'trail', look.pal), flow = ramp('beam2', look.fire ? 'bodyB' : 'midB', look.pal);
-        offLayer(ctx, boxOf(P, look.w * 1.5), look.fire ? 1 : 0.9, (g) => {
-          g.globalAlpha = 0.4; band(g, P, halo, u, [{ tex, ext: 0 }]);            // 外面一圈软光
-          g.globalAlpha = 1; band(g, P, hw, u, [{ tex: flow }, { tex }]);          // 本体：生图能量流 + 一缕亮丝
-        });
+        /* 外面一圈软光（0.4）+ 本体（生图能量流 + 一缕亮丝，占中间 1 / 1.6）合成一张条，按外晕的宽铺一次（原来三遍 + 离屏层；
+           外晕原来 1.9 倍宽，最外一圈贴图本来就近乎透明，收到 1.6 少铺三成面积） */
+        ctx.save(); ctx.globalAlpha *= look.fire ? 1 : 0.9;
+        band(ctx, P, halo, u, [{ tex: comp([[tex, 0.4], [flow, 1, 1 / 1.6], [tex, 1, 1 / 1.6]]) }]);
+        ctx.restore();
       },
     };
   }
