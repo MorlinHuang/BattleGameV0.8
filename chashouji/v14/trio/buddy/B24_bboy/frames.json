@@ -17,8 +17,40 @@
     "headspin",
     "windmill",
     "freeze",
-    "idle2"
+    "idle0"
    ]
+  },
+  {
+   "src": "raw/p6d_swing.png",
+   "screen": "auto",
+   "frames": [
+    "swing"
+   ],
+   "scale_as": "wind"
+  },
+  {
+   "src": "raw/p6d_release.png",
+   "screen": "auto",
+   "frames": [
+    "release"
+   ],
+   "scale_as": "wind"
+  },
+  {
+   "src": "raw/p6d_thru.png",
+   "screen": "auto",
+   "frames": [
+    "thru"
+   ],
+   "scale_as": "wind"
+  },
+  {
+   "src": "raw/p6_idle2.png",
+   "screen": "auto",
+   "frames": [
+    "idle2"
+   ],
+   "scale_as": "idle"
   }
  ],
  "ref": "idle",

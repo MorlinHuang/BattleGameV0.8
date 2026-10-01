@@ -5,3 +5,7 @@
 - raw/act_b1.png（参考 act_a1 + ref）：cruise 插兜后仰滑行 / swerve 拐弯撩头发 / brake 急刹后仰两臂张开 / idle。
 - raw/prop_src.png：红纸条（长条、金边、两头微卷、不写字），part.py → web/assets/trio/B7_redslip.webp（onHit wear 挂在她头上）。
 - 进场 ride：cruise → swerve → brake(land)；出手在 wind 帧举过头顶那一刻离手（fire 段仍是 wind）。
+
+# 2026-10-01 精美1
+- P6/P7：补 swing / thru / idle2（raw/p6_*.png，蒙版局部重绘）；旧 idle2 改名 idle0。
+- 红牌重画：raw/prop_src2.png（红纸白字「红牌」、两头卷边、金边），part.py h 140 → B7_redslip.webp（126×140），cfg scale 0.55。旧图 prop_src.png 留着。

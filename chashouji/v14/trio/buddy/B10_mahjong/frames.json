@@ -19,8 +19,32 @@
     "walk3",
     "walk4",
     "plop",
-    "idle2"
+    "idle0"
    ]
+  },
+  {
+   "src": "raw/p6_swing.png",
+   "screen": "auto",
+   "frames": [
+    "swing"
+   ],
+   "scale_as": "wind"
+  },
+  {
+   "src": "raw/p6_thru.png",
+   "screen": "auto",
+   "frames": [
+    "thru"
+   ],
+   "scale_as": "throw"
+  },
+  {
+   "src": "raw/p6_idle2.png",
+   "screen": "auto",
+   "frames": [
+    "idle2"
+   ],
+   "scale_as": "idle"
   }
  ],
  "ref": "idle",

@@ -19,8 +19,40 @@
     "walk3",
     "walk4",
     "plop",
-    "idle2"
+    "idle0"
    ]
+  },
+  {
+   "src": "raw/p6d_swing.png",
+   "screen": "auto",
+   "frames": [
+    "swing"
+   ],
+   "scale_as": "idle"
+  },
+  {
+   "src": "raw/p6d_release.png",
+   "screen": "auto",
+   "frames": [
+    "release"
+   ],
+   "scale_as": "throw"
+  },
+  {
+   "src": "raw/p6d_thru.png",
+   "screen": "auto",
+   "frames": [
+    "thru"
+   ],
+   "scale_as": "throw"
+  },
+  {
+   "src": "raw/p6_idle2.png",
+   "screen": "auto",
+   "frames": [
+    "idle2"
+   ],
+   "scale_as": "idle"
   }
  ],
  "ref": "idle",
@@ -56,7 +88,7 @@
   "plop"
  ],
  "walkfix": {
-  "ref": "walk4",
+  "ref": "walk2",
   "band": 16
  }
 }

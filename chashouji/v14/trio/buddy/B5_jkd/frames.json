@@ -1,0 +1,85 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "magenta",
+   "frames": [
+    "idle",
+    "wind",
+    "hitA",
+    "hitB"
+   ]
+  },
+  {
+   "src": "raw/act_b3.png",
+   "screen": "magenta",
+   "frames": [
+    "walk1",
+    "walk4",
+    "walk3",
+    "walk2",
+    "taunt",
+    "idle0"
+   ]
+  },
+  {
+   "src": "raw/p6d_hitC.png",
+   "screen": "auto",
+   "frames": [
+    "hitC"
+   ],
+   "scale_as": "hitA"
+  },
+  {
+   "src": "raw/p6_hitD.png",
+   "screen": "auto",
+   "frames": [
+    "hitD"
+   ],
+   "scale_as": "hitB"
+  },
+  {
+   "src": "raw/p6_idle2.png",
+   "screen": "auto",
+   "frames": [
+    "idle2"
+   ],
+   "scale_as": "idle"
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  160,
+  18,
+  300,
+  145
+ ],
+ "fixed": [
+  66,
+  600,
+  250,
+  700
+ ],
+ "size": [
+  "h",
+  440
+ ],
+ "anchor": [
+  270,
+  693
+ ],
+ "loose": [
+  "walk1",
+  "walk2",
+  "walk3",
+  "walk4"
+ ],
+ "scale": [
+  0.9,
+  1.5
+ ],
+ "walkfix": {
+  "ref": "walk1",
+  "edge": "pivot"
+ }
+}

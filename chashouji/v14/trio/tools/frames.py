@@ -34,6 +34,7 @@ frames.json：
   "check": [[x0, y0, x1, y1, "脚"], ...],   可选：另外量几个本该不动的部位（输出像素），打印每帧偏多少
   "graft": [{"from": "wind", "to": ["throw"], "box": [x0, y0, x1, y1], "feather": 30}]   可选：从好的一帧把一块搬到画走样的帧上（输出像素，左边 feather 宽渐变）
   "scale_by": "fixed",               可选：缩放也按 fixed 找（站在滑板 / 平衡车上的人：板长不变，头仰着转着按头找不准）；loose 帧取同一张条的中位数
+  sheets[i].scale_as: "<帧>"          可选：这张条的缩放照抄那一帧（P6 局部重绘补帧：底图就是那一格的原像素）
   "scale_by": "sheet",               可选：每张条只在 scale_ref 帧（条上的 "scale_ref"，默认最后一格 = 重画的 idle）按头找一次缩放，整张条都用它
   "loose_scale": "sheet",            可选：只让 loose 帧的缩放取同一张条其它帧的中位数（B12 飞扑那帧头侧着按头找会顶到边界）
   "loose": ["walk1", ...],            可选：脚在动的帧（走路 / 跑 / 跳），不按 fixed 配：横向按头、竖向按脚底贴参考帧的地面线；残差表里不计
@@ -321,7 +322,8 @@ def cmd_build(d, spec):
     bysheet = spec.get('scale_by') == 'sheet'
     sheet_ref = {i: (spec['ref'] if spec['ref'] in sh['frames'] else sh.get('scale_ref', sh['frames'][-1])) for i, sh in enumerate(spec['sheets'])}
     sheet_s = {sheet_of[spec['ref']]: 1.0}
-    order = lambda q: (bysheet and q[0] != sheet_ref[sheet_of[q[0]]], loose_med and q[0] in loose)
+    scale_as = {fn: sh['scale_as'] for sh in spec['sheets'] if sh.get('scale_as') for fn in sh['frames']}
+    order = lambda q: (q[0] in scale_as, bysheet and q[0] != sheet_ref[sheet_of[q[0]]], loose_med and q[0] in loose)
     for fn, c in sorted(got.items(), key=order):
         if fn == spec['ref']:
             place[fn] = (1.0, 0.0, 0.0, 1.0); fixed_s.setdefault(sheet_of[fn], []).append(1.0); continue
@@ -338,6 +340,11 @@ def cmd_build(d, spec):
             place[fn] = (s, float(hb[0] - h[1]), float(ref_low - low), h[2])
             print(f'  {fn:8s} 同条中位缩放 {s:.2f}  loose：横按头、竖按脚底')
             continue
+        if fn in scale_as:
+            # 条上写 "scale_as": "<帧>"：缩放照抄那一帧（P6 补帧：蒙版局部重绘的单格条，腿 / 屁股就是那一格的原像素，
+            # 头改了表情 / 姿势按头找会顶到搜索边界，腿跟着被放大 10%）。只做平移配准
+            s = place[scale_as[fn]][0]; r = find(gray(resize(c, s)), fix_t)
+            place[fn] = (s, fb[0] - r[1], fb[1] - r[0], r[2]); print(f'  {fn:8s} 缩放照抄 {scale_as[fn]} {s:.2f}  不动部位匹配 {r[2]:.2f}'); continue
         best = None
         # scale_by "fixed"：缩放也按不动的部位找（脚下的滑板 / 平衡车：长短不变，头在蓄力 / 出手里仰着转着，按头找会顶到搜索边界）
         sc_t = fix_t if spec.get('scale_by') == 'fixed' and fn not in loose else head_t

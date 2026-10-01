@@ -11,3 +11,6 @@
   不挪的话坐下后换待机会横跳 66 px。**重新 build 后要依次重跑 walkfix.py、cellshift.py。**
 - 出手：3D 麻将 prop_mahjong（r 20 cell 77 scale 1.37），n 2，wind 帧举过头顶那一刻离手（hold.wind [201,8]，头顶 y 62）。
 - 站位 [740,1020,0.83]：1040 时和同组 B29 在场帧相交 371 px。
+- P6/P7（2026-10-01）：swing / thru / idle2 三帧，raw/p6_*.png（单格、透明、已按腿+马扎配回底图像素）。原 walk 条末格改名 idle0。
+  第一轮整块重画上半身 → 头被画大 20~40%；改成"木偶底图"：p6_<帧>_base2.png 只留腿+马扎+头（swing 把 wind 的头前移 −55,+18，thru 把 throw 的头前移 −22,+38），
+  头不透明、躯干手臂透明重画（mask2），头尺寸就锁住了。idle2 的 mask2 只透明脸前半 + 后脑 + 挠头那只手臂。脚本在 p6work/。

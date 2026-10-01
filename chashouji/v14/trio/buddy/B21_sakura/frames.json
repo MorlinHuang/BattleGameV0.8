@@ -1,0 +1,121 @@
+{
+ "sheets": [
+  {
+   "src": "raw/act_a1.png",
+   "screen": "magenta",
+   "frames": [
+    "idle",
+    "wind",
+    "throw",
+    "follow"
+   ]
+  },
+  {
+   "src": "raw/act_b1.png",
+   "screen": "magenta",
+   "frames": [
+    "dive",
+    "flop",
+    "slide",
+    "idle0"
+   ]
+  },
+  {
+   "src": "raw/p6d_swing.png",
+   "screen": "auto",
+   "frames": [
+    "swing"
+   ],
+   "scale_as": "wind"
+  },
+  {
+   "src": "raw/p6d_release.png",
+   "screen": "auto",
+   "frames": [
+    "release"
+   ],
+   "scale_as": "wind"
+  },
+  {
+   "src": "raw/p6d_thru.png",
+   "screen": "auto",
+   "frames": [
+    "thru"
+   ],
+   "scale_as": "wind"
+  },
+  {
+   "src": "raw/p6_idle2.png",
+   "screen": "auto",
+   "frames": [
+    "idle2"
+   ],
+   "scale_as": "idle"
+  }
+ ],
+ "ref": "idle",
+ "head": [
+  65,
+  5,
+  195,
+  118
+ ],
+ "fixed": [
+  350,
+  155,
+  720,
+  295
+ ],
+ "size": [
+  "w",
+  470
+ ],
+ "anchor": [
+  450,
+  295
+ ],
+ "check": [
+  [
+   478,
+   179,
+   603,
+   264,
+   "鞋"
+  ],
+  [
+   378,
+   179,
+   488,
+   259,
+   "大腿到膝"
+  ]
+ ],
+ "graft": [
+  {
+   "from": "wind",
+   "to": [
+    "throw"
+   ],
+   "box": [
+    420,
+    147,
+    603,
+    267
+   ],
+   "feather": 20
+  },
+  {
+   "from": "idle",
+   "to": [
+    "follow"
+   ],
+   "box": [
+    388,
+    147,
+    603,
+    267
+   ],
+   "feather": 36
+  }
+ ]
+}

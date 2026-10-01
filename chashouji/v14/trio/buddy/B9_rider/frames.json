@@ -17,6 +17,28 @@
     "cruise",
     "drift",
     "brake",
+    "idle0"
+   ]
+  },
+  {
+   "src": "raw/p6_swing.png",
+   "screen": "auto",
+   "frames": [
+    "swing"
+   ]
+  },
+  {
+   "src": "raw/p6d_thru.png",
+   "screen": "auto",
+   "frames": [
+    "thru"
+   ],
+   "scale_as": "throw"
+  },
+  {
+   "src": "raw/p6_idle2.png",
+   "screen": "auto",
+   "frames": [
     "idle2"
    ]
   }

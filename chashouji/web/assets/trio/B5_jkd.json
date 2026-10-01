@@ -1,1 +1,1 @@
-{"cell": [494, 482], "cols": 4, "frames": ["idle", "wind", "hitA", "hitB", "walk1", "walk4", "walk3", "walk2", "taunt", "idle2"], "anchor": [260.7, 478.1], "residual": 1.0}
+{"cell": [494, 492], "cols": 4, "frames": ["idle", "wind", "hitA", "hitB", "walk1", "walk4", "walk3", "walk2", "taunt", "idle0", "hitC", "hitD", "idle2"], "anchor": [260.9, 487.7], "residual": 0.41, "head": [189, 48, 280, 130], "ref": "idle"}
