@@ -1,0 +1,110 @@
+{
+ "url": "http://1.14.252.30:40235/index.html",
+ "mbps": 5.0,
+ "mode": "early12",
+ "frame": 4436.699999809265,
+ "log": [
+  {
+   "act": "档2 榴莲鞋雨",
+   "t": 4811.099999904633
+  },
+  {
+   "act": "档2 臭袜子足球",
+   "t": 4880.5
+  },
+  {
+   "act": "档1 口红",
+   "t": 4960.199999809265
+  },
+  {
+   "act": "档1 香蕉",
+   "t": 5028.699999809265
+  },
+  {
+   "t": 5665.899999856949,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "4/142",
+   "phase": "play",
+   "n": 0,
+   "note": "送礼后 0.25s"
+  },
+  {
+   "t": 6202.399999856949,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "4/142",
+   "phase": "play",
+   "n": 1,
+   "note": "送礼后 0.45s"
+  },
+  {
+   "t": 6592.299999952316,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "4/142",
+   "phase": "play",
+   "n": 2,
+   "note": "送礼后 0.65s"
+  },
+  {
+   "t": 7092.099999904633,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "4/142",
+   "phase": "play",
+   "n": 3,
+   "note": "送礼后 0.9s"
+  },
+  {
+   "t": 7413.699999809265,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "4/142",
+   "phase": "play",
+   "n": 4,
+   "note": "送礼后 1.2s"
+  }
+ ],
+ "errors": []
+}

@@ -1,0 +1,269 @@
+{
+ "url": "http://1.14.252.30:40235/index.html",
+ "mbps": 5.0,
+ "mode": "early",
+ "frame": 4228.700000047684,
+ "log": [
+  {
+   "act": "档3 闺蜜",
+   "t": 4605
+  },
+  {
+   "act": "档3 哥们",
+   "t": 4676.399999856949
+  },
+  {
+   "act": "档4 查岗党",
+   "t": 4774.099999904633
+  },
+  {
+   "act": "档4 灭迹党",
+   "t": 4873.700000047684
+  },
+  {
+   "t": 5528.099999904633,
+   "buddy": [
+    "B2:wait(未加载)/ride",
+    "B30:wait(未加载)/kneeslide",
+    "B12:wait(未加载)/idle"
+   ],
+   "bestie": [
+    "G27:wait(未加载)/tackle",
+    "G6:wait(未加载)/walk1",
+    "G14:wait(未加载)/wind"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "4/142",
+   "phase": "play",
+   "n": 0,
+   "note": "送礼后 0.3s"
+  },
+  {
+   "t": 5979,
+   "buddy": [
+    "B2:wait(未加载)/ride",
+    "B30:wait(未加载)/kneeslide",
+    "B12:enter/idle"
+   ],
+   "bestie": [
+    "G27:wait(未加载)/tackle",
+    "G6:wait(未加载)/walk1",
+    "G14:wait/wind"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "6/142",
+   "phase": "play",
+   "n": 1,
+   "note": "送礼后 0.8s"
+  },
+  {
+   "t": 6641.599999904633,
+   "buddy": [
+    "B2:wait(未加载)/ride",
+    "B30:wait(未加载)/kneeslide",
+    "B12:on/idle"
+   ],
+   "bestie": [
+    "G27:wait/tackle",
+    "G6:enter/walk2",
+    "G14:enter/wind"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "8/142",
+   "phase": "play",
+   "n": 2,
+   "note": "送礼后 1.5s"
+  },
+  {
+   "t": 7991,
+   "buddy": [
+    "B2:wait(未加载)/ride",
+    "B30:wait/kneeslide",
+    "B12:on/idle"
+   ],
+   "bestie": [
+    "G27:on/wind",
+    "G6:on/follow",
+    "G14:on/wind"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "9/142",
+   "phase": "play",
+   "n": 3,
+   "note": "送礼后 2.5s"
+  },
+  {
+   "t": 9068.5,
+   "buddy": [
+    "B2:wait(未加载)/ride",
+    "B30:enter/kneeslide",
+    "B12:on/wind"
+   ],
+   "bestie": [
+    "G27:on/idle",
+    "G6:on/idle",
+    "G14:on/follow"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "9/142",
+   "phase": "play",
+   "n": 4,
+   "note": "送礼后 3.5s"
+  },
+  {
+   "t": 10539.5,
+   "buddy": [
+    "B2:wait/ride",
+    "B30:on/follow",
+    "B12:exit/idle"
+   ],
+   "bestie": [
+    "G27:on/wind",
+    "G6:exit/walk1",
+    "G14:on/idle"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    false,
+    false
+   ],
+   "items": false,
+   "video": false,
+   "preload": "10/142",
+   "phase": "play",
+   "n": 5,
+   "note": "送礼后 5s"
+  },
+  {
+   "t": 13319.099999904633,
+   "buddy": [
+    "B2:on/aim0",
+    "B30:on/follow"
+   ],
+   "bestie": [],
+   "g4L": [
+    "#0 t1.23"
+   ],
+   "g4R": [
+    "#0 t0.30"
+   ],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": false,
+   "video": false,
+   "preload": "16/142",
+   "phase": "play",
+   "n": 6,
+   "note": "送礼后 6.5s"
+  },
+  {
+   "t": 16206.399999856949,
+   "buddy": [
+    "B2:on/aim0",
+    "B30:on/idle"
+   ],
+   "bestie": [],
+   "g4L": [
+    "#0 t2.03"
+   ],
+   "g4R": [
+    "#0 t1.10"
+   ],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": false,
+   "video": false,
+   "preload": "36/142",
+   "phase": "play",
+   "n": 7,
+   "note": "送礼后 8s"
+  },
+  {
+   "t": 19053.599999904633,
+   "buddy": [
+    "B2:on/aim4"
+   ],
+   "bestie": [],
+   "g4L": [
+    "#0 t2.93"
+   ],
+   "g4R": [
+    "#0 t2.00"
+   ],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": false,
+   "video": false,
+   "preload": "60/142",
+   "phase": "play",
+   "n": 8,
+   "note": "送礼后 10s"
+  },
+  {
+   "t": 21872.39999985695,
+   "buddy": [
+    "B2:exit/ride"
+   ],
+   "bestie": [],
+   "g4L": [
+    "#0 t3.98"
+   ],
+   "g4R": [
+    "#0 t3.05"
+   ],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": false,
+   "video": false,
+   "preload": "82/142",
+   "phase": "play",
+   "n": 9,
+   "note": "送礼后 12s"
+  }
+ ],
+ "errors": []
+}

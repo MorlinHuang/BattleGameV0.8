@@ -67,7 +67,9 @@ const IntroVideo = (() => {
     if (new URLSearchParams(location.search).get('introvideo') === '0' || !ALPHA_OK) return;   // ?introvideo=0：关掉（胶片 / 压测用）
     for (const [k, c] of Object.entries(CLIPS)) {
       const v = document.createElement('video');
-      v.src = c.src; v.preload = 'auto'; v.playsInline = true;
+      /* preload none：首屏不碰视频（docs/首屏加载诊断.md R3：4 个视频 15 MB，preload auto 时在首屏那十几秒占掉 6 条连接里的 4 条）。
+         首帧之后预取队列最后一项（load）才开始缓冲；缓冲够之前送礼，begin 按 readyState 跳过视频 */
+      v.src = c.src; v.preload = 'none'; v.playsInline = true;
       const [, , w, h] = c.box;
       Object.assign(v.style, {
         position: 'absolute', width: w / W * 100 + '%', height: h / H * 100 + '%',
@@ -151,7 +153,18 @@ const IntroVideo = (() => {
     hide(v);
   }
 
+  /* 首帧之后预取队列的最后一项（main.js / preload.js）：一个一个开始缓冲（一次一个，不跟送礼时的按需加载抢连接），
+     每个到 canplaythrough（或出错）算这一个完。读够多少由浏览器定（服务器 serve.py 支持 Range，可以边下边放） */
+  function load() {
+    return Object.values(vids).reduce((p, v) => p.then(() => new Promise((ok) => {
+      if (v.readyState >= 4) { ok(); return; }
+      v.addEventListener('canplaythrough', ok, { once: true });
+      v.addEventListener('error', ok, { once: true });
+      v.preload = 'auto'; v.load();
+    })), Promise.resolve());
+  }
+
   const playing = () => !!cur && !cur.done;
   const owner = () => cur && cur.crew;         // 正在放谁的（调试台换人时要连视频一起收掉）
-  return { init, begin, stop, playing, owner, CLIPS };
+  return { init, load, begin, stop, playing, owner, CLIPS };
 })();

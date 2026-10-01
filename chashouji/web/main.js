@@ -300,12 +300,25 @@ function giveGift(side, key, pick) {
   if (it.tier >= 1) {
     const g = GIFT[ITEM_OF[side > 0 ? 'L' : 'R'][it.tier]];
     if (g.style === 'crew') {
-      /* 新来的人有出场视频（intro.js，目前只有真相女神）：先放视频、她候场，放完从视频里走出来；续时间不放 */
-      const [m, b] = summonCrew(g.crew, undefined, pick);
-      if (b && INTRO_OF.has(m)) IntroVideo.begin(INTRO_OF.get(m), m, b);
+      /* 新来的人有出场视频（intro.js）：先放视频、她候场，放完从视频里走出来；续时间不放。
+         视频没缓冲够（预取队列最后才轮到它）begin 返回 false，人直接从画外冲进来 */
+      const go = () => {
+        const [m, b] = summonCrew(g.crew, undefined, pick);
+        if (b && INTRO_OF.has(m)) IntroVideo.begin(INTRO_OF.get(m), m, b);
+      };
+      /* 档 4 这一组（几个人的贴图 + 各自的法术潮）还没加载完（首帧刚出来就送）：插到队首，到了再上场。
+         数值上面已经算进去了，只是人晚到一两秒；这一局已经结束 / 重开了就不再上场。
+         档 3 三人组不在这里等：trio.js 只抽加载好的人，没有才等那一个人（Act.summon） */
+      if (CREW[g.crew].members && !Preload.ready(g.crew)) {
+        const gen = matchGen;
+        Preload.need(g.crew).then(() => { if (gen === matchGen && S.phase !== 'over') go(); });
+      } else go();
     }
-    else if (g.style === 'rain') RAIN[g.rain].summon();
-    else Ammo.launch(g, null, { gift: true, exec: it.tier === 4 });
+    else {
+      Preload.need('items');                        // 档 1 / 2 的贴图还没轮到就先拿；没到之前 ammo.js / rain.js 用矢量画法
+      if (g.style === 'rain') RAIN[g.rain].summon();
+      else Ammo.launch(g, null, { gift: true, exec: it.tier === 4 });
+    }
   } else {
     // 免费档不飞实体，只在自己那侧冒一小串火花 —— 它买的是参与感，不是战力
     RECIPE.star.burst(side > 0 ? 46 : W - 46, 300 + Math.random() * 520, -side, 0.3);
@@ -317,7 +330,9 @@ function hexDebuff(side, k, sec) {
   else { S.debKB = Math.max(S.debKB, k); S.debB = Math.max(S.debB, sec); }
 }
 
+let matchGen = 0;                                   // 第几局（档 4 等素材上场时，局已经换了就不再上）
 function startMatch() {
+  matchGen++;
   S.p = 50; S.fA = S.fB = 0;
   S.pos = 0; S.vel = 0;
   S.debA = S.debB = S.debKA = S.debKB = 0;
@@ -1875,7 +1890,15 @@ class PoseView {
      染色走 source-atop，只盖在已画出的角色像素上，不会糊到背景。
      受击**不缩放**：以前挨一下会以脚底为锚"胀"4.5%~13% 再在零点几秒里缩回，缩回的那一下
      读成"人突然变小"，用户原话"受击后人物明显变小了，很奇怪"。 */
+  /* 姿势图是陆续到的（docs/首屏加载诊断.md P2）：首帧只等待机循环那几张（LOOP_N），其余在预取队列最前面。
+     这一张还没到 → 画同组的基础姿势（aK_g3、aK_t2 → aK），基础姿势也没到 → n0（首帧前一定有）；锚点按实际画的那一张取 */
+  shownOf(name) {
+    if (this.imgs[name]) return name;
+    const base = name.split('_')[0];
+    return this.imgs[base] ? base : 'n0';
+  }
   draw(ctx, name, x, y, tint, tintA) {
+    name = this.shownOf(name);
     const img = this.imgs[name], m = WORLD.poses[name];
     if (!img) return;
     const w = m.w, h = m.h;
@@ -2513,44 +2536,64 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* 长卷背景与姿势贴图，都由 v14/build.py 生成。world.json 是它们的说明书：
      每间房多宽、客厅正中在哪、每张贴图的锚点和手机位置。 */
   const vq = Q0.get('v') ? '?v=' + encodeURIComponent(Q0.get('v')) : '';
+  /* 首帧要的姿势（待机循环那几张）和 HUD 头像不依赖 world.json，跟它同时开始下（首帧路径上少两段串行往返）。
+     头像离线从 girl.png / boy.png 裁好的 160 方图，两张共 21KB —— 立绘原图是 760×1145，只为取两个脸去加载它们不值当 */
+  const poseImgs = {};
+  const loadPose = (n) => load(`assets/world/pose_${n}.webp`).then(im => { poseImgs[n] = im; });
+  const firstPoses = [...new Set(LOOP_N)];
+  const firstP = Promise.all([Promise.all(firstPoses.map(loadPose)),
+    Promise.all(['av_a', 'av_b'].map(n => load(`assets/ui/${n}.webp`).catch(() => null))).then(([a, b]) => { HUD.avA = a; HUD.avB = b; })]);
+  const bgName = Q0.get('bg') || 'v15';
+  const bgDir = bgName === 'v14' ? 'assets/world/' : `assets/world/${bgName}/`;
+  const roomsJ = bgName !== 'v14' ? fetch(bgDir + 'rooms.json' + vq).then(r => r.json()) : null;   // 跟 world.json 同时下
   WORLD = await (await fetch('assets/world/world.json' + vq)).json();
   /* 房间是一套一套的：assets/world/<套>/ 下的 room{i}.webp + rooms.json（rooms / center）+ anim/、fx/（会动的东西，bgmotion.js）。
      默认 v15 雷雨夜（2026-09-29 用户定稿）；?bg=v14 看旧的白天长卷（world.json 自带的 rooms / center，图在 assets/world/ 根下，不会动）。
      姿势贴图两套共用。 */
-  const bgName = Q0.get('bg') || 'v15';
-  const bgDir = bgName === 'v14' ? 'assets/world/' : `assets/world/${bgName}/`;
-  if (bgName !== 'v14') Object.assign(WORLD, await (await fetch(bgDir + 'rooms.json' + vq)).json());
+  if (roomsJ) Object.assign(WORLD, await roomsJ);
   WORLD.total = WORLD.rooms.reduce((a, b) => a + b, 0);
-  const rooms = await Promise.all(WORLD.rooms.map((_, i) => load(`${bgDir}room${i}.webp`)));
-  const motionN = bgName !== 'v14' ? await BgMotion.load(bgDir, vq) : 0;   // 这套房间里会动的东西（视频动区 + 程序光效，没有就是 0）
-  const poseNames = Object.keys(WORLD.poses);
-  const poseImgs = {};
-  await Promise.all(poseNames.map(n => load(`assets/world/pose_${n}.webp`).then(im => { poseImgs[n] = im; })));
+  /* 首帧只等首帧画得到的东西（docs/首屏加载诊断.md P1、P2：改之前把 38.8 MB 全部 await 完才起主循环、绑按钮，5 Mbps 首帧 66 秒）：
+     长卷背景、待机循环那几张姿势、HUD 头像（三样一起下）。其余登记进预取队列（preload.js），首帧之后按下面的顺序在后台加载：
+     其余姿势 → 档 1 / 2 物品和命中粒子 → 背景动效（光效贴图 + 动区视频）→ 档 3 六十人 → 档 4 两组 → 结算图 → 档 4 出场视频。
+     送礼时还没轮到的：档 1 / 2 矢量画法（ammo.js、fx.js、rain.js），档 3 只抽加载好的人（trio.js），档 4 插队等这一组、跳过视频，
+     结算纯色板（result.js），姿势退回基础姿势（PoseView.shownOf） */
+  const noSpr = Q0.get('nosprite') === '1', V = Q0.get('v');
+  TRIO.need = (id) => Preload.need('trio:' + id);
+  const [rooms] = await Promise.all([Promise.all(WORLD.rooms.map((_, i) => load(`${bgDir}room${i}.webp`))), firstP]);
   const actors = new PoseView(poseImgs);
-  /* HUD 头像。离线从 girl.png / boy.png 裁好的 160 方图，两张共 21KB ——
-     立绘原图是 760×1145，只为取两个脸去加载它们不值当。 */
-  [HUD.avA, HUD.avB] = await Promise.all(
-    ['av_a', 'av_b'].map(n => load(`assets/ui/${n}.webp`).catch(() => null)));
-  /* 3D 转盘贴图，两套：飞行物品的（ammo.js）和命中粒子的（fx.js）。
-     失败不阻塞 —— 加载不到就退回各自的矢量画法，?nosprite=1 同时关掉两套。 */
+
+  /* 预取队列。姿势：基础姿势（aK、bF……）→ 过渡帧（_t）→ 步态帧（_g），缺的那几帧按 shownOf 退回基础姿势，基础姿势先到 */
+  const poseRank = (n) => (n.includes('_t') ? 1 : n.includes('_g') ? 2 : 0);
+  for (const n of Object.keys(WORLD.poses).filter(n => !firstPoses.includes(n)).sort((a, b) => poseRank(a) - poseRank(b)))
+    Preload.add('pose:' + n, () => loadPose(n));
+  /* 3D 转盘贴图，两套：飞行物品的（ammo.js）和命中粒子的（fx.js）；加上档 2 两场天上掉东西的图集。
+     失败不阻塞 —— 加载不到就退回各自的矢量画法，?nosprite=1 同时关掉 */
+  Preload.add('items', () => Promise.all([Ammo.loadSprites(V, noSpr), Particles.loadShapes(V, noSpr), DurianRain.load(V, noSpr), SockRain.load(V, noSpr)]));
+  /* 背景里会动的东西（bgmotion.js：程序光效贴图 + 7 段动区视频 1.5 MB）。没加载完之前 BgMotion.draw 只画底图（fx 为空直接返回、动区列表为空）。
+     首帧不等它（5 Mbps 下它的视频跟首帧的姿势抢带宽，首帧晚 1.5 秒）；排在档 1 / 2 之后：礼物要用的先到，背景动效是氛围 */
+  Preload.add('bgmotion', () => (bgName !== 'v14' ? BgMotion.load(bgDir, vq) : 0));
+  /* 档 3：两边轮流排（哥们第 1 个、闺蜜第 1 个、哥们第 2 个……），哪边先送都有人可抽 */
+  const tb = BuddyTrio.acts, tg = BestieTrio.acts;
+  for (let i = 0; i < Math.max(tb.length, tg.length); i++)
+    for (const a of [tb[i], tg[i]]) if (a) Preload.add('trio:' + a.cfg.id, () => a.load(V, noSpr));
+  /* 档 4：一组一个 job（key = CREW 的名字，giveGift 按它插队）：组里每个人的贴图 + 各自的法术潮（+ 白娘子的掌心水柱） */
+  for (const [key, grp] of [['g4L', G4L], ['g4R', G4R]])
+    Preload.add(key, () => Promise.all([...grp.members.map(c => c.load(V, noSpr)), ...grp.members.map(c => TIDE_OF.get(c).load(V, noSpr)),
+                                       ...(grp.members.includes(Baisu) ? [WaterArt.load(V, noSpr)] : [])]));
   // 结算演出图。失败不阻塞：缺素材时结算退到纯色板，照样把结果交代清楚
-  const resN = await Result.load(Q0.get('v'));
-  const noSpr = Q0.get('nosprite') === '1';
-  const [sprOK, shpOK] = await Promise.all([
-    Ammo.loadSprites(Q0.get('v'), noSpr),
-    Particles.loadShapes(Q0.get('v'), noSpr),
-    ...ACTS.map(a => a.load(Q0.get('v'), noSpr)),
-    ...[...G4L.members, ...G4R.members].map(c => c.load(Q0.get('v'), noSpr)),
-    DurianRain.load(Q0.get('v'), noSpr),
-    ...[...TIDE_OF.values()].map(t => t.load(Q0.get('v'), noSpr)),
-    WaterArt.load(Q0.get('v'), noSpr),
-    SockRain.load(Q0.get('v'), noSpr),
-  ]);
-  document.getElementById('msg').textContent =
-    `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` + (motionN ? ` · 背景动效 ${motionN}` : '') +
-    (sprOK.some(Boolean) ? ` · 物品转盘 ${sprOK.filter(Boolean).length}` : '') +
-    (shpOK.some(Boolean) ? ` · 粒子 ${shpOK.filter(Boolean).length}` : '') +
-    (resN ? ` · 结算 ${resN}` : '');
+  Preload.add('result', () => Result.load(V));
+  Preload.add('video', () => IntroVideo.load(), { wait: false });   // 出场视频：最后，不算进"全部加载完"
+  const loadedMsg = () => Promise.all([Preload.need('items'), Preload.need('result'), Preload.need('bgmotion')]).then(([[sprOK, shpOK], resN, motionN]) => {
+    document.getElementById('msg').textContent =
+      `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` + (motionN ? ` · 背景动效 ${motionN}` : '') +
+      (sprOK.some(Boolean) ? ` · 物品转盘 ${sprOK.filter(Boolean).length}` : '') +
+      (shpOK.some(Boolean) ? ` · 粒子 ${shpOK.filter(Boolean).length}` : '') +
+      (resN ? ` · 结算 ${resN}` : '') + ` · 预取 ${Preload.stats().n} 项 ${(Preload.stats().ms / 1000).toFixed(1)}s`;
+  });
+  /* 胶片 / 压测 / ?live 截图这些诊断模式要可复现：照旧等全部加载完再开始（不走首帧后的后台队列） */
+  const FULL = ['live', 'strip', 'loopstrip', 'gaitstrip', 'tweenstrip', 'ammostrip', 'bubblestrip', 'fxstrip', 'bench', 'preload'].some(k => Q0.has(k));
+  if (FULL) { await Preload.all(); await loadedMsg(); }
+  else Preload.onIdle(loadedMsg);
 
   const Q = new URLSearchParams(location.search);
 
@@ -3224,6 +3267,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  requestAnimationFrame(() => Preload.run());       // 第一帧画出来以后再开始后台预取（诊断模式上面已经全部加载完，这里是空转）
 
   const pv = document.getElementById('pv');
   pv.oninput = () => { if (S.phase !== 'idle') return; S.p = +pv.value; S.auto = false; document.getElementById('auto').checked = false; };

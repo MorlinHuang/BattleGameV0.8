@@ -35,6 +35,9 @@ const TRIO = {
      v14/trio/tools/combo_scan.py 扫过，后排 / 上方都找不到不压人的备用位（后排两人横向放不下；上方再往上就进 HUD），
      见 shots/trio_std/组合遮挡矩阵_*.txt 末尾。任意 后排 × 地板 × 上方 同框不互相遮挡，站位按那两张矩阵调 */
   SLOTS: ['ground', 'top', 'floor'],
+  /* 素材按需加载（docs/首屏加载诊断.md P1）：首帧不等三人组，首帧后 main.js 的预取队列（preload.js）逐人调 Act.load；
+     送礼时抽到的人还没加载好，调 need(编号) 插队（main.js boot 接到 Preload.need，插队时后台队列让路），进场等到加载完 */
+  need: null,
 };
 
 /* 三人组专用的命中配方（2026-10-01，审查第八批）：main.js 把它并进 RECIPE（cfg.recipe 写这几个名字）。
@@ -249,14 +252,17 @@ function Act(cfg) {
   const texW = () => (SH ? SH.cell[0] : img ? img.width : 300), texH = () => (SH ? SH.cell[1] : img ? img.height : 300);
 
   function init(opt) { o = opt; }
+  /* 加载只做一次（预取队列和送礼时按需加载拿到的是同一个 promise）；ready = 这个人的图全部有了结果（缺图 = 加载失败，照旧不画） */
+  let loading = null, ready = false;
   function load(v, off) {
-    if (off) return Promise.resolve(false);
+    if (loading) return loading;
+    if (off) { ready = true; return (loading = Promise.resolve(false)); }
     const one = (src) => new Promise((ok) => {
       const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null);
       i.src = src + (v ? '?v=' + encodeURIComponent(v) : '');
     });
-    return Promise.all([one(SH ? SH.src : cfg.src), A.prop ? one(A.prop) : null, A.atlas ? one(A.atlas.src) : null, ...PARTS.map(q => one(q.src))])
-      .then(([a, p, t, ...ps]) => { img = a; prop = p; atlas = t; ps.forEach((im, i) => { partImg[i] = im; }); return !!a; });
+    return (loading = Promise.all([one(SH ? SH.src : cfg.src), A.prop ? one(A.prop) : null, A.atlas ? one(A.atlas.src) : null, ...PARTS.map(q => one(q.src))])
+      .then(([a, p, t, ...ps]) => { img = a; prop = p; atlas = t; ps.forEach((im, i) => { partImg[i] = im; }); ready = true; return !!a; }));
   }
 
   /* 来一个（wait 秒后才开始进场）；在场再送 = 续一份时间，下一下按礼物力度打。 */
@@ -273,6 +279,7 @@ function Act(cfg) {
           pk: null, bm: null, prevPh: 0, landed: false,
           clip: null, ammo: true, pop: 1, hang: Math.random() * 6, sq: 0, fn: null, tf: null,   // 帧序列：出手动作、手里有没有东西、挤压、当前帧
           at: cfg.at, depth: cfg.depth };
+    if (!ready) TRIO.need(cfg.id);                               // 还没加载好：插队加载，进场等它（update 不走时钟、items 不画）
     return b;
   }
   /* 从现在起 lead 秒后起手，一整下（ACT）能不能在离场前收完 */
@@ -407,7 +414,7 @@ function Act(cfg) {
     for (let i = shots.length - 1; i >= 0; i--) if (!stepShot(shots[i], dt)) shots.splice(i, 1);
     for (let i = marks.length - 1; i >= 0; i--) if ((marks[i].t += dt) > marks[i].life) marks.splice(i, 1);
     if (jets.length) stepDrops(dt);
-    if (!b) return;
+    if (!b || !ready) return;                                   // 叫到了但图还没到：原地等，错开进场的 wait 从加载完才开始数
     if (b.wait > 0) { b.wait -= dt; return; }
     b.t += dt;
     const T = TRIO.T, se = TE + b.stay;
@@ -1316,8 +1323,8 @@ function Act(cfg) {
     return out;
   }
   /* 此刻在哪一段：wait 等着上 / enter 进场 / on 在场 / exit 离场（胶片标格用：出手中途离场这种冲突只看帧名分不出来） */
-  const phase = () => (!b ? null : b.wait > 0 ? 'wait' : b.t < TE ? 'enter' : b.t <= TE + b.stay ? 'on' : 'exit');
-  return { init, load, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), flying, drops: () => jets, frame: () => (b && SH ? frameName() : null), phase, cfg };
+  const phase = () => (!b ? null : b.wait > 0 || !ready ? 'wait' : b.t < TE ? 'enter' : b.t <= TE + b.stay ? 'on' : 'exit');
+  return { init, load, ready: () => ready, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), flying, drops: () => jets, frame: () => (b && SH ? frameName() : null), phase, cfg };
 }
 
 /* ---- 程序画的小东西 ---- */
@@ -1393,8 +1400,10 @@ function Trio(data) {
   /* cur[槽位] = 这个槽位这一趟的人 { m, slot, id }；在场 = m.active()（含正在离场） */
   let cur = {};
   const live = (x) => !!x && x.m.active();
+  /* 抽人：只从已经加载好的人里抽；这个槽位一个加载好的都没有（首帧刚出来、预取队列还没排到三人组）才抽没加载的 ——
+     他的 Act.summon 会马上开始加载、等加载完再进场（不会画出空白） */
   const draw = (k) => {
-    const c = pool[k].filter(x => !x.m.active());
+    const free = pool[k].filter(x => !x.m.active()), c = free.some(x => x.m.ready()) ? free.filter(x => x.m.ready()) : free;
     return c.length ? { ...c[Math.floor(Math.random() * c.length)] } : null;
   };
   const stagger = () => [...TRIO.STAGGER].sort(() => Math.random() - 0.5);

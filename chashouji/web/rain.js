@@ -86,7 +86,8 @@ function Drops(cfg) {
   function draw(ctx) {
     for (const p of ps) {
       const a = p.a;
-      if (!a.img) continue;
+      /* 图集还没加载到（首帧之后预取队列在排，首帧刚出来就送了档 2，docs/首屏加载诊断.md）：矢量画法，砸照样砸 */
+      if (!a.img) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); VEC[p.kind](ctx, p.r, a.col); ctx.restore(); continue; }
       let c = Math.floor(p.rot / 6.2832 * N) % N;
       if (c < 0) c += N;
       const d = p.r * a.scale * 2, e = a.cell;
@@ -99,6 +100,43 @@ function Drops(cfg) {
 
   return { init, load, summon, update, draw, active, reset };
 }
+
+/* 矢量画法（图集没到时用）：形状读得出是什么、颜色跟图集那一份（col）一样；深色描边（浅绿墙上浅色不描边就化掉） */
+const VEC_INK = 'rgba(40,30,24,.9)';
+const VEC_COL = { white: '#a7b04a', red: '#d8283a', pink: '#f07aa8', black: '#2a2a30', ball: '#f4f4f0', stink: '#d9d2b0' };
+const VEC = {
+  durian(ctx, r, col) {                       // 榴莲：一圈尖刺的椭圆
+    ctx.beginPath();
+    for (let i = 0; i < 28; i++) {
+      const a = i / 28 * 6.2832, k = i % 2 ? 0.82 : 1;
+      ctx.lineTo(Math.cos(a) * r * k, Math.sin(a) * r * 0.86 * k);
+    }
+    ctx.closePath(); ctx.fillStyle = VEC_COL[col]; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = VEC_INK; ctx.stroke();
+  },
+  heel(ctx, r, col) {                         // 高跟鞋：鞋身 + 细跟
+    ctx.beginPath();
+    ctx.moveTo(-r, r * 0.15); ctx.quadraticCurveTo(-r * 0.2, -r * 0.1, r * 0.25, -r * 0.55);
+    ctx.lineTo(r * 0.8, -r * 0.6); ctx.lineTo(r * 0.85, r * 0.6); ctx.lineTo(r * 0.7, r * 0.6); ctx.lineTo(r * 0.62, -r * 0.05);
+    ctx.quadraticCurveTo(-r * 0.1, r * 0.4, -r, r * 0.45); ctx.closePath();
+    ctx.fillStyle = VEC_COL[col]; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = VEC_INK; ctx.stroke();
+  },
+  football(ctx, r, col) {                     // 足球：白球 + 中间黑五边形
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.9, 0, 6.2832); ctx.fillStyle = VEC_COL[col]; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = VEC_INK; ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) { const a = -1.5708 + i * 1.2566; ctx.lineTo(Math.cos(a) * r * 0.32, Math.sin(a) * r * 0.32); }
+    ctx.closePath(); ctx.fillStyle = '#222'; ctx.fill();
+  },
+  sock(ctx, r, col) {                         // 臭袜子：L 形，袜口一道条纹
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.35, -r); ctx.lineTo(r * 0.2, -r); ctx.lineTo(r * 0.2, r * 0.25);
+    ctx.quadraticCurveTo(r * 0.95, r * 0.25, r * 0.95, r * 0.65); ctx.quadraticCurveTo(r * 0.95, r, r * 0.4, r);
+    ctx.lineTo(-r * 0.15, r); ctx.quadraticCurveTo(-r * 0.35, r, -r * 0.35, r * 0.7); ctx.closePath();
+    ctx.fillStyle = VEC_COL[col]; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = VEC_INK; ctx.stroke();
+    ctx.fillStyle = '#5b8c3a'; ctx.fillRect(-r * 0.35, -r * 0.8, r * 0.55, r * 0.14);
+  },
+};
 
 /* 图集参数照 tools/3d/pack_atlas.py 打印的那行填（cell、scale），每次重渲都要重填。
    r 是引擎里的半径（渲染时的 screen_r，描边按它倒推成屏幕 2.8px）；col 是爆点颜色（main.js 按它挑配方）。
