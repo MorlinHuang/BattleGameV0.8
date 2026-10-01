@@ -9,42 +9,8 @@
   {
    "name": "release",
    "base": "throw",
-   "box": [
-    0,
-    0,
-    564,
-    245
-   ],
-   "screen": "magenta",
-   "K": 1.59574,
-   "ox": 62,
-   "oy": 138,
-   "fixed": [
-    330,
-    412,
-    410,
-    466
-   ]
-  },
-  {
-   "name": "through",
-   "base": "throw",
-   "box": [
-    0,
-    0,
-    564,
-    245
-   ],
-   "screen": "magenta",
-   "K": 1.59574,
-   "ox": 62,
-   "oy": 138,
-   "fixed": [
-    330,
-    412,
-    410,
-    466
-   ]
+   "paste": "cell",
+   "added": true
   },
   {
    "name": "idle2",

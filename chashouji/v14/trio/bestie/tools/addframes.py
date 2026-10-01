@@ -96,6 +96,12 @@ def cell(d, cells, e, meta, spec):
     """补出来的这一格：生图里整个人抠出来，照 frames.py build 的配准 —— 按参考帧的头找缩放（生图会把人画大一圈），
     按底格的不动部位（e["fixed"]，格内像素，一般是支撑脚）找平移，贴进同样大小的格子。
     不按像素原位贴（inpaint_paste）：模型不保尺寸，框边会留下硬切口"""
+    if e.get('paste') == 'cell':
+        # 不是生图：raw/add_<name>.png 已经是加边后整格大小的 RGBA（脚本合成，如 G8_elsa/armswing.py 绕肩转手臂）
+        out = Image.open(os.path.join(TRIO, d, 'raw', f'add_{e["name"]}.png')).convert('RGBA')
+        assert out.size == cells[e['base']].size, (out.size, cells[e['base']].size)
+        print(f'  {e["name"]:8s} 整格贴入（脚本合成）')
+        return out
     if e.get('paste') == 'inplace':
         # 小框局部改（换个表情、抬一只手）：模型在蒙版外基本原样画，按 prep 时的 K / ox / oy 原位贴回框里那一块（tools/inpaint_paste.py）。
         # prep 必须是在当前加过边的格子上做的（K、ox、oy 对应这个格子）
@@ -192,7 +198,7 @@ def build(d):
         if e['name'] not in order: order.append(e['name']); e['added'] = True
         a = np.array(cells[e['name']])[..., 3] > 8
         edge = int(a[0].sum() + a[-1].sum() + a[:, 0].sum() + a[:, -1].sum())
-        print(f'  {e["name"]:8s} ← {e["base"]}  框 {e["box"]}  贴边不透明像素 {edge}（> 0 = 新姿势碰到格边被切）')
+        print(f'  {e["name"]:8s} ← {e["base"]}  框 {e.get("box", "整格")}  贴边不透明像素 {edge}（> 0 = 新姿势碰到格边被切）')
     cw, ch = meta['cell']; C = meta['cols']; rows = (len(order) + C - 1) // C
     atlas = Image.new('RGBA', (cw * C, ch * rows))
     for i, n in enumerate(order): atlas.paste(cells[n], (i % C * cw, i // C * ch))

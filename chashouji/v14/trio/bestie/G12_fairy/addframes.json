@@ -1,0 +1,27 @@
+{
+ "pad": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "frames": [
+  {
+   "name": "through",
+   "base": "idle",
+   "box": [
+    150,
+    60,
+    280,
+    230
+   ],
+   "screen": "green",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.14286,
+   "ox": 212,
+   "oy": 62,
+   "added": true
+  }
+ ]
+}

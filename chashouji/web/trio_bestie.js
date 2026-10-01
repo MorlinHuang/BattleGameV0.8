@@ -361,7 +361,7 @@ const TRIO_BESTIE = {
     },
     G8: {       // 冰雪女王（艾莎式）：踮着脚一路滑冰滑进来（燕式滑行 → 踮脚转一圈 → 急停），掌心上浮着一根冰锥；把冰锥举过头顶一掷，打中他的头冻出一层冰壳
       face: +1,
-      sheet: { src: 'assets/trio/G8_elsa.webp', cell: [644, 493], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'glide', 'twirl', 'stop', 'idle2'] },
+      sheet: { src: 'assets/trio/G8_elsa.webp', cell: [644, 493], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'glide', 'twirl', 'stop', 'idle2', 'release'] },
       /* 锚点 = 前脚水晶鞋底：出手四帧按这只鞋配准（残差 0.46 px）；滑冰三帧 loose（横按头、竖按脚底） */
       anchor: [411.5, 483.1], at: [200, 960, 0.81], pivot: [411, 483], leanK: 0,
       depth: 0.8, recipe: 'water',
@@ -374,8 +374,8 @@ const TRIO_BESTIE = {
       /* 冰锥是平面图（bestie/G8_elsa/raw/icicle_src.png 抠出来，150 px 长 × 0.6，尖朝右）：待机浮在伸出去的掌心上、尖指着他（aim）；
          wind 帧右手举过头顶、冰锥在掌心上方那一刻离手（后排：出手点在女生头顶以上），尖朝前直飞；throw 帧是甩出去的手 */
       atk: { kind: 'throw', item: 'icicle', prop: 'assets/world/trio_g8_icicle.webp', scale: 0.6,
-             seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.35]],
-             hold: { idle: [495, 124], wind: [420, 20] },
+             seq: [['wind', 0.3], ['release', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.35]], dir: { release: -22.5 },   // 精闺1 / 自检 4.4（所需 ≈ −23°）：release = throw 帧手臂绕肩往上转 54°（G8_elsa/armswing.py），过顶往前抡、离手那一刻手速沿圆弧切线 = 手臂 67.5° − 90°
+             hold: { idle: [495, 124], wind: [420, 20], release: [482, 72] },
              T: 0.45, arc: 0.15, spin: 0, aim: true, stretch: 0.03, gap: [0.9, 1.3], onHit: 'freeze' },
     },
     G9: {       // 广场舞大妈：腰挂小音箱、扭着秧歌步抬腿甩手走进来；一只手叉腰、一只手翘着兰花指打拍子；抡起一条红绸从头顶甩过去抽他
@@ -520,7 +520,7 @@ const TRIO_BESTIE = {
     },
     G16: {      // 狐尾妖姬（妲己式）：一团狐火橙烟里九条白尾巴裹着她现身，伸个懒腰、托腮一笑；掌心托一团青蓝狐火，举过头顶甩出去
       face: +1,
-      sheet: { src: 'assets/trio/G16_daji.webp', cell: [288, 401], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wrap', 'stretch', 'lean', 'idle2'] },
+      sheet: { src: 'assets/trio/G16_daji.webp', cell: [288, 401], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wrap', 'stretch', 'lean', 'idle2', 'through'] },
       /* 九尾宝座画在每一帧里：按交叠的大腿 + 臀配准（残差 0.27 px），scale_by sheet（wind 仰头按头找会放大到 1.15、stretch 缩到 0.85）。
          锚点 = 最低点（鞋 / 裙摆）。人（不算白尾巴）约 3.2 万格内像素 × 0.8² ≈ 2.05 万屏幕像素，同 G11 */
       anchor: [159.6, 383.7], at: [275, 550, 0.8], pivot: [159, 383], leanK: 0.3,
@@ -532,7 +532,7 @@ const TRIO_BESTIE = {
       /* 狐火是平面图（bestie/G16_daji/raw/foxfire_src.png 抠出来，100 px × 0.45）：待机浮在托起的掌心上打旋（次级摆动）；
          wind 举过头顶 → throw 甩出去、一路打着旋（道具表：狐火是光效，不做 3D） */
       atk: { kind: 'throw', item: 'foxfire', prop: 'assets/world/trio_g16_foxfire.webp', scale: 0.45,
-             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
+             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['through', 0.14], ['follow', 0.25]],   // 精闺1 / 自检 4.5：follow 和 throw 几乎同一张（剪影差 0.09）→ 补 through：甩完的手顺势落到膝上
              hold: { idle: [272, 92], wind: [207, 0], throw: [272, 86] },
              T: 0.5, arc: 0.2, spin: 10, idleSpin: 6, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
