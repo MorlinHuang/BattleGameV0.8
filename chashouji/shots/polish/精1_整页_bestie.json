@@ -1,0 +1,192 @@
+{
+ "side": "bestie",
+ "button": "闺蜜 ③",
+ "rounds": [
+  {
+   "round": 1,
+   "before": [],
+   "drawn": [
+    [
+     "ground",
+     "G8",
+     "on",
+     "follow"
+    ],
+    [
+     "top",
+     "G18",
+     "on",
+     "throw"
+    ],
+    [
+     "floor",
+     "G27",
+     "on",
+     "idle"
+    ]
+   ],
+   "shot": {
+    "file": "/tmp/p1/精1_整页_bestie_1.png",
+    "t": 2.21,
+    "state": [
+     [
+      "ground",
+      "G8",
+      "on",
+      "throw"
+     ],
+     [
+      "top",
+      "G18",
+      "on",
+      "idle"
+     ],
+     [
+      "floor",
+      "G27",
+      "on",
+      "wind"
+     ]
+    ]
+   },
+   "errors_so_far": []
+  },
+  {
+   "round": 2,
+   "before": [
+    [
+     "ground",
+     "G8",
+     "on",
+     "idle"
+    ],
+    [
+     "top",
+     "G18",
+     "on",
+     "idle"
+    ],
+    [
+     "floor",
+     "G27",
+     "on",
+     "idle"
+    ]
+   ],
+   "drawn": [
+    [
+     "ground",
+     "G8",
+     "on",
+     "follow"
+    ],
+    [
+     "top",
+     "G18",
+     "on",
+     "throw"
+    ],
+    [
+     "floor",
+     "G27",
+     "on",
+     "idle"
+    ]
+   ],
+   "shot": {
+    "file": "/tmp/p1/精1_整页_bestie_2.png",
+    "t": 1.31,
+    "state": [
+     [
+      "ground",
+      "G8",
+      "on",
+      "throw"
+     ],
+     [
+      "top",
+      "G18",
+      "on",
+      "idle"
+     ],
+     [
+      "floor",
+      "G27",
+      "on",
+      "throw"
+     ]
+    ]
+   },
+   "errors_so_far": []
+  },
+  {
+   "round": 3,
+   "before": [
+    [
+     "ground",
+     "G8",
+     null,
+     null
+    ],
+    [
+     "top",
+     "G18",
+     null,
+     null
+    ],
+    [
+     "floor",
+     "G27",
+     null,
+     null
+    ]
+   ],
+   "drawn": [
+    [
+     "ground",
+     "G3",
+     "on",
+     "aim2"
+    ],
+    [
+     "top",
+     "G19",
+     "on",
+     "follow"
+    ],
+    [
+     "floor",
+     "G29",
+     "on",
+     "throw"
+    ]
+   ],
+   "shot": {
+    "file": "/tmp/p1/精1_整页_bestie_3.png",
+    "t": 2.31,
+    "state": [
+     [
+      "ground",
+      "G3",
+      "on",
+      "wind"
+     ],
+     [
+      "top",
+      "G19",
+      "on",
+      "throw"
+     ],
+     [
+      "floor",
+      "G29",
+      "on",
+      "wind"
+     ]
+    ]
+   },
+   "errors_so_far": []
+  }
+ ],
+ "errors": []
+}
