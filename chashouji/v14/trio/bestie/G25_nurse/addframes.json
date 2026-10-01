@@ -6,47 +6,24 @@
    "box": [
     0,
     0,
-    240,
+    314,
     190
    ],
    "screen": "green",
    "fixed": [
     0,
-    235,
-    314,
+    265,
+    215,
     352
    ],
    "scale_by": "fixed",
-   "paste": "box",
+   "paste": "inplace",
    "feather": 10,
    "check": null,
    "K": 2.23881,
    "ox": 71,
-   "oy": 62
-  },
-  {
-   "name": "through",
-   "base": "throw",
-   "box": [
-    0,
-    0,
-    240,
-    190
-   ],
-   "screen": "green",
-   "fixed": [
-    0,
-    235,
-    314,
-    352
-   ],
-   "scale_by": "fixed",
-   "paste": "box",
-   "feather": 10,
-   "check": null,
-   "K": 2.23881,
-   "ox": 71,
-   "oy": 62
+   "oy": 62,
+   "added": true
   }
  ],
  "pad": [

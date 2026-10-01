@@ -11,8 +11,8 @@
    ],
    "screen": "magenta",
    "fixed": [
-    0,
-    212,
+    150,
+    235,
     309,
     339
    ],
@@ -22,37 +22,14 @@
    "check": null,
    "K": 2.31362,
    "ox": 62,
-   "oy": 74
-  },
-  {
-   "name": "through",
-   "base": "throw",
-   "box": [
-    0,
-    0,
-    309,
-    172
-   ],
-   "screen": "magenta",
-   "fixed": [
-    0,
-    212,
-    309,
-    339
-   ],
-   "scale_by": "fixed",
-   "paste": "box",
-   "feather": 10,
-   "check": null,
-   "K": 2.31362,
-   "ox": 62,
-   "oy": 74
+   "oy": 74,
+   "added": true
   }
  ],
  "pad": [
   40,
   40,
-  40,
-  0
+  95,
+  8
  ]
 }

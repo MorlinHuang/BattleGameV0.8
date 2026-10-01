@@ -1,1 +1,1 @@
-{"cell": [381, 457], "cols": 4, "frames": ["idle", "wind", "throw", "follow", "jump1", "jump2", "jump3", "jump4"], "anchor": [178.9, 436.5], "residual": 0.62, "pad": [40, 40, 40, 0]}
+{"cell": [381, 457], "cols": 4, "frames": ["idle", "wind", "throw", "follow", "jump1", "jump2", "jump3", "jump4", "release"], "anchor": [178.9, 436.5], "residual": 0.62, "pad": [40, 40, 40, 0]}

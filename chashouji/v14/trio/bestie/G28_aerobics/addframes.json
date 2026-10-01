@@ -22,31 +22,8 @@
    "check": null,
    "K": 1.96937,
    "ox": 137,
-   "oy": 62
-  },
-  {
-   "name": "through",
-   "base": "throw",
-   "box": [
-    0,
-    0,
-    301,
-    215
-   ],
-   "screen": "green",
-   "fixed": [
-    0,
-    265,
-    301,
-    417
-   ],
-   "scale_by": "fixed",
-   "paste": "box",
-   "feather": 10,
-   "check": null,
-   "K": 1.96937,
-   "ox": 137,
-   "oy": 62
+   "oy": 62,
+   "added": true
   }
  ],
  "pad": [

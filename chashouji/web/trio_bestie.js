@@ -88,7 +88,7 @@ const TRIO_BESTIE = {
 
     G23: {      // 客栈女侠（郭芙蓉式）：马步从左下角滑进来、跺地站定，排山倒海 —— 双掌齐推，一道气浪轰他的脸
       face: +1,
-      sheet: { src: 'assets/trio/G23_furong.webp', cell: [474, 347], cols: 4, names: ['idle', 'raise', 'throw', 'follow', 'slide', 'land', 'wind', 'idle2'] },
+      sheet: { src: 'assets/trio/G23_furong.webp', cell: [474, 347], cols: 4, names: ['idle', 'raise', 'throw', 'follow', 'slide', 'land', 'wind', 'idle2', 'release'] },
       anchor: [253.1, 345.4], at: [175, 1330, 1], pivot: [253, 345],
       leanK: 0,   // 马步两只靴子离锚点各 150px：整体前后倾会把靴子一上一下翘起来，蓄力 / 出手全靠帧
       depth: 1.3, recipe: 'thud',
@@ -98,8 +98,8 @@ const TRIO_BESTIE = {
       idle: { frame: 'idle', breathe: [0.018, 0.75, 0] },   // 站马步：只竖向起伏（绕两靴之间的地面），横向不补 —— 不然两只靴子左右挪
       /* 发带下面那截飘带：上沿钉住，下端左右甩（框只有上沿压着飘带，其余三边透明） */
       flex: { idle: [[140, 102, 190, 126, 't', 8, 1.2]] },
-      atk: { kind: 'beam', seq: [['raise', 0.34], ['throw', 0.4, 'fire'], ['follow', 0.3]],
-             hold: { raise: [185, 165], throw: [390, 120] }, stretch: 0.03, gap: [1.0, 1.4],   // raise：两只手掌收在腰侧之间那一点（蓄力球画在这）
+      atk: { kind: 'beam', seq: [['raise', 0.34], ['release', 0.4, 'fire'], ['follow', 0.3]], dir: { release: 48 },   // 精闺1：双掌往前上推 48°（所需 39°），光束从掌心直出
+             hold: { raise: [185, 165], throw: [390, 120], release: [345, 22] }, stretch: 0.03, gap: [1.0, 1.4],   // raise：两只手掌收在腰侧之间那一点（蓄力球画在这）
              /* 气浪：比悟空的光线粗一倍（排山倒海是一堵墙推过去，不是一根线）；最外一层暗红给它在暖色客厅上描个边 */
              beam: { fire: 0.38, drip: 0.1, ball: 40, glow: [255, 170, 70], edge: [220, 60, 30],
                      layers: [[84, [170, 30, 20], 0.3], [64, [255, 90, 40], 0.6], [42, [255, 160, 70], 0.85], [20, [255, 230, 160], 1], [7, [255, 255, 255], 1]] } },
@@ -107,19 +107,19 @@ const TRIO_BESTIE = {
 
     G21: {      // 忍者扇娘（不知火舞式）：左下角翻滚进来（团身滚 → 落地蹲 → 半跪），胸罩当手里剑甩出去，打中挂在他头上
       face: +1,
-      sheet: { src: 'assets/trio/G21_mai.webp', cell: [377, 344], cols: 4, names: ['idle', 'wind0', 'throw', 'follow', 'roll', 'land', 'wind', 'idle2'] },
-      anchor: [182.6, 338.4], at: [150, 1310, 1], pivot: [182, 338],
+      sheet: { src: 'assets/trio/G21_mai.webp', cell: [385, 384], cols: 4, names: ['idle', 'wind0', 'throw', 'follow', 'roll', 'land', 'wind', 'idle2', 'release'] },
+      anchor: [190.6, 378.4], at: [150, 1310, 1], pivot: [190, 378],
       leanK: 0,   // 半跪：绕地面转会把着地的膝盖和前脚翘起来
       depth: 1.3, recipe: 'rouge',
       enter: { kind: 'roll', seq: [['roll', 0.5], ['land', 0.14, 'land'], ['idle', 9]], sq: 0.1 },
       exit: { frame: 'roll' },
       idle: { frame: 'idle', breathe: [0.016, 0.7, 0] },
       /* 前脚脚尖不耐烦地点地：脚踝钉住（'l'），脚尖上下点（框上、右、下三边透明） */
-      flex: { idle: [[278, 317, 302, 343, 'l', 6, 0.9]] },
+      flex: { idle: [[286, 357, 310, 383, 'l', 6, 0.9]] },
       /* wind0（第一张条的蓄力，手只到肩后）当蓄力前段，wind（第二张条的强蓄力，手甩到身后）接着 */
       atk: { kind: 'throw', item: 'bra', prop: 'assets/world/trio_prop_bra.webp', scale: 0.55,
-             seq: [['wind0', 0.1], ['wind', 0.22], ['throw', 0.1, 'fire'], ['follow', 0.3]],
-             hold: { idle: [156, 217], wind0: [82, 137], wind: [76, 183], throw: [325, 137] },
+             seq: [['wind0', 0.1], ['wind', 0.2], ['release', 0.06, 'fire'], ['throw', 0.12], ['follow', 0.28]], dir: { release: 57 },   // 精闺1：release 出手瞬间（手臂甩到最前上方、手在最远点，自检 4.4 所需角度）→ 原 throw 帧接着当跟随；dir = 肩 → 手（图集上量）
+             hold: { idle: [164, 257], wind0: [90, 177], wind: [84, 223], throw: [333, 177], release: [343, 12] },
              T: 0.45, arc: 0.18, spin: 16, idleSpin: 0.8, stretch: 0.03, gap: [1.0, 1.4], onHit: 'wear' },
     },
     G22: {      // 麻花辫探险家（劳拉式）：左下角匍匐爬进来（左右肘交替）趴定，举相机拍照取证，闪光晃他的眼，照片飞出来
@@ -143,7 +143,7 @@ const TRIO_BESTIE = {
 
     G24: {      // 宫斗贵妃（华妃式）：侧卧着从左下角滑进来、撑肘起身扶正旗头，弹出一枚金护甲砸他 —— 赏"一丈红"（打中炸红粉）
       face: +1,
-      sheet: { src: 'assets/trio/G24_huafei.webp', cell: [570, 303], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'slide', 'land', 'wind2', 'idle2'] },
+      sheet: { src: 'assets/trio/G24_huafei.webp', cell: [570, 303], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'slide', 'land', 'wind2', 'idle2', 'release'] },
       anchor: [393.1, 291.8], at: [280, 1325, 1], pivot: [393, 291],
       leanK: 0,   // 侧卧：整体前后倾会把贴地的腿翘起来
       depth: 1.3, recipe: 'rouge',
@@ -154,13 +154,13 @@ const TRIO_BESTIE = {
       flex: { idle: [[488, 235, 529, 302, 'l', 7, 0.8]] },
       /* 金护甲：bestie/tools/prop_nailguard.py 程序画的（她手指上的护甲跟手指叠着，抠不出来） */
       atk: { kind: 'throw', item: 'nailguard', prop: 'assets/world/trio_g24_nailguard.webp', scale: 0.45,
-             seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.3]],
-             hold: { wind: [167, 144], throw: [461, 169] },
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.12], ['follow', 0.26]], dir: { release: 60 },   // 精闺1：release 出手瞬间（手臂甩到最前上方、手在最远点，自检 4.4 所需角度）→ 原 throw 帧接着当跟随；dir = 肩 → 手（图集上量）
+             hold: { wind: [167, 144], throw: [461, 169], release: [428, 20] },
              T: 0.5, arc: 0.2, spin: 12, stretch: 0, gap: [1.0, 1.4], onHit: 'bounce' },
     },
     G25: {      // 大针筒护士：踩着输液架轮座从左下角滑进来、跳下来半跪扶着输液架，甩一支巨型针筒飞镖，扎在他头上
       face: +1,
-      sheet: { src: 'assets/trio/G25_nurse.webp', cell: [394, 402], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'ride', 'hop', 'wind2', 'idle2'] },
+      sheet: { src: 'assets/trio/G25_nurse.webp', cell: [394, 402], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'ride', 'hop', 'wind2', 'idle2', 'release'] },
       anchor: [232.3, 398.5], at: [185, 1330, 1], pivot: [232, 398],
       leanK: 0,   // 半跪：整体前后倾会把着地的膝盖和脚带起来
       depth: 1.3, recipe: 'rouge',
@@ -173,8 +173,8 @@ const TRIO_BESTIE = {
       /* 巨型针筒：tools/3d/syringe.py 3D 转盘；扎在头上那一支用平面图（onHit 'wear' 只画 prop） */
       atk: { kind: 'throw', item: 'syringe', r: 36, atlas: { src: 'assets/trio/prop_syringe.webp', n: 36, cols: 6, cell: 128, scale: 1.10 },
              prop: 'assets/world/trio_g25_syringe.webp',
-             seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.3]],
-             hold: { idle: [158, 150], wind: [140, 132], throw: [337, 169] },
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.12], ['follow', 0.26]], dir: { release: 47 },   // 精闺1：release 出手瞬间（手臂甩到最前上方、手在最远点，所需 47°）→ 原 throw 帧接着当跟随；dir = 肩 → 手（图集上量）
+             hold: { idle: [158, 150], wind: [140, 132], throw: [337, 169], release: [262, 42] },
              T: 0.5, arc: 0.15, spin: 6.3, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'wear' },
     },
     G30: {      // 葫芦山蛇精式妖女：像蛇一样左右扭着从左下角滑进来、斜倚坐起，举如意放一道绿光吸住他
@@ -191,15 +191,15 @@ const TRIO_BESTIE = {
       /* 发髻上垂下的翠玉流苏：顶钉住（'t'），框左、右、下三边透明 */
       flex: { follow: [[290, 223, 300, 248, 't', 6, 1.1]] },
       /* 如意画在帧里：往后抡（wind2）→ 举过头顶（wind）→ 指向他放光（throw）→ 收回膝前（follow = 待机） */
-      atk: { kind: 'beam', seq: [['wind2', 0.18], ['wind', 0.2], ['throw', 0.5, 'fire'], ['follow', 0.3]],
-             hold: { wind2: [254, 227], wind: [280, 124], throw: [522, 234] }, stretch: 0, gap: [1.0, 1.4],
+      atk: { kind: 'beam', seq: [['wind2', 0.18], ['wind', 0.2], ['release', 0.5, 'fire'], ['follow', 0.3]], dir: { release: 70 },   // 精闺1：举如意的手臂 70°（所需 69°），光从如意头直出
+             hold: { wind2: [254, 227], wind: [280, 124], throw: [522, 234], release: [488, 40] }, stretch: 0, gap: [1.0, 1.4],
              beam: { fire: 0.45, drip: 0.1, ball: 30, glow: [120, 255, 150], edge: [20, 120, 60],
                      layers: [[40, [20, 120, 60], 0.3], [28, [60, 200, 100], 0.6], [16, [140, 255, 170], 0.9], [6, [240, 255, 240], 1]] } },
     },
     G26: {      // 蝴蝶发饰剑士（蝴蝶忍式）：从左上轻轻一跃、张开蝴蝶羽织落地蹲下，挥袖放出一群毒蝴蝶扑过去
       face: +1,
-      sheet: { src: 'assets/trio/G26_shinobu.webp', cell: [413, 376], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'leap', 'land', 'wind2', 'idle2'] },
-      anchor: [219, 371.1], at: [175, 1330, 1], pivot: [219, 371],
+      sheet: { src: 'assets/trio/G26_shinobu.webp', cell: [423, 391], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'leap', 'land', 'wind2', 'idle2', 'release'] },
+      anchor: [219, 386.1], at: [175, 1330, 1], pivot: [219, 386],
       leanK: 0,   // 蹲着：整体前后倾会把着地的木屐带起来
       depth: 1.3, recipe: 'petal',
       /* 轻跳落地：h 小（身形轻），腾空张开羽织 → 脚尖点地 → 蹲下 */
@@ -207,17 +207,17 @@ const TRIO_BESTIE = {
       exit: { frame: 'leap' },
       idle: { frame: 'idle', breathe: [0.018, 0.75, 0] },
       /* 羽织袖子垂下的那一角（蝴蝶翅尖）：顶钉住（'t'），框左、右、下三边透明 */
-      flex: { idle: [[118, 270, 160, 317, 't', 7, 0.9]] },
+      flex: { idle: [[118, 285, 160, 332, 't', 7, 0.9]] },
       /* 毒蝴蝶：tools/3d/butterfly.py 3D 转盘齐射件，一次放 5 只；待机时指尖停着一只 */
       atk: { kind: 'throw', item: 'butterfly', r: 22, n: 5, atlas: { src: 'assets/trio/prop_butterfly.webp', n: 36, cols: 6, cell: 76, scale: 1.13 },
-             seq: [['wind2', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.3]],
-             hold: { idle: [193, 122], wind2: [93, 127], throw: [366, 110] },
+             seq: [['wind2', 0.26], ['release', 0.06, 'fire'], ['throw', 0.12], ['follow', 0.26]], dir: { release: 40 },   // 精闺1：release 出手瞬间（手臂甩到最前上方、手在最远点，自检 4.4 所需角度）→ 原 throw 帧接着当跟随；dir = 肩 → 手（图集上量）
+             hold: { idle: [193, 137], wind2: [93, 142], throw: [366, 125], release: [395, 20] },
              T: 0.6, arc: 0.3, spin: 5.2, idleSpin: 0.5, stretch: 0.03, gap: [1.0, 1.4] },
     },
     G27: {      // 暴脾气平民女孩（杉菜式）：从左下角冲过来一记滑铲、撑地起身半跪，抡起书包砸过去
       face: +1,
-      sheet: { src: 'assets/trio/G27_shancai.webp', cell: [412, 354], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'tackle', 'rise', 'wind2', 'idle2'] },
-      anchor: [174, 348.1], at: [170, 1330, 1], pivot: [174, 348],
+      sheet: { src: 'assets/trio/G27_shancai.webp', cell: [417, 404], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'tackle', 'rise', 'wind2', 'idle2', 'release'] },
+      anchor: [174, 398.1], at: [170, 1330, 1], pivot: [174, 398],
       leanK: 0,   // 半跪：整体前后倾会把跪地的膝盖带起来
       depth: 1.3, recipe: 'thud',
       /* 滑铲进来（前脚鞋底朝前）→ 刹住撑地起身 → 半跪；wind / follow 两帧的前腿按 idle 挪正过（G27_shancai/fixleg.py，build 后必跑） */
@@ -225,16 +225,16 @@ const TRIO_BESTIE = {
       exit: { frame: 'tackle' },
       idle: { frame: 'idle', breathe: [0.018, 0.8, 0] },
       /* 脑后翘起的短发梢：根在右边钉住（框上、下、左三边透明，flexfind） */
-      flex: { idle: [[138, 62, 158, 110, 'r', 4, 0.9]] },
+      flex: { idle: [[138, 112, 158, 160, 'r', 4, 0.9]] },
       /* 书包：引擎 3D 转盘（tools/3d/schoolbag.py，道具表 r 30 cell 115 scale 1.37）；待机拎着书包带在手里晃（idleSpin） */
       atk: { kind: 'throw', item: 'schoolbag', r: 30, atlas: { src: 'assets/trio/prop_schoolbag.webp', n: 36, cols: 6, cell: 115, scale: 1.37 },
-             seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['follow', 0.3]],
-             hold: { idle: [156, 158], wind: [50, 192], throw: [306, 60] },
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.12], ['follow', 0.26]], dir: { release: 37.5 },   // 精闺1：release 出手瞬间（手臂甩到最前上方、手在最远点，自检 4.4 所需角度）→ 原 throw 帧接着当跟随；dir = 肩 → 手（图集上量）
+             hold: { idle: [156, 208], wind: [50, 242], throw: [306, 110], release: [400, 25] },
              T: 0.5, arc: 0.22, spin: 6.3, idleSpin: 0.9, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
     G28: {      // 80 年代健美操女：从左边一路开合跳进来，指尖转着呼啦圈，甩出去套在他头上
       face: +1,
-      sheet: { src: 'assets/trio/G28_aerobics.webp', cell: [381, 457], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'jump1', 'jump2', 'jump3', 'jump4'] },
+      sheet: { src: 'assets/trio/G28_aerobics.webp', cell: [381, 457], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'jump1', 'jump2', 'jump3', 'jump4', 'release'] },
       anchor: [178.9, 436.5], at: [155, 1330, 0.9], pivot: [178, 436],
       leanK: 0,   // 两脚大开站定：整体前后倾绕两脚中点转，离中点 120 px 的脚会上下挪 7 px（量出来的）
       depth: 1.3, recipe: 'star',
@@ -247,13 +247,13 @@ const TRIO_BESTIE = {
          收势用 jump3（双臂举成 V 欢呼）：A 条的 follow 那格头画小了 9%，按头缩放后脚踩到地板下 17 px，不上场 */
       atk: { kind: 'throw', item: 'hoop', r: 36, atlas: { src: 'assets/trio/prop_hoop.webp', n: 36, cols: 6, cell: 108, scale: 1.07 },
              prop: 'assets/world/trio_g28_hoop.webp',
-             seq: [['wind', 0.28], ['throw', 0.1, 'fire'], ['jump3', 0.35]],
-             hold: { idle: [124, 80], wind: [67, 236], throw: [335, 154] },
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.12], ['jump3', 0.3]], dir: { release: 53.5 },   // 精闺1：release 出手瞬间（手臂甩到最前上方、手在最远点，自检 4.4 所需角度）→ 原 throw 帧接着当跟随；dir = 肩 → 手（图集上量）
+             hold: { idle: [124, 80], wind: [67, 236], throw: [335, 154], release: [330, 65] },
              T: 0.55, arc: 0.25, spin: 5.7, idleSpin: 2.5, stretch: 0.03, gap: [1.0, 1.4], onHit: 'wear' },
     },
     G29: {      // 打狗棒女侠（黄蓉式）：撑着打狗棒从左上一跃、棒子点地荡进来落成蹲，竹棒伸缩着捅过去
       face: +1,
-      sheet: { src: 'assets/trio/G29_huangrong.webp', cell: [389, 379], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'vault', 'swing', 'land', 'idle2'] },
+      sheet: { src: 'assets/trio/G29_huangrong.webp', cell: [444, 387], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'vault', 'swing', 'land', 'idle2', 'release'] },
       anchor: [228.4, 371.7], at: [180, 1328, 0.98], pivot: [228, 371],
       leanK: 0,   // 蹲着、一只手撑地：整体前后倾会把撑地的手和靴子带起来
       depth: 1.3, recipe: 'thud',
@@ -268,8 +268,8 @@ const TRIO_BESTIE = {
                 at: { idle: [160, 157, 0], land: [151, 235, 0], vault: [222, 52, 3.1416], swing: [210, 120, 3.44] } }],
       /* 伸缩棒（帧序列 punch）：棒头从 throw 帧里抠，伸出去的"管子"填竹子色；收势 = 收棒回腰（用 wind 帧）——
          A 条 follow（棒扛肩）那格两腿站位画得不一样（配准残差 6.7 px），不上场 */
-      atk: { kind: 'punch', seq: [['wind', 0.3], ['throw', 0.55, 'fire'], ['wind', 0.25]],
-             fist: [310, 185, 348, 203], fistC: [330, 194], wrist: [302, 197], armW: 8,
+      atk: { kind: 'punch', seq: [['wind', 0.3], ['release', 0.55, 'fire'], ['throw', 0.12], ['wind', 0.2]], dir: { release: 40 },   // 精闺1：release 前臂 + 竹棒往前上捅（前臂 35°、画里竹棒 46°，伸长方向取 40°；所需 33°），伸出去的棒沿 wrist → fistC
+             fist: [315, 82, 342, 106], fistC: [328, 94], wrist: [309, 110], armW: 8,
              skin: '#6cbf45', skinShade: 'rgba(40,110,30,.55)', skinEdge: '#1f3d12', fistZ: 1.3, phases: [0.16, 0.12, 0.22],
              stretch: 0, gap: [1.0, 1.4] },
     },
@@ -289,10 +289,10 @@ const TRIO_BESTIE = {
       flex: { idle: [[128, 134, 169, 200, 'r', 10, 1.1]] },
       /* 百裂脚：抬膝蓄力 → 高踢 / 平踢每秒 10 帧交替 0.6 秒、每 0.1 秒一道腿影飞过去 → 比 V 收势。
          出手点 = hitA 踢过头顶的那只靴子（后排：腿影从女生头顶翻过去） */
-      /* 精闺1 P6：连踢 4 帧循环 收腿 hitC → 侧踢 hitD → 收腿 hitC → 正蹬 hitE（都是 hitB 上身原样、只重画踢的那条腿：bestie/tools/addframes.py），每秒 12 帧；两脚踢都往右下指向男主 */
-      atk: { kind: 'rush', seq: [['wind', 0.3], [['hitC', 'hitD', 'hitC', 'hitE'], 0.6, 'fire'], ['follow', 0.5]], fps: 12, from: [562, 368], dir: { hitD: -28, hitE: -30 },   // 自检 4.4：腿要指向男主（所需 −34°）：hitD 侧踢 −28°、hitE 正蹬 −30°（髋 → 靴，图集上量）；hitA 竖踢 / hitB 平踢方向不对，不进连踢
+      /* 精闺1 P6：连踢 4 帧循环 收腿 hitC → 侧踢 hitD → 收腿 hitC → 正蹬 hitE（都是 hitB 上身原样、只重画踢的那条腿：bestie/tools/addframes.py），每秒 12 帧；两脚踢都略往下、沿腿指向男主 */
+      atk: { kind: 'rush', seq: [['wind', 0.3], [['hitC', 'hitD', 'hitC', 'hitE'], 0.6, 'fire'], ['follow', 0.5]], fps: 12, from: [588, 333], dir: { hitD: -17, hitE: -19 },   // 腿影沿腿飞向男主：髋（屏幕 ≈ (217, 753)）→ 男主 (616, 837) 是 −12°，hitD −17° / hitE −19°（髋 → 靴尖，图集上量），差 ≤ 7°；hitA 竖踢 / hitB 往上踢不进连踢（审查 −34° 是从旧 from 高踢靴尖算的）
              rush: { n: 6, every: 0.1, T: 0.1, line: '#bfe0ff',
-                     ghost: [{ frame: 'hitD', box: [375, 248, 600, 392] }, { frame: 'hitE', box: [375, 248, 600, 412] }] },
+                     ghost: [{ frame: 'hitD', box: [365, 235, 605, 345] }, { frame: 'hitE', box: [365, 235, 613, 362] }] },
              gap: [0.8, 1.2], stretch: 0.03 },
     },
 
@@ -382,7 +382,7 @@ const TRIO_BESTIE = {
       face: +1,
       sheet: { src: 'assets/trio/G9_auntie.webp', cell: [357, 439], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'release', 'through', 'idle2'] },
       /* 锚点 = 两只布鞋鞋底中点：出手四帧按两只鞋配准（残差 0.64 px）；走路四帧 loose，出自同一张底图（蓝幕，layers.cut_blue） */
-      anchor: [177.6, 434.8], at: [170, 970, 0.88], pivot: [177, 434], leanK: 0,
+      anchor: [177.6, 434.8], at: [150, 970, 0.88], pivot: [177, 434], leanK: 0,   /* 精闺1：release 往上抡压 G18 落脚区 121 px → combo_scan --only=G9,G10,G27 建议站位 */
       depth: 0.8, recipe: 'rouge',
       /* 秧歌步（walk）：接地 A（右手甩到身前）→ 抬膝过渡 → 接地 B（右手甩到身后）→ 抬膝过渡。
          stride 136.5：着地鞋跟每次换帧前进 68 / 69 / 68 / 68 格内 px（walkshift.py 把 walk2~4 横移 −3 / +4 / −5 后），换帧同一只脚差 ≤ 0.75 格内 px */
@@ -401,7 +401,7 @@ const TRIO_BESTIE = {
       face: +1,
       sheet: { src: 'assets/trio/G10_harley.webp', cell: [396, 431], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'spin', 'stop', 'idle2', 'drop', 'through'] },
       /* 锚点 = 两只轮滑鞋轮子着地中点：按前脚红轮滑鞋配准、缩放也按它（scale_by fixed：wind 仰头时按头找缩放会缩成 0.87）；残差 0.14 px */
-      anchor: [228.5, 425.4], at: [160, 1020, 0.86], pivot: [228, 425], leanK: 0,
+      anchor: [228.5, 425.4], at: [160, 980, 0.86], pivot: [228, 425], leanK: 0,   /* 精闺1：地板 G27 新出手帧手臂举高后挡 G10 drop 帧 18% → combo_scan --only=G9,G10,G27 建议站位 */
       depth: 0.8, recipe: 'star',
       /* 轮滑（ride）：压低冲刺 → 单脚转一圈 → 横刹后仰（露面后换两次帧）；离场转身滑走 */
       enter: { kind: 'ride', T: 1.0, tilt: 0.1, seq: [['cruise', 0.4], ['spin', 0.3], ['stop', 0.3, 'land'], ['idle', 9]], sq: 0.07 },

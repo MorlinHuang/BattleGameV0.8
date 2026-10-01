@@ -59,6 +59,14 @@ def sh(spec, b):
     return [b[0] + l, b[1] + t, b[2] + l, b[3] + t]
 
 
+def shb(spec, meta, b):
+    """蒙版 / 贴回框：同 sh()，但框贴着原格子哪条边，就一直延伸到加边后的那条边 —— 加的边就是给伸出去的手臂、头发、竹棒留的，
+    框不盖住它，伸进边里的那一截会被切掉（G21 / G27 头顶、G29 竹棒尖）"""
+    l, t, r, bt = (spec.get('pad') or [0, 0, 0, 0]) + [0] * (4 - len(spec.get('pad') or []))
+    cw, ch = meta['cell']; W, H = cw - l - r, ch - t - bt
+    return [0 if b[0] <= 0 else b[0] + l, 0 if b[1] <= 0 else b[1] + t, cw if b[2] >= W else b[2] + l, ch if b[3] >= H else b[3] + t]
+
+
 def boxes(e):
     """box 可以是一个框 [x0, y0, x1, y1]，也可以是几个框的列表（G4 踢腿：上半身 + 踢的那条腿，支撑腿那一块不动）"""
     return [e['box']] if isinstance(e['box'][0], (int, float)) else e['box']
@@ -75,7 +83,7 @@ def prep(d, fn):
     bg = Image.new('RGBA', (SIDE, SIDE), SCREEN[e['screen']] + (255,))
     bg.alpha_composite(c.resize((round(cw * K), round(ch * K)), Image.LANCZOS), (ox, oy))
     m = Image.new('RGBA', (SIDE, SIDE), (0, 0, 0, 255))
-    for x0, y0, x1, y1 in (sh(spec, b) for b in boxes(e)):
+    for x0, y0, x1, y1 in (shb(spec, meta, b) for b in boxes(e)):
         m.paste((0, 0, 0, 0), (ox + round(x0 * K), oy + round(y0 * K), ox + round(x1 * K), oy + round(y1 * K)))
     raw = os.path.join(TRIO, d, 'raw'); os.makedirs(raw, exist_ok=True)
     bg.convert('RGB').save(os.path.join(raw, f'add_{fn}_base.png')); m.save(os.path.join(raw, f'add_{fn}_mask.png'))
@@ -95,15 +103,18 @@ def cell(d, cells, e, meta, spec):
         from inpaint_paste import paste as ipaste
         tmp = tempfile.mkdtemp(); b = os.path.join(tmp, 'b.png'); o = os.path.join(tmp, 'o.png')
         cells[e['base']].save(b)
-        ipaste(b, os.path.join(TRIO, d, 'raw', f'add_{e["name"]}.png'), e['ox'], e['oy'], e['K'], e['screen'], [sh(spec, x) for x in boxes(e)], o, e.get('feather', 6))
+        ipaste(b, os.path.join(TRIO, d, 'raw', f'add_{e["name"]}.png'), e['ox'], e['oy'], e['K'], e['screen'], [shb(spec, meta, x) for x in boxes(e)], o, e.get('feather', 6))
         out = Image.open(o).convert('RGBA'); _sh.rmtree(tmp)
         print(f'  {e["name"]:8s} 原位贴回 {len(boxes(e))} 个框')
         return out
     rgb, al = F.load_sheet(os.path.join(TRIO, d, 'raw', f'add_{e["name"]}.png'), 'auto', None)
     rgb = F.edge_extend(rgb, al)
     c = F.split(rgb, al, 1)[0]
-    ref = cells[meta.get('ref', 'idle')]; head_t = F.gray(ref.crop(meta.get('head') or sh(spec, spec['head'])))
-    if e.get('head'): head_t = F.gray(cells[e['base']].crop(sh(spec, e['head'])))   # 帧上写 head = 底格自己的头框（踢腿帧头的朝向和参考帧不一样，按参考帧的头找缩放偏 20%）   # 老图集 json 没存头框：addframes.json 里写 idle 的头框
+    def head_t():
+        """按头找缩放用的模板：帧上写 head = 底格自己的头框（踢腿帧头的朝向和参考帧不一样，按参考帧的头找缩放偏 20%）；
+        否则参考帧的头框（老图集 json 没存头框的，addframes.json 顶层写 idle 的头框）。scale_by fixed / scale 写死的不需要"""
+        if e.get('head'): return F.gray(cells[e['base']].crop(sh(spec, e['head'])))
+        return F.gray(cells[meta.get('ref', 'idle')].crop(meta.get('head') or sh(spec, spec['head'])))
     base = cells[e['base']]; fx = sh(spec, e['fixed']); fix_t = F.gray(base.crop(fx))
     k0 = 1 / e['K'] * 1024 / 1254                          # 生图回来是 1254 见方，底格放大了 K 倍贴在 1024 上
     if 'scale' in e: s = e['scale']; mh = None
@@ -115,8 +126,9 @@ def cell(d, cells, e, meta, spec):
         s, mh = best
     else:
         best = None
+        ht = head_t()
         for s in np.arange(k0 * 0.75, k0 * 1.15, 0.005):
-            r = F.find(F.gray(F.resize(c, s)), head_t)
+            r = F.find(F.gray(F.resize(c, s)), ht)
             if r and (best is None or r[2] > best[1]): best = (s, r[2])
         s, mh = best
     def place(s):
@@ -147,7 +159,7 @@ def cell(d, cells, e, meta, spec):
         # 只换框里那一块（踢腿帧：上身照底格原样，只重画踢的那条腿）——框外是底格原像素，框边往里 FE px 渐变到新图
         from scipy import ndimage
         M = np.zeros((ch, cw), bool)
-        for x0, y0, x1, y1 in (sh(spec, b) for b in boxes(e)): M[y0:y1, x0:x1] = True
+        for x0, y0, x1, y1 in (shb(spec, meta, b) for b in boxes(e)): M[y0:y1, x0:x1] = True
         FE = e.get('feather', 8); w = np.clip(ndimage.distance_transform_edt(M) / FE, 0, 1)[..., None]
         A, B = np.array(base).astype(np.float32), np.array(out).astype(np.float32)
         al = A[..., 3:] * (1 - w) + B[..., 3:] * w

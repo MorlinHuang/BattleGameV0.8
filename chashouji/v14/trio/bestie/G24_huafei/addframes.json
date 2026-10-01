@@ -4,10 +4,18 @@
    "name": "release",
    "base": "throw",
    "box": [
-    0,
-    0,
-    265,
-    193
+    [
+     0,
+     0,
+     265,
+     193
+    ],
+    [
+     265,
+     0,
+     490,
+     80
+    ]
    ],
    "screen": "magenta",
    "fixed": [
@@ -22,31 +30,8 @@
    "check": null,
    "K": 1.57895,
    "ox": 62,
-   "oy": 273
-  },
-  {
-   "name": "through",
-   "base": "throw",
-   "box": [
-    0,
-    0,
-    265,
-    193
-   ],
-   "screen": "magenta",
-   "fixed": [
-    265,
-    70,
-    490,
-    193
-   ],
-   "scale_by": "fixed",
-   "paste": "box",
-   "feather": 10,
-   "check": null,
-   "K": 1.57895,
-   "ox": 62,
-   "oy": 273
+   "oy": 273,
+   "added": true
   }
  ],
  "pad": [
