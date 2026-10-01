@@ -92,9 +92,32 @@ def load_data():
 const fs=require('fs');const W=process.argv[1];
 const src=fs.readFileSync(W+'/trio.js','utf8');
 const rope=src.match(/const ROPE\s*=\s*\{[^}]*\};/)[0];
-const d=new Function(rope+fs.readFileSync(W+'/trio_buddy.js','utf8')+fs.readFileSync(W+'/trio_bestie.js','utf8')+'\nreturn {buddy:TRIO_BUDDY,bestie:TRIO_BESTIE};')();
+const tune=fs.existsSync(W+'/trio_tune.js')?fs.readFileSync(W+'/trio_tune.js','utf8'):'const TRIO_TUNE={};';
+const d=new Function(rope+fs.readFileSync(W+'/trio_buddy.js','utf8')+fs.readFileSync(W+'/trio_bestie.js','utf8')+tune+'\nreturn {buddy:TRIO_BUDDY,bestie:TRIO_BESTIE,tune:TRIO_TUNE};')();
 process.stdout.write(JSON.stringify(d));"""
-    return json.loads(subprocess.run(['node', '-e', js, WEB], capture_output=True, text=True, check=True).stdout)
+    d = json.loads(subprocess.run(['node', '-e', js, WEB], capture_output=True, text=True, check=True).stdout)
+    tune = d.pop('tune')
+    for side in d.values():
+        side['cast'] = {k: tuned(tune.get(k), c) for k, c in side['cast'].items()}
+    return d
+
+
+def tuned(t, c):
+    """web/trio_tune.js 合并进角色数据，和 trio.js tuned() 同一条规矩（角色数据里写了的为准；at 里的点只在同一版图集 cell 上有效，
+    不一致整块作废、连同 alt）。扫描要看运行时真画的帧：idle.alt（idle2）、hold.idle2、parts.at.idle2 都从这里来（精引2）"""
+    if not t: return c
+    c = dict(c); atk = dict(c.get('atk') or {}); idle = dict(c.get('idle') or {})
+    if t.get('dir') and not atk.get('dir'): atk['dir'] = t['dir']
+    if t.get('atlasAim') and atk.get('atlas') and not atk['atlas'].get('aim'): atk['atlas'] = {**atk['atlas'], 'aim': t['atlasAim']}
+    at = t.get('at'); same = bool(at and c.get('sheet') and list(at['cell']) == list(c['sheet']['cell']))
+    if same and at.get('hold'): atk['hold'] = {**at['hold'], **(atk.get('hold') or {})}
+    if same and at.get('arm') and not atk.get('arm'): atk['arm'] = at['arm']
+    if same and at.get('parts') and c.get('parts'):
+        c['parts'] = [({**q, 'at': {**at['parts'][os.path.basename(q['src']).rsplit('.', 1)[0]], **q['at']}}
+                       if os.path.basename(q['src']).rsplit('.', 1)[0] in at['parts'] else q) for q in c['parts']]
+    if t.get('alt') and not idle.get('alt') and (not at or same): idle['alt'] = t['alt']
+    c['atk'] = atk; c['idle'] = idle
+    return c
 
 
 def alpha(path):
@@ -309,7 +332,7 @@ def sheet_person(c, at, foot, side):
         cw, ch = sh['cell']; cols = sh['cols']
         cell = lambda fn: rgba[(sh['names'].index(fn) // cols) * ch:(sh['names'].index(fn) // cols + 1) * ch,
                                (sh['names'].index(fn) % cols) * cw:(sh['names'].index(fn) % cols + 1) * cw]
-        want = [c['idle']['frame']]
+        want = [c['idle']['frame']] + ([c['idle']['alt']['frame']] if c['idle'].get('alt') else [])   # 待机轮换的 idle2 也在场上画（精引2）
         for q in A.get('seq', []): want += q[0] if isinstance(q[0], list) else [q[0]]
         E = c.get('enter')
         if isinstance(E, dict) and E.get('seq') and not isinstance(E['seq'][-1][0], list):   # 进场落定那一帧（走路循环是还在走，不算在场）
@@ -322,7 +345,9 @@ def sheet_person(c, at, foot, side):
         heads = {f: (find_head(cc, refc, hb) if hb else est_head(cc[..., 3] > 40)) for f, cc in cells}
         # 画在帧里的招牌道具：图集 json 的 ident（每帧各自的框）优先；cfg.ident 是参考帧上的框，每帧按模板重找
         meta = json.load(open(os.path.join(WEB, 'assets/trio', name + '.json')))
-        idents = {f: list(meta.get('ident', {}).get(f, {}).items()) for f, _ in cells}   # {帧: {名: 框}}（crewframes.py ident）
+        # {帧: {名: 框}}（crewframes.py ident）；美术重出的图集写成 {帧: [框, ...]}（没名字），按 道具1、道具2 编号
+        idf = lambda v: list(v.items()) if isinstance(v, dict) else [(f'道具{k + 1}', bx) for k, bx in enumerate(v or [])]
+        idents = {f: idf(meta.get('ident', {}).get(f)) for f, _ in cells}
         if c.get('ident') and refc is not None:
             for f, cc in cells: idents[f] = idents[f] + [(f'道具{len(idents[f]) + k + 1}', find_head(cc, refc, bx)) for k, bx in enumerate(c['ident'])]
     else:
@@ -334,7 +359,7 @@ def sheet_person(c, at, foot, side):
     seq = A.get('seq', []); fi = next((i for i, q in enumerate(seq) if q[2:] == ['fire']), None)
     nm = lambda qs: {f for q in qs for f in (q[0] if isinstance(q[0], list) else [q[0]])}
     E_ = c.get('enter'); X_ = (c.get('exit') or {}).get('frame')
-    free = {c['idle']['frame']} | (nm(E_['seq']) if isinstance(E_, dict) and E_.get('seq') else set()) | set(X_ if isinstance(X_, list) else [X_] if X_ else []) \
+    free = {c['idle']['frame']} | ({c['idle']['alt']['frame']} if c['idle'].get('alt') else set()) | (nm(E_['seq']) if isinstance(E_, dict) and E_.get('seq') else set()) | set(X_ if isinstance(X_, list) else [X_] if X_ else []) \
            | ({(sw or {}).get('pump', {}).get(k) for k in ('fwd', 'back')} if (sw or {}).get('pump') else set())
     empty = (nm(seq[fi:]) - nm(seq[:fi]) - free) if fi is not None else set()
     # 挂件（场景层 fixed 不算人）、道具

@@ -343,7 +343,7 @@ function startMatch() {
   for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); for (const t of TIDE_OF.values()) t.reset(); Clash.reset(); Foam.reset();
   IntroVideo.stop();
   S.auto = false;
-  Ammo.clear(); Particles.clear();
+  Ammo.clear(); Particles.clear(); TrioFX.clear();
 }
 
 /* ---------- 表现层：由 S 派生画面 ---------- */
@@ -1776,7 +1776,7 @@ function stainAt(part, x, y) {
 function addStain(d) {
   const same = stains.filter((s) => s.part === d.part);
   if (same.length >= STAIN.max) stains.splice(stains.indexOf(same[0]), 1);
-  d.r = 2.5 + Math.random() * 3.5; d.t = 0;
+  d.r = 2.5 + Math.random() * 3.5; d.t = 0; d.seed = Math.floor(Math.random() * 1e6);   // 斑块形状的种子（FxShape.blob，每点各不一样、每帧同形）
   stains.push(d);
 }
 function tickStains(dt) {
@@ -1790,7 +1790,7 @@ function drawStains(ctx) {
     else { if (!h) continue; const b = h.box; x = b[0] + d.u * (b[2] - b[0]); y = b[1] + d.v * (b[3] - b[1]); }
     const look = STAIN_LOOK[d.part];
     ctx.globalAlpha = Math.min(1, (STAIN.life - d.t) / STAIN.fade);
-    ctx.beginPath(); ctx.arc(x, y, d.r, 0, 6.2832);
+    FxShape.blob(ctx, x, y, d.r, d.seed);                 // 不规则斑块（精特3 第 11 条：原来是圆规画的正圆点）
     ctx.fillStyle = look.fill; ctx.fill();
     ctx.lineWidth = 1.2; ctx.strokeStyle = look.edge; ctx.stroke();
   }
@@ -1913,6 +1913,25 @@ class PoseView {
     const seg = ([a, b, v]) => [x - m.ax + a * k, x - m.ax + b * k, y - m.ay + v * (m.h / img.height)];
     Light.contact(ctx, pr.touch.map(seg), pr.near.map(seg), 1, lift, 1, this.light(x, m));
   }
+  /* 这张姿势图在贴图坐标 (u, v) 处有没有人（alpha > 128）。按 1/MASK 缩小量一次、按姿势名存着（三人组出手的路不压自己主角，trio.js o.own） */
+  solid(name, u, v) {
+    name = this.shownOf(name);
+    const img = this.imgs[name], m = WORLD.poses[name], K = PoseView.MASK;
+    if (!img) return false;
+    const masks = this.masks || (this.masks = new Map());
+    let q = masks.get(name);
+    if (!q) {
+      const w = Math.ceil(m.w / K), h = Math.ceil(m.h / K), c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const x = c.getContext('2d', { willReadFrequently: true });
+      x.drawImage(img, 0, 0, w, h);
+      const d = x.getImageData(0, 0, w, h).data, a = new Uint8Array(w * h);
+      for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3] > 128 ? 1 : 0;
+      masks.set(name, q = { w, h, a });
+    }
+    const i = Math.floor(u / K), j = Math.floor(v / K);
+    return i >= 0 && j >= 0 && i < q.w && j < q.h && q.a[j * q.w + i] === 1;
+  }
   draw(ctx, name, x, y, tint, tintA) {
     name = this.shownOf(name);
     const img = this.imgs[name], m = WORLD.poses[name];
@@ -1930,6 +1949,8 @@ class PoseView {
     this.shown = name;
   }
 }
+
+PoseView.MASK = 4;
 
 /* ---------- 背景：三间房拼成的长卷 ---------- */
 /* 只画镜头里看得见的那一两间。三张图各两千多宽，全画一遍白费两倍填充。
@@ -2469,15 +2490,23 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      shield = 自己这边主角的脸框：后排的人出手要从他 / 她头顶翻过去，不横穿脸。
      水枪 / 喷雾（atk.kind 'jet'，原 crew.js 滑板哥们 / 平衡车闺蜜，2026-10-01 迁成帧序列）每颗水滴 / 雾团碰到就 onDrip 溅一下；
      水打偏了碰到她身体轮廓前沿也溅开（front，手机那一行不算）、她倒地按上沿判（top）；雾 front 给 null（见 boyAim 上面的注释） */
+  /* own = 自己这边主角身上有没有 (x, y) 这一点（精引2 P9：飞的东西、光束、鞭、伸缩臂不从自己主角身上横穿；trio.js 出手时按它挑路线）。
+     两个人在同一张姿势图里：按两张脸的中点左右分（女生在左），再看姿势图这一点有没有人 */
+  const ownBody = (who) => (x, y) => {
+    const fa = faceOf('a'), fb = faceOf('b');
+    if (!fa || !fb || (who === 'a') !== (x < (fa[0] + fb[0]) / 2)) return false;
+    const name = actors.shownOf(FX.frame), m = WORLD.poses[name];
+    return actors.solid(name, x - FX.pairX - FX.hitX + m.ax, y - GROUND - FX.bob + m.ay);
+  };
   for (const a of BuddyTrio.acts) a.init({
-    face: () => faceOf('a'), shield: () => faceOf('b'), aim: girlAim, ground: () => GROUND + FX.bob,
+    face: () => faceOf('a'), shield: () => faceOf('b'), own: ownBody('b'), aim: girlAim, ground: () => GROUND + FX.bob,
     top: girlTop, front: (y) => offArm(y) ? null : frontAt(y, -1),
     onHit: (x, y, first, rc) => impact(+1, y, first ? GIFT.buddy.power : 1, RECIPE[rc], x),
     onSplash: (x, y) => RECIPE.water.drip(x, y, +1),
     onDrip: (x, y) => RECIPE.water.drip(x, y, +1),
   });
   for (const a of BestieTrio.acts) a.init({
-    face: () => faceOf('b'), shield: () => faceOf('a'), aim: boyAim, ground: () => GROUND + FX.bob,
+    face: () => faceOf('b'), shield: () => faceOf('a'), own: ownBody('a'), aim: boyAim, ground: () => GROUND + FX.bob,
     front: () => null,
     onHit: (x, y, first, rc) => impact(-1, y, first ? GIFT.bestie.power : 1, RECIPE[rc], x),
     onDrip: (x, y) => RECIPE.pepper.drip(x, y, -1),
@@ -2574,6 +2603,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   Light.on = lq !== '0';
   if (lq && lq !== '0' && lq !== '1') for (const k of Object.keys(Light.has)) Light.has[k] = lq.split(',').includes(k);
   Light.dbg = Q0.get('lightdbg');
+  /* 精引2 的三样（出手方向 / 待机轮换 / 换帧淡入）各自一个关，改前改后对比胶片用：?triodir=0、?trioalt=0、?triofade=0 */
+  if (Q0.get('triodir') === '0') TRIO.dir = false;
+  if (Q0.get('trioalt') === '0') TRIO.alt = false;
+  if (Q0.get('triofade') === '0') TRIO.fade = 0;
   Light.use(bgName, WORLD.rooms);
   /* 首帧只等首帧画得到的东西（docs/首屏加载诊断.md P1、P2：改之前把 38.8 MB 全部 await 完才起主循环、绑按钮，5 Mbps 首帧 66 秒）：
      长卷背景、待机循环那几张姿势、HUD 头像（三样一起下）。其余登记进预取队列（preload.js），首帧之后按下面的顺序在后台加载：
@@ -2592,6 +2625,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* 3D 转盘贴图，两套：飞行物品的（ammo.js）和命中粒子的（fx.js）；加上档 2 两场天上掉东西的图集。
      失败不阻塞 —— 加载不到就退回各自的矢量画法，?nosprite=1 同时关掉 */
   Preload.add('items', () => Promise.all([Ammo.loadSprites(V, noSpr), Particles.loadShapes(V, noSpr), DurianRain.load(V, noSpr), SockRain.load(V, noSpr)]));
+  /* 三人组特效（trio_fx.js，自检 P4 / P5 / P8：烘焙贴图光束、三层命中配方、落地 / 滑行尘土）。贴图到齐才换配方（同名覆盖 RECIPE）——
+     没到之前命中照旧走老配方、光束照旧平涂（trio.js 按 TrioFX.ready() 选），不会打出空的爆点；?triofx=0 不加载（改前对比） */
+  if (Q0.get('triofx') !== '0') Preload.add('trio_fx', () => TrioFX.load(V).then(ok => { if (ok) Object.assign(RECIPE, TrioFX.RECIPE); }));
   /* 背景里会动的东西（bgmotion.js：程序光效贴图 + 7 段动区视频 1.5 MB）。没加载完之前 BgMotion.draw 只画底图（fx 为空直接返回、动区列表为空）。
      首帧不等它（5 Mbps 下它的视频跟首帧的姿势抢带宽，首帧晚 1.5 秒）；排在档 1 / 2 之后：礼物要用的先到，背景动效是氛围 */
   Preload.add('bgmotion', () => (bgName !== 'v14' ? BgMotion.load(bgDir, vq) : 0));
@@ -2653,7 +2689,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       }
       /* hudTick 也要跟着快进：它管两种闪光的余量。不调的话预热结束那一帧的
          HUD 永远是"刚开局、什么都没闪过"的样子，?livet 微调也扫不到闪光。 */
-      battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); S.t += 1 / 30;
+      battle(1 / 30); Ammo.update(1 / 30); Particles.update(1 / 30); TrioFX.update(1 / 30); S.t += 1 / 30;
       /* 帮手和礼物雨也要跟着快进：不推进的话预热里送的档 3 礼物全卡在 t=0 叠着（闺蜜被叫满、Truth 被连续续时间） */
       for (const c of CREWS) c.update(1 / 30); DurianRain.update(1 / 30); SockRain.update(1 / 30); tideUpdate(1 / 30);
       derive(1 / 30); hudTick(1 / 30);
@@ -2834,6 +2870,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     DurianRain.draw(fctx); SockRain.draw(fctx);   // 天上掉的东西从镜头这一侧砸在人身上，盖在人物之上、爆点之下
     Foam.draw(fctx);                              // 白娘子水柱打在身上爆的水泡沫，同样盖在人物之上
     Particles.draw(fctx);
+    TrioFX.draw(fctx);                            // 三人组的光束粒子 / 命中碎片 / 尘土（trio_fx.js，同一层）
     fctx.restore();
     /* 结算全屏接管：演出图铺满整幅，距离条不再画。结果已经写在画面里
        （谁在抡枕头、谁跪着哭），再摆一遍是重复。 */
@@ -2982,7 +3019,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     callDue();
     for (let k = Math.round(Math.max(0, +(Q.get('ammoskip') || 0)) * 60); k > 0; k--) {
       const d = Particles.tick(1 / 60);
-      Particles.update(1 / 60); Ammo.update(d);
+      Particles.update(1 / 60); TrioFX.update(1 / 60); Ammo.update(d);
       for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); tideUpdate(d);
       Bubble.update(d, FX.struggle); derive(d); hudTick(d);
       simT += 1 / 60; callDue();
@@ -2993,12 +3030,20 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       for (let k = 0; k < Math.max(1, Math.round(step * 60)); k++) {
         simT += 1 / 60; callDue();
         const d = Particles.tick(1 / 60);
-        Particles.update(1 / 60);
+        Particles.update(1 / 60); TrioFX.update(1 / 60);
         Ammo.update(d);
         for (const c of CREWS) c.update(d); DurianRain.update(d); SockRain.update(d); tideUpdate(d);
         Bubble.update(d, FX.struggle);
         derive(d); hudTick(d);
         if (coupleProbe) probeCouple();
+        /* 每个模拟步每个三人组的人画的是哪一帧，累计秒数：window.trioShown[编号][帧]（格子之间一闪而过的帧也记得到，idle2 读数用） */
+        const sh = window.trioShown || (window.trioShown = {});
+        const fs = window.trioSwitch || (window.trioSwitch = {});   // 换帧时刻：[编号] = [[模拟秒, 帧], ...]（拍淡入胶片对准换帧那一下用）
+        for (const a of ACTS) {
+          const f = a.frame(); if (!f) continue;
+          const m = sh[a.cfg.id] || (sh[a.cfg.id] = {}); m[f] = (m[f] || 0) + 1 / 60;
+          const q = fs[a.cfg.id] || (fs[a.cfg.id] = []); if (!q.length || q[q.length - 1][1] !== f) q.push([+simT.toFixed(3), f]);
+        }
       }
       el += step;
       if (Q.get('crewlog') === '1') crewLog();
@@ -3011,7 +3056,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       const jet = ACTS.filter(a => a.peek()[0] && a.peek()[0].ja != null).map(a => { const b = a.peek()[0]; return [a.cfg.id, +b.ja.toFixed(3), b.jtg && b.jtg.slice(0, 2).map(Math.round), b.jm && b.jm.map(Math.round)]; });
       /* 朝前飞的平面道具（atk.aim）：[编号, x, y, 尖头朝向, 实际位移方向]，两个角应当一致 */
       const fly = ACTS.filter(a => a.flying).flatMap(a => a.flying().map(f => [a.cfg.id, ...f]));
-      (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last, ph, jet, fly });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
+      /* 出手路线（精引2 读数）：[编号, { 种类, 出手方向, 起始切线, 前 60 px 弦, 压着自己主角多长, … }]，见 trio.js paths() */
+      const path = ACTS.flatMap(a => a.paths().map(q => [a.cfg.id, q]));
+      (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last, ph, jet, fly, path });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
       const dx = i * W * sc;
       for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 168, 26);
@@ -3101,7 +3148,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       const step = i === 0 ? 1 / 60 : MS;
       for (let k = 0; k < Math.max(1, Math.round(step * 60)); k++) {
         const d = Particles.tick(1 / 60);   // 与主循环同构：粒子走真实时间，逻辑走 d
-        Particles.update(1 / 60);
+        Particles.update(1 / 60); TrioFX.update(1 / 60);
         derive(d); hudTick(d);
       }
       el += step;
@@ -3175,7 +3222,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
          都冻 35~110ms，而连点时命中是密集的，顿帧会一段一段接上。这个数
          在耗时曲线上完全看不出来：那些帧的渲染一切正常，只是世界没动。 */
       if (d === 0) froze++;
-      Particles.update(dt);
+      Particles.update(dt); TrioFX.update(dt);
       Ammo.update(d);
       Bubble.update(d, FX.struggle);
       S.t += d;
@@ -3251,7 +3298,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        和闪光正是这一下的可视化 —— 把它们一起冻住，爆炸就会迟到一百毫秒，
        读起来是"闪了一下、卡住、然后才炸开"。 */
     const dt = Particles.tick(raw);
-    Particles.update(raw);
+    Particles.update(raw); TrioFX.update(raw);
     /* 弹幕走 dt，跟游戏逻辑一起冻。这和粒子走真实时间并不矛盾：爆炸是"刚刚
        这一下"的可视化，冻住它就迟到了；而正在飞的弹幕是**下一下**的前奏，
        顿帧的意思就是全世界停下来看这一击，此刻别的东西还在飞就散掉了。 */
