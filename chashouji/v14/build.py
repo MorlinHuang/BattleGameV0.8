@@ -463,6 +463,51 @@ STRUGGLE_GUARD = 6
 STRUGGLE_FEATHER = 8
 
 
+# 后退步态（2026-10-01 用户：「男女主后退的动作还是不对，帧数不够、距离与动作不匹配导致滑步。而且没有左右腿交替向后，看着特别假」）。
+# 旧八格 gait/<档>/f1~f7 是让模型自己摆腿：前后两半是同一组姿势（f1 = f5 逐字节相同），同一条腿一直在往后踢；
+# 站地那只脚每格的位置也是随机的，和背景卷过的距离对不上。新版 walk/<档>/（walk/guide.py）先算好一个循环 WALK_N 格里
+# 两只拖鞋该在哪 —— 站地的脚从身后匀速挪到身前、抬起的脚从身前摆到身后，后半步两只脚对调，各自一直在自己那条地面线上
+# （近脚低、远脚高，交替就看在这里）—— 把拖鞋贴在这些位置上再让模型只画腿，挑拖鞋落位最准的候选（walk/score.py）。
+# 播哪一格按**量出来的**站地脚位置定（walk_load 的 at），不按格号平分：某一格站地脚比计划偏了几像素，就晚几像素再换到它。
+WALK_N = 16
+
+
+def slipper_blobs(a, mask, girl):
+    """赢方拖鞋色块 [(中心 x, 鞋底 y)]：女生白兔拖鞋 = 亮且不偏色，男生黑猫拖鞋 = 暗。只在蒙版放开区的地面带里找。"""
+    r, g, b = (a[..., k].astype(int) for k in range(3))
+    s = ((np.minimum(np.minimum(r, g), b) > 200) & (a.max(2).astype(int) - a.min(2) < 40)) if girl else (a.max(2) < 70)
+    ys = np.nonzero(mask.any(1))[0]
+    s &= mask
+    s[:ys.max() - 200] = False
+    lab, n = ndimage.label(ndimage.binary_closing(ndimage.binary_opening(s, np.ones((5, 5))), np.ones((9, 9))))
+    out = []
+    for k in range(1, n + 1):
+        yy, xx = np.nonzero(lab == k)
+        if len(xx) >= 800:
+            out.append((float(xx.mean()), int(yy.max())))
+    return out
+
+
+def walk_load(name):
+    """walk/<档>/ → (帧路径 w01..w15, at, 一步长 S 原图像素)。at[i] = 第 i 格（0 = base）在一个循环里的位置（0~1）：
+    = 站地那只脚离它起步处的距离 / 两步长。前半步 0 号脚（开局的后脚）站地，从第 0 格量；后半步 1 号脚站地，从第 WALK_N/2 格量。"""
+    d = os.path.join(HERE, 'walk', name)
+    plan = json.load(open(os.path.join(d, 'plan.json')))
+    mask = np.array(Image.open(os.path.join(HERE, 'gait', name, 'mask.png')))[..., 3] == 0
+    paths = [os.path.join(HERE, 'gait', name, 'base.png')] + [os.path.join(d, f'w{i:02d}.png') for i in range(1, WALK_N)]
+    tgt = {0: {'0': dict(x=plan['back'], line=plan['lines'][0], lift=0), '1': dict(x=plan['front'], line=plan['lines'][1], lift=0)}}
+    tgt.update({f['i']: f['feet'] for f in plan['frames']})
+    h = WALK_N // 2
+    def stance_x(i, foot):
+        t = tgt[i][foot]
+        blobs = slipper_blobs(np.array(Image.open(paths[i]).convert('RGB')), mask, name[0] == 'a')
+        return min(blobs, key=lambda q: abs(q[0] - t['x']) + abs(q[1] - t['line']))[0]
+    xs = [stance_x(i, '0' if i < h else '1') for i in range(WALK_N)]
+    S = abs(stance_x(0, '1') - xs[0])         # 一步长 = base 里两只拖鞋的间距
+    at = [abs(xs[i] - xs[0 if i < h else h]) / (2 * S) + (0.5 if i >= h else 0) for i in range(WALK_N)]
+    return paths[1:], [round(v, 4) for v in at], S
+
+
 def struggle_load(name, gait_mask):
     """返回 ([s1, s2, s3 的 RGB int16 数组], 取用权重 H×W×1)；这一档没做挣扎帧返回 ([], None)"""
     d = os.path.join(HERE, 'struggle', name)
@@ -667,11 +712,18 @@ def main():
         k = scales.get(name, SCALE)
         struggle, sw = struggle_load(name, os.path.join(d, 'mask.png'))
         frames = [name]
-        for f in range(1, 8):
+        walk = all(os.path.isfile(os.path.join(HERE, 'walk', name, f'w{i:02d}.png')) for i in range(1, WALK_N))   # 一整圈都挑好了才换新版
+        if walk:
+            # 新版后退步态：拖鞋是按计划贴好的、鞋底就在原地面线上，不用 plant_feet 拉腿（后半步站地的是远脚，
+            # 最低点本来就该比近脚高，拉到同一条线反而错）
+            srcs, at, S = walk_load(name)
+            srcs = [np.array(Image.open(q).convert('RGB')).astype(np.int16) for q in srcs]
+        else:
+            srcs = [plant_feet(os.path.join(d, f'f{f}.png'), os.path.join(d, 'base.png'), os.path.join(d, 'mask.png')) for f in range(1, 8)]
+        for f, img in enumerate(srcs, 1):
             g = f'{name}_g{f}'
-            img = plant_feet(os.path.join(d, f'f{f}.png'), os.path.join(d, 'base.png'), os.path.join(d, 'mask.png'))
             if struggle:
-                j = f % (len(struggle) + 1)          # 第 0、4 格是原图的腿，其余轮着换挣扎帧
+                j = f % (len(struggle) + 1)          # 格号是 (挣扎帧数+1) 的倍数的用原图的腿，其余轮着换挣扎帧
                 if j:
                     img = np.round(img * (1 - sw) + struggle[j - 1] * sw).astype(np.int16)
             meta, im, _ = build_pose(g, img, anchor=base_raw, scale=k, lose=LOSE(name))
@@ -680,8 +732,11 @@ def main():
             poses[g] = meta
             sheet.append((g, meta, im))
             frames.append(g)
-        cycle = round(2 * stride(os.path.join(d, 'base.png'), os.path.join(d, 'mask.png')) * k)
-        gaits[name] = {'frames': frames, 'cycle': cycle}
+        if walk:
+            gaits[name] = {'frames': frames, 'cycle': round(2 * S * k), 'at': at}
+        else:
+            gaits[name] = {'frames': frames, 'cycle': round(2 * stride(os.path.join(d, 'base.png'), os.path.join(d, 'mask.png')) * k)}
+        cycle = gaits[name]['cycle']
         print(name, 'gait cycle', cycle, 'px')
 
     # 过渡帧（2026-09-30 用户：「男女主的动作切换还是太生硬……需要加中间帧」）：tween/<档>/ 下 base.png（= 该档原图）

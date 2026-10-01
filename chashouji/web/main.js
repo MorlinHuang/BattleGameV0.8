@@ -57,7 +57,7 @@ const P = {
   /* 一次只走一档，每档至少停这么久。一件戒指盒能让拉力差 1 秒内从 0 冲到
      趴下那档，不拦的话跪和扑倒各一闪而过；人摔倒本来也是先跪、再扑、再趴。 */
   stageHold: 0.6,
-  /* 步态：八格一个循环（两步），按**位移**推进、不按时间 —— 背景不动脚就不动，被拽回来
+  /* 步态：一个循环两步（v14/walk 新版 16 格，旧版 gait 八格），按**位移**推进、不按时间 —— 背景不动脚就不动，被拽回来
      就倒着播。一个循环对应背景卷过多少像素，由 build.py 按每档原图里两脚的间距量出来
      （world.json 的 gaits[档].cycle，约 400~650）：这样站地的那只脚在画面上往前挪的速度
      正好等于地板卷过去的速度，脚像钉在地上。
@@ -439,8 +439,14 @@ function derive(dt) {
     // 往赢的那一方拖 = 正着走（倒退）；被拽回来 = 倒着播（往前走）
     const toward = FX.pose[0] === 'a' ? 1 : -1;
     FX.gaitPh += S.vel * toward * dt * P.pxPerM * P.gaitSlip / gait.cycle;
-    const n = gait.frames.length;
-    FX.frame = gait.frames[((Math.floor(FX.gaitPh * n) % n) + n) % n];
+    const n = gait.frames.length, ph = FX.gaitPh - Math.floor(FX.gaitPh);
+    if (gait.at) {
+      /* 新版后退步态（v14/walk，16 格两步）：at[i] 是第 i 格站地那只脚**量出来的**位置（占一个循环的几分之几）。
+         播离当前相位最近的那一格 —— 站地的脚在它那一格的正中和地板对齐，前后各差半格，不会一格格越攒越偏 */
+      let best = 0, bd = 2;
+      gait.at.forEach((a, i) => { const d = Math.min(Math.abs(ph - a), 1 - Math.abs(ph - a)); if (d < bd) { bd = d; best = i; } });
+      FX.frame = gait.frames[best];
+    } else FX.frame = gait.frames[Math.floor(ph * n)];
     FX.bob = 0;
   } else {
     FX.frame = FX.pose;
@@ -1805,8 +1811,9 @@ const phonePos = () => [FX.phoneX, FX.phoneY];
    这条线上（女生扑倒/趴那两张原图她整个人比男生的脚高 20~28），超过 maxFloat 的是腾空的帧，不印。两人在世界里挪动时，把这几段这一帧扫过的地方按**世界横坐标**记进一排格子（跟地板一起卷，
    镜头走了印子留在原地），每格记最后一次被蹭的时刻；画的时候按离现在多久淡掉。
    只记时刻不叠透明度：同一块地一秒被蹭六十次，叠起来会越蹭越黑，而真实的擦痕蹭一次和蹭十次差不多。
-   颜色是比地板浅的一道（木地板被鞋底、膝盖磨亮），外沿一道深一点的细线把它从米色地板里描出来
-   （明亮底图上的规矩：看得见靠轮廓，见 chashouji-fx）。每格按位置哈希出粗细和深浅，读成一道道擦痕而不是一条带子。 */
+   颜色：灰色的一整片（2026-10-01 用户：「地上的拖痕是金色的，而且特别细碎。改成灰色的，大块一些，不要三条细线」）。
+   以前是米白擦亮 + 深木色外沿的三道细线，在米色地板上读成金色碎线。现在每格画一根竖条，高度按平滑噪声起伏、
+   相邻格连成一片，边缘参差；按长段（约 30~60 像素）偶尔断开，读成一块一块的灰印。两遍：外圈淡、内芯浓，边不发硬。 */
 const SCUFF = {
   cell: 3,          // 地板按世界横坐标每几像素记一格
   life: 5,          // 蹭上之后多少秒完全消失（用户定的 5 秒）
@@ -1814,11 +1821,13 @@ const SCUFF = {
   minV: 0.25,       // 拖动速度（米/秒）低于它不算在拖 —— 礼物停了两人原地僵着，不该还在往地上印
   y: 3,             // 痕的中线在输方最低点往下几像素（痕在贴地那一点前面一点点，不被身子的轮廓线压住）
   maxFloat: 40,     // 输方最低点离脚底线超过这么多算腾空（生图画成了飞扑），这一帧不印
-  lanes: [-5, 0, 5.5],   // 一格里画三道细线，各自在中线上下的偏移（像素）
-  lw: 4,            // 每道细线的粗细上限（像素）；2.2 在手机上缩到一个像素，几乎看不见（2026-09-30 截图）
-  a: 0.75,          // 最浓的一道的透明度
-  fill: [252, 236, 214],     // 擦亮的颜色：比地板浅的米白
-  edge: [96, 64, 40],        // 外沿细线：深木色
+  h: 24,            // 一片灰印的厚度（像素，外圈），按噪声在 0.6~1.2 倍之间起伏；16 在手机上只剩一道细条（2026-10-01 截图）
+  core: 0.55,       // 内芯厚度占外圈的比例
+  wave: 7,          // 厚度起伏的噪声每几格一个节点（7 格 = 21 像素）
+  gap: 14,          // 断开的判定每几格一段（14 格 = 42 像素一块）
+  gapP: 0.22,       // 一段断开的概率
+  a: 0.5,           // 内芯透明度（外圈再乘 0.5）
+  rgb: [112, 110, 106],      // 灰（略偏暖一点点，不发蓝）
   dustEvery: 0.09,  // 拖动时每隔几秒在输方最前面那段贴地处扬一小团灰
 };
 const Scuff = (() => {
@@ -1858,20 +1867,19 @@ const Scuff = (() => {
       if (!at) return;
       const c = SCUFF.cell;
       const i0 = Math.max(0, Math.floor(-ox / c)), i1 = Math.min(at.length - 1, Math.ceil((W - ox) / c));
+      /* 平滑值噪声：每 wave 格一个哈希节点，中间 smoothstep 插值 —— 厚度一段段缓缓起伏，不是每格乱跳 */
+      const noise = (i, k) => { const u = i / SCUFF.wave, j = Math.floor(u), t = u - j, s = t * t * (3 - 2 * t);
+        return hash(j, k) * (1 - s) + hash(j + 1, k) * s; };
+      ctx.fillStyle = `rgb(${SCUFF.rgb.join(',')})`;
       for (let pass = 0; pass < 2; pass++) {
-        ctx.fillStyle = `rgb(${(pass ? SCUFF.fill : SCUFF.edge).join(',')})`;
         for (let i = i0; i <= i1; i++) {
           const age = clock - at[i];
-          if (age >= SCUFF.life) continue;
-          const k = Math.min(1, (SCUFF.life - age) / SCUFF.fade), y0 = GROUND + SCUFF.y + ys[i];
-          SCUFF.lanes.forEach((ly, l) => {
-            const h = hash(i >> 2, l);                  // 四格（12 像素）一段同粗同浓，读成连贯的一道
-            if (h < 0.18) return;                        // 这一道在这里断开
-            const lw = SCUFF.lw * (0.45 + 0.55 * h);
-            ctx.globalAlpha = SCUFF.a * k * (0.5 + 0.5 * hash(i >> 3, l + 7)) * (pass ? 1 : 0.6);
-            if (pass) ctx.fillRect(ox + i * c, y0 + ly - lw / 2, c + 0.5, lw);
-            else ctx.fillRect(ox + i * c, y0 + ly - lw / 2 - 1.2, c + 0.5, lw + 2.4);   // 先铺深色外沿，比亮线宽一圈
-          });
+          if (age >= SCUFF.life || hash(Math.floor(i / SCUFF.gap), 3) < SCUFF.gapP) continue;
+          const k = Math.min(1, (SCUFF.life - age) / SCUFF.fade);
+          const h = SCUFF.h * (0.6 + 0.6 * noise(i, 1)) * (pass ? SCUFF.core : 1);
+          const cy = GROUND + SCUFF.y + ys[i] + (noise(i, 5) - 0.5) * 4;     // 中线上下飘一点，边不是一条直线
+          ctx.globalAlpha = SCUFF.a * k * (0.75 + 0.25 * noise(i, 9)) * (pass ? 1 : 0.5);
+          ctx.fillRect(ox + i * c, cy - h / 2, c, h);       // ox、c 都是整数，相邻格正好挨着（多画半像素的话半透明重叠处会叠出一道道竖纹）
         }
       }
       ctx.globalAlpha = 1;
@@ -2932,11 +2940,11 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* ?gaitstrip=aK 把某一档的步态循环按顺序摊开：两条腿是不是交替往后、上半身
      有没有跟着跳。 */
   if (Q.has('gaitstrip')) {
-    const g = WORLD.gaits[Q.get('gaitstrip') || 'aK'].frames;
+    const G = WORLD.gaits[Q.get('gaitstrip') || 'aK'], g = G.frames;
     const p = { a: 81, b: 19 }[g[0][0]];
     filmstrip(g.length, (i) => {
       S.p = p; S.pos = 0; S.vel = 0; FX.pose = g[0]; FX.poseT = 0;
-      FX.gaitPh = (i + 0.5) / g.length;
+      FX.gaitPh = G.at ? G.at[i] : (i + 0.5) / g.length;
       derive(0);
     }, (i) => `${FX.frame}`);
     return;
