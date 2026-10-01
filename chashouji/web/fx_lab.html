@@ -25,7 +25,8 @@
          件：beam B19 B22 G23 G30 / ribbon G9 G13 G17 B12 G29 / jet B1 G1 B20 / qi B23 G14 / trail G16 G15 G20 / rope G11 / petal G7
     ?film=<模式> [&recipes=a,b,..] [&looks=..]           → 离线拍胶片：固定 1/60 步长、定种子，画到 #sheet，window.FILM = dataURL
     ?bench=1 [&frames=600] [&bench2=1]                   → 真实计时：同屏 6 人 + 主角的负载，旧 / 新各跑一遍，结果写进标题；
-                                                          bench2 = 再加第二批的件（一条水柱、一条绸、一记橡皮臂、一个带火尾的狐火、一组剑气）
+                                                          bench2 = 再加第二批的件（一条水柱、一条绸、一记橡皮臂、一个带火尾的狐火、一组剑气）；
+                                                          &b2off=stream,silk,arm,fox 不画这几件的本体（分账）
   第二批（带状物 / 水柱喷雾 / 剑气 / 拖尾 / 绳 / 花瓣上限）的旧侧：drawWhip / drawArm / drawSwing / puff 是 trio.js 闭包里的，抄在 oldWhip / oldArm /
   oldSwing / oldPuff（注明出处行号，2026-10-01 工作区版本）；水柱 / 喷雾运行时从 crew.js 原文切 drawStream / drawMist 执行。
   水滴的发射与飞行两侧共用一份（照 trio.js stepJet / stepDrops 的口径简化：定点喷口、反解仰角、扫动落点），只有画法不同。
@@ -346,6 +347,12 @@ async function loadCrew() {
   if (a < 0 || b < 0) throw new Error('fx_lab: crew.js 里找不到 drawStream / drawMist 的边界');
   return new Function('MIST', src.slice(a, b) + '\nreturn { drawStream, drawMist };')({ fluid: { life: 0.8 } });
 }
+/* 精特3 几何图元：crew.js 整个文件在函数作用域里执行一份，拿嫦娥月光束 / 法海咒语 / 水柱的现行画法（fx.js 的 FxShape 是全局，crew.js 里照常能用） */
+async function loadCrewAll() {
+  const src = await fetch('crew.js?v=' + V).then(r => r.text());
+  return new Function(src + '\nreturn { drawStream, drawMantra, drawMoonBeams, CHANGE, FAHAI_FX };')();
+}
+let CREWALL = null;
 const img = (src) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('加载失败 ' + src)); i.src = src; });
 /* 底图：night = v15 雷雨夜客厅（正式页默认）/ day = v14 白天明亮客厅 / esports = v15 电竞房（三种底上都要清楚） */
 const BGS = { night: 'assets/world/v15/room1.webp', day: 'assets/world/room1.webp', esports: 'assets/world/v15/room2.webp' };
@@ -383,6 +390,34 @@ function scene(mode, opt) {
       drawOld(ctx) { for (const q of slashes) oldSlash(ctx, q); },
       drawNew() {},
     };
+  }
+  /* 精特3 几何图元盘点：全画在"旧"那张画布上，用的是**正式页现行代码**（fx.js Particles / crew.js / 斩痕）。改前改后各拍一遍（换 fx.js、crew.js
+     之前和之后），同种子同时刻，拼成上下两行。斩痕：fx.js 有 FxShape（改后）就走 FxShape.slash（= 引擎按接入清单换掉 trio.js drawSlash 之后的样子），没有就走旧 drawSlash 原样 */
+  if (mode === 'geo') {
+    const k = opt.look, T0 = 0.03;
+    if (k === 'crescent' || k === 'thud' || k === 'houyi') {
+      let fired = false;
+      return { T: 1, step(t) { if (!fired && t >= T0) { fired = true; OLD[k].burst(HIT[0], HIT[1], SIDE, s); } }, drawOld() {}, drawNew() {} };
+    }
+    if (k === 'slash') {                                  // G14 金色斩痕（用户截图二）：两道
+      const Q = QIS.G14.Q, cuts = [0, 1].map(i => ({ t: -T0 - i * Q.gap, p: [HIT[0] + (i ? 30 : -20), HIT[1] + (i ? -25 : 15)], ang: Q.ang + (i ? 0.45 : -0.1), flip: 1 }));
+      let fired = false;
+      const one = (ctx, q) => (typeof FxShape !== 'undefined' ? FxShape.slash(ctx, q, Q) : oldSlashQ(ctx, q, Q));
+      return { T: 1, step(t, dt) { for (const q of cuts) q.t += dt; if (!fired && cuts[0].t >= 0.05) { fired = true; OLD.star.burst(HIT[0], HIT[1], SIDE, s); } },
+               drawOld(ctx) { for (const q of cuts) if (q.t < Q.life) one(ctx, q); }, drawNew() {} };
+    }
+    if (k === 'stream' || k === 'mantra') {
+      const C = k === 'stream' ? JETS.B1 : JETS.G1, sim = jetSim(C, () => {}, () => {});
+      return { T: 2, step(t, dt) { sim.step(dt, t >= T0 && t < 1.6); },
+               drawOld(ctx) { ctx.save(); if (k === 'stream') CREWALL.drawStream(ctx, sim.drops, { m: C.m }); else CREWALL.drawMantra(ctx, sim.drops); ctx.restore(); }, drawNew() {} };
+    }
+    if (k === 'moon') {                                   // 嫦娥：头顶三个光点，第二个蓄 0.4 s → 轰 0.3 s 砸到命中点
+      const B = CREWALL.CHANGE.beam, S = { ph: 'charge', k: 1, pt: 0, motes: [] }, b = { t: 2, spray: 99, beam: S, kick: 0 };
+      const g = { orbs: [[330, 800], [500, 770], [670, 800]], end: HIT, s: 1 }, TT = { enter: 0, exit: 1 };
+      return { T: 1, step(t, dt) { b.t += dt; if (t < T0) return; S.pt += dt; if (S.ph === 'charge' && S.pt >= B.T.charge) { S.ph = 'fire'; S.pt = 0; OLD.star.burst(HIT[0], HIT[1], SIDE, 0.55); } },
+               drawOld(ctx) { CREWALL.drawMoonBeams(ctx, b, g, TT, 'beam'); CREWALL.drawMoonBeams(ctx, b, g, TT, 'orbs'); }, drawNew() {} };
+    }
+    throw new Error('geo: 未知件 ' + k);
   }
   if (mode === 'beam') {
     const L = opt.look, B = L.beam, fx = TrioFX.beam(B);
@@ -617,13 +652,24 @@ function film(kind) {
     rope: { times: [0.0, 0.3, 0.6, 0.9, 1.2, 1.5], crop: [130, 740, 420, 520] },
     petal: { times: [0.08, 0.25, 0.45, 0.7, 1.0, 1.4], crop: [0, 740, 960, 640] },
   };
+  const GEO = {                                                                                  // 精特3：每件一行，crop 520 × 460
+    crescent: { times: [0.05, 0.1, 0.16, 0.24, 0.32, 0.42], crop: [HIT[0] - 200, HIT[1] - 230, 520, 460] },
+    thud: { times: [0.05, 0.1, 0.16, 0.24, 0.32, 0.42], crop: [HIT[0] - 200, HIT[1] - 230, 520, 460] },
+    houyi: { times: [0.05, 0.1, 0.16, 0.24, 0.32, 0.42], crop: [HIT[0] - 200, HIT[1] - 230, 520, 460] },
+    slash: { times: [0.06, 0.09, 0.14, 0.22, 0.32, 0.45], crop: [HIT[0] - 200, HIT[1] - 230, 520, 460] },
+    stream: { times: [0.3, 0.55, 0.85, 1.2, 1.5, 1.75], crop: [400, 820, 520, 460] },
+    mantra: { times: [0.3, 0.55, 0.85, 1.2, 1.5, 1.75], crop: [150, 760, 520, 460] },
+    moon: { times: [0.1, 0.3, 0.45, 0.52, 0.6, 0.7], crop: [190, 740, 520, 460] },
+  };
+  if (kind === 'geo') for (const k of (Q.get('looks') || Object.keys(GEO).join(',')).split(','))
+    rows.push({ mode: 'geo', opt: { look: k, s }, label: k, times: GEO[k].times, crop: GEO[k].crop });
   if (B2[kind]) for (const k of (Q.get('looks') || PIECES[kind].join(',')).split(','))
     rows.push({ mode: kind, opt: { look: k, s, dir: +(Q.get('dir') || 0) }, label: k, times: B2[kind].times, crop: B2[kind].crop });
-  const cw = kind === 'hit' ? 240 : kind === 'rope' ? 260 : kind === 'dust' ? 420 : 400, sc0 = cw / rows[0].crop[2], ch = Math.round(rows[0].crop[3] * sc0);
+  const cw = kind === 'geo' ? 300 : kind === 'hit' ? 240 : kind === 'rope' ? 260 : kind === 'dust' ? 420 : 400, sc0 = cw / rows[0].crop[2], ch = Math.round(rows[0].crop[3] * sc0);
   const ncol = rows[0].times.length, LBL = 26;
   /* &schemes=jp1,A,B,AB：每一项拍"旧 + 每个方案"一行一行往下排（同种子、同时刻）；不给就是旧 + 当前方案两行 */
-  const SCH = (Q.get('schemes') || TrioFX.scheme()).split(','), NAME = { jp1: '精特1', A: 'A 程序化', B: 'B 生图', AB: 'A+B' };
-  const per = 1 + SCH.length;
+  const SCH = kind === 'geo' ? [TrioFX.scheme()] : (Q.get('schemes') || TrioFX.scheme()).split(','), NAME = { jp1: '精特1', A: 'A 程序化', B: 'B 生图', AB: 'A+B' };
+  const per = kind === 'geo' ? 1 : 1 + SCH.length;      // geo 只拍"旧"那张（正式页现行代码）
   const sheet = document.getElementById('sheet');
   sheet.width = ncol * cw; sheet.height = rows.length * per * (ch + LBL);
   const G = sheet.getContext('2d');
@@ -640,7 +686,7 @@ function film(kind) {
       step(sc, t, DT); t += DT;
       if (t + 1e-6 >= row.times[k]) {
         render(sc, cOld, cNew);
-        for (const [c, j, tag] of si ? [[cNew, si + 1, NAME[sch]]] : [[cOld, 0, '旧'], [cNew, 1, NAME[sch]]]) {
+        for (const [c, j, tag] of kind === 'geo' ? [[cOld, 0, typeof FxShape !== 'undefined' ? '改后' : '改前']] : si ? [[cNew, si + 1, NAME[sch]]] : [[cOld, 0, '旧'], [cNew, 1, NAME[sch]]]) {
           const y = (ri * per + j) * (ch + LBL);
           G.drawImage(c, cx, cy - VIEW.y0, cw0, ch0, k * cw, y + LBL, cw, ch);
           G.fillStyle = j ? '#9fe' : '#fb9'; G.font = '15px system-ui';
@@ -663,6 +709,7 @@ function bench(frames) {
     const fxs = [TrioFX.beam(LOOKS.B22.beam), TrioFX.beam(LOOKS.G23.beam)], st = [{}, {}];
     /* bench2：第二批的件同屏再加一份 —— B1 水柱一直喷、G9 红绸每 0.6 s 抽一下、B12 橡皮臂每 0.8 s 出一拳、G16 狐火每 0.6 s 扔一个（带火尾）、
        B23 每 1.2 s 三道剑气。水柱的水滴两侧各跑一份同样的模拟（定种子），落点溅射走各自的 water.drip */
+    const B2OFF = new Set((Q.get('b2off') || '').split(','));      // 第二批分账：&b2off=stream,silk,arm,fox 不画这几件的本体（它们放的粒子照常）
     const B2 = Q.get('bench2') ? (() => {
       const W = side === 'old' ? OLD.water : TrioFX.RECIPE.water;
       return { jet: jetSim(JETS.B1, (x, y) => W.drip(x, y, +1), () => {}), stream: TrioFX.stream(), silk: TrioFX.ribbon(RIB.G9.Q, 'silk'), arm: TrioFX.ribbon(RIB.B12.A, 'arm'),
@@ -730,10 +777,10 @@ function bench(frames) {
       } else {
         if (OFF !== 'beam' && OFF !== 'all') fxs.forEach(fx => fx.draw(g));
         if (B2) {
-          B2.stream.draw(g, B2.jet.drops, JETS.B1.m, B2.jet.dir());
-          if (wt < 0.44) B2.silk.draw(g, RIB.G9.from, RIB.G9.dir * Math.PI / 180, RIB.G9.to, whipE(wt, RIB.G9.phases), wt, 1);
-          if (at < 0.6) { const R = RIB.B12, k = punchK(at, R.A.phases); B2.arm.draw(g, R.wr, null, [R.fr[0] + (R.to[0] - R.fr[0]) * k, R.fr[1] + (R.to[1] - R.fr[1]) * k], 1, at, 1); const tp = B2.arm.tip(); drawFist(g, R, tp[0], tp[1], tp[2]); }
-          for (const sh of B2.shots) { B2.fox.draw(g, sh); drawItem(g, TRAILS.G16, sh); }
+          if (!B2OFF.has('stream')) B2.stream.draw(g, B2.jet.drops, JETS.B1.m, B2.jet.dir());
+          if (wt < 0.44 && !B2OFF.has('silk')) B2.silk.draw(g, RIB.G9.from, RIB.G9.dir * Math.PI / 180, RIB.G9.to, whipE(wt, RIB.G9.phases), wt, 1);
+          if (at < 0.6 && !B2OFF.has('arm')) { const R = RIB.B12, k = punchK(at, R.A.phases); B2.arm.draw(g, R.wr, null, [R.fr[0] + (R.to[0] - R.fr[0]) * k, R.fr[1] + (R.to[1] - R.fr[1]) * k], 1, at, 1); const tp = B2.arm.tip(); drawFist(g, R, tp[0], tp[1], tp[2]); }
+          for (const sh of B2.shots) { if (!B2OFF.has('fox')) B2.fox.draw(g, sh); drawItem(g, TRAILS.G16, sh); }
         }
         if (OFF !== 'part' && OFF !== 'all') TrioFX.draw(g);
       }
@@ -787,7 +834,7 @@ function frame(now) {
   P2 = await secondParticles();
   const [okFx] = await Promise.all([TrioFX.load(V), Particles.loadShapes(V, false), P2.loadShapes(V, false)]);
   if (!okFx) throw new Error('fx_lab: trio_fx 贴图没加载全');
-  OLD = await loadOld(Particles); OLD2 = await loadOld(P2); CREW = await loadCrew();
+  OLD = await loadOld(Particles); OLD2 = await loadOld(P2); CREW = await loadCrew(); CREWALL = await loadCrewAll();
   BG = await loadBg(Q.get('bg') || 'night');
   if (Q.get('scheme')) TrioFX.setScheme(Q.get('scheme'));
   const srcs = new Set([...Object.values(RIB).filter(r => r.sheet).map(r => r.sheet), ...Object.values(TRAILS).map(c => c.prop || c.atlas.src)]);

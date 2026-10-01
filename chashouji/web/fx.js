@@ -15,6 +15,160 @@
  */
 'use strict';
 
+/* FxShape —— 去几何图元的矢量画法（精特3，2026-10-01）。
+   用户看正式页："光晕的圆圈、弧形的特效，太规整不自然，一看就是代码的产物"。正圆 / 正椭圆描边、等宽直线、规整弧带
+   都换成同一套思路（精特1b A 方案的矢量版，不要贴图，随 fx.js 一起到、首帧就能用）：
+     · 轮廓用几道不公约的谐波扰动（角向 / 沿长度），谐波的相位按种子定、随时间慢慢漂 —— 不圆、不直、每一下都不一样，动起来不重复；
+     · 宽度也按谐波起伏，越老越多地方宽度掉到 0 = 断成一截截两头收尖的弧段（"笔触"，不是描边）；
+     · 冲击波两道波前错开（主波 + 内侧一道细的余波）。
+   种子由调用方给（同一下炸出来的"深色托底 + 亮色"两圈要同形，见 Particles ring 的 shapeSeed）。全部只填充多边形，不用 shadow / filter。 */
+const FxShape = (() => {
+  const TAU = 6.283185307179586;
+  function rng(seed) {                                    // mulberry32
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  const hash = (...v) => { let h = 2166136261; for (const x of v) { h ^= Math.round(x) | 0; h = Math.imul(h, 16777619); } return h >>> 0; };
+  /* 一组谐波：[频率, 振幅, 相位, 漂移速度] × 4。角向用整数频率（绕一圈首尾接得上），沿长度的用非整数 */
+  function harm(seed, ks = [2, 3, 5, 8]) {
+    const r = rng(seed), H = [];
+    for (let i = 0; i < ks.length; i++) H.push(ks[i], [1, 0.6, 0.42, 0.28][i], r() * TAU, (r() - 0.5) * 3.2);
+    H.rot = r() * TAU;
+    return H;
+  }
+  const n = (H, x, t, sh = 0) => {                          // −1..1
+    let v = 0;
+    for (let i = 0; i < H.length; i += 4) v += H[i + 1] * Math.sin(H[i] * x + H[i + 2] + sh * (i + 1) + H[i + 3] * t);
+    return v / 2.3;
+  };
+  const sstep = (e0, e1, x) => { const k = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return k * k * (3 - 2 * k); };
+
+  /* 一道波前：半径 R（y 压 sq）、最宽 w；thr 越大断得越多（≤ −0.2 基本不断），null = 一整圈不断（只起伏）。宽度 = w × 包络，包络在断口两侧平滑收到 0 */
+  function front(ctx, x, y, R, sq, w, thr, t, H, sh) {
+    const N = Math.max(28, Math.min(84, Math.round(R * 0.45)));
+    const ox = new Float32Array(N), oy = new Float32Array(N), ix = new Float32Array(N), iy = new Float32Array(N), on = new Uint8Array(N);
+    let any = 0, gap = -1;
+    for (let i = 0; i < N; i++) {
+      const a = i / N * TAU, th = a + H.rot;
+      const rr = R * (1 + 0.11 * n(H, a, t, sh)), m = 0.5 + 0.5 * n(H, a, t * 0.7, sh + 1.9);
+      const k = thr == null ? 1 : sstep(thr, thr + 0.22, m), hw = w * 0.5 * k * (0.55 + 0.9 * m);
+      on[i] = hw > 0.25; if (on[i]) any = 1; else if (gap < 0) gap = i;
+      const c = Math.cos(th), s = Math.sin(th);
+      ox[i] = x + c * (rr + hw); oy[i] = y + s * (rr + hw) * sq; ix[i] = x + c * (rr - hw); iy[i] = y + s * (rr - hw) * sq;
+    }
+    if (!any) return;
+    ctx.beginPath();
+    if (gap < 0) {                                         // 一整圈没断：外圈 + 内圈反向，evenodd 掏空
+      for (let i = 0; i < N; i++) i ? ctx.lineTo(ox[i], oy[i]) : ctx.moveTo(ox[i], oy[i]);
+      ctx.closePath();
+      ctx.moveTo(ix[N - 1], iy[N - 1]); for (let i = N - 2; i >= 0; i--) ctx.lineTo(ix[i], iy[i]);
+      ctx.closePath(); ctx.fill('evenodd'); return;
+    }
+    for (let j = 1, run = []; j <= N; j++) {               // 从一个断口开始绕一圈，按连续的"有"切成段
+      const i = (gap + j) % N;
+      if (on[i]) run.push(i);
+      if ((!on[i] || j === N) && run.length) {
+        if (run.length > 1) {
+          ctx.moveTo(ox[run[0]], oy[run[0]]);
+          for (const q of run) ctx.lineTo(ox[q], oy[q]);
+          for (let q = run.length - 1; q >= 0; q--) ctx.lineTo(ix[run[q]], iy[run[q]]);
+          ctx.closePath();
+        }
+        run = [];
+      }
+    }
+    ctx.fill();
+  }
+  /* 冲击波：主波 + 内侧余波（0.78 R、细一半、断得更早）。u 0..1 = 年龄（越老断得越多），t 秒（谐波漂移） */
+  function ring(ctx, x, y, r, sq, w, u, t, H) {
+    front(ctx, x, y, r, sq, w, 0.75 * u - 0.12, t, H, 0);   // 前三成寿命基本连着（命中那一下要读得出"一圈"），之后越来越碎
+    const A = ctx.globalAlpha;
+    ctx.globalAlpha = A * 0.6;
+    front(ctx, x, y, r * 0.78, sq, w * 0.55, 0.1 + 0.7 * u, t, H, 2.7);
+    ctx.globalAlpha = A;
+  }
+  /* 速度线 / 火花：尾 (x0, y0) 收尖 → 头 (x1, y1) 圆头宽 w。替换 lineCap round 的等宽直线 */
+  function streak(ctx, x0, y0, x1, y1, w) {
+    const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L * w / 2, ny = dx / L * w / 2, a = Math.atan2(dy, dx);
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1 + nx, y1 + ny); ctx.arc(x1, y1, w / 2, a + Math.PI / 2, a - Math.PI / 2, true); ctx.closePath(); ctx.fill();
+  }
+  /* 不规则斑块路径（调用方 fill / stroke）：10 个顶点按谐波推拉、二次曲线连 */
+  function blob(ctx, x, y, r, seed) {
+    const H = harm(seed, [2, 3, 4, 7]), K = 10, P = [];
+    for (let i = 0; i < K; i++) { const a = i / K * TAU; P.push([x + Math.cos(a + H.rot) * r * (1 + 0.22 * n(H, a, 0)), y + Math.sin(a + H.rot) * r * (1 + 0.22 * n(H, a, 0))]); }
+    ctx.beginPath();
+    for (let i = 0; i <= K; i++) {
+      const p = P[i % K], q = P[(i + 1) % K], mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+      i ? ctx.quadraticCurveTo(p[0], p[1], mx, my) : ctx.moveTo(mx, my);
+    }
+    ctx.closePath();
+  }
+  /* 弧形刀光（替换 trio.js drawSlash）：s { t, p, ang, flip }、Q = A.slash { len, w, color, life }。
+     同旧的接口和节奏：0.07 s 从弦的一头划到另一头、后半寿命淡出；层次同旧（深色托底 → 外晕 → 本色 → 白芯）。
+     改的是形：中线半径沿弧起伏、宽度两头收尖且沿弧鼓瘪不匀、划过去的前沿是一条更尖的舌头；后半寿命从两头往中间断成碎段（碎散），
+     外侧多拖两缕细丝（拉丝）。种子取 s.ang（每道随机），同一道每帧同形 */
+  const SLASH_L = (c) => [[1.35, 'rgba(15,30,70,.55)'], [2.2, `rgba(${c[0]},${c[1]},${c[2]},.35)`], [1, `rgba(${c[0]},${c[1]},${c[2]},.95)`], [0.35, 'rgba(255,255,255,1)']];
+  function slash(ctx, s, Q) {
+    if (s.t < 0 || !s.p) return;
+    const c = Q.color, R = Q.len / 2, life = Q.life || 0.45, dr = Math.min(1, s.t / 0.07), fade = Math.min(1, (life - s.t) / (life * 0.5));
+    if (fade <= 0) return;
+    const H = harm(hash(s.ang * 1e4, 7), [1.7, 2.9, 4.3, 7.1]), u = s.t / life, brk = Math.max(0, (u - 0.45) / 0.55);
+    const a0 = -0.9, span = 1.8, M = 26;
+    ctx.save(); ctx.translate(s.p[0], s.p[1]); ctx.rotate(s.ang); ctx.scale(1, s.flip || 1); ctx.globalAlpha = fade;
+    const cy = R * 0.4, pt = (f, off) => { const a = a0 + span * f - Math.PI / 2, rr = R * (1 + 0.07 * n(H, f * 3, s.t * 2)) + off; return [Math.cos(a) * rr, cy + Math.sin(a) * rr]; };
+    for (const [wk, col] of SLASH_L(c)) {
+      ctx.fillStyle = col; ctx.beginPath();
+      let open = false; const inner = [];
+      const flush = () => { if (open) { for (let q = inner.length - 1; q >= 0; q--) ctx.lineTo(inner[q][0], inner[q][1]); ctx.closePath(); } open = false; inner.length = 0; };
+      for (let i = 0; i <= M; i++) {
+        const f = i / M * dr;
+        /* 宽：两头收尖（sin^0.7）× 沿弧鼓瘪 × 前沿舌头（离划到的那一点越近越尖）× 碎散（谐波低于阈值的地方断开，从两头先断） */
+        const env = Math.pow(Math.sin(Math.PI * f), 0.7) * (dr >= 1 ? 1 : Math.min(1, (dr - f) / 0.12));
+        const m = 0.5 + 0.5 * n(H, f * 5, 0, 1.3), cut = brk > 0 ? sstep(brk * 0.9 + Math.abs(f - 0.5) * brk, brk * 0.9 + Math.abs(f - 0.5) * brk + 0.18, m) : 1;
+        const hw = Q.w * wk * 0.62 * env * (0.7 + 0.6 * m) * cut;
+        if (hw < 0.3) { flush(); continue; }
+        const o = pt(f, hw), q = pt(f, -hw * 0.6);             // 月牙：往外鼓得多、内沿收得少（同旧"内弧往里收"）
+        if (!open) { ctx.moveTo(o[0], o[1]); open = true; } else ctx.lineTo(o[0], o[1]);
+        inner.push(q);
+      }
+      flush(); ctx.fill();
+    }
+    /* 拉丝：外侧两缕细丝，比刀光晚一点划到、先断 */
+    ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},.8)`;
+    for (const k of [1, 2]) {
+      const off = Q.w * (0.75 + 0.55 * k), f0 = 0.15 * k, f1 = Math.min(dr, 1) * (1 - 0.1 * k) - brk * 0.5;
+      if (f1 - f0 < 0.05) continue;
+      ctx.beginPath();
+      const L = [];
+      for (let i = 0; i <= 12; i++) { const f = f0 + (f1 - f0) * i / 12, hw = Q.w * 0.09 * Math.sin(Math.PI * i / 12) * (1 + 0.5 * n(H, f * 7, s.t, k)); L.push([pt(f, off + hw), pt(f, off - hw)]); }
+      L.forEach(([o], i) => (i ? ctx.lineTo(o[0], o[1]) : ctx.moveTo(o[0], o[1])));
+      for (let i = L.length - 1; i >= 0; i--) ctx.lineTo(L[i][1][0], L[i][1][1]);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+  /* 波动的光带（替换"四层同宽直线"的光束）：O → E，每层 [宽倍数, rgb, 不透明度]，中线横向三频波往前传（两头钉住）、宽度沿长度脉动、
+     出口胀一点；每层相位错开（不同心）。env 0..1 整体粗细 */
+  function wavyBand(ctx, O, E, W, layers, t, seed) {
+    const dx = E[0] - O[0], dy = E[1] - O[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, N = Math.max(6, Math.ceil(L / 28));
+    const H = harm(seed, [1.3, 2.7, 4.9, 8.3]), amp = Math.min(22, W * 0.35 + 3);
+    layers.forEach(([k, rgb, a], li) => {
+      const up = [], dn = [];
+      for (let i = 0; i <= N; i++) {
+        const f = i / N, d = f * L, env = Math.sin(Math.PI * Math.min(1, f * 1.6)) ** 0.5 * (1 - 0.4 * f);
+        const o = amp * env * n(H, f * 4, t * 9, li * 0.7), hw = W * k * 0.5 * (1 + 0.35 * Math.exp(-d / 50)) * (1 + 0.14 * n(H, f * 9, t * 14, li + 2));
+        const cx = O[0] + ux * d - uy * o, cy = O[1] + uy * d + ux * o;
+        up.push([cx - uy * hw, cy + ux * hw]); dn.push([cx + uy * hw, cy - ux * hw]);
+      }
+      ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`; ctx.beginPath();
+      up.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+      for (let i = dn.length - 1; i >= 0; i--) ctx.lineTo(dn[i][0], dn[i][1]);
+      ctx.closePath(); ctx.fill();
+    });
+  }
+  return { rng, hash, harm, n, ring, front, streak, blob, slash, wavyBand };
+})();
+
 /* 聊天气泡图标（真相喷雾：雾里飘的、命中时从男生脸上蹦出来的"被翻出来的聊天记录"）。
    以 (0,0) 为中心、半宽 r：圆角框 + 左下一个小尾巴 + 三个点。粒子（kind 'chat'）和 crew.js 的雾共用这一个画法。
    描边是实体靠轮廓那条规矩：白框在浅绿墙上不描边就化掉。 */
@@ -168,7 +322,7 @@ const Particles = (function () {
   /* kind 只有六种，都是形态而非题材：
        dot   光斑，会从 r 涨到 r1
        spark 沿速度方向的短亮线，速度越快拉得越长
-       ring  扩散的椭圆环（贴地看所以压扁）
+       ring  扩散的涟漪（贴地看所以压扁；FxShape.ring：不圆、粗细不匀、越老断得越多、带一道余波）
        chip  翻滚的小片，羽毛/塑料碎/纸屑都用它
        star  五角星，会旋转、会缩小
        soft  绒絮，普通混合，用作灰尘与绒毛
@@ -195,6 +349,9 @@ const Particles = (function () {
     p.sway = o.sway || 0;      // 横向摆幅，羽毛飘落用
     p.text = o.text || '';     // tag 上写的字
     p.seed = Math.random() * 6.283;
+    /* ring 的形状种子：位置 + 半径 + 出生那一帧。配方里"深色托底一圈 + 亮色一圈"是同一帧在同一点 spawn 的两颗（半径差几 px），
+       种子相同 → 两圈同形，托底才托得住；随机种子的话两圈各扭各的，读成两个乱圈 */
+    p.H = p.kind === 'ring' ? FxShape.harm(FxShape.hash(o.x * 2, o.y * 2, (o.r || 4) * 4, frameNo)) : null;
     /* 颜色串和贴图在出生时就定下来。它们整个生命周期都不变，而写在 draw 里
        就是每帧、每颗粒子都重新拼一次字符串、让浏览器重新解析一次颜色 ——
        场上常有三五百颗粒子，这笔账一秒钟要算上万次。 */
@@ -212,7 +369,9 @@ const Particles = (function () {
     return p;
   }
 
+  let frameNo = 0;                                       // 第几次 update（ring 种子用：同一帧出生的算同一下）
   function update(dt) {
+    frameNo++;
     for (let i = act.length - 1; i >= 0; i--) {
       const p = act[i];
       p.life -= dt;
@@ -419,25 +578,18 @@ const Particles = (function () {
         const r = p.r + (p.r1 - p.r) * (1 - k);
         ctx.drawImage(p.tex, p.x - r, p.y - r, r * 2, r * 2);
 
-      } else if (p.kind === 'spark') {
+      } else if (p.kind === 'spark') {                    // 头圆尾尖的一笔（原来是等宽圆头直线）
         const sp = Math.hypot(p.vx, p.vy);
-        const len = Math.min(26, 4 + sp * 0.028);
+        /* 长短、粗细每颗各不一样（seed 定）：配方 sweep 一圈等速甩出去的火花，长度一样时排成一圈整齐的虚线（用户截图一里那圈短线） */
+        const j = p.seed / 6.283, len = Math.min(26, 4 + sp * 0.028) * (0.55 + 0.9 * j);
         const nx = sp ? p.vx / sp : 1, ny = sp ? p.vy / sp : 0;
-        ctx.strokeStyle = p.fill;
-        ctx.lineWidth = p.lw;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x - nx * len, p.y - ny * len);
-        ctx.stroke();
+        ctx.fillStyle = p.fill;
+        FxShape.streak(ctx, p.x - nx * len * 1.3, p.y - ny * len * 1.3, p.x, p.y, p.lw * (0.8 + 0.8 * ((j * 7.3) % 1)));
 
-      } else if (p.kind === 'ring') {
+      } else if (p.kind === 'ring') {                     // 涟漪（原来是 ctx.ellipse 描边的正椭圆）：半径 / 粗细 / 透明度的语义不变
         const r = p.r + (p.r1 - p.r) * (1 - k);
-        ctx.strokeStyle = p.fill;
-        ctx.lineWidth = p.lw * k + 0.6;
-        ctx.beginPath();
-        ctx.ellipse(p.x, p.y, r, r * 0.5, 0, 0, 6.2832);
-        ctx.stroke();
+        ctx.fillStyle = p.fill;
+        FxShape.ring(ctx, p.x, p.y, r, 0.5, (p.lw * k + 0.6) * 1.6, 1 - k, p.maxLife - p.life, p.H);
       }
     }
     ctx.restore();

@@ -1,0 +1,324 @@
+{
+ "url": "http://127.0.0.1:40235/?v=jt3c1790844707",
+ "mbps": 0.0,
+ "mode": "full",
+ "frame": 5563.599999904633,
+ "log": [
+  {
+   "act": "档1 口红",
+   "t": 135435.5
+  },
+  {
+   "act": "档1 香蕉",
+   "t": 138482.59999990463
+  },
+  {
+   "t": 139570.19999980927,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 0,
+   "note": "档1 口红 + 档1 香蕉 后 0.6s"
+  },
+  {
+   "t": 141108,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 1,
+   "note": "档1 口红 + 档1 香蕉 后 1.4s"
+  },
+  {
+   "act": "档2 榴莲鞋雨",
+   "t": 141236.5
+  },
+  {
+   "act": "档2 臭袜子足球",
+   "t": 145514.39999985695
+  },
+  {
+   "t": 153958.39999985695,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 2,
+   "note": "档2 榴莲鞋雨 + 档2 臭袜子足球 后 0.5s"
+  },
+  {
+   "t": 154376.5,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 3,
+   "note": "档2 榴莲鞋雨 + 档2 臭袜子足球 后 1.2s"
+  },
+  {
+   "act": "档3 闺蜜 第1轮",
+   "t": 154653.69999980927
+  },
+  {
+   "act": "档3 哥们 第1轮",
+   "t": 155002.89999985695
+  },
+  {
+   "t": 160795.19999980927,
+   "buddy": [
+    "B3:on/aim4",
+    "B17:on/follow",
+    "B29:enter/walk1"
+   ],
+   "bestie": [
+    "G21:on/idle",
+    "G6:on/follow",
+    "G14:on/throw"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 4,
+   "note": "档3 闺蜜 第1轮 + 档3 哥们 第1轮 后 1.2s"
+  },
+  {
+   "t": 163166.69999980927,
+   "buddy": [
+    "B3:on/aim0",
+    "B17:on/idle",
+    "B29:on/idle"
+   ],
+   "bestie": [
+    "G21:on/idle",
+    "G6:on/idle",
+    "G14:on/idle"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 5,
+   "note": "档3 闺蜜 第1轮 + 档3 哥们 第1轮 后 3.0s"
+  },
+  {
+   "t": 166076.69999980927,
+   "buddy": [
+    "B3:on/aim0",
+    "B17:on/throw",
+    "B29:on/idle"
+   ],
+   "bestie": [
+    "G21:on/wind",
+    "G6:on/wind",
+    "G14:on/idle"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 6,
+   "note": "档3 闺蜜 第1轮 + 档3 哥们 第1轮 后 8.5s"
+  },
+  {
+   "act": "档3 闺蜜 第2轮",
+   "t": 166449.39999985695
+  },
+  {
+   "act": "档3 哥们 第2轮",
+   "t": 168585.5
+  },
+  {
+   "t": 172159.89999985695,
+   "buddy": [
+    "B3:on/aim4",
+    "B17:on/idle",
+    "B29:on/idle"
+   ],
+   "bestie": [
+    "G21:on/follow",
+    "G6:on/wind",
+    "G14:on/idle"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 7,
+   "note": "档3 闺蜜 第2轮 + 档3 哥们 第2轮 后 1.2s"
+  },
+  {
+   "t": 172870.29999995232,
+   "buddy": [
+    "B3:on/aim4",
+    "B17:on/idle",
+    "B29:on/wind"
+   ],
+   "bestie": [
+    "G21:on/idle",
+    "G6:on/idle",
+    "G14:on/throw"
+   ],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 8,
+   "note": "档3 闺蜜 第2轮 + 档3 哥们 第2轮 后 3.0s"
+  },
+  {
+   "t": 183043.29999995232,
+   "buddy": [
+    "B29:exit/walk1"
+   ],
+   "bestie": [],
+   "g4L": [],
+   "g4R": [],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 9,
+   "note": "档3 闺蜜 第2轮 + 档3 哥们 第2轮 后 8.5s"
+  },
+  {
+   "act": "档4 查岗党",
+   "t": 186456.19999980927
+  },
+  {
+   "act": "档4 灭迹党",
+   "t": 191912.89999985695
+  },
+  {
+   "t": 198125.59999990463,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [
+    "#0 t0.45"
+   ],
+   "g4R": [
+    "#0 t1.05"
+   ],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 10,
+   "note": "档4 查岗党 + 档4 灭迹党 后 1.0s"
+  },
+  {
+   "t": 200457.39999985695,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [
+    "#0 t1.25"
+   ],
+   "g4R": [
+    "#0 t1.85"
+   ],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 11,
+   "note": "档4 查岗党 + 档4 灭迹党 后 3.5s"
+  },
+  {
+   "t": 202560.59999990463,
+   "buddy": [],
+   "bestie": [],
+   "g4L": [
+    "#0 t1.70"
+   ],
+   "g4R": [
+    "#0 t2.30"
+   ],
+   "g4ready": [
+    true,
+    true
+   ],
+   "items": true,
+   "video": false,
+   "preload": "142/142",
+   "phase": "play",
+   "n": 12,
+   "note": "档4 查岗党 + 档4 灭迹党 后 7.0s"
+  }
+ ],
+ "errors": []
+}

@@ -85,7 +85,65 @@
  *     AB 比 jp1 多 ~4 ms：冲击波序列帧 ~+1.1（&benchoff=beam 分账）、两道网格光束 ~+2.5（每段一次路径填充；第一版 14 px 一段时 +8）。
  *     软渲染下绝对值不可信、相对比可信；真机未测。
  *     贴图：beam2.webp 47 KB + rip.webp 229 KB（有损，42 格序列帧）—— 不在首屏关键路径上，建议引擎放预取队列里 TrioFX.load。
- * 第二批的件（带状物 / 水柱 / 剑气 / 拖尾）沿用同一套手法：形状和运动程序化去规则，质感用烘焙 / 生图贴图。
+ *
+ * ======================================================================================================================
+ * 第二批（精特2，2026-10-01，自检 P4②③④ / P10 / P11）：沿用精特1b 的手法 —— 形状和运动程序化去规则（wob：三道不公约的波，
+ * 宽窄 / 横向位移 / 甩影），质感用烘焙 / 生图贴图（band.webp 条带 + beam2 的生图能量流）。胶片 shots/polish/精特2_*（老上新下，同种子同时刻）。
+ *   带状物  绸 / 鞭剑：大波 + 布颤（wob）、扭转最窄 0.36（第一版 0.16 侧身成一根线）、宽窄抖、甩影（最近 0.05 s 的形状淡铺在下面）
+ *           橡皮臂：整条弓起来回甩 + 往拳头走的肉浪鼓包；竹棒：捅出去被甩弯、回弹几下（第一版两者都是笔直等粗的一根）
+ *   水柱    每滴自带粗细（鼓包随水走）+ 横向松散；sheen 高光丝随水流；折射暗边（第一版是一根淡色等粗管子，比旧版还弱）
+ *   剑气    月牙身后一条生图能量尾（beam2 bodyB / midB，宽窄横向都抖），月牙胀缩、微抖着转
+ *   拖尾    越老越往两边飘、宽窄抖、外圈软光；狐火本体换生图能量流
+ *   喷雾 / 喷、秋千绳、花瓣：第一版胶片过（雾团是有体积的噪声团，绳是麻绳纹带 + 甩弯），未再改
+ *
+ * ---------- 接入清单（给引擎；行号 = 工作区 trio.js / main.js 2026-10-01，基于 6009923 + 引擎未提交的出手方向改动，会漂，以函数名为准）----------
+ *   dir 一律可以传三种：弧度 / null（直线）/ 控制点 [cx, cy] —— 引擎已有 dirAt(P, frameName()) 和 rayC(p0, p2, d, lam)：
+ *   传 rayC 的结果最省事，件的路线和引擎判打中的那条逐点一致。
+ *
+ * 5. 带状物 TrioFX.ribbon(Q, style)（建 Act 时一个句柄 h）
+ *      G9 G13 红 / 白绸  style 'silk'，Q = A.whip     替换 drawWhip（trio.js:1250）整个函数体的画法：
+ *                         h.draw(ctx, handPt(P), c, tg, e, W.t, P.s)  —— e 照 drawWhip 第 3 行算，c = W.way ? rayC(h, tg, d, W.way.lam) : null
+ *      G17 鞭剑          style 'blade'，同上
+ *      B12 橡皮臂        style 'arm'，Q = A            替换 drawArm（trio.js:1415）里画手臂那一段：h.draw(ctx, wr, d, [fx, fy], 1, b.pk.t, s)（d = drawArm 第 2 行的 dirAt）；
+ *                         拳头按 h.tip()[2] 转（替换 drawArm 里的 ang），拳头仍由引擎画
+ *      G29 打狗棒        style 'bamboo'，同上
+ *      调用点不变：drawOver（trio.js:1237）里 1243 drawArm / 1245 drawWhip
+ * 6. 秋千绳 TrioFX.rope(ctx, pts, w, fill, edge, bend)
+ *      drawSwing（trio.js:1192）/ drawRopes（1227）/ drawLine（1042）里每根绳原来的 stroke 换成 rope(ctx, pts, R.w * P.s, R.fill, R.edge, bend)；
+ *      bend = −摆角速度 × 14（不荡传 0）。调用点 971 / 972 / 1002 不变；座板、绳上的花照旧
+ * 7. 水柱 / 喷雾（B1~B4 stream，G1~G3 mist）
+ *      drawJets（trio.js:900）第 902 行 drawStream / drawMist 换成：
+ *        h = J.draw === 'mist' ? TrioFX.mist({ life: J.life }) : TrioFX.stream()     // 建 Act 时一次
+ *        h.draw(ctx, jets, b && b.jm, F > 0 ? -b.ja : Math.PI + b.ja)                 // 第 4 参 = 枪口此刻的屏幕角
+ *      crew.js drawStream（580）/ drawMist（634）原样留给男女主自己的水枪；落点 main.js:2505 / 2506 / 2512 的 RECIPE.water / pepper.drip
+ *      在 Object.assign(RECIPE, TrioFX.RECIPE) 之后自动是新的（pepper 是新配方）
+ * 8. 喷（B20 酒雾，atk.kind 'spray'）h = TrioFX.spray(A.spray)
+ *      stepFx（trio.js:757）第 787 行 shots.push({ kind: 'puff', ... }) 之后：h.emit(h0, a)；
+ *      drawShot（1305）第 1308 行 'puff' 分支整段换成 h.puff(ctx, s)。路照旧（puff 的 c 已经由引擎按出口方向算）
+ * 9. 剑气飞行段（B23 G14，atk.kind 'slash'）
+ *      fire()（trio.js:621）slash 分支（639 行 shots.push）每道 t 起点再往前挪 FLY = 0.12；stepShot（652）'slash' 分支（668）
+ *      s.t 跨过 −FLY 的那一帧：TrioFX.qi(handPt(P), dir, o.aim(s.u), A.slash.color, { T: FLY, len: A.slash.len, ang: s.ang, life: A.slash.life })；
+ *      drawShot 1307 行 'slash' 分支不再画（刀光由 qi 到点自己放）。打中时刻不变（刀光开始后 0.05 s）
+ * 10. 飞行物拖尾（G16 狐火 fox、G15 项链 gem、G20 月牙 moon；其他小件 trailLook(rgb, 'fire' | 'glint')）
+ *      h = TrioFX.trail(TrioFX.TRAIL.fox)（cfg 里加一项 trail: 'fox' 之类，建 Act 时取）
+ *      stepShot（652）飞行段算完 s.x / s.y 之后（第 699 行 s.x = nx 之后；打中弹开的 s.fall 分支 655 行也调，尾巴淡完）：h.track(s, dt)
+ *      drawShot（1305）画物件之前（1316 行 ctx.save 之前）：h.draw(ctx, s)
+ * 11. 花瓣上限（P11）：TrioFX.RECIPE.petal 已是 petals() 默认（主体 ≤ 14 片、半径 200 px、寿命 0.55~0.8 s），Object.assign 后自动生效；
+ *      按人换颜色：petals({ pal: [...] }) 另挂一个名字
+ *
+ * 12. 精特3 去几何图元（2026-10-01，用户："光晕的圆圈、弧形的特效太规整"）：画法在 **fx.js FxShape**（正式页已加载，不依赖 trio_fx），
+ *      引擎只换调用 —— 全表与胶片见 docs/美术打磨自检.md 第 5 节「几何图元盘点」：
+ *        trio.js drawSlash（截图二的金色弧带）函数体 → FxShape.slash(ctx, s, A.slash)
+ *        trio.js drawGhost 速度线三根直线 → FxShape.streak（头圆尾尖）
+ *        main.js drawStains 的 ctx.arc → FxShape.blob(ctx, x, y, d.r, seed)
+ *      fx.js Particles 'ring'（截图一的金色椭圆环，全站 ~70 处）/ 'spark' 已在 fx.js 里换掉，引擎不用动。
+ *      TrioFX.slash 本身也改成 FxShape.slash 现画（不再用 slash.webp 序列帧）
+ *
+ * 预取（main.js:2627 Preload.add('items', ...) 之后另登记一项，不要放进 boot 首帧关键路径）：
+ *      Preload.add('trio_fx', () => TrioFX.load(V))
+ *      assets/fx/trio/ 九张 + atlas.json，共 397 KB：rip.webp 234 KB · beam2.webp 47 KB · band.webp 18 KB · frag 14 · ring 12 · beam 12 ·
+ *      slash 11 · glow 9 · dust 7 KB · atlas.json 6 KB。第二批只用 band + beam2（+ 第一批的 frag / glow / dust / slash）；
+ *      没加载完时所有件 ready() 为假直接不画（引擎照旧画的那一份就别删，按 TrioFX.ready() 二选一）
  * ====================================================================================================================== */
 'use strict';
 
@@ -180,14 +238,14 @@ const TrioFX = (function () {
        'spr'    贴图，绕自身转（rot），可"翻面"（flip：按 cos 压扁一个轴，读成薄片在空中翻）
        'vel'    贴图顺着速度方向画（水滴 / 籽 / 锥形火花），速度越快拉得越长（stretch）
        'ring'   冲击波：半径 r0 → r1（easeOut），透明度 a → 0，可压扁（sq）
-       'seq'    序列帧（刀光）：frames 按 ft 时间点切换
+       'flip'   涟漪序列帧（frames 按年龄均分）；'fly' 剑气沿路飞；'fxs' 斩痕（fx.js FxShape.slash 现画，w = 弦长、h = 宽、rgb）
      age 从 -delay 起算：错开出场用模拟时间，不用 setTimeout（墙钟，顿帧冻住时它照走 —— trio.js sweep 那条注释） */
   const act = [], pool = [];
   const FADE_IN = 0.03;                                  // 淡入用绝对时间（skill：按寿命比例会让长寿命粒子迟到）
   function spawn(o) {
     if (act.length >= MAX) pool.push(act.shift());       // 满了回收最老的（同 ammo.js：新发射的才是观众正在看的）
     const p = pool.pop() || {};
-    p.m = o.m || 'spr'; p.img = o.img || null; p.frames = o.frames || null; p.ft = o.ft || null;
+    p.m = o.m || 'spr'; p.img = o.img || null; p.tex = o.tex || null; p.tex2 = o.tex2 || null; p.rgb = o.rgb || null; p.frames = o.frames || null;
     p.x = o.x; p.y = o.y; p.vx = o.vx || 0; p.vy = o.vy || 0;
     p.g = o.g || 0; p.drag = o.drag != null ? o.drag : 1;
     p.life = o.life; p.age = -(o.delay || 0);
@@ -247,6 +305,7 @@ const TrioFX = (function () {
       ctx.setTransform(T);
       ctx.translate(x, y);
       if (p.m === 'fly') { drawFly(ctx, p, T, al); continue; }
+      if (p.m === 'fxs') { FxShape.slash(ctx, { t: p.age, p: [0, 0], ang: p.rot, flip: 1 }, { len: p.w, w: p.h, color: p.rgb, life: p.life }); continue; }
       if (p.m === 'ring') {
         const r = p.s0 + (p.s1 - p.s0) * easeOut(u);
         ctx.scale(p.mx, p.my);
@@ -271,12 +330,10 @@ const TrioFX = (function () {
       }
       if (p.rot) ctx.rotate(p.rot);
       if (p.flip) h *= 0.25 + 0.75 * Math.abs(Math.cos(p.fph + p.age * p.flip));
-      const img = p.m === 'seq' ? p.frames[frameAt(p.ft, p.age)] : p.img;
-      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      ctx.drawImage(p.img, -w / 2, -h / 2, w, h);
     }
     ctx.restore();
   }
-  function frameAt(ft, t) { let k = 0; while (k + 1 < ft.length && t >= ft[k + 1]) k++; return k; }
   /* 'fly'（剑气）：t 秒时在路上哪、朝哪。走法 easeIn 一点（刚甩出去最慢、越飞越快：读出"甩"） */
   function flyAt(p, t) {
     const e = Math.min(1, Math.max(0, t / p.T)), k = e * (0.6 + 0.4 * e), [x0, y0, cx, cy, x1, y1] = p.path, q = 1 - k;
@@ -285,13 +342,23 @@ const TrioFX = (function () {
   }
   /* 剑气本体 + 身后三道残影（同一张月牙，越往后越淡越小）；月牙凸面朝前：贴图里弧在上（-y），转 ang + π/2 */
   function drawFly(ctx, p, T, al) {
+    if (p.tex) {                                          // 能量尾：身后 0.075 s 飞过的路铺一条生图能量流（beam2 bodyB / midB），宽窄、横向都按 wob 抖，越往后越细
+      const t1 = p.age, t0 = Math.max(0, t1 - 0.075), M = 8, pts = [], hw = [], u = [];
+      for (let j = 0; j <= M; j++) {
+        const tt = t0 + (t1 - t0) * j / M, [x, y, a] = flyAt(p, tt), f = j / M, o = p.w * 0.16 * wob(j * 70, t1, p.fph) * (1 - f);
+        pts.push([x - Math.sin(a) * o, y + Math.cos(a) * o]); hw.push(p.h * 0.28 * Math.pow(f, 1.3) * (1 + 0.4 * wob(j * 55, t1, 1 + p.fph)) + 1); u.push(-tt * 2400);
+      }
+      ctx.setTransform(T); ctx.globalAlpha = al * 0.9;
+      band(ctx, pts, hw, u, [{ tex: p.tex }, { tex: p.tex2, ext: 0 }]);
+    }
     for (let k = 3; k >= 0; k--) {
       const t = p.age - k * 0.022;
       if (t < 0) continue;
       const [x, y, a] = flyAt(p, t), sc = (0.7 + 0.3 * Math.min(1, t / p.T)) * (1 - k * 0.12);
-      ctx.setTransform(T); ctx.translate(x, y); ctx.rotate(a + Math.PI / 2);
+      const fl = 1 + 0.09 * Math.sin(t * 61 + p.fph);       // 月牙一胀一缩、微微抖着转（一张贴图平移过去读成贴纸）
+      ctx.setTransform(T); ctx.translate(x, y); ctx.rotate(a + Math.PI / 2 + 0.07 * Math.sin(t * 43 + p.fph));
       ctx.globalAlpha = al * (k ? 0.42 / k : 1);
-      ctx.drawImage(p.img, -p.w * sc / 2, -p.h * sc * 0.3, p.w * sc, p.h * sc);
+      ctx.drawImage(p.img, -p.w * sc * fl / 2, -p.h * sc * 0.3, p.w * sc * fl, p.h * sc / fl);
     }
   }
 
@@ -572,14 +639,12 @@ const TrioFX = (function () {
     }),
   };
 
-  /* ---------- 斩痕：刀光序列帧（划开 → 满弧 → 拉丝 → 碎散），带拖尾渐隐 ---------- */
+  /* ---------- 斩痕 ----------
+     精特3：原来是 slash.webp 四格序列帧（划开 → 满弧 → 拉丝 → 碎散），帧里的弧是圆规画的月牙 —— 用户："弧形的特效太规整"。
+     换成 fx.js FxShape.slash（与正式页 trio.js drawSlash 的替换同一个画法）：中线半径沿弧起伏、宽度两头收尖且鼓瘪不匀、前沿舌头、
+     后半寿命从两头往中间断成碎段、外侧两缕细丝。宽 = len × 0.08（B23 230 / 18、G14 240 / 20 的比例） */
   function slash(x, y, ang, len, rgb, life = 0.45, delay = 0) {
-    const pal = palOf(rgb, 0.7, 0.6);
-    const frames = [0, 1, 2, 3].map(i => ramp('slash', 'slash' + i, pal));
-    const ft = [0, 0.05, 0.05 + life * 0.25, 0.05 + life * 0.55];
-    /* 序列帧 256×160，弧心在下沿中点、半径 0.74 高 —— 让弧中点落在 (x, y)：往弧心方向挪 */
-    const w = len * 1.15, h = w * 160 / 256;
-    spawn({ m: 'seq', frames, ft, x: x - Math.sin(ang) * h * 0.24, y: y + Math.cos(ang) * h * 0.24, w, h, rot: ang, life, delay, a: 1, fo: 0.45 });
+    spawn({ m: 'fxs', x, y, rot: ang, w: len, h: len * 0.08, rgb, life, delay, a: 1, fi: 0 });
   }
 
   /* ---------- 光束 ---------- */
@@ -830,8 +895,9 @@ const TrioFX = (function () {
 
   /* ---------- 出口方向 → 路径控制点（P1 共用）----------
      所有从手里出去的件走同一条路：from 沿 dir 出去、弯到 to 的二次贝塞尔，控制点 = from + dir × 0.42·|to − from|。
-     dir null 或与 from→to 差不到 2° → 控制点在中点（直线）。返回 [cx, cy, 弯不弯] */
+     dir null 或与 from→to 差不到 2° → 控制点在中点（直线）。dir 也可以直接给控制点 [cx, cy]。返回 [cx, cy, 弯不弯] */
   function ctrl(from, dir, to) {
+    if (Array.isArray(dir)) return [dir[0], dir[1], true];   // 调用方已经有自己的控制点（引擎 rayC / over 的结果）：原样用，路线与引擎判打中的那条逐点一致
     const dx = to[0] - from[0], dy = to[1] - from[1], D = Math.hypot(dx, dy) || 1;
     if (dir != null) {
       const da = Math.atan2(Math.sin(dir - Math.atan2(dy, dx)), Math.cos(dir - Math.atan2(dy, dx)));
@@ -840,6 +906,8 @@ const TrioFX = (function () {
     return [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, false];
   }
   const bz = (p0, c, p2, t) => { const q = 1 - t; return [q * q * p0[0] + 2 * q * t * c[0] + t * t * p2[0], q * q * p0[1] + 2 * q * t * c[1] + t * t * p2[1]]; };
+  /* 三道不公约的波（同 beam drawWavy 的 off）：沿长度 x（px）、时间 t 往前传，ph 错开股 / 层。值域约 −1..1，不重复成一节节 —— 第二批所有"去规则"共用 */
+  const wob = (x, t, ph = 0) => (Math.sin(x * 0.022 - t * 15 + ph) + 0.55 * Math.sin(x * 0.051 - t * 26 + ph * 2) + 0.35 * Math.sin(x * 0.0093 - t * 7 + ph * 3)) / 1.9;
   const rgbOf = (c) => {                                 // '#rrggbb' / 'rgba(r,g,b,a)' / [r, g, b] → [r, g, b]
     if (Array.isArray(c)) return c;
     if (c[0] === '#') return [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
@@ -1008,19 +1076,29 @@ const TrioFX = (function () {
       texName = style === 'blade' ? 'blade' : 'silk';
     }
     const ink = TUBE ? Q.skinEdge : Q.edge || 'rgba(40,20,10,.85)';
+    /* 甩影（去规则：快的时候一条带子读成"一片扫过去的面"，不是一根线）：调用方时钟 t 的最近 SMEAR 秒里的几帧形状，淡淡地铺在本体下面 */
+    const SMEAR = 0.05, hist = [];
+    const smearC = TUBE ? mix(rgbOf(Q.skin), WHITE, 0.3) : mix(rgbOf(Q.color), WHITE, style === 'blade' ? 0.55 : 0.2);
+    const smearPal = [smearC, smearC, smearC, smearC];
     let last = null;
     const D = Array.from({ length: N + 1 }, () => [0, 0]);
     return {
       draw(ctx, from, dir, to, e, t, s = 1) {
         if (!ready()) return;
-        const c = ctrl(from, dir, to);
-        /* 该在的位置：沿路 0 → e；绸 / 剑另加一道往前走的波（甩出去时大、到点后收）—— 加在 D 上，弹簧把它滤顺 */
-        const amp = TUBE ? 0 : (Q.amp || 24) * (style === 'blade' ? 1.0 : 0.8);
+        const c = ctrl(from, dir, to), tot0 = Math.hypot(to[0] - from[0], to[1] - from[1]);
+        /* 该在的位置：沿路 0 → e，再加横向位移（加在 D 上，弹簧把它滤顺）：
+             绸 / 剑  一道往前走的大波（甩出去时大、到点后收）+ 一层碎的三频抖（布被风吹的颤，不是一条正弦）
+             橡皮臂   整条往一侧弓、弓的方向来回甩、慢慢收（橡皮的弹），叠一道往拳头走的小波
+             竹棒     捅出去时整根被甩弯、来回弹几下再收住（竹子的韧），叠一层细颤 */
+        const amp = TUBE ? 0 : (Q.amp || 24) * (style === 'blade' ? 1.0 : 0.8), fw0 = (Q.w || 8) * s;
         for (let i = 0; i <= N; i++) {
           const f = i / N, p = bz(from, c, to, f * e);
-          if (amp && i > 0 && i < N) {
-            const q = bz(from, c, to, Math.min(1, f * e + 0.01)), L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
-            const w = Math.sin(Math.PI * f) * amp * (1.2 - e * 0.7) * Math.sin(6.2832 * (f * (Q.waves || 1.5) - t * (Q.hz || 4)));
+          if (i > 0 && i < N) {
+            const q = bz(from, c, to, Math.min(1, f * e + 0.01)), L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1, sn = Math.sin(Math.PI * f);
+            let w;
+            if (style === 'arm') w = sn * Math.min(70, tot0 * 0.09) * (Math.sin(t * 17 + 1.3) * Math.exp(-t * 2.5) + 0.45 * Math.sin(9.42 * f - t * 23));
+            else if (style === 'bamboo') w = sn * Math.min(36, tot0 * 0.07) * (Math.sin(t * 30 + 0.6) * Math.exp(-t * 3) + 0.25 * Math.sin(t * 71));
+            else w = sn * (amp * (1.2 - e * 0.7) * Math.sin(6.2832 * (f * (Q.waves || 1.5) - t * (Q.hz || 4))) + fw0 * (style === 'blade' ? 0.5 : 1.1) * wob(f * 620, t, 1.1));
             const ox = -(q[1] - p[1]) / L * w, oy = (q[0] - p[0]) / L * w;
             p[0] += ox; p[1] += oy;
           }
@@ -1036,16 +1114,23 @@ const TrioFX = (function () {
         let W0;
         if (TUBE) {
           W0 = Q.armW * s * (1 - 0.25 * Math.min(1, tot / 500)) / 2;                     // 拉得越长越细（同旧 drawArm）
-          for (let i = 0; i <= N; i++) { const f = i / N; hw.push(W0 * (style === 'arm' ? 0.92 + 0.2 * Math.max(0, (f - 0.8) / 0.2) : 1)); }
+          for (let i = 0; i <= N; i++) {
+            const f = i / N;
+            /* 臂：一道往拳头走的鼓包（橡皮被拽出去的肉浪）+ 近拳头鼓；棒：竹节处略粗、整根粗细不匀一点 */
+            hw.push(W0 * (style === 'arm' ? (0.9 + 0.2 * Math.max(0, (f - 0.8) / 0.2)) * (1 + 0.16 * Math.sin(L[i] * 0.05 - t * 26) * Math.sin(Math.PI * f) + 0.07 * wob(L[i], t, 0.4))
+                                          : 1 + 0.08 * wob(L[i] * 2, 0, 2.2)));
+          }
         } else {
-          W0 = (Q.w || 8) * s * (style === 'silk' ? 0.8 : 0.5);
+          W0 = fw0 * (style === 'silk' ? 0.8 : 0.5);
           const tp = Q.taper != null ? Q.taper : 0.5;
           for (let i = 0; i <= N; i++) {
             const f = i / N;
-            /* 扭转：silk φ 沿长度转 1.1 圈、随时间拧；blade 跟着螺旋相位（宽面转到侧面时窄） */
+            /* 扭转：silk φ 沿长度转 1.1 圈、随时间拧；blade 跟着螺旋相位（宽面转到侧面时窄）。侧过去最窄只到 0.36（第一版 0.16，
+               胶片上一侧身就是一根线）；再叠一层沿长度的宽窄抖 */
             const ph = style === 'blade' ? 6.2832 * (f * (Q.waves || 2) - t * (Q.hz || 4)) : 1.1 + f * 7.0 + t * 2.4;
             phi.push(ph);
-            hw.push(W0 * (1 - (1 - tp) * f) * (style === 'blade' ? 0.45 + 0.55 * Math.abs(Math.cos(ph)) : 0.16 + 0.84 * Math.abs(Math.cos(ph))) * (i === N && !Q.tip ? 0.3 : 1));
+            hw.push(W0 * (1 - (1 - tp) * f) * (style === 'blade' ? 0.45 + 0.55 * Math.abs(Math.cos(ph)) : 0.36 + 0.64 * Math.abs(Math.cos(ph)))
+                    * (1 + 0.2 * wob(L[i] * 1.4, t, 2.0)) * (i === N && !Q.tip ? 0.3 : 1));
           }
         }
         /* u：绸 / 剑从根量（纹路钉在布上）；臂从拳头量、褶距随拉长放稀；棒从梢量（节从手里冒出来） */
@@ -1062,6 +1147,22 @@ const TrioFX = (function () {
           for (const [k, w] of [[0.5, tw * 0.85], [1, 0.4]]) { pts.push([pts[N][0] + Math.cos(tipA) * tl * k, pts[N][1] + Math.sin(tipA) * tl * k]); hw.push(w); phi.push(0); u.push(u[u.length - 1] + tl * k * 64 / (W0 * 2.6)); }
         }
         last = [pts[N][0], pts[N][1], tipA];
+        /* 甩影：先画（压在本体下面）。只画梢比这一帧挪开 6 px 以上的那几帧（停住时不花钱） */
+        if (hist.length && t < hist[hist.length - 1].t - 1e-6) hist.length = 0;
+        while (hist.length && t - hist[0].t > SMEAR) hist.shift();
+        const smT = ramp('band', 'sheen', smearPal);
+        for (const g of hist) {
+          const ag = (t - g.t) / SMEAR, gp = g.pts;
+          if (ag <= 0 || Math.hypot(gp[gp.length - 1][0] - pts[N][0], gp[gp.length - 1][1] - pts[N][1]) < 6) continue;
+          ctx.save(); ctx.globalAlpha *= (style === 'silk' ? 0.55 : 0.45) * (1 - ag);
+          band(ctx, gp, g.hw, g.u, [{ tex: smT, ext: 0 }]);
+          ctx.restore();
+        }
+        if (!hist.length || t - hist[hist.length - 1].t >= 0.012) {
+          const gp = [], gh = [], gu = [];
+          for (let i = 0; i < pts.length; i += 2) { gp.push([pts[i][0], pts[i][1]]); gh.push(Math.max(hw[i] * 1.5, 3)); gu.push(u[i]); }
+          hist.push({ t, pts: gp, hw: gh, u: gu });
+        }
         const body = ramp('band', texName, TUBE ? pals.body : pals.front);
         if (TUBE) { band(ctx, pts, hw, u, [{ tex: body }], ink, 1.4); return; }
         const backT = ramp('band', texName, pals.back), darkT = ramp('band', texName, pals.dark), sheenT = ramp('band', 'sheen', pals.sheen);
@@ -1116,7 +1217,7 @@ const TrioFX = (function () {
       draw(ctx, ps, m, dir) {
         if (!ready()) return;
         const n = ps.length, link = (p, d) => d.seq === p.seq + 1 && Math.hypot(d.x - p.x, d.y - p.y) <= 60 && !(d.t > WATER.breakT && d.j < WATER.brk);
-        const tex = ramp('band', 'water', pal), linked = new Set(), runs = [];
+        const tex = ramp('band', 'water', pal), hl = ramp('band', 'sheen', [pal[3], pal[3], pal[3], pal[3]]), linked = new Set(), runs = [];
         let run = n ? [ps[n - 1]] : [];
         for (let i = n - 1; i >= 1; i--) {
           if (link(ps[i - 1], ps[i])) run.push(ps[i - 1]);
@@ -1126,7 +1227,10 @@ const TrioFX = (function () {
         const head = n && m && Math.hypot(ps[n - 1].x - m[0], ps[n - 1].y - m[1]) < 60 ? ps[n - 1] : null;
         const lines = [];
         for (const r of runs) {
-          const pts = r.map(d => [d.x, d.y]), hw = r.map(d => wOf(d) * 0.58), u = r.map(d => -d.seq * 45);
+          /* 去规则：每滴水自带一个粗细（鼓包随水往前走，不是一根等粗的管子）和一点横向偏移（越老越大：水柱在空中松开、抖） */
+          const pts = r.map(d => { const v = Math.hypot(d.vx, d.vy) || 1, o = wOf(d) * 0.22 * Math.sin(d.seq * 0.83 + 0.4) * Math.min(1, d.t / 0.15);
+                                   return [d.x - d.vy / v * o, d.y + d.vx / v * o]; });
+          const hw = r.map(d => wOf(d) * 0.58 * (1 + 0.24 * Math.sin(d.seq * 1.31) + 0.12 * Math.sin(d.seq * 0.47 + 1.7))), u = r.map(d => -d.seq * 45);
           if (r[0] === head) {                                 // 接到喷口；给了 dir 就先沿 dir 出去一小段
             const d0 = Math.hypot(head.x - m[0], head.y - m[1]);
             if (dir != null && d0 > 6) { pts.unshift([m[0] + Math.cos(dir) * d0 * 0.45, m[1] + Math.sin(dir) * d0 * 0.45]); hw.unshift(WATER.w0 * 0.55); u.unshift(-(head.seq + 0.55) * 45); }
@@ -1138,7 +1242,9 @@ const TrioFX = (function () {
         }
         if (lines.length) {
           const all = [].concat(...lines.map(l => l[0]));
-          offLayer(ctx, boxOf(all, 16), 0.9, (g) => { for (const [pts, hw, u] of lines) band(g, pts, hw, u, [{ tex }]); });
+          /* 水身 + 一条断续的白高光（sheen 条的亮丝沿 u 走 = 跟着水流）+ 折射暗边（实体靠轮廓：第一版没边，亮地板上是一根淡管子） */
+          const edge = `rgba(${pal[0].join(',')},.6)`;
+          offLayer(ctx, boxOf(all, 30), 0.95, (g) => { for (const [pts, hw, u] of lines) band(g, pts, hw, u, [{ tex }, { tex: hl, alpha: () => 0.7, ext: 0 }], edge, 1.3); });
         }
         /* 断开的水珠、水沫：贴图水滴，顺速度画（头在前） */
         const dropA = ramp('frag', 'drop0', pal), dropB = ramp('frag', 'drop1', pal);
@@ -1257,8 +1363,8 @@ const TrioFX = (function () {
      那一道 s.t 跨过 −T 的那一帧调 qi（from = handPt(P)，to = o.aim(s.u)）—— 刀光由 qi 到点自己放，drawShot 'slash' 不再画 */
   function qi(from, dir, to, rgb, o = {}) {
     if (!ready()) return 0;
-    const T = o.T || 0.12, pal = palOf(rgb, 0.7, 0.6), c = ctrl(from, dir, to), len = o.len || 230, w = len * 0.62, h = w * 160 / 256, dl = o.delay || 0;
-    spawn({ m: 'fly', img: ramp('slash', 'slash1', pal), path: [from[0], from[1], c[0], c[1], to[0], to[1]], T, x: from[0], y: from[1], w, h, life: T, a: 1, fi: 0, fo: 0.01, delay: dl });
+    const T = o.T || 0.12, pal = palOf(rgb, 0.7, 0.6), c = ctrl(from, dir, to), len = o.len || 230, w = len * 0.78, h = w * 160 / 256, dl = o.delay || 0;
+    spawn({ m: 'fly', img: ramp('slash', 'slash1', pal), tex: ramp('beam2', 'bodyB', pal), tex2: ramp('beam2', 'midB', pal), path: [from[0], from[1], c[0], c[1], to[0], to[1]], T, x: from[0], y: from[1], w, h, life: T, a: 1, fi: 0, fo: 0.01, delay: dl });
     spawn({ m: 'spr', img: glow('flare', pal), x: from[0], y: from[1], w: 90, s0: 1.2, s1: 0.5, life: 0.08, fi: 0, a: 1, fo: 0.6, delay: dl, z: 1 });   // 出刀一闪
     for (let j = 1; j <= 8; j++) {                       // 沿路：按剑气经过的时刻错开出生，留在身后往两侧散
       const e = j / 9, k = e * (0.6 + 0.4 * e), p = bz(from, c, to, k), q = bz(from, c, to, Math.min(1, k + 0.02)), a = Math.atan2(q[1] - p[1], q[0] - p[0]);
@@ -1281,8 +1387,8 @@ const TrioFX = (function () {
      记录挂在 s._fxTr 上（引擎不用管）。尾巴沿实际飞过的点画，首段切线就是飞行方向（P1 的 dir 由路径本身决定：throw 的控制点用 TrioFX.ctrl） */
   const TRAIL = {
     fox: { pal: [[16, 34, 120], [40, 140, 255], [140, 226, 255], [236, 252, 255]], w: 34, len: 0.17, fire: true },          // 青蓝狐火：火舌往上窜
-    gem: { pal: [[14, 30, 110], [60, 120, 255], [170, 210, 255], [255, 255, 255]], w: 14, len: 0.14, fire: false },          // 心形蓝宝石项链
-    moon: { pal: [[110, 60, 10], [255, 190, 40], [255, 236, 140], [255, 255, 240]], w: 16, len: 0.14, fire: false },         // 金月牙镖
+    gem: { pal: [[14, 30, 110], [60, 120, 255], [170, 210, 255], [255, 255, 255]], w: 18, len: 0.14, fire: false },          // 心形蓝宝石项链
+    moon: { pal: [[110, 60, 10], [255, 190, 40], [255, 236, 140], [255, 255, 240]], w: 20, len: 0.14, fire: false },         // 金月牙镖
   };
   const trailLook = (rgb, kind = 'glint', w) => ({ pal: palOf(rgb, 0.6, 0.6), w: w || (kind === 'fire' ? 30 : 14), len: kind === 'fire' ? 0.17 : 0.14, fire: kind === 'fire' });
   function trail(look) {
@@ -1308,16 +1414,27 @@ const TrioFX = (function () {
       draw(ctx, s) {
         const H = s._fxTr;
         if (!H || H.pts.length < 2 || !ready()) return;
-        const pts = [], hw = [];
+        const pts = [], hw = [], ag = [];
         for (let i = H.pts.length - 1; i >= 0; i--) {
           const k = 1 - (H.t - H.pts[i][2]) / look.len;
           if (k <= 0) break;
-          pts.push([H.pts[i][0], H.pts[i][1]]); hw.push(look.w / 2 * Math.pow(k, 0.8));
+          pts.push([H.pts[i][0], H.pts[i][1]]); hw.push(look.w / 2 * Math.pow(k, 0.8)); ag.push(1 - k);
         }
         if (pts.length < 2) return;
-        const L = arcLen(pts), u = L.map(d => d * 1.6 + H.t * (look.fire ? 700 : 300));
-        const tex = ramp('band', 'trail', look.pal);
-        offLayer(ctx, boxOf(pts, look.w), look.fire ? 1 : 0.9, (g) => band(g, pts, hw, u, [{ tex }]));
+        /* 去规则：尾巴越老越往两边飘（wob 横向位移 × 年龄）、宽窄沿长度抖 —— 第一版是一根等宽渐细的光管，胶片上读成"画了条线" */
+        const L = arcLen(pts), n = pts.length, P = [];
+        for (let i = 0; i < n; i++) {
+          const j0 = Math.max(0, i - 1), j1 = Math.min(n - 1, i + 1), dx = pts[j1][0] - pts[j0][0], dy = pts[j1][1] - pts[j0][1], dl = Math.hypot(dx, dy) || 1;
+          const o = look.w * (look.fire ? 0.7 : 0.45) * ag[i] * wob(L[i] * 2.2, H.t, 0.5);
+          P.push([pts[i][0] - dy / dl * o, pts[i][1] + dx / dl * o]);
+          hw[i] *= 1 + (look.fire ? 0.45 : 0.3) * wob(L[i] * 3, H.t, 2.4);
+        }
+        const u = L.map(d => d * 1.6 + H.t * (look.fire ? 700 : 300)), halo = hw.map(w => w * 1.9);
+        const tex = ramp('band', 'trail', look.pal), flow = ramp('beam2', look.fire ? 'bodyB' : 'midB', look.pal);
+        offLayer(ctx, boxOf(P, look.w * 1.5), look.fire ? 1 : 0.9, (g) => {
+          g.globalAlpha = 0.4; band(g, P, halo, u, [{ tex, ext: 0 }]);            // 外面一圈软光
+          g.globalAlpha = 1; band(g, P, hw, u, [{ tex: flow }, { tex }]);          // 本体：生图能量流 + 一缕亮丝
+        });
       },
     };
   }

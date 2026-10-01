@@ -593,11 +593,13 @@ function drawStream(ctx, ps, b) {
     segs.push([last, { x: b.m[0], y: b.m[1], t: 0, seq: last.seq + 1, j: 1 }]);
   ctx.lineCap = 'round';
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
-  /* 描边 → 水身：两遍，每段按两头的平均宽度/透明度 */
+  /* 描边 → 水身：两遍，每段按两头的平均宽度/透明度。宽度再按水滴序号起伏（精特3：等宽的一根管子一看就是代码画的；
+     鼓包挂在序号上 = 跟着水往前流，同一滴每帧一样粗） */
+  const bulge = (d) => 1 + 0.24 * Math.sin(d.seq * 1.31) + 0.12 * Math.sin(d.seq * 0.47 + 1.7);
   for (const [pad, col, k] of [[5, W.edge, 0.5], [0, W.body, 0.85]]) {
     for (const [p, d] of segs) {
       const m = { t: (p.t + d.t) / 2 };
-      ctx.lineWidth = wOf(m) + pad; ctx.strokeStyle = rgba(col, aOf(m) * k);
+      ctx.lineWidth = wOf(m) * (bulge(p) + bulge(d)) / 2 + pad; ctx.strokeStyle = rgba(col, aOf(m) * k);
       ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(d.x, d.y); ctx.stroke();
     }
   }
@@ -1104,10 +1106,9 @@ function drawMantra(ctx, ps) {
     const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, sz * 1.1);
     g.addColorStop(0, rgba(M.glow, 0.55)); g.addColorStop(1, rgba(M.glow, 0));
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, sz * 1.1, 0, 6.283); ctx.fill();
-    ctx.lineCap = 'round';
-    for (const [w, a, L] of [[sz * 0.5, 0.22, 2.2], [sz * 0.22, 0.5, 1.4]]) {   // 残影：往来的方向拖两道渐短的金光
-      ctx.lineWidth = w; ctx.strokeStyle = rgba(M.glow, a);
-      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + tx * sz * L, d.y + ty * sz * L); ctx.stroke();
+    for (const [w, a, L] of [[sz * 0.5, 0.22, 2.2], [sz * 0.22, 0.5, 1.4]]) {   // 残影：往来的方向拖两道渐短的金光，尾巴收尖（原来是等宽圆头直线）
+      ctx.fillStyle = rgba(M.glow, a);
+      FxShape.streak(ctx, d.x + tx * sz * L, d.y + ty * sz * L, d.x, d.y, w);
     }
     ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(Math.sin(d.t * 5 + d.j * 6) * 0.25);
     ctx.font = `900 ${sz.toFixed(1)}px "Noto Serif CJK SC","Songti SC","STSong","SimSun",serif`;
@@ -1167,6 +1168,7 @@ const CHANGE_FX = {
 };
 /* 三个光点 + 正在轰的那一束。g：beamGeo（光点屏幕位置、光束终点、缩放）；T：CHANGE.T（进出场时刻，光点跟着亮起 / 熄掉）；
    what：'beam' 只画光束（在她身后）、'orbs' 只画光点（在她身前），见 Crew items */
+const ORB_H = [101, 202, 303].map(k => FxShape.harm(k));   // 三个光点各自一套谐波（芒的长短、轮廓的起伏）
 function drawMoonBeams(ctx, b, g, T, what) {
   const F = CHANGE_FX, B = CHANGE.beam, S = b.beam, s = g.s, se = T.enter + b.spray;
   const out = b.t > se ? Math.max(0, 1 - (b.t - se) / T.exit) : 1;
@@ -1177,10 +1179,8 @@ function drawMoonBeams(ctx, b, g, T, what) {
     const O = g.orbs[S.k], E = g.end, f = S.pt / B.T.fire, M = F.beam;
     const env = f < M.rise ? f / M.rise : f > 1 - M.tail ? (1 - f) / M.tail : 1;
     const w = M.W * s * env * (1 + 0.08 * Math.sin(b.t * 70));
-    for (const [k, c, a] of M.layers) {
-      ctx.lineWidth = w * k; ctx.strokeStyle = rgbaOf(c, a);
-      ctx.beginPath(); ctx.moveTo(O[0], O[1]); ctx.lineTo(E[0], E[1]); ctx.stroke();
-    }
+    /* 四层同宽直线 → 一条在扭、在胀缩的光带（FxShape.wavyBand：中线横向三频波、宽度沿长度脉动、各层相位错开；精特3） */
+    FxShape.wavyBand(ctx, O, E, w, M.layers, b.t, S.k * 7919 + 13);
     /* 光束里往下冲的碎光 */
     const dx = E[0] - O[0], dy = E[1] - O[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
     for (let i = 0; i < M.sparks; i++) {
@@ -1204,19 +1204,19 @@ function drawMoonBeams(ctx, b, g, T, what) {
     const gl = ctx.createRadialGradient(x, y, 0, x, y, R * 2.8);
     gl.addColorStop(0, rgbaOf(St.core, 0.95 * vis)); gl.addColorStop(0.3, rgbaOf(St.rgb, 0.55 * vis)); gl.addColorStop(1, rgbaOf(St.rgb, 0));
     ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(x, y, R * 2.8, 0, 6.283); ctx.fill();
-    /* 十字芒：慢慢转，蓄力时拉长 */
-    const fl = R * St.flare * (1 + c), a0 = b.t * 0.6 + i;
-    ctx.lineWidth = 2.2 * s; ctx.strokeStyle = rgbaOf(St.core, 0.85 * vis);
-    for (let k = 0; k < 2; k++) {
-      const a = a0 + k * Math.PI / 2, cx = Math.cos(a) * fl, cy = Math.sin(a) * fl;
-      ctx.beginPath(); ctx.moveTo(x - cx, y - cy); ctx.lineTo(x + cx, y + cy); ctx.stroke();
+    /* 芒：四道从中心往外收尖的光（原来是两根等宽直线交叉），每道长短各自一闪一闪，慢慢转，蓄力时拉长 */
+    const fl = R * St.flare * (1 + c), a0 = b.t * 0.6 + i, H = ORB_H[i % 3];
+    ctx.fillStyle = rgbaOf(St.core, 0.85 * vis);
+    for (let k = 0; k < 4; k++) {
+      const a = a0 + k * Math.PI / 2, L = fl * (0.75 + 0.3 * FxShape.n(H, k * 1.7, b.t * 3));
+      FxShape.streak(ctx, x + Math.cos(a) * L, y + Math.sin(a) * L, x, y, 4.4 * s);
     }
-    ctx.lineWidth = 2 * s; ctx.strokeStyle = rgbaOf(St.edge, 0.55 * vis);
-    ctx.beginPath(); ctx.arc(x, y, R * 0.62, 0, 6.283); ctx.stroke();
+    ctx.fillStyle = rgbaOf(St.edge, 0.55 * vis);                 // 托底一圈深靛：轮廓微微起伏的一笔（front thr null = 不断）
+    FxShape.front(ctx, x, y, R * 0.62, 1, 2 * s, null, b.t, H, 0);
     ctx.fillStyle = rgbaOf(St.core, vis); ctx.beginPath(); ctx.arc(x, y, R * 0.55, 0, 6.283); ctx.fill();
     if (S && S.k === i && S.ph === 'charge') {
-      ctx.lineWidth = 3 * s; ctx.strokeStyle = rgbaOf(St.rgb, 0.8 * c * vis);
-      ctx.beginPath(); ctx.arc(x, y, R * (3.2 - 2.2 * c), 0, 6.283); ctx.stroke();
+      ctx.fillStyle = rgbaOf(St.rgb, 0.8 * c * vis);              // 往里收的光环：刚开始蓄断成几截，越蓄越连（u = 1 − c）
+      FxShape.ring(ctx, x, y, R * (3.2 - 2.2 * c), 1, 3.4 * s, 1 - c, b.t, H);
     }
     if (S) for (const m of S.motes) {
       if (m.k !== i) continue;
