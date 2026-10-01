@@ -1,0 +1,145 @@
+{
+ "pad": [
+  40,
+  24,
+  40,
+  0
+ ],
+ "head": [
+  90,
+  95,
+  200,
+  175
+ ],
+ "check": [
+  62,
+  445,
+  116,
+  497
+ ],
+ "frames": [
+  {
+   "name": "hitC",
+   "base": "hitB",
+   "box": [
+    [
+     295,
+     110,
+     533,
+     300
+    ]
+   ],
+   "screen": "magenta",
+   "K": 1.68856,
+   "ox": 62,
+   "oy": 92,
+   "fixed": [
+    258,
+    432,
+    328,
+    484
+   ],
+   "check": null,
+   "added": true,
+   "scale_by": "fixed",
+   "paste": "box"
+  },
+  {
+   "name": "hitD",
+   "base": "hitB",
+   "box": [
+    [
+     295,
+     110,
+     573,
+     300
+    ],
+    [
+     330,
+     300,
+     573,
+     470
+    ]
+   ],
+   "screen": "magenta",
+   "K": 1.46819,
+   "ox": 62,
+   "oy": 129,
+   "fixed": [
+    258,
+    432,
+    328,
+    484
+   ],
+   "check": null,
+   "added": true,
+   "scale_by": "fixed",
+   "paste": "box",
+   "feather": 8
+  },
+  {
+   "name": "idle2",
+   "base": "idle",
+   "box": [
+    [
+     105,
+     80,
+     215,
+     185
+    ],
+    [
+     200,
+     115,
+     275,
+     205
+    ]
+   ],
+   "screen": "magenta",
+   "K": 1.46819,
+   "ox": 62,
+   "oy": 129,
+   "fixed": [
+    90,
+    246,
+    270,
+    272
+   ],
+   "added": true,
+   "paste": "inplace",
+   "check": null
+  },
+  {
+   "name": "hitE",
+   "base": "hitB",
+   "box": [
+    [
+     295,
+     110,
+     573,
+     300
+    ],
+    [
+     330,
+     300,
+     573,
+     470
+    ]
+   ],
+   "screen": "magenta",
+   "fixed": [
+    258,
+    432,
+    328,
+    484
+   ],
+   "check": null,
+   "scale_by": "fixed",
+   "paste": "box",
+   "feather": 8,
+   "K": 1.46819,
+   "ox": 62,
+   "oy": 129,
+   "added": true
+  }
+ ]
+}

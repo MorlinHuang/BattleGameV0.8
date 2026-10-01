@@ -1,0 +1,80 @@
+{
+ "pad": [
+  40,
+  24,
+  40,
+  0
+ ],
+ "frames": [
+  {
+   "name": "drop",
+   "base": "throw",
+   "box": [
+    0,
+    0,
+    316,
+    200
+   ],
+   "screen": "green",
+   "K": 2.2113,
+   "ox": 163,
+   "oy": 62,
+   "fixed": [
+    140,
+    198,
+    270,
+    262
+   ],
+   "paste": "box",
+   "feather": 10,
+   "added": true
+  },
+  {
+   "name": "through",
+   "base": "throw",
+   "box": [
+    0,
+    0,
+    316,
+    200
+   ],
+   "screen": "green",
+   "K": 2.08817,
+   "ox": 99,
+   "oy": 62,
+   "feather": 10,
+   "added": true,
+   "paste": "box",
+   "fixed": [
+    125,
+    350,
+    252,
+    405
+   ],
+   "scale": 0.35
+  },
+  {
+   "name": "idle2",
+   "base": "idle",
+   "box": [
+    [
+     148,
+     0,
+     250,
+     98
+    ]
+   ],
+   "screen": "green",
+   "K": 2.08817,
+   "ox": 99,
+   "oy": 62,
+   "fixed": [
+    125,
+    350,
+    252,
+    405
+   ],
+   "paste": "inplace"
+  }
+ ]
+}

@@ -1,0 +1,58 @@
+{
+ "frames": [
+  {
+   "name": "release",
+   "base": "throw",
+   "box": [
+    0,
+    0,
+    332,
+    165
+   ],
+   "screen": "magenta",
+   "fixed": [
+    0,
+    205,
+    332,
+    314
+   ],
+   "scale_by": "fixed",
+   "paste": "box",
+   "feather": 10,
+   "check": null,
+   "K": 2.18447,
+   "ox": 62,
+   "oy": 125
+  },
+  {
+   "name": "through",
+   "base": "throw",
+   "box": [
+    0,
+    0,
+    332,
+    165
+   ],
+   "screen": "magenta",
+   "fixed": [
+    0,
+    205,
+    332,
+    314
+   ],
+   "scale_by": "fixed",
+   "paste": "box",
+   "feather": 10,
+   "check": null,
+   "K": 2.18447,
+   "ox": 62,
+   "oy": 125
+  }
+ ],
+ "pad": [
+  40,
+  40,
+  40,
+  0
+ ]
+}

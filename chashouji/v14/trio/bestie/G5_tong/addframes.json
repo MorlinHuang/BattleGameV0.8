@@ -1,0 +1,87 @@
+{
+ "pad": [
+  40,
+  24,
+  40,
+  0
+ ],
+ "head": [
+  62,
+  38,
+  140,
+  112
+ ],
+ "frames": [
+  {
+   "name": "release",
+   "base": "throw",
+   "box": [
+    18,
+    0,
+    319,
+    250
+   ],
+   "screen": "green",
+   "K": 2.04545,
+   "ox": 186,
+   "oy": 62,
+   "added": true,
+   "fixed": [
+    160,
+    398,
+    222,
+    438
+   ],
+   "paste": "box",
+   "feather": 14
+  },
+  {
+   "name": "through",
+   "base": "throw",
+   "box": [
+    0,
+    0,
+    319,
+    250
+   ],
+   "screen": "green",
+   "K": 2.04545,
+   "ox": 186,
+   "oy": 62,
+   "fixed": [
+    160,
+    398,
+    222,
+    438
+   ],
+   "added": true
+  },
+  {
+   "name": "idle2",
+   "base": "idle",
+   "box": [
+    0,
+    0,
+    319,
+    215
+   ],
+   "screen": "green",
+   "K": 2.04545,
+   "ox": 186,
+   "oy": 62,
+   "fixed": [
+    160,
+    398,
+    222,
+    438
+   ],
+   "added": true
+  }
+ ],
+ "check": [
+  78,
+  398,
+  136,
+  438
+ ]
+}

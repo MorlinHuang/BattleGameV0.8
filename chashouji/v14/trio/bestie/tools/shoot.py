@@ -7,7 +7,8 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../../shot
 for k in range(8):
     r = subprocess.run(['timeout', '150', 'ssh', '-o', 'ConnectTimeout=20', 'kf-deployment', f'python3 /tmp/film.py "v=s{k}{name}&{q}" /tmp/{name}.png'], capture_output=True, text=True)
     if r.returncode: continue
-    subprocess.run(['timeout', '90', 'scp', '-o', 'ConnectTimeout=20', '-q', f'kf-deployment:/tmp/{name}.*', OUT])
+    for _ in range(5):                                    # 桌面 ssh 偶尔 Connection closed：取回失败就重取
+        if subprocess.run(['timeout', '90', 'scp', '-o', 'ConnectTimeout=20', '-q', f'kf-deployment:/tmp/{name}.*', OUT]).returncode == 0: break
     fr = [[e.split(':')[1] for e in c if e.split(':')[0] == who] for c in json.load(open(f'{OUT}/{name}.json'))]
     seq = [f[0] if f else '-' for f in fr]
     ok = all(n in seq for n in need.split(',')) and seq.count('idle') >= min_idle
