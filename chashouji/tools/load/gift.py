@@ -44,7 +44,9 @@ async def main():
             log.append({'act': what, 't': await pg.evaluate('performance.now()')})
 
         async def snap(note=''):
-            await pg.locator('#stage').screenshot(path=f'{OUT}_{k[0]:02d}.png')
+            # 按外框截整页（locator.screenshot 要等元素"稳定"，桌面负载高时 30 秒都等不到，整轮回归白跑）
+            box = await pg.locator('#stage').bounding_box()
+            await pg.screenshot(path=f'{OUT}_{k[0]:02d}.png', clip=box, timeout=120000)
             s = await pg.evaluate(STATE); s.update(n=k[0], note=note); log.append(s); k[0] += 1
 
         if MODE == 'early12':     # 首帧即送档 1 + 档 2（图集还没到：ammo.js / rain.js 的矢量画法）

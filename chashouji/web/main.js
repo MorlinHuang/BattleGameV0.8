@@ -1897,13 +1897,29 @@ class PoseView {
     const base = name.split('_')[0];
     return this.imgs[base] ? base : 'n0';
   }
+  /* 立体感（light.js，和三人组同一套）：draw 用打好光（含轮廓光）的那张；shade 是脚下的接触影，renderActors 一开头画（在所有人之下）。
+     y 传地面（GROUND），lift = 一步一颠离地多高 */
+  /* 光按两人站的地方取：横向取到 32px 一格、竖向按地面 —— 挨打往后一弹（hitX）、一步一颠（bob）不该让光变（光一变这张姿势图就要重算） */
+  light(x, m) {
+    const w = m.w, h = m.h;
+    return Light.at(Math.round(x / 32) * 32 - m.ax + w / 2, GROUND - m.ay + h / 2, Math.max(w, h) * 0.45);
+  }
+  shade(ctx, name, x, y, lift) {
+    name = this.shownOf(name);
+    const img = this.imgs[name], m = WORLD.poses[name];
+    if (!img || !Light.on) return;
+    const pr = Light.profile(img, 0, 0, img.width, img.height), k = m.w / img.width;
+    if (!pr.near) return;
+    const seg = ([a, b, v]) => [x - m.ax + a * k, x - m.ax + b * k, y - m.ay + v * (m.h / img.height)];
+    Light.contact(ctx, pr.touch.map(seg), pr.near.map(seg), 1, lift, 1, this.light(x, m));
+  }
   draw(ctx, name, x, y, tint, tintA) {
     name = this.shownOf(name);
     const img = this.imgs[name], m = WORLD.poses[name];
     if (!img) return;
     const w = m.w, h = m.h;
     const dx = x - m.ax, dy = y - m.ay;
-    ctx.drawImage(img, dx, dy, w, h);
+    ctx.drawImage(Light.lit(img, 0, 0, img.width, img.height, this.light(x, m), w / img.width), 0, 0, img.width, img.height, dx, dy, w, h);
     if (tintA > 0.004) {
       ctx.save();
       ctx.globalCompositeOperation = 'source-atop';
@@ -2539,7 +2555,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* 首帧要的姿势（待机循环那几张）和 HUD 头像不依赖 world.json，跟它同时开始下（首帧路径上少两段串行往返）。
      头像离线从 girl.png / boy.png 裁好的 160 方图，两张共 21KB —— 立绘原图是 760×1145，只为取两个脸去加载它们不值当 */
   const poseImgs = {};
-  const loadPose = (n) => load(`assets/world/pose_${n}.webp`).then(im => { poseImgs[n] = im; });
+  const loadPose = (n) => load(`assets/world/pose_${n}.webp`).then(im => { poseImgs[n] = im; Light.profile(im, 0, 0, im.width, im.height); });   // 脚下接触影的剪影底边：加载时量（light.js）
   const firstPoses = [...new Set(LOOP_N)];
   const firstP = Promise.all([Promise.all(firstPoses.map(loadPose)),
     Promise.all(['av_a', 'av_b'].map(n => load(`assets/ui/${n}.webp`).catch(() => null))).then(([a, b]) => { HUD.avA = a; HUD.avB = b; })]);
@@ -2552,6 +2568,13 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      姿势贴图两套共用。 */
   if (roomsJ) Object.assign(WORLD, await roomsJ);
   WORLD.total = WORLD.rooms.reduce((a, b) => a + b, 0);
+  /* 人物吃场景光（light.js）：按这一套背景的灯和房间底色；?light=0 关掉（改前改后对比、诊断） */
+  /* ?light=0 全关；?light=shadow,grade,rim 只开其中几样（逐项对比） */
+  const lq = Q0.get('light');
+  Light.on = lq !== '0';
+  if (lq && lq !== '0' && lq !== '1') for (const k of Object.keys(Light.has)) Light.has[k] = lq.split(',').includes(k);
+  Light.dbg = Q0.get('lightdbg');
+  Light.use(bgName, WORLD.rooms);
   /* 首帧只等首帧画得到的东西（docs/首屏加载诊断.md P1、P2：改之前把 38.8 MB 全部 await 完才起主循环、绑按钮，5 Mbps 首帧 66 秒）：
      长卷背景、待机循环那几张姿势、HUD 头像（三样一起下）。其余登记进预取队列（preload.js），首帧之后按下面的顺序在后台加载：
      其余姿势 → 档 1 / 2 物品和命中粒子 → 背景动效（光效贴图 + 动区视频）→ 档 3 六十人 → 档 4 两组 → 结算图 → 档 4 出场视频。
@@ -2766,6 +2789,12 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* near：站在主角前面的帮手（缩放 > 1，离镜头近 —— 哥们、闺蜜的前排，crew.js Buddy.rows / MIST.rows），连同他喷的水画在主角之上，挡住主角；
        跟主角进同一块画布，出场压暗时一起暗 */
     const near = (it) => !it.behind && it.s > 1;
+    /* 影子在所有人之下（light.js）：男女主和三人组脚下的接触影、悬空的人投在墙上的影子；三人组这一帧的打光也在这里做好 */
+    Light.next(FX.camX, MID);
+    if (Light.on) {
+      actors.shade(cctx, FX.frame, FX.pairX + FX.hitX, GROUND, -FX.bob);
+      BuddyTrio.shade(cctx); BestieTrio.shade(cctx);
+    }
     const dim = introDim();
     for (const it of crew) if (!it.behind && !near(it)) it.draw(cctx);
     if (dim > 0) drawIntroDim(cctx, dim);
@@ -3111,6 +3140,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const N = clamp(+(Q.get('benchframes') || 420), 60, 2000);
     const RATE = clamp(+(Q.get('benchrate') || 110), 40, 2000) / 1000;
     const bOff = Q.get('benchoff') || '';
+    /* ?benchtrio=1：不送礼，两边三人组一直在场（?buddy= / ?bestie= 指定谁，每 2.5 秒续一次）+ 男女主 —— 量立体感（light.js）的开销：
+       同一个 seed 跑 ?light=0 和默认各一遍，角色层均值的差就是它的代价（docs/三人组角色规范.md「立体感 · 性能」） */
+    const benchTrio = Q.get('benchtrio') === '1';
+    let trioT = 0;
     if (bOff === 'ammo' || bOff === 'both') Ammo.draw = () => {};
     if (bOff === 'part' || bOff === 'both') Particles.draw = () => {};
 
@@ -3120,7 +3153,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        会一直开着，礼物全在排队，量出来的负载比真实情况低。 */
     const gnames = ['wand', 'wand', 'mirror', 'wand', 'boom', 'wand', 'mirror', 'drop'];
     const T = { logic: 0, bg: 0, ch: 0, fx: 0, all: 0 };
-    const each = new Float64Array(N);
+    const each = new Float64Array(N), eachCh = new Float64Array(N);   // 每帧总计 / 角色层：取中位数（桌面负载高时偶尔整个进程停几百毫秒，均值会被拖走）
     const M = { logic: 0, bg: 0, ch: 0, fx: 0, all: 0, at: 0 };
     let bi = 0, bacc = 0, gi = 0, maxP = 0, maxA = 0, sumP = 0, sumA = 0, drops = 0, froze = 0;
     S.t = 3.0;
@@ -3132,7 +3165,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       const dt = 1 / 60;
       const t0 = performance.now();
       bacc += dt;
-      if (bacc >= RATE) { bacc -= RATE; giveGift(gi % 2 ? +1 : -1, gnames[gi++ % gnames.length]); }
+      if (benchTrio) {
+        if ((trioT -= dt) <= 0) { trioT = 2.5; summonCrew('buddy'); summonCrew('bestie'); }
+        for (const c of CREWS) c.update(dt);
+      } else if (bacc >= RATE) { bacc -= RATE; giveGift(gi % 2 ? +1 : -1, gnames[gi++ % gnames.length]); }
       battle(dt);
       const d = Particles.tick(dt);
       /* 冻结帧占比 —— 帧率正常但画面不动，观众读到的同样是"卡"。每次命中
@@ -3149,7 +3185,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       const t3 = performance.now(); renderFx();
       const t4 = performance.now();
       T.logic += t1 - t0; T.bg += t2 - t1; T.ch += t3 - t2; T.fx += t4 - t3; T.all += t4 - t0;
-      each[bi] = t4 - t0;
+      each[bi] = t4 - t0; eachCh[bi] = t3 - t2;
       /* 均值说明不了卡顿 —— 均值 3ms 的同时可以有一帧 39ms，而观众看到的
          就是那一帧。所以每层都要留峰值，否则只知道"有尖峰"，不知道尖峰在
          哪一层；再记下它出现在第几帧，用来分辨"开头一次性的预热"和"运行中
@@ -3167,9 +3203,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       if (++bi < N) { requestAnimationFrame(benchStep); return; }
 
       const sorted = Array.from(each).sort((a, b) => a - b);
-      const p95 = sorted[Math.floor(N * 0.95)], worst = sorted[N - 1];
+      const p95 = sorted[Math.floor(N * 0.95)], worst = sorted[N - 1], med = sorted[N >> 1], medCh = Array.from(eachCh).sort((a, b) => a - b)[N >> 1];
       const rows = [
-        `连点压测  ${N} 帧 · 每 ${Math.round(RATE * 1000)}ms 一件礼物` + (bOff ? `  [关掉 ${bOff}]` : ''),
+        (benchTrio ? `三人组常驻  ${N} 帧 · 立体感 ${Light.on ? '开' : '关'}` : `连点压测  ${N} 帧 · 每 ${Math.round(RATE * 1000)}ms 一件礼物`) + (bOff ? `  [关掉 ${bOff}]` : ''),
         ``,
         `           均值      峰值`,
         `每帧总计   ${(T.all / N).toFixed(2)}      ${M.all.toFixed(1)} ms  (第 ${M.at} 帧)`,
@@ -3178,6 +3214,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
         `  角色层   ${(T.ch / N).toFixed(2)}      ${M.ch.toFixed(1)}`,
         `  特效层   ${(T.fx / N).toFixed(2)}      ${M.fx.toFixed(1)}`,
         ``,
+        `中位 每帧 ${med.toFixed(2)} 角色层 ${medCh.toFixed(2)} ms`,
         `p95 ${p95.toFixed(2)}ms   掉帧(>16.7ms) ${drops}/${N} = ${(drops * 100 / N).toFixed(1)}%`,
         `世界被顿帧冻住 ${froze}/${N} 帧 = ${(froze * 100 / N).toFixed(1)}%`,
         `粒子 均 ${(sumP / N).toFixed(0)} 峰 ${maxP}     弹幕 均 ${(sumA / N).toFixed(1)} 峰 ${maxA}`,

@@ -262,7 +262,11 @@ function Act(cfg) {
       i.src = src + (v ? '?v=' + encodeURIComponent(v) : '');
     });
     return (loading = Promise.all([one(SH ? SH.src : cfg.src), A.prop ? one(A.prop) : null, A.atlas ? one(A.atlas.src) : null, ...PARTS.map(q => one(q.src))])
-      .then(([a, p, t, ...ps]) => { img = a; prop = p; atlas = t; ps.forEach((im, i) => { partImg[i] = im; }); ready = true; return !!a; }));
+      .then(([a, p, t, ...ps]) => {
+        img = a; prop = p; atlas = t; ps.forEach((im, i) => { partImg[i] = im; });
+        if (a && SH) Light.profiles(a, SH.cell[0], SH.cell[1], SH.names.length, SH.cols);   // 接地阴影的剪影底边：加载时一次量完（light.js）
+        ready = true; return !!a;
+      }));
   }
 
   /* 来一个（wait 秒后才开始进场）；在场再送 = 续一份时间，下一下按礼物力度打。 */
@@ -286,7 +290,7 @@ function Act(cfg) {
   const room = (lead) => b.t + lead + ACT <= TE + b.stay;
   const active = () => !!b;
   const busy = () => !!b || shots.length > 0 || marks.length > 0 || jets.length > 0;
-  function reset() { b = null; shots.length = 0; marks.length = 0; jets.length = 0; }
+  function reset() { b = null; shots.length = 0; marks.length = 0; jets.length = 0; unlit(); }
 
   /* 此刻的摆放：锚点在屏幕 (x, y)，画多大 s，整个人绕 rc（屏幕点）转 rot。 */
   function place() {
@@ -418,7 +422,7 @@ function Act(cfg) {
     if (b.wait > 0) { b.wait -= dt; return; }
     b.t += dt;
     const T = TRIO.T, se = TE + b.stay;
-    if (b.t >= se + TX) { b = null; return; }
+    if (b.t >= se + TX) { b = null; unlit(); return; }
     if (!b.landed && b.t >= TE) { b.landed = true; if (o.onLand) { const P = place(); o.onLand(...P.at(cfg.anchor), EK); } }
     b.snap *= Math.exp(-TRIO.lean.decay * dt);
     const on = b.t >= TE && b.t <= se;
@@ -824,18 +828,31 @@ function Act(cfg) {
   }
 
   /* ---- 画 ---- */
+  /* 布景在人身后（横绳、场景层），站在场景层上的人的影子（画在台面上：场景层之后、人之前），人本身，布景在人前面，出现特效。
+     地上的影子、墙上的影子不在这里：renderActors 一开头先画（shade），在所有人之下 */
   function drawBody(ctx) {
     if (!b || b.wait > 0 || !img) return;
-    const P = place(), [x0, y0] = P.at([0, 0]);
+    const P = place();
     if (EK === 'rope') drawSling(ctx, P);
     drawScene(ctx, -1);
+    if (Light.on && support() === 'scene') shadeFloor(ctx, P);
+    drawPerson(ctx, P, 'lit');
+    drawScene(ctx, 1);
+    if (SH && EK === 'appear' && E.fx) { const ap = appearK(); if (ap < 1) appearFx(ctx, P, ap); }
+  }
+  /* 人本身：帧（或单张立绘）+ 挂件 + 手里的东西 + 秋千绳 / 倒挂的丝，含前后倾、呼吸挤压、出现的淡入和升起剪切。
+     mode 'lit' = 照常画（light.js 开着时用打好光的图 + 叠轮廓光）；'sil' = 只画剪影（墙上的影子：帧和挂件换成染了阴影色的小剪影，
+     不画绳子、手里的东西）—— 同一套变换，影子跟人的姿态严丝合缝 */
+  function drawPerson(ctx, P, mode) {
+    const sil = mode === 'sil';
+    const [x0, y0] = P.at([0, 0]);
     ctx.save();
     if (P.rot) { ctx.translate(P.rc[0], P.rc[1]); ctx.rotate(P.rot); ctx.translate(-P.rc[0], -P.rc[1]); }
     if (P.spin) { ctx.translate(P.sc[0], P.sc[1]); ctx.rotate(P.spin); ctx.translate(-P.sc[0], -P.sc[1]); }
     if (SH) {
       const fn = frameName(), T = TRIO.T, se = TE + b.stay, [ax, ay] = P.at(cfg.anchor);
-      if (cfg.ropes) (cfg.ropes.ends ? drawSwing(ctx, P, fn) : drawRopes(ctx, P));   // ropes.x：绳子和座板画在帧里（G12，原单张立绘），引擎只接上帧顶到转轴那一截
-      if (EK === 'drop') drawLine(ctx, P);
+      if (cfg.ropes && !sil) (cfg.ropes.ends ? drawSwing(ctx, P, fn) : drawRopes(ctx, P));   // ropes.x：绳子和座板画在帧里（G12，原单张立绘），引擎只接上帧顶到转轴那一截
+      if (EK === 'drop' && !sil) drawLine(ctx, P);
       /* 离场掉头（exit.flip）：绕锚点左右翻过来，走出去是背朝她 / 他走的 */
       if (b.t > se && cfg.exit && cfg.exit.flip) { ctx.translate(ax, 0); ctx.scale(-1, 1); ctx.translate(-ax, 0); }
       /* 原地出现：淡入、由小弹大（从一条线后面升上来的按那条线剪掉线以下）；离场反过来 */
@@ -852,22 +869,23 @@ function Act(cfg) {
       let k = b.sq;
       if (br && b.t >= TE && b.t <= TE + b.stay) k -= br[0] * Math.sin(b.t * 6.2832 * br[1] + b.ph);
       ctx.translate(ax, ay); ctx.scale(1 + k * (br && br[2] != null ? br[2] : 0.4), 1 - k); ctx.translate(-ax, -ay);
-      drawParts(ctx, P, fn, -1);
+      drawParts(ctx, P, fn, -1, mode);
       const pk = A.kind === 'punch' && punchK() > 0.001;
       if (pk) clipFist(ctx, P, x0, y0);                        // 出拳：拳头那一块不画在原处（drawOver 画在伸出去的地方）
-      drawFrame(ctx, P, fn);
+      const i = SH.names.indexOf(fn), [cw, ch] = SH.cell, sx = (i % SH.cols) * cw, sy = Math.floor(i / SH.cols) * ch;
+      if (sil) { const q = Light.sil(img, sx, sy, cw, ch, light().shade); drawFrame(ctx, P, fn, q.im, q.k); }
+      else drawFrame(ctx, P, fn, Light.lit(img, sx, sy, cw, ch, light(), P.s), 1);   // 打好光（含轮廓光）的那张，同一布局
       if (pk) ctx.restore();
-      drawParts(ctx, P, fn, 1);
-      if (b.ammo && A.hold && A.hold[fn]) drawHeld(ctx, P, fn);
+      drawParts(ctx, P, fn, 1, mode);
+      if (!sil && b.ammo && A.hold && A.hold[fn]) drawHeld(ctx, P, fn);
       ctx.restore();
-      drawScene(ctx, 1);
-      if (EK === 'appear' && E.fx && ap < 1) appearFx(ctx, P, ap);
       return;
     }
-    if (cfg.ropes) drawRopes(ctx, P);
+    if (cfg.ropes && !sil) drawRopes(ctx, P);
     const pk = A.kind === 'punch' && punchK() > 0.001;
     if (pk) clipFist(ctx, P, x0, y0);                      // 出拳时拳头那一块不画在原处（drawOver 画在伸出去的地方）
-    ctx.drawImage(img, x0, y0, img.width * P.s, img.height * P.s);
+    const q = sil ? Light.sil(img, 0, 0, img.width, img.height, light().shade) : null, g = sil ? null : Light.lit(img, 0, 0, img.width, img.height, light(), P.s);
+    ctx.drawImage(sil ? q.im : g, 0, 0, img.width * (sil ? q.k : 1), img.height * (sil ? q.k : 1), x0, y0, img.width * P.s, img.height * P.s);
     if (pk) ctx.restore();
     ctx.restore();
   }
@@ -924,14 +942,17 @@ function Act(cfg) {
   /* 画图集里的一帧。flex 区域不在原处画，按条带错位重画：钉住的那一边（'t' 顶 / 'b' 底 / 'l' 左 / 'r' 右）位移为 0、越往外越大（r^1.5），
      相位沿条带往外滞后一点（r × 1.6），读成挂着的东西在晃而不是整块平移。区域四周除了钉住那边都必须是透明的，不然错位会撕开。
      钉右 / 钉底是给朝右的闺蜜：拖在身后（左边）的头发、飘带挂在右边，翘起来的脚、往上飘的东西根在底边 */
-  function drawFrame(ctx, P, fn) {
+  /* src：从哪张图取（原图集，或 light.js 打好光 / 轮廓光 / 剪影的副本 —— 同一布局，坐标 × k） */
+  function drawFrame(ctx, P, fn, src = img, k = 1) {
     const i = SH.names.indexOf(fn), [cw, ch] = SH.cell, sx0 = (i % SH.cols) * cw, sy0 = Math.floor(i / SH.cols) * ch;
     const [x0, y0] = P.at([0, 0]), s = P.s, fx = cfg.flex && cfg.flex[fn];
-    if (!fx) { ctx.drawImage(img, sx0, sy0, cw, ch, x0, y0, cw * s, ch * s); return; }
+    const blit = (u, v, w, h, dx, dy, dw, dh) => ctx.drawImage(src, u * k, v * k, w * k, h * k, dx, dy, dw, dh);
+    if (!fx || k < 1) {                                       // 墙上影子的小剪影（k < 1）本来就是糊的，不按条带错位画
+ blit(sx0, sy0, cw, ch, x0, y0, cw * s, ch * s); return; }
     ctx.save(); ctx.beginPath(); ctx.rect(x0 - 1e4, y0 - 1e4, 3e4, 3e4);
     for (const f of fx) ctx.rect(x0 + f[2] * s, y0 + f[1] * s, (f[0] - f[2]) * s, (f[3] - f[1]) * s);   // 反向矩形 = 挖掉
     ctx.clip('evenodd');
-    ctx.drawImage(img, sx0, sy0, cw, ch, x0, y0, cw * s, ch * s);
+    blit(sx0, sy0, cw, ch, x0, y0, cw * s, ch * s);
     ctx.restore();
     const ST = 2;
     for (const [bx0, by0, bx1, by1, pin, amp, hz, lag] of fx) {
@@ -939,24 +960,27 @@ function Act(cfg) {
       /* 横条（钉上 / 下边，条带左右错位）或竖条（钉左 / 右边，上下错位）；r = 离钉住那边多远（0 ~ 1） */
       if (pin === 't' || pin === 'b') for (let y = by0; y < by1; y += ST) {
         const h = Math.min(ST, by1 - y), m = (y + h / 2 - by0) / (by1 - by0), d = off(pin === 't' ? m : 1 - m);
-        ctx.drawImage(img, sx0 + bx0, sy0 + y, bx1 - bx0, h, x0 + (bx0 + d) * s, y0 + y * s, (bx1 - bx0) * s, h * s + 0.6);
+        blit(sx0 + bx0, sy0 + y, bx1 - bx0, h, x0 + (bx0 + d) * s, y0 + y * s, (bx1 - bx0) * s, h * s + 0.6);
       } else for (let x = bx0; x < bx1; x += ST) {
         const w = Math.min(ST, bx1 - x), m = (x + w / 2 - bx0) / (bx1 - bx0), d = off(pin === 'l' ? m : 1 - m);
-        ctx.drawImage(img, sx0 + x, sy0 + by0, w, by1 - by0, x0 + x * s, y0 + (by0 + d) * s, w * s + 0.6, (by1 - by0) * s);
+        blit(sx0 + x, sy0 + by0, w, by1 - by0, x0 + x * s, y0 + (by0 + d) * s, w * s + 0.6, (by1 - by0) * s);
       }
     }
   }
   /* 挂件层：这一帧挂在 at[帧] 那一点、先转到帧上写的角度，再按 sway 甩（正弦 + 跟着秋千的摆往后拖，rad）。z 选画在人后还是人前 */
-  function drawParts(ctx, P, fn, z) {
+  function drawParts(ctx, P, fn, z, mode) {
     PARTS.forEach((q, i) => {
-      const im = partImg[i], a = q.at[fn];
-      if (!im || !a || q.fixed || (q.z || 1) !== z) return;
+      const im0 = partImg[i], a = q.at[fn];
+      if (!im0 || !a || q.fixed || (q.z || 1) !== z) return;
       if (q.ammo && !b.ammo) return;                          // 手里那一件本身：扔出去了、还没回来（reload）就不画
+      /* 挂件吃同一处的光（不叠轮廓光：它跟着甩、转角度，光边方向对不上）；剪影模式换小剪影 */
+      const sl = mode === 'sil' ? Light.sil(im0, 0, 0, im0.width, im0.height, light().shade) : null;
+      const im = sl ? sl.im : Light.lit(im0, 0, 0, im0.width, im0.height, light(), P.s, false), kk = sl ? sl.k : 1;
       /* 跟摆：身子（秋千 / 荡）以角速度 P.w 转，挂着的东西跟不上，相对身子往反方向拖 */
       const sw = q.sway || [0, 0, 0], ang = a[2] + sw[0] * Math.sin(b.t * 6.2832 * sw[1] + b.ph) - (sw[2] || 0) * P.w;
       const [x, y] = P.at([a[0], a[1]]), k = q.ammo && b.pop < 1 ? backOut(b.pop) : 1;   // 回到手上那一下从握点长出来（同 drawHeld）
       ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.scale(k, k);
-      ctx.drawImage(im, -q.pivot[0] * P.s, -q.pivot[1] * P.s, im.width * P.s, im.height * P.s);
+      ctx.drawImage(im, 0, 0, im0.width * kk, im0.height * kk, -q.pivot[0] * P.s, -q.pivot[1] * P.s, im0.width * P.s, im0.height * P.s);
       ctx.restore();
     });
   }
@@ -972,9 +996,11 @@ function Act(cfg) {
       const im = partImg[i];
       if (!im || !q.fixed || (q.z || 1) !== z) return;
       const a = Array.isArray(q.at) ? q.at : q.at[fn] || Object.values(q.at)[0];
-      ctx.save(); ctx.globalAlpha *= al;
-      ctx.translate(ax + (a[0] - cfg.anchor[0]) * s, ay + (a[1] - cfg.anchor[1]) * s); ctx.rotate(a[2] || 0);
-      ctx.drawImage(im, -q.pivot[0] * s, -q.pivot[1] * s, im.width * s, im.height * s);
+      const ox = ax + (a[0] - cfg.anchor[0]) * s, oy = ay + (a[1] - cfg.anchor[1]) * s, ang = a[2] || 0;
+      /* 布景跟人吃同一处的光（不然人压暗了、墙沿还是白天的亮度）；不叠轮廓光 —— 它是石头 / 砖，光边会读成描了一圈 */
+      const g = Light.lit(im, 0, 0, im.width, im.height, light(), s, false);
+      ctx.save(); ctx.globalAlpha *= al; ctx.translate(ox, oy); ctx.rotate(ang);
+      ctx.drawImage(g, 0, 0, im.width, im.height, -q.pivot[0] * s, -q.pivot[1] * s, im.width * s, im.height * s);
       ctx.restore();
     });
   }
@@ -1314,6 +1340,110 @@ function Act(cfg) {
     ctx.restore();
   }
 
+  /* ---- 立体感（light.js；docs/三人组角色规范.md「立体感」）----
+     三件事全按剪影和 cfg 自动算，60 人不逐人调：
+     · 站在哪（support）：脚下是 fixed 场景层（墙沿、石台）→ 'scene'，影子画在台面上；后排地面、前景地板（depth ≥ 0.8）→ 'floor'；
+       上方其余的（秋千、飞、倒挂、扒墙、浮着）→ 'air'，影子投在身后墙上。
+     · 影子的形状：这一帧剪影的底边（Light.profile），离地高度 = 整个人此刻比到位时高多少（place 的 dy < 0 那部分）。
+     · 打光（light）：按**到位时**的外框中心取这一处的光 —— 进场一路滑进来不重算（light.js 按格缓存，光一变就要重算这一格）；
+       镜头卷动（男女主被拖着走）时人钉在屏幕上、世界位置在变，光跟着变 */
+  let sup = null;
+  function light() {
+    const [ax, ay, s] = b.at, cx = ax + (texW() / 2 - cfg.anchor[0]) * s, cy = ay + (texH() / 2 - cfg.anchor[1]) * s;
+    return Light.at(cx, cy, Math.max(texW(), texH()) * s * 0.45);
+  }
+  /* 当前帧在图集里哪一格 → 剪影底边 */
+  function profileNow() {
+    if (!SH) return Light.profile(img, 0, 0, img.width, img.height);
+    const i = SH.names.indexOf(frameName()), [cw, ch] = SH.cell;
+    return Light.profile(img, (i % SH.cols) * cw, Math.floor(i / SH.cols) * ch, cw, ch);
+  }
+  /* 站在哪：待机帧贴地那几段的中点（到位时的屏幕位置）正下方 0~16px 内，fixed 场景层（画在人身后的）有不透明像素 → 'scene' */
+  function support() {
+    if (sup) return sup;
+    const fl = (cfg.depth || 1) >= 0.8 ? 'floor' : 'air';
+    if (!SH || !PARTS.some(q => q.fixed)) return (sup = fl);
+    const i = SH.names.indexOf(cfg.idle.frame), [cw, ch] = SH.cell, pr = Light.profile(img, (i % SH.cols) * cw, Math.floor(i / SH.cols) * ch, cw, ch);
+    if (!pr.touch.length) return (sup = fl);
+    const [ax, ay, s] = cfg.at, mx = pr.touch.reduce((a, q) => a + q[0] + q[1], 0) / pr.touch.length / 2;
+    const X = ax + (mx - cfg.anchor[0]) * s, Y = ay + (pr.yb - cfg.anchor[1]) * s;
+    const on = PARTS.some((q, k) => {
+      const im = partImg[k];
+      if (!q.fixed || (q.z || 1) !== -1 || !im) return false;
+      const a = Array.isArray(q.at) ? q.at : Object.values(q.at)[0];
+      const u = (X - (ax + (a[0] - cfg.anchor[0]) * s)) / s + q.pivot[0], v = (Y - (ay + (a[1] - cfg.anchor[1]) * s)) / s + q.pivot[1];
+      return alphaCol(im, u, v, v + 16 / s);
+    });
+    return (sup = on ? 'scene' : fl);
+  }
+  /* 场景层贴图 im 第 u 列、v0 ~ v1 行之间有没有不透明像素（判一次，不进每帧） */
+  function alphaCol(im, u, v0, v1) {
+    if (u < 0 || u >= im.width || v1 < 0 || v0 >= im.height) return false;
+    const c = document.createElement('canvas'), h = Math.max(1, Math.ceil(v1 - v0)); c.width = 1; c.height = h;
+    const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(im, Math.floor(u), Math.floor(v0), 1, h, 0, 0, 1, h);
+    const d = x.getImageData(0, 0, 1, h).data;
+    for (let k = 3; k < d.length; k += 4) if (d[k] > 128) return true;
+    return false;
+  }
+  /* 影子跟着露面的程度走：原地出现的淡入 / 由小弹大、从一条线后面升上来（脚还在线后面时不画） */
+  function shownK(P) {
+    if (EK !== 'appear') return 1;
+    let k = Math.min(1, appearK() * 1.6);
+    if (E.rise && P.dy > 0) k *= Math.max(0, 1 - P.dy / (0.12 * texH() * P.s));
+    return k;
+  }
+  /* 地上 / 台面上的接触影：贴地几段换到屏幕；离地（dy < 0）时影子留在到位时那条地面上、按高度变淡变散；从下面进场的（dy > 0）影子跟着脚走 */
+  function shadeFloor(ctx, P) {
+    const pr = profileNow(), L = light();
+    if (!pr.near) return;
+    const se = TE + b.stay, flip = SH && b.t > se && cfg.exit && cfg.exit.flip, ax = P.at(cfg.anchor)[0];
+    const X = (x, y) => { const p = pt(P, [x, y]); return [flip ? 2 * ax - p[0] : p[0], p[1]]; };
+    const lift = Math.max(0, -P.dy), k = shownK(P);
+    let touch, near;
+    if (Math.abs(P.spin) > 0.25 || Math.abs(P.rot) > 0.5) {          // 翻滚、大角度甩：底边转走了，按外框给一团
+      const r = Math.max(texW(), texH()) * P.s * 0.22;
+      touch = []; near = [[P.sc[0] - r, P.sc[0] + r, P.sc[1] + r * 1.2]];
+    } else {
+      const seg = ([a, c, y]) => { const p = X(a, y), q = X(c, y); return [Math.min(p[0], q[0]), Math.max(p[0], q[0]), (p[1] + q[1]) / 2 + lift]; };
+      touch = pr.touch.map(seg); near = pr.near.map(seg);
+    }
+    if (support() === 'scene') {                                        // 台面外面不画（腾空跳上墙沿那一段，影子不悬在空中）
+      ctx.save(); sceneClip(ctx); Light.contact(ctx, touch, near, P.s, lift, k, L); ctx.restore();
+    } else Light.contact(ctx, touch, near, P.s, lift, k, L);
+  }
+  function sceneClip(ctx) {
+    const [ax, ay, s] = b.at;
+    ctx.beginPath();
+    PARTS.forEach((q, i) => {
+      const im = partImg[i];
+      if (!q.fixed || (q.z || 1) !== -1 || !im) return;
+      const a = Array.isArray(q.at) ? q.at : Object.values(q.at)[0];
+      ctx.rect(ax + (a[0] - cfg.anchor[0]) * s - q.pivot[0] * s, ay + (a[1] - cfg.anchor[1]) * s - q.pivot[1] * s - 20 * s, im.width * s, im.height * s + 20 * s);
+    });
+    ctx.clip();
+  }
+  /* renderActors 一开头（所有人之前）：地上的接触影、悬空的人投在墙上的影子。站在场景层上的在 drawBody 里画。
+     墙上的影子 = 整个人按此刻的姿态再画一遍剪影（drawPerson 'sil'），往背光方向挪一点、放大自带模糊 */
+  let warmI = 0;
+  function shade(ctx) {
+    if (!Light.on || !b || b.wait > 0 || !img) return;
+    if (SH) {                                                   // 预热图集里的下一格（light.js warm，全场每帧一格）
+      const i = warmI++ % SH.names.length, [cw, ch] = SH.cell;
+      Light.warm(img, (i % SH.cols) * cw, Math.floor(i / SH.cols) * ch, cw, ch, light(), b.at[2]);
+    }
+    if (!Light.has.shadow) return;
+    const sp = support(), P = place();
+    if (sp === 'floor') shadeFloor(ctx, P);
+    else if (sp === 'air') {
+      const L = light(), [dx, dy] = Light.wallOff(L);
+      ctx.save(); ctx.translate(dx, dy); ctx.globalAlpha = Light.WALL.a;                 // 出现的淡入、升起剪切 drawPerson 自己会做
+      drawPerson(ctx, P, 'sil');
+      ctx.restore();
+    }
+  }
+  /* 离场走完：放掉打好光的副本（light.js drop） */
+  function unlit() { [img, ...partImg].forEach(Light.drop); }
+
   function items() {
     const out = [];
     if (b && b.wait <= 0 && img) out.push({ s: b.depth, draw: drawBody });
@@ -1324,7 +1454,7 @@ function Act(cfg) {
   }
   /* 此刻在哪一段：wait 等着上 / enter 进场 / on 在场 / exit 离场（胶片标格用：出手中途离场这种冲突只看帧名分不出来） */
   const phase = () => (!b ? null : b.wait > 0 || !ready ? 'wait' : b.t < TE ? 'enter' : b.t <= TE + b.stay ? 'on' : 'exit');
-  return { init, load, ready: () => ready, summon, update, items, drawOver, active, busy, reset, peek: () => (b ? [b] : []), flying, drops: () => jets, frame: () => (b && SH ? frameName() : null), phase, cfg };
+  return { init, load, ready: () => ready, summon, update, items, shade, drawOver, active, busy, reset, peek: () => (b ? [b] : []), flying, drops: () => jets, frame: () => (b && SH ? frameName() : null), phase, cfg };
 }
 
 /* ---- 程序画的小东西 ---- */
@@ -1436,6 +1566,8 @@ function Trio(data) {
       });
     },
     current: () => cur,
+    /* 影子先于所有人画（light.js）：main.js renderActors 一开头调 */
+    shade(ctx) { for (const m of all) m.shade(ctx); },
     active: () => all.some(m => m.active()),
     reset() { all.forEach(m => m.reset()); cur = {}; },
   };

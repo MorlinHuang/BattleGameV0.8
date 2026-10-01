@@ -90,9 +90,16 @@
    排查掉小半个钟头。带上 ?v=<任意变化的值> 就能只让 js 失效、图片照旧走缓存。
    document.write 在解析期插入，执行顺序与写死 script 标签完全一致。 */
 (function () {
+  /* ?seed=<整数>：Math.random 换成定种子的 mulberry32（诊断）—— 改前 / 改后两条胶片（?light=0 对 ?light=1）每格抽到的人、
+     出手时机、粒子都一模一样，并排才比得出来（docs/三人组角色规范.md「立体感」的对比胶片）。线上不带这个参数，不受影响 */
+  var sd = new URLSearchParams(location.search).get('seed');
+  if (sd != null) {
+    var a = (+sd | 0) || 1;
+    Math.random = function () { a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
   var v = new URLSearchParams(location.search).get('v');
   var q = v ? '?v=' + encodeURIComponent(v) : '';
-  var fs = ['fx.js', 'ammo.js', 'crew.js', 'trio.js', 'trio_buddy.js', 'trio_bestie.js', 'rain.js', 'sea.js', 'bubble.js', 'result.js', 'intro.js', 'bgmotion.js', 'preload.js', 'main.js'];
+  var fs = ['fx.js', 'ammo.js', 'crew.js', 'light.js', 'trio.js', 'trio_buddy.js', 'trio_bestie.js', 'rain.js', 'sea.js', 'bubble.js', 'result.js', 'intro.js', 'bgmotion.js', 'preload.js', 'main.js'];
   for (var i = 0; i < fs.length; i++) document.write('<scr' + 'ipt src="' + fs[i] + q + '"></scr' + 'ipt>');
   /* 读数行本身要留着（截图与压测都往里写），只是默认藏起来。这里必须写死 'flex'
      而不是清空 —— 清空只是去掉行内样式，#devrow{display:none} 那条还在，行还是不出来。 */
