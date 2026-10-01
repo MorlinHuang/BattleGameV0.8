@@ -1,6 +1,6 @@
 """三人组特效贴图离线烘焙（trio_fx.js 用），2026-10-01。
 
-    python3 tools/fx_bake.py        → web/assets/fx/trio/{beam,glow,ring,frag,dust,slash}.webp + atlas.json
+    python3 tools/fx_bake.py        → web/assets/fx/trio/{beam,glow,ring,frag,dust,slash,band}.webp + atlas.json
 
 全部贴图是**灰度值 + alpha**：RGB 三通道相同，存的是"这一点在色带上的位置" v（0 = 暗边 / 描边，0.45 = 本色，
 0.8 = 亮色，1 = 白高光），颜色在运行时由 trio_fx.js 的 ramp() 按调色板映射（每人 beam 的 glow / edge / layers、
@@ -453,17 +453,357 @@ def bake_slash():
     return im, cells
 
 
+# ---------- 带状物贴图条（第二批，P4②③ / P10）：沿长度平铺（横向周期），横截面烧明暗 ----------
+# 每条 256×64：x 沿带子长度（运行时按弧长取，周期 256），y 横截面（行 0 / 64 = 两条边，32 = 中线）。
+# 描边不烧进来：带子按段铺，每段宽度不一样（绸子扭转、末梢渐细），烧在贴图里的边对不上段的边 —— 描边由 trio_fx.js 沿两条边各描一笔。
+
+def bake_band():
+    W, H = 256, 64
+    X, Y = coords(W, H)
+    y = (Y - H / 2) / (H / 2)                       # -1 .. 1（-1 = 上边，光从上来）
+    ay = np.abs(y)
+    edge_a = smooth(1.0, 0.9, ay)                   # 两条边抗锯齿
+    strips = {}
+
+    def cyl(light=0.55):
+        """圆柱横截面的明暗：法线 (y, sqrt(1 - y²))，光从上前方来"""
+        nz = np.sqrt(np.clip(1 - y * y, 0, 1))
+        return np.clip(light * nz + 0.45 * (-y) * 0.9 + 0.25, 0, 1)
+
+    def tile(seed, sx, sy):                         # 输出分辨率的周期噪声放大到超采样网格（横向周期保持 256）
+        n = periodic_noise(H, W, sx, sy, seed)
+        return np.repeat(np.repeat(n, SS, axis=0), SS, axis=1)
+
+    # 绸：中间略鼓（亮）、两边卷边压暗，沿长度一缕缕的织纹光泽（低频、细长）。正反面共用，运行时换调色板
+    n = tile(31, 60, 3)
+    v = 0.5 + 0.1 * (1 - ay) + 0.16 * (n - 0.5)
+    v = np.where(ay > 0.82, 0.3 + 0.1 * (n - 0.5), v)
+    strips['silk'] = (v, edge_a)
+    # 光泽：绸面上一条软的高光带（中线偏上），沿长度断续 —— 运行时按扭转角调透明度叠上去
+    n = tile(32, 70, 8)
+    a = np.exp(-((y + 0.15) / 0.38) ** 2) * np.clip(0.2 + 1.2 * n, 0, 1) * edge_a
+    strips['sheen'] = (np.full(y.shape, 0.97), np.clip(a, 0, 1))
+    # 剑身（软鞭剑，金属）：暗边 → 下斜面 → 血槽 → 上斜面亮 → 一条白刃光
+    n = tile(33, 90, 4)
+    v = np.where(y < -0.3, 0.74, 0.5) + 0.05 * (n - 0.5)
+    v = np.where(ay < 0.13, 0.36, v)
+    v = np.maximum(v, np.exp(-((y + 0.56) / 0.07) ** 2))
+    v = np.where(ay > 0.84, 0.07, v)
+    strips['blade'] = (np.clip(v, 0, 1), edge_a)
+    # 竹：圆柱明暗 + 细纤维 + 每 64 px 一个竹节（暗缝 + 亮棱）
+    n = tile(34, 50, 1.2)
+    v = 0.2 + 0.62 * cyl() + 0.08 * (n - 0.5)
+    m = np.mod(X, 64)
+    v = np.where(m < 2.2, 0.12, np.where(m < 4.6, np.maximum(v, 0.9 - 0.2 * ay), v))
+    v = np.where(ay > 0.86, 0.06, v)
+    strips['bamboo'] = (np.clip(v, 0, 1), edge_a)
+    # 皮肤（橡皮臂）：圆柱明暗，每 64 px 一道弯的褶（拉长时运行时把 u 放稀，褶跟着拉开 = 拉伸纹）
+    v = 0.24 + 0.62 * cyl(0.5)
+    crease = np.mod(X - 10 * y * y, 64)
+    v = v - 0.18 * np.exp(-((crease - 32) / 1.3) ** 2) * (ay < 0.75)
+    v = np.where(ay > 0.86, 0.06, v)
+    strips['skin'] = (np.clip(v, 0, 1), edge_a)
+    # 麻绳：三股斜绞（股间暗缝）+ 毛刺纤维，边缘被毛刺啃得不齐
+    n = tile(35, 5, 1.0)
+    ph = np.mod(X / 21.33 + y * 0.7, 1.0)
+    strand = np.sin(np.pi * ph) ** 0.6
+    v = 0.12 + 0.5 * strand * cyl(0.6) + 0.25 * cyl(0.6) + 0.1 * (n - 0.5)
+    v = np.where(ay > 0.84, 0.08, v)
+    rough = smooth(1.0, 0.88, ay + 0.06 * (n - 0.5))
+    strips['rope'] = (np.clip(v, 0, 1), rough)
+    # 水柱：半透明水身（中间透、边缘一圈折射暗边更实），上沿一条断续的白高光、下沿一道淡的，水身里流动的明暗
+    n = tile(36, 30, 6)
+    n2 = tile(37, 40, 3)
+    body_a = 0.5 + 0.35 * smooth(0.55, 0.9, ay) + 0.12 * (n - 0.5)
+    v = 0.55 + 0.18 * (n - 0.5)
+    v = np.where(ay > 0.8, 0.14, v)
+    hl = np.exp(-((y + 0.42) / 0.09) ** 2) * np.clip((n2 - 0.45) * 4, 0, 1)
+    hl2 = np.exp(-((y - 0.5) / 0.06) ** 2) * np.clip((n2 - 0.6) * 3, 0, 1) * 0.6
+    v = np.maximum(v, np.clip(hl + hl2, 0, 1))
+    a = np.maximum(body_a, np.clip(hl + hl2, 0, 1)) * edge_a
+    strips['water'] = (np.clip(v, 0, 1), np.clip(a, 0, 1))
+    # 拖尾：一缕软光（中间亮、两边淡），沿长度被噪声扯成一丝丝（火尾、拖光共用，运行时调色板定颜色）
+    n = tile(38, 28, 6)
+    a = np.exp(-(y / 0.5) ** 2) * np.clip(0.4 + 0.9 * n, 0, 1) * smooth(1.0, 0.8, ay)
+    v = 0.2 + 0.8 * np.exp(-(y / 0.3) ** 2) * (0.7 + 0.3 * n)
+    strips['trail'] = (np.clip(v, 0, 1), np.clip(a, 0, 1))
+
+    names = list(strips)
+    im = Image.new('RGBA', (W, H * len(names) + 64))
+    cells = {}
+    for i, k in enumerate(names):
+        v4, a4 = down(*strips[k], W, H)
+        im.paste(to_img(v4, a4), (0, i * H))
+        cells[k] = [0, i * H, W, H]
+    # 金铃（G13 白绸梢）：铃身（上圆下张口）+ 口沿一道厚边 + 一道开缝 + 顶上的环，圆鼓鼓地打光
+    C = 64
+    X2, Y2 = coords(C, C)
+    x, y = X2 - C / 2, Y2 - C / 2 - 2
+    pts = [(-17, 14), (-14, 6), (-12, -6), (-8, -13), (0, -16), (8, -13), (12, -6), (14, 6), (17, 14)]
+    body = poly_sdf(x, y, pts + [(17, 17), (-17, 17)])
+    loop = np.abs(np.hypot(x, y + 21) - 5) - 1.8
+    sdf = np.minimum(body, loop)
+    sh = dome_shade(body * SS, 12 * SS, amb=0.38)
+    v = 0.3 + 0.62 * sh
+    v = np.where(y > 13, 0.42 + 0.3 * smooth(17, 13, y), v)                              # 口沿
+    slot = (np.abs(x) < 9) & (np.abs(y - 9) < 1.4)
+    v = np.where(slot, 0.06, v)
+    v = np.where(loop < 0, 0.62, v)
+    v = np.maximum(v, np.exp(-(((x + 6) / 2.6) ** 2 + ((y + 6) / 4.5) ** 2)))           # 高光
+    v, a = solid(sdf, np.clip(v, 0, 1), ink=1.5)
+    v4, a4 = down(v, a, C, C)
+    im.paste(to_img(v4, a4), (0, H * len(names)))
+    cells['bell'] = [0, H * len(names), C, C]
+    return im, cells
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     meta = {}
-    for name, fn in [('beam', bake_beam), ('glow', bake_glow), ('ring', bake_ring), ('frag', bake_frag), ('dust', bake_dust), ('slash', bake_slash)]:
+    for name, fn in [('beam', bake_beam), ('glow', bake_glow), ('ring', bake_ring), ('frag', bake_frag), ('dust', bake_dust), ('slash', bake_slash), ('band', bake_band), ('beam2', bake_beam2), ('rip', bake_rip)]:
         im, cells = fn()
         p = os.path.join(OUT, name + '.webp')
-        im.save(p, 'WEBP', lossless=True, method=6)
+        if name == 'rip':                                       # 42 格序列帧，无损 425 KB；软的东西有损看不出来（q82 + alpha q60）
+            im.save(p, 'WEBP', quality=82, alpha_quality=60, method=6)
+        else:
+            im.save(p, 'WEBP', lossless=True, method=6)
         meta[name] = {'src': f'assets/fx/trio/{name}.webp', 'size': list(im.size), 'cells': cells}
         print(f'{name:6s} {im.size[0]}x{im.size[1]} {os.path.getsize(p) / 1024:.1f} KB')
     with open(os.path.join(OUT, 'atlas.json'), 'w') as f:
         json.dump(meta, f, ensure_ascii=False, indent=1)
+
+
+
+# ====================================================================================================================
+# 精特1b（2026-10-01 用户："光束圈太规范的圆、直线光束太直太死板"）：去规则的冲击波与光束。三条路并排比：
+#   A  程序化：冲击波 = 极坐标噪声位移的涟漪序列帧（外缘不圆、粗细不匀、随时间断成弧段、两三道波前错时扩散、内部能量纹）；
+#      光束 = 边缘被噪声啃毛的贴图条（外晕一缕缕、光身边缘起伏、芯亮度沿长度不匀）+ 运行时横向波动 / 脉动 / 游丝 / 电弧（trio_fx.js）
+#   B  生图：generate_image 出的冲击波、光束能量流（tools/fx_src/gen_*.png，品红幕布 / 自带 alpha），抠像转成色带位置 v + alpha
+#   AB A 管形状和动、B 管质感：涟漪序列帧的波带里按极坐标贴 B 冲击波的纹理；光束 A 的网格 + B 的束身贴图
+# 产物：beam2.webp（光束条）、rip.webp（冲击波序列帧 + B 单帧）
+# ====================================================================================================================
+
+SRC = os.path.join(os.path.dirname(__file__), 'fx_src')
+
+
+def gen_va(path):
+    """生图 → (v, alpha)，0..1 浮点、原尺寸。自带 alpha 的直接用；品红幕布按"品红度" min(R, B) − G 抠（int16，防 uint8 下溢）。
+    v = 亮度拉伸到色带位置（深蓝描边 → 0.1 上下、青色本体 → 0.5、白芯 → 1）：颜色在运行时由调色板重新给"""
+    im = np.array(Image.open(path).convert('RGBA')).astype(np.int16)
+    r, g, b, a = im[..., 0], im[..., 1], im[..., 2], im[..., 3]
+    if a.min() < 250:
+        al = a / 255.0
+    else:
+        m = np.minimum(r, b) - g
+        al = np.clip(1 - (m - 40) / 120.0, 0, 1)
+        r = np.where(al < 1, np.minimum(r, g + 40), r)       # 去色溢：只动过渡带
+        b = np.where(al < 1, np.minimum(b, g + 40), b)
+    lum = (0.3 * r + 0.59 * g + 0.11 * b) / 255.0
+    v = np.clip((lum - 0.06) / 0.86, 0, 1)
+    return v, al
+
+
+def resize_va(v, a, w, h):
+    """带 alpha 的缩放：v 预乘 alpha 缩，再除回去（不让透明处的 v 渗进边缘）"""
+    A = np.array(Image.fromarray((a * 65535).astype(np.uint32).astype(np.int32), 'I').resize((w, h), Image.LANCZOS)).astype(float) / 65535
+    VA = np.array(Image.fromarray(((v * a) * 65535).astype(np.uint32).astype(np.int32), 'I').resize((w, h), Image.LANCZOS)).astype(float) / 65535
+    A = np.clip(A, 0, 1)
+    return np.clip(np.where(A > 1e-3, VA / np.maximum(A, 1e-3), 0), 0, 1), A
+
+
+def loopx(v, a, W):
+    """横向首尾交叉淡化成周期 W 的条（输入宽 > W）：x ∈ [0, W)，尾部 ov 列与开头淡化相接"""
+    n = v.shape[1]
+    ov = n - W
+    out_v, out_a = v[:, :W].copy(), a[:, :W].copy()
+    k = np.linspace(0, 1, ov)[None, :]
+    out_a[:, :ov] = a[:, :ov] * k + a[:, W:W + ov] * (1 - k)
+    out_v[:, :ov] = (v[:, :ov] * a[:, :ov] * k + v[:, W:W + ov] * a[:, W:W + ov] * (1 - k)) / np.maximum(out_a[:, :ov], 1e-4)
+    return out_v, out_a
+
+
+def bake_beam2():
+    W, H = 256, 64
+    X, Y = coords(W, H)
+    y = (Y - H / 2) / (H / 2)
+    ay = np.abs(y)
+    strips = {}
+
+    def tile(seed, sx, sy):
+        n = periodic_noise(H, W, sx, sy, seed)
+        return np.repeat(np.repeat(n, SS, axis=0), SS, axis=1)
+
+    # 外晕（被啃毛）：一缕缕往外飘的软光，边缘按噪声阈值侵蚀 —— 不是一条直边的光管
+    n1, n2, n3 = tile(51, 30, 7), tile(52, 80, 20), tile(53, 12, 3)
+    reach = 0.55 + 0.4 * n2                                        # 这一列外晕伸多远
+    a = np.exp(-(y / (0.5 * reach)) ** 2) * (0.25 + 1.2 * n1)
+    a = a * smooth(0.25, 0.55, n3 + 0.5 * (1 - ay / np.maximum(reach, 0.2)))   # 侵蚀：越往外越容易被啃掉
+    a = np.clip(a, 0, 1) * smooth(1.0, 0.85, ay)
+    v = 0.16 + 0.35 * np.exp(-(y / 0.35) ** 2) * n1
+    strips['haloE'] = (np.clip(v, 0, 1), a)
+    # 光身（毛边）：平顶管，边缘半宽按低频噪声起伏 ±18%，再被高频噪声啃出缺口和外溢的小火苗；暗边照旧（亮底图靠它立住）
+    n4, n5, n6 = tile(54, 26, 4), tile(55, 40, 64), tile(56, 6, 2)
+    edge = 0.78 + 0.16 * (n5 - 0.5) * 2 + 0.06 * (n6 - 0.5) * 2
+    a = smooth(edge + 0.1, edge, ay)
+    tongue = smooth(0.62, 0.8, n6) * smooth(edge + 0.22, edge, ay) * (ay > edge)          # 外溢的小火苗
+    a = np.maximum(a, tongue * 0.9)
+    inner = np.clip(1 - ay / np.maximum(edge - 0.08, 0.1), 0, 1)
+    v = np.where(ay > edge - 0.08, 0.07, 0.4 + 0.42 * inner ** 1.2 + 0.32 * (n4 - 0.5))
+    v = np.where(tongue > 0.3, 0.55, v)
+    strips['bodyE'] = (np.clip(v, 0, 1), np.clip(a, 0, 1))
+    # 中层（亮纹）：拉长的条纹，强度沿长度有大块明暗（一股股往前推）
+    n7, n8 = tile(57, 24, 3.5), tile(58, 120, 64)
+    a = np.exp(-(y / 0.42) ** 2) * (0.15 + 1.4 * n7) * (0.5 + 0.9 * n8)
+    a = np.clip(a, 0, 1) * smooth(1.0, 0.7, ay)
+    v = 0.42 + 0.4 * np.exp(-(y / 0.22) ** 2) + 0.18 * (n7 - 0.5)
+    strips['midE'] = (np.clip(v, 0, 1), a)
+    # 芯：亮度沿长度不匀（低频噪声调宽度和亮度），偶尔细到一线
+    n9, n10 = tile(59, 70, 64), tile(60, 16, 2.5)
+    wid = 0.2 + 0.18 * n9
+    a = np.clip(np.exp(-(y / wid) ** 2) * (0.7 + 0.5 * n10), 0, 1) * smooth(1.0, 0.75, ay)
+    v = 0.7 + 0.3 * np.exp(-(y / (wid * 0.5)) ** 2) * (0.6 + 0.4 * n9)
+    strips['coreE'] = (np.clip(v, 0, 1), a)
+    names = list(strips)
+    rows = []
+    for k in names:
+        rows.append(down(*strips[k], W, H))
+    # B：生图束身。a 当光身（带深蓝暗边），b 只留亮丝当中层。束身大约在图高 30%~70%，取中间一条、按 64 行缩、横向交叉淡化成 256 周期
+    for name, path, only_hot in [('bodyB', 'gen_beam_a.png', False), ('midB', 'gen_beam_b.png', True)]:
+        v, a = gen_va(os.path.join(SRC, path))
+        hh = v.shape[0]
+        rr = np.where(a.mean(axis=1) > 0.05)[0]
+        y0, y1 = max(0, rr[0] - 8), min(hh, rr[-1] + 8)
+        v, a = v[y0:y1], a[y0:y1]
+        Wn = int(round(v.shape[1] * H / (y1 - y0)))
+        v, a = resize_va(v, a, Wn, H)
+        v, a = loopx(v, a, W)
+        if only_hot:
+            a = a * smooth(0.45, 0.8, v)
+        rows.append((v, a))
+        names.append(name)
+    im = Image.new('RGBA', (W, H * len(names)))
+    cells = {}
+    for i, (k, (v, a)) in enumerate(zip(names, rows)):
+        im.paste(to_img(v, a), (0, i * H))
+        cells[k] = [0, i * H, W, H]
+    return im, cells
+
+
+def ring_band_tex(path, NT=512, NR=48):
+    """B 冲击波按极坐标展开成"波带纹理"：每个角度找这一圈的内外沿（alpha 加权的径向分布），把这一段拉成 NR 行 → (NR, NT) 的 v / alpha"""
+    v, a = gen_va(path)
+    h, w = v.shape
+    cy, cx = h / 2, w / 2
+    th = np.linspace(-np.pi, np.pi, NT, endpoint=False)
+    rs = np.linspace(0, min(cx, cy) * 0.98, 400)
+    xs = cx + np.cos(th)[None, :] * rs[:, None]
+    ys = cy + np.sin(th)[None, :] * rs[:, None]
+    xi, yi = np.clip(xs.astype(int), 0, w - 1), np.clip(ys.astype(int), 0, h - 1)
+    A, Vv = a[yi, xi], v[yi, xi]                                   # (400, NT)
+    cum = np.cumsum(A, axis=0)
+    tot = cum[-1] + 1e-6
+    r_in = rs[np.argmax(cum > tot * 0.04, axis=0)]
+    r_out = rs[np.argmax(cum > tot * 0.97, axis=0)]
+    t = np.linspace(0, 1, NR)[:, None]
+    rr = r_in[None, :] * (1 - t) + r_out[None, :] * t
+    xi = np.clip((cx + np.cos(th)[None, :] * rr).astype(int), 0, w - 1)
+    yi = np.clip((cy + np.sin(th)[None, :] * rr).astype(int), 0, h - 1)
+    return v[yi, xi], a[yi, xi]                                    # 行 0 = 内沿、NR−1 = 外沿
+
+
+def bake_rip():
+    """冲击波：A 序列帧 2 变体 × 10 帧、AB 序列帧 2 × 10、B 单帧 2 张。格 192（运行时最大画到 ~300 px，软的东西放大不露怯）"""
+    C, NF = 192, 10
+    X, Y = coords(C, C)
+    x, y = (X - C / 2) / (C / 2), (Y - C / 2) / (C / 2)
+    r = np.hypot(x, y)
+    th = np.arctan2(y, x)
+    u = (th + np.pi) / (2 * np.pi)                                 # 0..1 绕一圈
+    tiles, names = [], []
+    btex = [ring_band_tex(os.path.join(SRC, p)) for p in ('gen_ring_a.png', 'gen_ring_b.png')]
+
+    def polar(nz, tau, rows):
+        """周期噪声表 nz（rows × 256，行 = 时间、列 = 角度）在 (u, tau) 处插值 → 与 u 同形"""
+        fr = tau * (rows - 1)
+        r0 = int(np.floor(fr)); r1 = min(rows - 1, r0 + 1); k = fr - r0
+        row = nz[r0] * (1 - k) + nz[r1] * k
+        return np.interp(u * 256, np.arange(257), np.append(row, row[0]))
+
+    for var in range(2):
+        nzR = periodic_noise(64, 256, 14, 10, 300 + var)            # 波前半径起伏
+        nzT = periodic_noise(64, 256, 9, 8, 310 + var)              # 粗细
+        nzG = periodic_noise(64, 256, 7, 6, 320 + var)              # 断成弧段
+        nzR2 = periodic_noise(64, 256, 11, 10, 330 + var)
+        nzW = periodic_noise(64, 256, 3, 14, 340 + var)             # 外沿甩出的游丝（沿角度细长）
+        tex = periodic_noise(C * SS, C * SS, 30, 30, 350 + var)     # 波带里的能量纹（A）
+        for mode in ('A', 'AB'):
+            bv, ba = btex[var]
+            for f in range(NF):
+                tau = (f + 0.5) / NF
+                grow = 1 - (1 - tau) ** 2.4
+                # 主波前：半径随角度起伏 ±10%，粗细 0.45~1.55 倍、越扩越薄；后期按阈值断开成弧段
+                R1 = (0.26 + 0.6 * grow) * (1 + 0.2 * (polar(nzR, tau, 64) - 0.5))
+                T1 = (0.12 * (1 - tau) ** 0.7 + 0.02) * (0.45 + 1.1 * polar(nzT, tau, 64))
+                gate = smooth(-0.07, 0.07, polar(nzG, tau, 64) - (0.12 + 0.55 * tau ** 1.3))
+                d = r - R1
+                bt = np.clip((d + T1 * 0.35) / (T1 * 1.35), 0, 1)       # 0 内沿 .. 1 外沿
+                inb = smooth(-T1 * 0.35 - 0.012, -T1 * 0.35 + 0.012, d) * smooth(T1 + 0.012, T1 - 0.012, d)
+                if mode == 'A':
+                    tx = 0.75 + 0.5 * (tex - 0.5) * 2
+                    a1 = inb * gate * np.clip(tx, 0.2, 1)
+                    v1 = np.where(bt < 0.2, 1.0, np.where(bt < 0.78, 0.9 - 0.45 * (bt - 0.2) / 0.58, 0.06))
+                    v1 = np.clip(v1 + 0.12 * (tex - 0.5), 0, 1)
+                else:                                                     # AB：波带里贴 B 冲击波的纹理（按角度、带内位置取）
+                    NR, NT = bv.shape
+                    ti = np.clip((bt * (NR - 1)).astype(int), 0, NR - 1)
+                    ui = ((u * 1.0 + 0.13 * var) % 1 * NT).astype(int) % NT
+                    sbv, sba = bv[ti, ui], ba[ti, ui]
+                    a1 = inb * gate * np.clip(0.25 + 0.95 * sba, 0, 1)
+                    v1 = np.where(bt > 0.8, 0.06, np.clip(0.2 + 0.85 * sbv, 0, 1))
+                    v1 = np.where(bt < 0.12, np.maximum(v1, 0.92), v1)
+                # 第二道波前（晚一点、细、淡）
+                tau2 = max(0.0, (tau - 0.18) / 0.82)
+                R2 = (0.18 + 0.5 * (1 - (1 - tau2) ** 2.4)) * (1 + 0.24 * (polar(nzR2, tau, 64) - 0.5))
+                T2 = (0.06 * (1 - tau2) + 0.01) * (0.5 + polar(nzT, 1 - tau, 64))
+                d2 = r - R2
+                a2 = smooth(T2 + 0.01, T2 - 0.01, np.abs(d2)) * smooth(-0.1, 0.1, polar(nzG, 1 - tau, 64) - 0.3) * 0.65 * (tau > 0.12)
+                v2 = np.where(d2 > T2 * 0.4, 0.1, 0.85)
+                # 游丝：外沿往外甩出的细长弧丝，越晚越长越淡
+                wl = (0.03 + 0.09 * tau) * polar(nzW, tau, 64)
+                a3 = smooth(0.55, 0.75, polar(nzW, tau, 64)) * smooth(T1 + wl + 0.01, T1, d) * smooth(T1 - 0.01, T1 + 0.01, d) * (1 - tau) * gate
+                v3 = 0.5
+                # 早期中心能量雾
+                a4 = (tex * 0.16) * smooth(R1 * 0.9, R1 * 0.4, r) * max(0.0, 1 - tau / 0.3)
+                v4 = 0.85
+                vv, aa = over(np.full(r.shape, v4), a4, np.full(r.shape, v3), a3)
+                vv, aa = over(vv, aa, v2, a2)
+                vv, aa = over(vv, aa, v1, a1)
+                v4_, a4_ = down(np.clip(vv, 0, 1), np.clip(aa, 0, 1) * smooth(1.0, 0.96, r), C, C)
+                tiles.append(to_img(v4_, a4_))
+                names.append(f'rip{mode}{var}_{f}')
+    # B 单帧：生图冲击波缩到格子里（整圈 0.92 半径）
+    for k, p in enumerate(('gen_ring_a.png', 'gen_ring_b.png')):
+        v, a = gen_va(os.path.join(SRC, p))
+        ys_, xs_ = np.where(a > 0.05)
+        cy, cx = v.shape[0] / 2, v.shape[1] / 2
+        R = max(np.abs(xs_ - cx).max(), np.abs(ys_ - cy).max()) / 0.94
+        c = (int(cx - R), int(cy - R), int(cx + R), int(cy + R))
+        pad = lambda m: np.pad(m, ((max(0, -c[1]), max(0, c[3] - m.shape[0])), (max(0, -c[0]), max(0, c[2] - m.shape[1]))))
+        vv, aa = pad(v), pad(a)
+        o0, o1 = max(0, c[1]), max(0, c[0])
+        vv, aa = vv[o0:o0 + c[3] - c[1], o1:o1 + c[2] - c[0]], aa[o0:o0 + c[3] - c[1], o1:o1 + c[2] - c[0]]
+        vv, aa = resize_va(vv, aa, C, C)
+        tiles.append(to_img(vv, aa))
+        names.append(f'ringB{k}')
+    cols = 10
+    rows = (len(tiles) + cols - 1) // cols
+    im = Image.new('RGBA', (cols * C, rows * C))
+    cells = {}
+    for i, (n, t) in enumerate(zip(names, tiles)):
+        cx_, cy_ = (i % cols) * C, (i // cols) * C
+        im.paste(t, (cx_, cy_))
+        cells[n] = [cx_, cy_, C, C]
+    return im, cells
 
 
 if __name__ == '__main__':

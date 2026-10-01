@@ -21,14 +21,23 @@
   旧的那一侧**不是抄的**：运行时把 main.js 的 RECIPE、trio.js 的 TRIO_RECIPE 原文切出来执行（INK 起到 Object.assign(RECIPE, TRIO_RECIPE) 前），
   只有光束 / 斩痕两段画法是闭包里的，抄在下面 oldBeam / oldSlash（注明出处行号）。
   URL：
-    ?mode=hit|beam|dust &recipe=<名> &look=B19|B22|G23|G30 &s=1.7 &dir=<度，光束出口方向相对直线的偏角>
-    ?film=hit|beam|dust [&recipes=a,b,..] [&looks=..]  → 离线拍胶片：固定 1/60 步长、定种子，画到 #sheet，window.FILM = dataURL
-    ?bench=1 [&frames=600]                               → 真实计时：同屏 6 人 + 主角的负载，旧 / 新各跑一遍，结果写进标题
+    ?mode=hit|beam|dust|ribbon|jet|qi|trail|rope|petal &recipe=<名> &look=<件> &s=1.7 &dir=<度，出口方向相对默认的偏角>
+         件：beam B19 B22 G23 G30 / ribbon G9 G13 G17 B12 G29 / jet B1 G1 B20 / qi B23 G14 / trail G16 G15 G20 / rope G11 / petal G7
+    ?film=<模式> [&recipes=a,b,..] [&looks=..]           → 离线拍胶片：固定 1/60 步长、定种子，画到 #sheet，window.FILM = dataURL
+    ?bench=1 [&frames=600] [&bench2=1]                   → 真实计时：同屏 6 人 + 主角的负载，旧 / 新各跑一遍，结果写进标题；
+                                                          bench2 = 再加第二批的件（一条水柱、一条绸、一记橡皮臂、一个带火尾的狐火、一组剑气）
+  第二批（带状物 / 水柱喷雾 / 剑气 / 拖尾 / 绳 / 花瓣上限）的旧侧：drawWhip / drawArm / drawSwing / puff 是 trio.js 闭包里的，抄在 oldWhip / oldArm /
+  oldSwing / oldPuff（注明出处行号，2026-10-01 工作区版本）；水柱 / 喷雾运行时从 crew.js 原文切 drawStream / drawMist 执行。
+  水滴的发射与飞行两侧共用一份（照 trio.js stepJet / stepDrops 的口径简化：定点喷口、反解仰角、扫动落点），只有画法不同。
 -->
 <div id="bar">
-  <label>模式 <select id="mode"><option value="hit">命中</option><option value="beam">光束</option><option value="dust">尘土</option></select></label>
+  <label>模式 <select id="mode"><option value="hit">命中</option><option value="beam">光束</option><option value="dust">尘土</option>
+    <option value="ribbon">绸 / 鞭 / 臂 / 棒</option><option value="jet">水柱 / 喷雾</option><option value="qi">剑气</option><option value="trail">拖尾</option>
+    <option value="rope">秋千绳</option><option value="petal">花瓣上限</option></select></label>
   <label>配方 <select id="recipe"></select></label>
-  <label>光束 <select id="look"></select></label>
+  <label>件 <select id="look"></select></label>
+  <label>方案 <select id="scheme"><option value="jp1">精特1</option><option value="A">A 程序化</option><option value="B">B 生图</option><option value="AB">A+B</option></select></label>
+  <label>底图 <select id="bg"><option value="night">雷雨夜客厅</option><option value="day">白天客厅</option><option value="esports">电竞房</option></select></label>
   <label>颜色 glow <input type="color" id="cGlow"> edge <input type="color" id="cEdge"></label>
   <label>分量 s <select id="s"><option>0.55</option><option>1.0</option><option selected>1.7</option></select></label>
   <label>出口偏角 <input type="range" id="dir" min="-40" max="40" value="0"><span id="dirv">0°</span></label>
@@ -38,7 +47,7 @@
 </div>
 <div id="panes">
   <div class="pane"><span>旧（现在正式页的画法）</span><canvas id="cOld" width="960" height="640"></canvas></div>
-  <div class="pane"><span>新（trio_fx.js）</span><canvas id="cNew" width="960" height="640"></canvas></div>
+  <div class="pane"><span>新（trio_fx.js，方案见上）</span><canvas id="cNew" width="960" height="640"></canvas></div>
 </div>
 <div id="note"></div>
 <canvas id="sheet"></canvas>
@@ -90,6 +99,7 @@ const RECIPES = ['thud', 'star', 'splash', 'feather', 'melon', 'slash', 'petal',
 const WHO = { thud: 'B29', star: 'B12', splash: 'B27', feather: 'B18', melon: 'B28', slash: 'B23', petal: 'B11', debris: 'B8', hollow: 'B15', water: 'B19', ball: 'B21', rouge: 'G 口红' };
 
 let OLD = null;                                       // 旧配方（从 main.js / trio.js 原文切出来执行）
+let OLD2 = null, P2 = null, CREW = null;              // 新侧兜底用的旧配方（绑第二个粒子池）、crew.js 水柱 / 喷雾旧画法
 let BG = null;
 
 /* ---- 旧画法：trio.js drawBeam（fire 分支）+ orb，trio.js:1220-1245 原样 ---- */
@@ -128,17 +138,220 @@ function oldSlash(ctx, s) {
   ctx.restore();
 }
 
-async function loadOld() {
+/* ======================= 第二批：件的配置（cfg 原文，trio_bestie.js / trio_buddy.js）与场景几何 ======================= */
+const easeOut = (u) => 1 - Math.pow(1 - u, 3), backOut = (u) => { const c = 1.70158; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
+const BOY = [640, 1000];                              // 闺蜜侧的落点（男主在画面右边，这张底图没画他：取他脸的高度一带）
+const RIB = {                                         // whip：A.whip + phases 原文；dir 默认 = 自检量的出手帧手臂方向（P10②，"实测"）
+  G9: { kind: 'whip', from: [170, 860], to: BOY, dir: -52, phases: [0.14, 0.08, 0.22], style: 'silk',
+        Q: { w: 14, taper: 0.35, amp: 30, waves: 1.3, hz: 3, color: '#e0303a', edge: 'rgba(110,10,20,.9)' } },
+  G13: { kind: 'whip', from: [170, 860], to: BOY, dir: -18, phases: [0.14, 0.08, 0.22], style: 'silk',
+         Q: { w: 10, taper: 0.5, amp: 26, waves: 1.3, hz: 3, color: '#f6f4f8', edge: 'rgba(120,120,150,.9)', tip: [18, 13, '#e8b52c'] } },
+  G17: { kind: 'whip', from: [170, 860], to: BOY, dir: null, phases: [0.14, 0.08, 0.22], style: 'blade',
+         Q: { w: 7, taper: 0.55, amp: 26, waves: 2, hz: 4, color: '#f7a3c6', edge: 'rgba(120,30,70,.9)', tip: [30, 6, '#ffd6e6'] } },
+  /* punch：atk 原文。屏幕上的手腕 / 拳头静止位 = at + (格内 − anchor) × s（B12 at [940, 560, 1] anchor [300, 180]；这里整体挪到画面里） */
+  B12: { kind: 'punch', wr: [896, 930], fr: [876, 930], to: HIT, dir: null, s: 1, style: 'arm', sheet: 'assets/trio/B12_straw.webp', cell: [305, 360], cols: 2, fi: 0,
+         A: { fist: [0, 44, 36, 96], fistC: [16, 70], wrist: [36, 70], armW: 16, skin: '#f7cba0', skinShade: 'rgba(214,146,96,.5)', skinEdge: '#5a3420', fistZ: 1.35, phases: [0.16, 0.1, 0.34] } },
+  G29: { kind: 'punch', wr: [252, 1157], fr: [279.4, 1154], to: BOY, dir: null, s: 0.98, style: 'bamboo', sheet: 'assets/trio/G29_huangrong.webp', cell: [309, 339], cols: 4, fi: 2,
+         A: { fist: [270, 145, 308, 163], fistC: [290, 154], wrist: [262, 157], armW: 8, skin: '#6cbf45', skinShade: 'rgba(40,110,30,.55)', skinEdge: '#1f3d12', fistZ: 1.3, phases: [0.16, 0.12, 0.22] } },
+};
+const JETS = {
+  B1: { draw: 'stream', m: [840, 1060], to: HIT, face: -1, recipe: 'water', J: { V: 1250, G: 900, rate: 55, life: 1.6, miss: 90, hitEvery: 0.3, spread: 0, vJit: 0 } },
+  G1: { draw: 'mist', m: [150, 960], to: BOY, face: 1, recipe: 'pepper', J: { V: 1100, G: 60, drag: 1.0, rate: 90, spread: 0.1, vJit: 0.15, life: 0.8, miss: 60, snap: 12, hitEvery: 0.3, pulse: [0.42, 0.14] } },
+  B20: { draw: 'spray', m: [820, 900], to: HIT, face: -1, recipe: 'splash', Q: { dur: 0.6, rate: 90, T: 0.3, tick: 0.15, color: [235, 195, 110], r: 18, spread: 0.14 } },
+};
+const QIS = {                                          // atk.slash 原文；from = 出手点（刀尖），to = 落点；recipe 同 cfg.recipe
+  B23: { from: [860, 1180], to: HIT, dir: null, recipe: 'star', Q: { n: 3, gap: 0.08, len: 230, w: 18, life: 0.5, color: [90, 230, 110], ang: -0.5, spread: 0.25 } },
+  G14: { from: [190, 800], to: BOY, dir: null, recipe: 'star', Q: { n: 2, gap: 0.12, len: 240, w: 20, life: 0.5, color: [255, 215, 110], ang: -0.6, spread: 0.2 } },
+};
+const TRAILS = {                                       // throw：T / arc / spin 原文；item 图（平面 prop 或 3D 转盘图集）
+  G16: { recipe: 'foxfire', trail: 'fox', T: 0.5, arc: 0.2, spin: 10, prop: 'assets/world/trio_g16_foxfire.webp', scale: 0.45 },
+  G15: { recipe: 'water', trail: 'gem', T: 0.55, arc: 0.2, spin: 5.7, atlas: { src: 'assets/trio/prop_necklace.webp', n: 36, cols: 6, cell: 79, scale: 1.39 }, r: 26 },
+  G20: { recipe: 'crescent', trail: 'moon', T: 0.5, arc: 0.2, spin: 12, prop: 'assets/world/trio_g20_crescent.webp', scale: 0.5 },
+};
+const ROPE_G11 = { w: 7, fill: '#c9a36a', edge: 'rgba(70,45,20,.85)', wood: ['#b07a42', '#d9a468', 'rgba(90,55,25,.6)'], flowers: '#f59ab8' };
+const PIECES = { hit: null, dust: null, beam: Object.keys(LOOKS), ribbon: Object.keys(RIB), jet: Object.keys(JETS), qi: Object.keys(QIS), trail: Object.keys(TRAILS), rope: ['G11'], petal: ['G7'] };
+const IMGS = {};                                       // 场景里要用的角色图集 / 道具图（main 里预载）
+
+/* ---- 旧画法：trio.js drawWhip（工作区 trio.js:1086-1115，前排：中线直、往下垂 sag）原样 ---- */
+function oldWhip(ctx, Q, h, tg, t, Ph, s) {
+  const e = t < Ph[0] ? easeOut(t / Ph[0]) : t < Ph[0] + Ph[1] ? 1 : 1 - Math.pow(Math.min(1, (t - Ph[0] - Ph[1]) / Ph[2]), 2);
+  const dx = tg[0] - h[0], dy = tg[1] - h[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L, N = 22;
+  const pts = [];
+  for (let i = 0; i <= N; i++) {
+    const f = i / N, w = Math.sin(Math.PI * f) * (Q.amp || 24) * (1.2 - e) * Math.sin(6.2832 * (f * (Q.waves || 1.5) - t * (Q.hz || 4)));
+    const sag = Math.sin(Math.PI * f) * L * 0.08 * (1 - e * 0.6), mx = h[0] + dx * f * e, my = h[1] + dy * f * e;
+    pts.push([mx + nx * w, my + ny * w + sag]);
+  }
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const [grow, col] of [[4, Q.edge || 'rgba(40,20,10,.85)'], [0, Q.color || '#c0302a']]) {
+    ctx.strokeStyle = col;
+    for (let i = 0; i < N; i++) {
+      ctx.lineWidth = (Q.w || 8) * s * (1 - (1 - (Q.taper != null ? Q.taper : 0.5)) * i / N) + grow;
+      ctx.beginPath(); ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[i + 1][0], pts[i + 1][1]); ctx.stroke();
+    }
+  }
+  if (Q.tip) {
+    const [tl, tw, tc] = Q.tip, a = pts[N], c = pts[N - 2], ang = Math.atan2(a[1] - c[1], a[0] - c[0]);
+    ctx.translate(a[0], a[1]); ctx.rotate(ang);
+    ctx.lineWidth = tw * s + 4; ctx.strokeStyle = Q.edge || 'rgba(40,20,10,.85)'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(tl * s, 0); ctx.stroke();
+    ctx.lineWidth = tw * s; ctx.strokeStyle = tc; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(tl * s, 0); ctx.stroke();
+    ctx.lineWidth = tw * s * 0.3; ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.beginPath(); ctx.moveTo(tl * s * 0.15, -tw * s * 0.2); ctx.lineTo(tl * s * 0.85, -tw * s * 0.2); ctx.stroke();
+  }
+  ctx.restore();
+}
+/* 抽打的 e（drawWhip 同式）与出拳的 k（trio.js punchK 同式） */
+const whipE = (t, Ph) => t < Ph[0] ? easeOut(t / Ph[0]) : t < Ph[0] + Ph[1] ? 1 : 1 - Math.pow(Math.min(1, (t - Ph[0] - Ph[1]) / Ph[2]), 2);
+const punchK = (t, P) => t < P[0] ? easeOut(t / P[0]) : t < P[0] + P[1] ? 1 : 1 - backOut(Math.min(1, (t - P[0] - P[1]) / P[2]));
+/* 拳头 / 棒头：从出手帧那一格抠（trio.js drawArm 末尾同式），转到 ang */
+function drawFist(ctx, R, fx, fy, ang) {
+  const A = R.A, [fx0, fy0, fx1, fy1] = A.fist, c = A.fistC, z = R.s * A.fistZ, rest = Math.atan2(R.fr[1] - R.wr[1], R.fr[0] - R.wr[0]), im = IMGS[R.sheet];
+  const ox = (R.fi % R.cols) * R.cell[0], oy = Math.floor(R.fi / R.cols) * R.cell[1];
+  ctx.save(); ctx.translate(fx, fy); ctx.rotate(ang - rest);
+  ctx.drawImage(im, ox + fx0, oy + fy0, fx1 - fx0, fy1 - fy0, (fx0 - c[0]) * z, (fy0 - c[1]) * z, (fx1 - fx0) * z, (fy1 - fy0) * z);
+  ctx.restore();
+}
+/* ---- 旧画法：trio.js drawArm（工作区 trio.js:1201-1226，前排）原样，拳头走 drawFist ---- */
+function oldArm(ctx, R, k, pt) {
+  const A = R.A, s = R.s, wr = R.wr, fr = R.fr, tg = R.to;
+  const fx = fr[0] + (tg[0] - fr[0]) * k, fy = fr[1] + (tg[1] - fr[1]) * k;
+  const len = Math.hypot(fx - wr[0], fy - wr[1]), nx = -(fy - wr[1]) / (len || 1), ny = (fx - wr[0]) / (len || 1);
+  const wob = pt < A.phases[0] + A.phases[1] ? 0.08 : 0.16 * Math.sin(pt * 38);
+  const sag = len * wob * (ny < 0 ? -1 : 1);
+  const cx = (wr[0] + fx) / 2 + nx * sag, cy = (wr[1] + fy) / 2 + ny * sag;
+  const ang = Math.atan2(fy - cy, fx - cx);
+  const tube = (w, c, dx = 0, dy = 0) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(wr[0] + dx, wr[1] + dy); ctx.quadraticCurveTo(cx + dx, cy + dy, fx + dx, fy + dy); ctx.stroke(); };
+  const W = A.armW * s * (1 - 0.25 * Math.min(1, len / 500));
+  ctx.save(); ctx.lineCap = 'round';
+  tube(W + 5, A.skinEdge); tube(W, A.skin); tube(W * 0.45, A.skinShade, -nx * W * 0.22, -ny * W * 0.22);
+  tube(W * 0.22, 'rgba(255,240,220,.85)', nx * W * 0.25, ny * W * 0.25);
+  ctx.restore();
+  drawFist(ctx, R, fx, fy, ang);
+}
+/* ---- 旧画法：drawShot 'puff' 分支（工作区 trio.js:1131-1138）原样 ---- */
+function oldPuff(ctx, Q, s) {
+  const c = Q.color, u = s.t / s.life, r = (Q.r || 14) * (0.8 + 2.6 * u);
+  const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+  g.addColorStop(0, `rgba(255,255,255,${0.5 * (1 - u)})`); g.addColorStop(0.35, `rgba(${c[0]},${c[1]},${c[2]},${0.8 * (1 - u)})`); g.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, 6.2832); ctx.fill();
+}
+/* ---- 旧画法：drawSwing 的绳子两遍 stroke + ropeFlowers（工作区 trio.js:1028-1062）原样；座板两边同一套 ---- */
+function ropeFlowers(ctx, a, c, col, seed) {
+  const L = Math.hypot(c[0] - a[0], c[1] - a[1]), gap = 58;
+  for (let d = 24 + (seed * 17) % 30; d < L - 10; d += gap) {
+    const u = d / L, x = a[0] + (c[0] - a[0]) * u, y = a[1] + (c[1] - a[1]) * u, side = (Math.round(d / gap) + seed) % 2 ? 1 : -1;
+    ctx.save(); ctx.translate(x + side * 4, y);
+    ctx.fillStyle = '#5d9a4a'; ctx.beginPath(); ctx.ellipse(side * 6, 3, 5, 2.4, side * 0.5, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = col; for (let k = 0; k < 5; k++) { const q = k * 1.2566; ctx.beginPath(); ctx.arc(Math.cos(q) * 3.2, Math.sin(q) * 3.2, 2.6, 0, 6.2832); ctx.fill(); }
+    ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, 6.2832); ctx.fill();
+    ctx.restore();
+  }
+}
+function swingBoard(ctx, R, a, b) {
+  const h = 18, px0 = a[0] - 6, px1 = b[0] + 6, py0 = (a[1] + b[1]) / 2 - 2;
+  ctx.fillStyle = R.wood[0]; ctx.strokeStyle = R.edge; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.rect(px0, py0, px1 - px0, h); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = R.wood[1]; ctx.fillRect(px0 + 2, py0 + 2, px1 - px0 - 4, h * 0.32);
+}
+function oldRope(ctx, R, pts, w) {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const [ww, c] of [[w + 3, R.edge], [w, R.fill]]) { ctx.strokeStyle = c; ctx.lineWidth = ww; ctx.beginPath(); pts.forEach((p, j) => (j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.stroke(); }
+}
+/* 平面道具 / 3D 转盘一格（trio.js drawShot / drawAtlas 同式） */
+function drawItem(ctx, P, s) {
+  ctx.save(); ctx.translate(s.x, s.y);
+  if (P.atlas) { const T = P.atlas, n = T.n, i = ((Math.floor(s.ang / 6.2832 * n) % n) + n) % n, d = 2 * P.r * T.scale;
+    ctx.drawImage(IMGS[T.src], (i % T.cols) * T.cell, Math.floor(i / T.cols) * T.cell, T.cell, T.cell, -d / 2, -d / 2, d, d); }
+  else { const im = IMGS[P.prop], w = im.width * P.scale, h = im.height * P.scale; ctx.rotate(s.ang); ctx.drawImage(im, -w / 2, -h / 2, w, h); }
+  ctx.restore();
+}
+
+/* ---- 水滴：两侧共用的一份发射 + 飞行（trio.js stepJet / stepDrops 的口径：反解仰角 elevation、扫动落点、pulse、碰到落点那一列溅开） ---- */
+function jetSim(C, onDrip, onHit) {
+  const J = C.J, F = C.face, drops = [];
+  let e = 0, seq = 0, hitCd = 0, t = 0;
+  const elev = (dx, dy) => { const D = Math.abs(dx), h = -dy, v2 = J.V * J.V, g = J.G; if (g === 0) return Math.atan2(h, D);
+    const disc = v2 * v2 - g * (g * D * D + 2 * h * v2); return disc >= 0 ? Math.atan((v2 - Math.sqrt(disc)) / (g * D)) : Math.PI / 4; };
+  return {
+    drops, ja: 0,
+    step(dt, on) {
+      t += dt; hitCd -= dt;
+      const tg = [C.to[0] + 24 * Math.sin(t * 1.3), C.to[1] + 30 * Math.sin(t * 2.9 + 1.3)];
+      this.ja = elev(tg[0] - C.m[0], tg[1] - C.m[1]);
+      let emit = on;
+      if (J.pulse) { const cyc = J.pulse[0] + J.pulse[1]; if (t % cyc > J.pulse[0]) { emit = false; e = 0; } }
+      if (emit) {
+        e += dt * J.rate;
+        while (e >= 1) {
+          e -= 1;
+          const age = e / J.rate, a = this.ja + (Math.random() * 2 - 1) * (J.spread || 0), v = J.V * (1 + (Math.random() * 2 - 1) * (J.vJit || 0));
+          const vx = F * v * Math.cos(a), vy = -v * Math.sin(a);
+          drops.push({ x: C.m[0] + vx * age, y: C.m[1] + vy * age + 0.5 * J.G * age * age, vx, vy: vy + J.G * age, t: age, seq: seq++, j: Math.random() });
+        }
+      }
+      const past = (d) => (F < 0 ? d.x <= tg[0] : d.x >= tg[0]);
+      for (let i = drops.length - 1; i >= 0; i--) {
+        const d = drops[i];
+        if (J.drag) { const k = Math.exp(-J.drag * dt); d.vx *= k; d.vy *= k; }
+        d.vy += J.G * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.t += dt;
+        if (past(d) && Math.abs(d.y - tg[1]) < J.miss) {
+          const y = J.snap == null ? d.y : tg[1] + Math.max(-J.snap, Math.min(J.snap, d.y - tg[1]));
+          drops.splice(i, 1); onDrip(tg[0], y);
+          if (hitCd <= 0) { onHit(tg[0], y); hitCd = J.hitEvery; }
+        } else if (d.t > J.life || d.y > 1380) drops.splice(i, 1);
+      }
+    },
+    dir() { return F > 0 ? -this.ja : Math.PI + this.ja; },     // 出口方向（屏幕角）
+  };
+}
+
+/* oldSlash 的 cfg 版（G14 金色、两道）：同 trio.js drawSlash */
+function oldSlashQ(ctx, s, Q) {
+  if (s.t < 0) return;
+  const c = Q.color, R = Q.len / 2, life = Q.life || 0.45, draw = Math.min(1, s.t / 0.07), fade = Math.min(1, (life - s.t) / (life * 0.5));
+  ctx.save(); ctx.translate(s.p[0], s.p[1]); ctx.rotate(s.ang); ctx.globalAlpha = Math.max(0, fade);
+  const a0 = -0.9, a1 = a0 + 1.8 * draw;
+  for (const [w, col] of [[Q.w * 1.35, 'rgba(15,30,70,.55)'], [Q.w * 2.2, `rgba(${c[0]},${c[1]},${c[2]},.35)`], [Q.w, `rgba(${c[0]},${c[1]},${c[2]},.95)`], [Q.w * 0.35, 'rgba(255,255,255,1)']]) {
+    ctx.fillStyle = col; ctx.beginPath();
+    ctx.arc(0, R * 0.4, R, a0 - Math.PI / 2, a1 - Math.PI / 2);
+    ctx.arc(0, R * 0.4 + w, R - w * 0.2, a1 - Math.PI / 2, a0 - Math.PI / 2, true);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+/* 出口方向：def = 这件的默认方向（度，null = 直线），off = 实验台滑块的偏角（度） */
+const dirOf = (from, to, def, off) => {
+  if (def == null && !off) return null;
+  return (def != null ? def * Math.PI / 180 : Math.atan2(to[1] - from[1], to[0] - from[0])) + (off || 0) * Math.PI / 180;
+};
+
+async function loadOld(Pt) {
   const [m, t] = await Promise.all(['main.js', 'trio.js'].map(f => fetch(f + '?v=' + V).then(r => r.text())));
   const a = m.indexOf('const INK = ['), b = m.indexOf('Object.assign(RECIPE, TRIO_RECIPE);');
   const c = t.indexOf('const TRIO_RECIPE = (() => {'), d = t.indexOf('})();', c) + 5;
   if (a < 0 || b < 0 || c < 0 || d < 5) throw new Error('fx_lab: main.js / trio.js 里找不到 RECIPE / TRIO_RECIPE 的边界，切片规则要跟着改');
-  const r = new Function('Particles', m.slice(a, b) + '\n' + t.slice(c, d) + '\nreturn Object.assign({}, RECIPE, TRIO_RECIPE);')(Particles);
+  const r = new Function('Particles', m.slice(a, b) + '\n' + t.slice(c, d) + '\nreturn Object.assign({}, RECIPE, TRIO_RECIPE);')(Pt);
   return r;
 }
+/* 第二个粒子池：新侧里 trio_fx 没有的配方（foxfire / crescent）照旧走 fx.js，但要画在新那张画布上 —— fx.js 的 Particles 是单例，原文再执行一份 */
+async function secondParticles() {
+  const src = await fetch('fx.js?v=' + V).then(r => r.text());
+  const a = src.indexOf('function drawChatIcon('), b = src.indexOf('})();', src.indexOf('const Particles = (function () {')) + 5;
+  if (a < 0 || b < 5) throw new Error('fx_lab: fx.js 里找不到 Particles 的边界');
+  return new Function(src.slice(a, b) + '\nreturn Particles;')();
+}
+/* crew.js 的 drawStream / drawMist（水柱、喷雾的旧画法）原文切出来执行；drawMist 读 MIST.fluid.life（crew.js MIST 原值 0.8） */
+async function loadCrew() {
+  const src = await fetch('crew.js?v=' + V).then(r => r.text());
+  const a = src.indexOf('const WATER = {'), b = src.indexOf('/* ---- 两个帮手的配置 ---- */');
+  if (a < 0 || b < 0) throw new Error('fx_lab: crew.js 里找不到 drawStream / drawMist 的边界');
+  return new Function('MIST', src.slice(a, b) + '\nreturn { drawStream, drawMist };')({ fluid: { life: 0.8 } });
+}
 const img = (src) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('加载失败 ' + src)); i.src = src; });
-async function loadBg() {
-  const [room, pose] = await Promise.all([img('assets/world/v15/room1.webp'), img('assets/world/pose_aF.webp')]);
+/* 底图：night = v15 雷雨夜客厅（正式页默认）/ day = v14 白天明亮客厅 / esports = v15 电竞房（三种底上都要清楚） */
+const BGS = { night: 'assets/world/v15/room1.webp', day: 'assets/world/room1.webp', esports: 'assets/world/v15/room2.webp' };
+async function loadBg(name) {
+  if (!BGS[name]) throw new Error('fx_lab: 未知底图 ' + name);
+  const [room, pose] = await Promise.all([img(BGS[name]), img('assets/world/pose_aF.webp')]);
   const c = document.createElement('canvas'); c.width = W; c.height = VIEW.h;
   const g = c.getContext('2d');
   g.translate(0, -VIEW.y0);
@@ -149,7 +362,7 @@ async function loadBg() {
 
 /* ---- 一个场景 = 两边各一套时间线；step(dt) 推进、draw(ctxOld, ctxNew) 画 ---- */
 function scene(mode, opt) {
-  Particles.clear(); TrioFX.clear(); SIM.q.length = 0;
+  Particles.clear(); P2.clear(); TrioFX.clear(); SIM.q.length = 0;
   const s = opt.s;
   if (mode === 'hit') {
     const r = opt.recipe;
@@ -224,6 +437,150 @@ function scene(mode, opt) {
       marker(ctx) { if (st.x != null) { ctx.fillStyle = 'rgba(40,30,30,.5)'; ctx.beginPath(); ctx.arc(st.x, FOOT[1] + 20, 6, 0, 6.283); ctx.fill(); } },
     };
   }
+  /* ======================= 第二批的场景 ======================= */
+  const NEWR = (r) => TrioFX.RECIPE[r] || OLD2[r];     // 新侧：trio_fx 有的配方用新的，没有的（foxfire / crescent）照旧 —— 正式页 Object.assign 之后也是这样
+  if (mode === 'ribbon') {
+    const R = RIB[opt.look], T0 = 0.05, st = { t: -1 };
+    const P = R.kind === 'whip' ? R.phases : R.A.phases, dur = P[0] + P[1] + P[2];
+    const h = TrioFX.ribbon(R.kind === 'whip' ? R.Q : R.A, R.style), from = R.kind === 'whip' ? R.from : R.wr, dir = dirOf(from, R.to, R.dir, opt.dir);
+    const rc = { G9: 'rouge', G13: 'star', G17: 'petal', B12: 'star', G29: 'thud' }[opt.look], side = R.to === HIT ? +1 : -1;
+    let hit = false;
+    return {
+      T: 0.85,
+      step(t) {
+        st.t = t - T0;
+        if (!hit && st.t >= P[0]) { hit = true; OLD[rc].burst(R.to[0], R.to[1], side, s); NEWR(rc).burst(R.to[0], R.to[1], side, s); }
+      },
+      drawOld(ctx) {
+        if (st.t < 0 || st.t >= dur) return;
+        if (R.kind === 'whip') oldWhip(ctx, R.Q, R.from, R.to, st.t, P, 1); else oldArm(ctx, R, punchK(st.t, P), st.t);
+      },
+      drawNew(ctx) {
+        if (st.t < 0 || st.t >= dur) return;
+        if (R.kind === 'whip') { h.draw(ctx, R.from, dir, R.to, whipE(st.t, P), st.t, 1); return; }
+        const k = punchK(st.t, P), f = [R.fr[0] + (R.to[0] - R.fr[0]) * k, R.fr[1] + (R.to[1] - R.fr[1]) * k];
+        h.draw(ctx, R.wr, dir, f, 1, st.t, R.s);
+        const tp = h.tip(); drawFist(ctx, R, tp[0], tp[1], tp[2]);
+      },
+    };
+  }
+  if (mode === 'jet') {
+    const C = JETS[opt.look], side = -C.face, T0 = 0.05;
+    if (C.draw === 'spray') {
+      const Q = C.Q, sp = TrioFX.spray(Q), puffs = [], dir = dirOf(C.m, C.to, null, opt.dir);
+      const S = { t: 0, e: 0, h: 0 };
+      return {
+        T: 1.6,
+        step(t, dt) {
+          if (t < T0) return;
+          S.t += dt; S.e += dt * Q.rate;
+          const h0 = C.m, tg = C.to;
+          while (S.e >= 1 && S.t <= Q.dur) {                 // trio.js stepFx b.sp 同式
+            S.e -= 1;
+            const a = Math.atan2(tg[1] - h0[1], tg[0] - h0[0]) + (Math.random() * 2 - 1) * (Q.spread || 0.12), d = Math.hypot(tg[0] - h0[0], tg[1] - h0[1]);
+            const v = d / (Q.T || 0.3) * (0.85 + Math.random() * 0.25), T = Q.T || 0.3, p2 = [h0[0] + Math.cos(a) * v * T, h0[1] + Math.sin(a) * v * T];
+            const c = TrioFX.ctrl(h0, dir, p2);
+            puffs.push({ x: h0[0], y: h0[1], p0: h0, c, p2, T, vx: 0, vy: 0, t: 0, life: T * (1.3 + Math.random() * 0.5), j: Math.random() });
+            sp.emit(h0, dir != null ? dir : a);
+          }
+          if (S.t >= (Q.T || 0.3) + S.h * Q.tick && S.t <= Q.dur + (Q.T || 0.3)) {
+            if (S.h === 0) { OLD[C.recipe].burst(tg[0], tg[1], side, s); NEWR(C.recipe).burst(tg[0], tg[1], side, s); }
+            else { OLD.water.drip(tg[0], tg[1], side); TrioFX.RECIPE.water.drip(tg[0], tg[1], side); }
+            S.h++;
+          }
+          for (let i = puffs.length - 1; i >= 0; i--) {     // trio.js stepShot 'puff' 同式
+            const q = puffs[i]; q.t += dt;
+            if (q.t < q.T) { const e = q.t / q.T, u = 1 - e, x = u * u * q.p0[0] + 2 * u * e * q.c[0] + e * e * q.p2[0], y = u * u * q.p0[1] + 2 * u * e * q.c[1] + e * e * q.p2[1];
+              q.vx = (x - q.x) / dt; q.vy = (y - q.y) / dt; q.x = x; q.y = y; }
+            else { if (q.t > q.life * 0.55) { const k = Math.exp(-6 * dt); q.vx *= k; q.vy *= k; } q.x += q.vx * dt; q.y += q.vy * dt; }
+            if (q.t >= q.life) puffs.splice(i, 1);
+          }
+        },
+        drawOld(ctx) { for (const q of puffs) oldPuff(ctx, Q, q); },
+        drawNew(ctx) { for (const q of puffs) sp.puff(ctx, q); },
+      };
+    }
+    let first = true;
+    const hit = (x, y) => { const k = first ? s : 0.55; first = false; OLD[C.recipe].burst(x, y, side, k); NEWR(C.recipe).burst(x, y, side, k); };
+    const drip = (x, y) => { OLD[C.recipe === 'water' ? 'water' : 'pepper'].drip(x, y, side); TrioFX.RECIPE[C.recipe === 'water' ? 'water' : 'pepper'].drip(x, y, side); };
+    const sim = jetSim(C, drip, hit), h = C.draw === 'stream' ? TrioFX.stream() : TrioFX.mist({ life: C.J.life });
+    return {
+      T: 2.0,
+      step(t, dt) { sim.step(dt, t >= T0 && t < 1.6); },
+      drawOld(ctx) { ctx.save(); if (C.draw === 'stream') CREW.drawStream(ctx, sim.drops, { m: C.m }); else CREW.drawMist(ctx, sim.drops); ctx.restore(); },
+      drawNew(ctx) { const d = opt.dir ? sim.dir() + opt.dir * Math.PI / 180 : sim.dir(); h.draw(ctx, sim.drops, C.m, d); },
+    };
+  }
+  if (mode === 'qi') {
+    const C = QIS[opt.look], Q = C.Q, side = C.to === HIT ? +1 : -1, dir = dirOf(C.from, C.to, C.dir, opt.dir), T0 = 0.05, FLY = 0.12;
+    const cuts = [];
+    for (let i = 0; i < Q.n; i++) cuts.push({ i, p: [C.to[0] + (Math.random() - 0.5) * 40, C.to[1] + (Math.random() - 0.5) * 50], ang: Q.ang + (Math.random() * 2 - 1) * Q.spread + (i % 2 ? Math.PI * 0.12 : 0) });
+    const olds = cuts.map(c => ({ t: -T0 - c.i * Q.gap, p: c.p, ang: c.ang, hit: false })), news = cuts.map(c => ({ t: -T0 - c.i * Q.gap, hit: false, flown: false, ...c }));
+    let firstO = true, firstN = true;
+    return {
+      T: 1.0,
+      step(t, dt) {
+        for (const q of olds) { q.t += dt; if (!q.hit && q.t >= 0.05) { q.hit = true; OLD[C.recipe].burst(q.p[0], q.p[1], side, firstO ? s : 0.55); firstO = false; } }
+        for (const q of news) {
+          q.t += dt;
+          if (!q.flown && q.t >= 0) { q.flown = true; TrioFX.qi(C.from, dir, q.p, Q.color, { T: FLY, len: Q.len, ang: q.ang, life: Q.life }); }
+          if (!q.hit && q.t >= FLY + 0.05) { q.hit = true; NEWR(C.recipe).burst(q.p[0], q.p[1], side, firstN ? s : 0.55); firstN = false; }
+        }
+      },
+      drawOld(ctx) { for (const q of olds) if (q.t < Q.life) oldSlashQ(ctx, q, Q); },
+      drawNew() {},
+    };
+  }
+  if (mode === 'trail') {
+    const C = TRAILS[opt.look], h = TrioFX.trail(TrioFX.TRAIL[C.trail]), p0 = [200, 840], p2 = BOY, T0 = 0.05;
+    const d = Math.hypot(p2[0] - p0[0], p2[1] - p0[1]), c = [(p0[0] + p2[0]) / 2, Math.min(p0[1], p2[1]) - C.arc * d];
+    const sh = { x: p0[0], y: p0[1], t: 0, ang: 0, vx: 0, vy: 0, fall: null, stuck: null }, side = -1;
+    let on = false, done = false;
+    return {
+      T: 1.5,
+      step(t, dt) {
+        if (t < T0 || done) return;
+        on = true;
+        if (sh.fall != null) {                               // trio.js stepShot 打中弹开同式
+          sh.vy += 1800 * dt; sh.x += sh.vx * dt; sh.y += sh.vy * dt; sh.ang += C.spin * dt; sh.fall -= dt;
+          if (sh.fall <= 0) done = true;
+        } else {
+          sh.t += dt;
+          const e = Math.min(1, sh.t / C.T), u = 1 - e, nx = u * u * p0[0] + 2 * u * e * c[0] + e * e * p2[0], ny = u * u * p0[1] + 2 * u * e * c[1] + e * e * p2[1];
+          sh.vx = (nx - sh.x) / dt; sh.vy = (ny - sh.y) / dt; sh.x = nx; sh.y = ny; sh.ang += C.spin * dt;
+          if (e >= 1) { OLD[C.recipe].burst(sh.x, sh.y, side, s); NEWR(C.recipe).burst(sh.x, sh.y, side, s); sh.fall = 0.9; sh.vx = 110; sh.vy = -520; }
+        }
+        h.track(sh, dt);
+      },
+      drawOld(ctx) { if (on && !done) { ctx.save(); ctx.globalAlpha = sh.fall != null ? Math.min(1, sh.fall / 0.3) : 1; drawItem(ctx, C, sh); ctx.restore(); } },
+      drawNew(ctx) { if (!on) return; h.draw(ctx, sh); if (!done) { ctx.save(); ctx.globalAlpha = sh.fall != null ? Math.min(1, sh.fall / 0.3) : 1; drawItem(ctx, C, sh); ctx.restore(); } },
+    };
+  }
+  if (mode === 'rope') {
+    const R = ROPE_G11, PV = [330, 160], st = { t: 0 };
+    const at = (t) => { const th = 0.42 * Math.sin(2.6 * t), w = 0.42 * 2.6 * Math.cos(2.6 * t), co = Math.cos(th), si = Math.sin(th);
+      const P = (x, y) => [PV[0] + x * co - y * si, PV[1] + x * si + y * co];
+      return { a: P(-85, 900), b: P(85, 900), ta: P(-85, 560), tb: P(85, 560), w }; };
+    return {
+      T: 2.42,
+      step(t) { st.t = t; },
+      drawOld(ctx) { const q = at(st.t); for (const [e, top, i] of [[q.a, q.ta, 0], [q.b, q.tb, 1]]) { oldRope(ctx, R, [e, top], R.w); ropeFlowers(ctx, e, top, R.flowers, i * 3); } swingBoard(ctx, R, q.a, q.b); },
+      drawNew(ctx) { const q = at(st.t); for (const [e, top, i] of [[q.a, q.ta, 0], [q.b, q.tb, 1]]) { TrioFX.rope(ctx, [e, top], R.w, R.fill, R.edge, -q.w * 14); ropeFlowers(ctx, e, top, R.flowers, i * 3); } swingBoard(ctx, R, q.a, q.b); },
+    };
+  }
+  if (mode === 'petal') {
+    /* 闺蜜 petal 五人（G7 G11 G17 G18 G26）打男主：首击 s 1.7，之后每 0.35 s 补一下（s 0.55）—— 正式页连送时就是这样叠 */
+    const X = [600, 1010], side = -1;
+    let k = 0;
+    return {
+      T: 1.8,
+      step(t) {
+        while (k < 3 && t >= 0.05 + k * 0.35) { const ss = k ? 0.55 : s; OLD.petal.burst(X[0], X[1], side, ss); TrioFX.RECIPE.petal.burst(X[0], X[1], side, ss); k++; }
+      },
+      drawOld() {}, drawNew() {},
+      marker(ctx) { ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.arc(X[0], X[1], 200, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); },
+    };
+  }
   throw new Error('未知模式 ' + mode);
 }
 
@@ -236,11 +593,11 @@ function render(sc, cOld, cNew) {
     g.drawImage(BG, 0, 0);
     g.translate(0, -VIEW.y0);
     if (side === 'old') { sc.drawOld(g); Particles.draw(g); }
-    else { sc.drawNew(g); TrioFX.draw(g); }
+    else { sc.drawNew(g); P2.draw(g); TrioFX.draw(g); }
     if (sc.marker) sc.marker(g);
   }
 }
-function step(sc, t, dt) { simAdvance(dt); sc.step(t, dt); Particles.update(dt); TrioFX.update(dt); }
+function step(sc, t, dt) { simAdvance(dt); sc.step(t, dt); Particles.update(dt); P2.update(dt); TrioFX.update(dt); }
 
 /* ---- 胶片：固定步长推进，到采样时刻把两边裁一块贴到 sheet 上 ---- */
 function film(kind) {
@@ -251,14 +608,30 @@ function film(kind) {
   if (kind === 'beam') for (const k of (Q.get('looks') || 'B19,B22,G23,G30').split(',')) rows.push({ mode: 'beam', opt: { look: LOOKS[k], s, dir: +(Q.get('dir') || 0) }, label: k,
     times: [0.3, 0.47, 0.53, 0.65, 0.8, 1.0], crop: [HIT[0] - 200, MUZZLE[1] - 400, 800, 500] });
   if (kind === 'dust') rows.push({ mode: 'dust', opt: { s }, label: '落地 + 滑行', times: [0.03, 0.1, 0.2, 0.35, 0.5, 0.7, 0.9, 1.1], crop: [330, 1100, 630, 278] });
-  const cw = kind === 'hit' ? 240 : kind === 'beam' ? 400 : 420, sc0 = cw / rows[0].crop[2], ch = Math.round(rows[0].crop[3] * sc0);
+  /* 第二批：每种件一行（老上新下），时刻对齐动作的关键点 */
+  const B2 = {
+    ribbon: { times: [0.09, 0.14, 0.19, 0.25, 0.33, 0.43], crop: [100, 770, 860, 430] },        // 出手 0.05：甩出去中途 / 到点（0.19 / 0.21）/ 停 / 收回
+    jet: { times: [0.12, 0.3, 0.55, 0.85, 1.2, 1.7], crop: [100, 770, 860, 430] },
+    qi: { times: [0.09, 0.13, 0.17, 0.21, 0.3, 0.5], crop: [100, 770, 860, 430] },              // 剑气 0.05 → 0.17 到；之后刀光展开
+    trail: { times: [0.15, 0.27, 0.4, 0.52, 0.62, 0.9], crop: [100, 770, 860, 430] },           // 0.05 出手、0.55 打中
+    rope: { times: [0.0, 0.3, 0.6, 0.9, 1.2, 1.5], crop: [130, 740, 420, 520] },
+    petal: { times: [0.08, 0.25, 0.45, 0.7, 1.0, 1.4], crop: [0, 740, 960, 640] },
+  };
+  if (B2[kind]) for (const k of (Q.get('looks') || PIECES[kind].join(',')).split(','))
+    rows.push({ mode: kind, opt: { look: k, s, dir: +(Q.get('dir') || 0) }, label: k, times: B2[kind].times, crop: B2[kind].crop });
+  const cw = kind === 'hit' ? 240 : kind === 'rope' ? 260 : kind === 'dust' ? 420 : 400, sc0 = cw / rows[0].crop[2], ch = Math.round(rows[0].crop[3] * sc0);
   const ncol = rows[0].times.length, LBL = 26;
+  /* &schemes=jp1,A,B,AB：每一项拍"旧 + 每个方案"一行一行往下排（同种子、同时刻）；不给就是旧 + 当前方案两行 */
+  const SCH = (Q.get('schemes') || TrioFX.scheme()).split(','), NAME = { jp1: '精特1', A: 'A 程序化', B: 'B 生图', AB: 'A+B' };
+  const per = 1 + SCH.length;
   const sheet = document.getElementById('sheet');
-  sheet.width = ncol * cw; sheet.height = rows.length * 2 * (ch + LBL);
+  sheet.width = ncol * cw; sheet.height = rows.length * per * (ch + LBL);
   const G = sheet.getContext('2d');
   G.fillStyle = '#111'; G.fillRect(0, 0, sheet.width, sheet.height);
   const cOld = document.getElementById('cOld'), cNew = document.getElementById('cNew');
-  rows.forEach((row, ri) => {
+  const sch0 = TrioFX.scheme();
+  rows.forEach((row, ri) => SCH.forEach((sch, si) => {
+    TrioFX.setScheme(sch);
     seed(1000 + ri);
     const sc = scene(row.mode, row.opt);
     let t = 0, k = 0;
@@ -267,8 +640,8 @@ function film(kind) {
       step(sc, t, DT); t += DT;
       if (t + 1e-6 >= row.times[k]) {
         render(sc, cOld, cNew);
-        for (const [c, j, tag] of [[cOld, 0, '旧'], [cNew, 1, '新']]) {
-          const y = (ri * 2 + j) * (ch + LBL);
+        for (const [c, j, tag] of si ? [[cNew, si + 1, NAME[sch]]] : [[cOld, 0, '旧'], [cNew, 1, NAME[sch]]]) {
+          const y = (ri * per + j) * (ch + LBL);
           G.drawImage(c, cx, cy - VIEW.y0, cw0, ch0, k * cw, y + LBL, cw, ch);
           G.fillStyle = j ? '#9fe' : '#fb9'; G.font = '15px system-ui';
           G.fillText(`${tag} ${row.label}  t=${row.times[k].toFixed(2)}s`, k * cw + 6, y + 18);
@@ -276,7 +649,8 @@ function film(kind) {
         k++;
       }
     }
-  });
+  }));
+  TrioFX.setScheme(sch0);
   return sheet.toDataURL('image/png');
 }
 
@@ -285,8 +659,15 @@ function bench(frames) {
   const OFF = Q.get('benchoff');                                       // 差值分账：beam 不画光束 / part 不画粒子 / all 都不画（剩下的是生成 + 更新）（skill chashouji-verify 第四节）
   const c = document.getElementById('cNew'), g = c.getContext('2d');
   const run = (side) => {
-    seed(5); Particles.clear(); TrioFX.clear(); SIM.q.length = 0;
+    seed(5); Particles.clear(); P2.clear(); TrioFX.clear(); SIM.q.length = 0;
     const fxs = [TrioFX.beam(LOOKS.B22.beam), TrioFX.beam(LOOKS.G23.beam)], st = [{}, {}];
+    /* bench2：第二批的件同屏再加一份 —— B1 水柱一直喷、G9 红绸每 0.6 s 抽一下、B12 橡皮臂每 0.8 s 出一拳、G16 狐火每 0.6 s 扔一个（带火尾）、
+       B23 每 1.2 s 三道剑气。水柱的水滴两侧各跑一份同样的模拟（定种子），落点溅射走各自的 water.drip */
+    const B2 = Q.get('bench2') ? (() => {
+      const W = side === 'old' ? OLD.water : TrioFX.RECIPE.water;
+      return { jet: jetSim(JETS.B1, (x, y) => W.drip(x, y, +1), () => {}), stream: TrioFX.stream(), silk: TrioFX.ribbon(RIB.G9.Q, 'silk'), arm: TrioFX.ribbon(RIB.B12.A, 'arm'),
+               fox: TrioFX.trail(TrioFX.TRAIL.fox), shots: [], cuts: [], lastQi: -1 };
+    })() : null;
     const ms = [], cnt = [];
     let t = 0, last = 0;
     for (let f = 0; f < frames; f++) {
@@ -309,15 +690,53 @@ function bench(frames) {
         });
         if (Q.get('benchskid') !== '0') st.forEach((o, i) => TrioFX.skid(o, 300 + 400 * ((t * 0.7 + i * 0.5) % 1), 1340, -600, dt, 1));   // 旧的没有滑行尘；&benchskid=0 对等比
       }
+      if (B2) {
+        B2.jet.step(dt, true);
+        if (Math.floor(t / 0.6) !== Math.floor((t - dt) / 0.6)) B2.shots.push({ x: 200, y: 840, t: 0, ang: 0, vx: 0, vy: 0, fall: null, stuck: null });
+        for (const sh of B2.shots) {
+          sh.t += dt; const e = Math.min(1, sh.t / 0.5), u = 1 - e, nx = u * u * 200 + 2 * u * e * 420 + e * e * 640, ny = u * u * 840 + 2 * u * e * 740 + e * e * 1000;
+          sh.vx = (nx - sh.x) / dt; sh.vy = (ny - sh.y) / dt; sh.x = nx; sh.y = ny; sh.ang += 10 * dt;
+          if (side === 'new') B2.fox.track(sh, dt);
+        }
+        while (B2.shots.length && B2.shots[0].t >= 0.5) B2.shots.shift();
+        const qi = Math.floor(t / 1.2);
+        if (qi !== B2.lastQi) {
+          B2.lastQi = qi;
+          for (let i = 0; i < 3; i++) {
+            const p = [HIT[0] + (Math.random() - 0.5) * 40, HIT[1] + (Math.random() - 0.5) * 50], ang = -0.5 + (Math.random() * 2 - 1) * 0.25;
+            if (side === 'new') TrioFX.qi(QIS.B23.from, null, p, QIS.B23.Q.color, { T: 0.12, len: 230, ang, life: 0.5, delay: i * 0.08 });
+            else B2.cuts.push({ t: -i * 0.08, p, ang });
+          }
+        }
+        for (const c of B2.cuts) c.t += dt;
+        while (B2.cuts.length && B2.cuts[0].t >= 0.5) B2.cuts.shift();
+      }
       Particles.update(dt); TrioFX.update(dt);
       const tB = performance.now();
       g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(BG, 0, 0); g.translate(0, -VIEW.y0);
       g.getImageData(0, 0, 1, 1);                                     // 先把底图这一笔做完，下面只计特效的绘制
       const tC = performance.now();
+      const wt = t % 0.6, at = t % 0.8;
       if (side === 'old') {
         [LOOKS.B22.beam, LOOKS.G23.beam].forEach((B, i) => { if (ph <= 0.45 || firing) oldBeam(g, B, from(i), to(i), firing ? ph - 0.45 : ph, firing ? 'fire' : 'charge', 20); });
+        if (B2) {
+          CREW.drawStream(g, B2.jet.drops, { m: JETS.B1.m });
+          if (wt < 0.44) oldWhip(g, RIB.G9.Q, RIB.G9.from, RIB.G9.to, wt, RIB.G9.phases, 1);
+          if (at < 0.6) oldArm(g, RIB.B12, punchK(at, RIB.B12.A.phases), at);
+          for (const sh of B2.shots) drawItem(g, TRAILS.G16, sh);
+          for (const c of B2.cuts) oldSlash(g, c);
+        }
         Particles.draw(g);
-      } else { if (OFF !== 'beam' && OFF !== 'all') fxs.forEach(fx => fx.draw(g)); if (OFF !== 'part' && OFF !== 'all') TrioFX.draw(g); }
+      } else {
+        if (OFF !== 'beam' && OFF !== 'all') fxs.forEach(fx => fx.draw(g));
+        if (B2) {
+          B2.stream.draw(g, B2.jet.drops, JETS.B1.m, B2.jet.dir());
+          if (wt < 0.44) B2.silk.draw(g, RIB.G9.from, RIB.G9.dir * Math.PI / 180, RIB.G9.to, whipE(wt, RIB.G9.phases), wt, 1);
+          if (at < 0.6) { const R = RIB.B12, k = punchK(at, R.A.phases); B2.arm.draw(g, R.wr, null, [R.fr[0] + (R.to[0] - R.fr[0]) * k, R.fr[1] + (R.to[1] - R.fr[1]) * k], 1, at, 1); const tp = B2.arm.tip(); drawFist(g, R, tp[0], tp[1], tp[2]); }
+          for (const sh of B2.shots) { B2.fox.draw(g, sh); drawItem(g, TRAILS.G16, sh); }
+        }
+        if (OFF !== 'part' && OFF !== 'all') TrioFX.draw(g);
+      }
       g.getImageData(0, 0, 1, 1);                                     // 逼渲染把这一帧的绘制真做完，计时才算数
       const tD = performance.now();
       if (f >= 30) { ms.push((tB - tA) + (tD - tC)); cnt.push(side === 'old' ? Particles.count() : TrioFX.count()); }
@@ -327,9 +746,12 @@ function bench(frames) {
     return { mean: +mean.toFixed(3), p95: +ms[Math.floor(ms.length * 0.95)].toFixed(3), max: +ms[ms.length - 1].toFixed(3),
              peak: Math.max(...cnt), avg: Math.round(cnt.reduce((a, b) => a + b, 0) / cnt.length) };
   };
-  run('new');                                                         // 预热一遍（ramp 缓存、pattern 都建好）
-  const o = run('old'), n = run('new');
-  return { old: o, new: n, frames };
+  /* &schemes=jp1,A,B,AB：新侧按每个方案各跑一遍（各自先预热一遍）；不给就是当前方案 */
+  const SCH = (Q.get('schemes') || TrioFX.scheme()).split(','), sch0 = TrioFX.scheme(), res = { frames };
+  res.old = run('old');
+  for (const k of SCH) { TrioFX.setScheme(k); run('new'); res[k] = run('new'); }
+  TrioFX.setScheme(sch0);
+  return res;
 }
 
 /* ---- 交互 ---- */
@@ -338,7 +760,9 @@ const unhex = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 let cur = null, t0 = 0, tSim = 0;
 function restart() {
   const mode = document.getElementById('mode').value;
-  const look = JSON.parse(JSON.stringify(LOOKS[document.getElementById('look').value]));
+  const key = document.getElementById('look').value;
+  if (mode !== 'beam') { cur = scene(mode, { recipe: document.getElementById('recipe').value, look: key, s: +document.getElementById('s').value, dir: +document.getElementById('dir').value }); tSim = 0; return; }
+  const look = JSON.parse(JSON.stringify(LOOKS[key]));
   const gl = unhex(document.getElementById('cGlow').value), ed = unhex(document.getElementById('cEdge').value);
   if (hex(gl) !== hex(look.beam.glow) || hex(ed) !== hex(look.beam.edge)) {     // 改了颜色：glow / edge 替换，layers 按新色重排（外层 edge、内层往 glow 和白推）
     look.beam.glow = gl; look.beam.edge = ed;
@@ -360,21 +784,37 @@ function frame(now) {
 }
 
 (async function main() {
-  const [okFx] = await Promise.all([TrioFX.load(V), Particles.loadShapes(V, false)]);
+  P2 = await secondParticles();
+  const [okFx] = await Promise.all([TrioFX.load(V), Particles.loadShapes(V, false), P2.loadShapes(V, false)]);
   if (!okFx) throw new Error('fx_lab: trio_fx 贴图没加载全');
-  OLD = await loadOld();
-  BG = await loadBg();
+  OLD = await loadOld(Particles); OLD2 = await loadOld(P2); CREW = await loadCrew();
+  BG = await loadBg(Q.get('bg') || 'night');
+  if (Q.get('scheme')) TrioFX.setScheme(Q.get('scheme'));
+  const srcs = new Set([...Object.values(RIB).filter(r => r.sheet).map(r => r.sheet), ...Object.values(TRAILS).map(c => c.prop || c.atlas.src)]);
+  await Promise.all([...srcs].map(async (k) => { IMGS[k] = await img(k + '?v=' + V); }));
   const rs = document.getElementById('recipe'), ls = document.getElementById('look');
   for (const r of RECIPES) rs.add(new Option(`${r}（${WHO[r]}）`, r));
-  for (const k of Object.keys(LOOKS)) ls.add(new Option(k, k));
-  const syncColor = () => { const B = LOOKS[ls.value].beam; document.getElementById('cGlow').value = hex(B.glow); document.getElementById('cEdge').value = hex(B.edge); };
+  const fillLooks = () => {                              // 件的下拉随模式换
+    const m = document.getElementById('mode').value, keep = ls.value;
+    ls.length = 0;
+    for (const k of PIECES[m] || []) ls.add(new Option(k, k));
+    if ([...ls.options].some(o => o.value === keep)) ls.value = keep;
+  };
+  const syncColor = () => { if (!LOOKS[ls.value]) return; const B = LOOKS[ls.value].beam; document.getElementById('cGlow').value = hex(B.glow); document.getElementById('cEdge').value = hex(B.edge); };
   ls.onchange = () => { syncColor(); restart(); };
   if (Q.get('mode')) document.getElementById('mode').value = Q.get('mode');
+  fillLooks();
+  document.getElementById('mode').addEventListener('change', fillLooks);
   if (Q.get('recipe')) rs.value = Q.get('recipe');
   if (Q.get('look')) ls.value = Q.get('look');
   if (Q.get('s')) document.getElementById('s').value = Q.get('s');
   syncColor();
-  for (const id of ['mode', 'recipe', 's', 'cGlow', 'cEdge']) document.getElementById(id).onchange = restart;
+  for (const id of ['recipe', 's', 'cGlow', 'cEdge']) document.getElementById(id).onchange = restart;
+  const scs = document.getElementById('scheme'), bgs = document.getElementById('bg');
+  scs.value = TrioFX.scheme(); bgs.value = Q.get('bg') || 'night';
+  scs.onchange = () => { TrioFX.setScheme(scs.value); restart(); };
+  bgs.onchange = async () => { BG = await loadBg(bgs.value); restart(); };
+  document.getElementById('mode').addEventListener('change', () => { syncColor(); restart(); });
   document.getElementById('dir').oninput = (e) => { document.getElementById('dirv').textContent = e.target.value + '°'; restart(); };
   document.getElementById('go').onclick = restart;
 

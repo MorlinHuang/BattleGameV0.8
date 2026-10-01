@@ -63,6 +63,29 @@
  *        对等比（去掉旧版没有的滑行尘 &benchskid=0）：新·只画粒子 8.5 ms ≈ 旧·粒子 + 平涂光束 8.1 ms
  *      软渲染下绝对值偏大、填充率是瓶颈（skill chashouji-verify：这台机器绝对帧时间不可信，相对比可信）；手机 GPU 上 drawImage
  *      ~260 次 / 帧不是负担。真机帧时间未测。
+ *
+ * ======================================================================================================================
+ * 精特1b：去规则（2026-10-01 用户："光束圈太规范的圆，很代码很死板；直线光束太直太死板"）。接口不变，内部按方案出图：
+ *   TrioFX.setScheme('jp1' | 'A' | 'B' | 'AB')，TrioFX.scheme()。**默认 'AB'**；引擎不用调（fx_lab.html 的"方案"下拉用它并排比）。
+ *   jp1 精特1：冲击波 = 一张规整圆环贴图放大；光束 = 四层直贴图条
+ *   A   程序化：冲击波 = 涟漪序列帧（tools/fx_bake.py bake_rip：极坐标噪声位移 → 外缘不圆、粗细不匀、随时间断成弧段，两道波前错时扩散，
+ *       外沿甩游丝，早期中心一点能量雾；两套噪声随机挑 + 随机镜像，往受击方向漂一成半径）；
+ *       光束 = 沿路铺的网格（drawWavy）：三道不公约的横向波往前传（出口从 0 长起、中段最大、落点收到四成），每层相位错开不同心；
+ *       出口胀 1.4 倍、落点前收、宽度沿长度脉动；外晕 / 光身边缘被噪声啃毛（beam2 haloE / bodyE）；芯亮度沿长度不匀（coreE）；
+ *       两股游丝绕中线螺旋（虚线描边，偏移随时间滚）、偶发细电弧（每秒 ~9 道、0.07 s）
+ *   B   生图：generate_image 出的冲击波两张、光束能量流两张（tools/fx_src/gen_*.png，抠像转色带位置 v），形状仍是 jp1 的（圆环放大、直条）
+ *   AB  A 的形状和动 + B 的质感：涟漪序列帧的波带里按极坐标贴 B 冲击波的纹理；光束 A 的网格，光身 / 中层换 B 的能量流贴图
+ * 结论（胶片 shots/polish/精特1b_*：同场景同时刻定种子，雷雨夜 / 白天 / 电竞房三种底）：
+ *   · jp1 一眼是圆规画的同心圆 + 管子；B 质感好但轮廓还是正圆 / 直条（用户嫌的正是轮廓和运动，不是质感）—— 不选。
+ *   · A 轮廓、运动都去掉了几何感：圆断成漂移的弧段、几道波前错时，光束在扭、在胀缩、边缘冒火苗；但纹理偏"程序味"（干净的噪声），
+ *     光身按 52 px 一段铺，宽光束（G23）边上看得出折角。
+ *   · AB 选这个：A 解决形状和动，B 的手绘能量纹把网格折角和程序噪声都盖掉；三种底上都靠暗边立得住（电竞房蓝底上蓝光束对比比 jp1 弱一档，仍清楚）。
+ *   性能（fx_lab.html ?bench=1&schemes=jp1,A,B,AB，同第一批的压测场景，GUI Chrome + SwiftShader，600 帧，只计特效）：
+ *     旧 8.2 / p95 13.0 · jp1 12.9 / 19.9 · A 16.5 / 27.6 · B 13.2 / 20.6 · AB 16.9 / 28.0 ms（均值 / p95；同一页同一次跑完四个方案）
+ *     AB 比 jp1 多 ~4 ms：冲击波序列帧 ~+1.1（&benchoff=beam 分账）、两道网格光束 ~+2.5（每段一次路径填充；第一版 14 px 一段时 +8）。
+ *     软渲染下绝对值不可信、相对比可信；真机未测。
+ *     贴图：beam2.webp 47 KB + rip.webp 229 KB（有损，42 格序列帧）—— 不在首屏关键路径上，建议引擎放预取队列里 TrioFX.load。
+ * 第二批的件（带状物 / 水柱 / 剑气 / 拖尾）沿用同一套手法：形状和运动程序化去规则，质感用烘焙 / 生图贴图。
  * ====================================================================================================================== */
 'use strict';
 
@@ -147,7 +170,7 @@ const TrioFX = (function () {
     c = document.createElement('canvas');
     c.width = w; c.height = h;
     c.getContext('2d').putImageData(im, 0, 0);
-    if (rampCache.size > 400) rampCache.clear();        // 配方里颜色是离散的，正常几十条；上限防将来有人写连续随机色
+    if (rampCache.size > 1600) rampCache.clear();       // 配方里颜色是离散的，正常几十条 × 冲击波序列帧 10 帧；上限防将来有人写连续随机色
     rampCache.set(key, c);
     return c;
   }
@@ -164,7 +187,7 @@ const TrioFX = (function () {
   function spawn(o) {
     if (act.length >= MAX) pool.push(act.shift());       // 满了回收最老的（同 ammo.js：新发射的才是观众正在看的）
     const p = pool.pop() || {};
-    p.m = o.m || 'spr'; p.img = o.img; p.frames = o.frames || null; p.ft = o.ft || null;
+    p.m = o.m || 'spr'; p.img = o.img || null; p.frames = o.frames || null; p.ft = o.ft || null;
     p.x = o.x; p.y = o.y; p.vx = o.vx || 0; p.vy = o.vy || 0;
     p.g = o.g || 0; p.drag = o.drag != null ? o.drag : 1;
     p.life = o.life; p.age = -(o.delay || 0);
@@ -175,6 +198,9 @@ const TrioFX = (function () {
     p.a = o.a != null ? o.a : 1; p.fo = o.fo != null ? o.fo : 0.35; p.fi = o.fi != null ? o.fi : FADE_IN;
     p.z = o.z || 0; p.sq = o.sq || 1; p.sway = o.sway || 0; p.stretch = o.stretch || 0;
     p.orb = o.orb || 0; p.ox = o.x; p.oy = o.y;           // orb：绕出生点公转的半径（星星绕头转）
+    p.mx = o.mx || 1; p.my = o.my || 1;                   // 镜像（冲击波每次随机翻一翻，不用转 —— 转会走慢路径）
+    p.lim = o.lim || 0;                                   // lim：离出生点最远多少 px（P11 范围上限）：最后四分之一淡出，出界即收
+    p.path = o.path || null; p.T = o.T || 0;             // 'fly'：沿二次贝塞尔 path [x0, y0, cx, cy, x1, y1] 走 T 秒（剑气）
     act.push(p);
     return p;
   }
@@ -191,6 +217,8 @@ const TrioFX = (function () {
       p.y += p.vy * dt;
       p.rot += p.vrot * dt;
       if (p.orb) { p.ox += p.vx * dt; p.oy += p.vy * dt; }
+      if (p.path) { const q = flyAt(p, p.age); p.x = q[0]; p.y = q[1]; }
+      if (p.lim && Math.hypot(p.x - p.ox, p.y - p.oy) >= p.lim) { act.splice(i, 1); pool.push(p); }
     }
   }
 
@@ -209,16 +237,27 @@ const TrioFX = (function () {
       const u = p.age / p.life;
       let al;
       if (p.m === 'ring') al = p.a * Math.pow(1 - u, 1.3);
+      else if (p.m === 'flip') al = p.a * Math.pow(1 - u, 0.6);
       else al = p.a * (p.fi > 0 ? Math.min(1, p.age / p.fi) : 1) * Math.min(1, (p.life - p.age) / (p.life * p.fo));
+      if (p.lim) al *= Math.min(1, (p.lim - Math.hypot(p.x - p.ox, p.y - p.oy)) / (p.lim * 0.25));
       if (al <= 0.01) continue;
       ctx.globalAlpha = al;
       let x = p.x, y = p.y;
       if (p.orb) { const ph = p.fph + p.age * 7.4; x = p.ox + Math.cos(ph) * p.orb; y = p.oy + Math.sin(ph) * p.orb * 0.42; }
       ctx.setTransform(T);
       ctx.translate(x, y);
+      if (p.m === 'fly') { drawFly(ctx, p, T, al); continue; }
       if (p.m === 'ring') {
         const r = p.s0 + (p.s1 - p.s0) * easeOut(u);
+        ctx.scale(p.mx, p.my);
         ctx.drawImage(p.img, -r, -r * p.sq, r * 2, r * 2 * p.sq);
+        continue;
+      }
+      if (p.m === 'flip') {                               // 涟漪序列帧：帧里的波前自己在扩（半径 RIP_R(τ)），按 s0 → s1 定这一帧画多大
+        const f = Math.min(p.frames.length - 1, (u * p.frames.length) | 0), tau = (f + 0.5) / p.frames.length;
+        const r = p.s0 + (p.s1 - p.s0) * easeOut(u), H = r / RIP_R(p.s1 < p.s0 ? 1 - tau : tau);
+        ctx.scale(p.mx, p.my);
+        ctx.drawImage(p.frames[p.s1 < p.s0 ? p.frames.length - 1 - f : f], -H, -H * p.sq, H * 2, H * 2 * p.sq);
         continue;
       }
       const sc = p.s0 + (p.s1 - p.s0) * u;
@@ -238,6 +277,23 @@ const TrioFX = (function () {
     ctx.restore();
   }
   function frameAt(ft, t) { let k = 0; while (k + 1 < ft.length && t >= ft[k + 1]) k++; return k; }
+  /* 'fly'（剑气）：t 秒时在路上哪、朝哪。走法 easeIn 一点（刚甩出去最慢、越飞越快：读出"甩"） */
+  function flyAt(p, t) {
+    const e = Math.min(1, Math.max(0, t / p.T)), k = e * (0.6 + 0.4 * e), [x0, y0, cx, cy, x1, y1] = p.path, q = 1 - k;
+    return [q * q * x0 + 2 * q * k * cx + k * k * x1, q * q * y0 + 2 * q * k * cy + k * k * y1,
+            Math.atan2(q * (cy - y0) + k * (y1 - cy), q * (cx - x0) + k * (x1 - cx))];
+  }
+  /* 剑气本体 + 身后三道残影（同一张月牙，越往后越淡越小）；月牙凸面朝前：贴图里弧在上（-y），转 ang + π/2 */
+  function drawFly(ctx, p, T, al) {
+    for (let k = 3; k >= 0; k--) {
+      const t = p.age - k * 0.022;
+      if (t < 0) continue;
+      const [x, y, a] = flyAt(p, t), sc = (0.7 + 0.3 * Math.min(1, t / p.T)) * (1 - k * 0.12);
+      ctx.setTransform(T); ctx.translate(x, y); ctx.rotate(a + Math.PI / 2);
+      ctx.globalAlpha = al * (k ? 0.42 / k : 1);
+      ctx.drawImage(p.img, -p.w * sc / 2, -p.h * sc * 0.3, p.w * sc, p.h * sc);
+    }
+  }
 
   /* ---------- 小工具（配方用）---------- */
   const R = Math.random;
@@ -251,14 +307,38 @@ const TrioFX = (function () {
     return [-side * Math.cos(a) * sp, Math.sin(a) * sp - up];
   }
 
+  /* ---------- 方案（精特1b：去规则）----------
+     'jp1' 精特1（规整的圆环 + 直的贴图条）/ 'A' 程序化（涟漪序列帧、光束横向波动 + 毛边 + 游丝 + 电弧）/ 'B' 生图贴图（形状同 jp1）/
+     'AB' A 的形状和动 + B 的质感。默认见文件头；fx_lab.html 的"方案"下拉用 setScheme 切 */
+  let SCHEME = 'AB';
+  const setScheme = (k) => { if (!['jp1', 'A', 'B', 'AB'].includes(k)) throw new Error('trio_fx: 未知方案 ' + k); SCHEME = k; };
+  /* 涟漪帧里主波前的半径（格子半宽为 1）：tools/fx_bake.py bake_rip 的 R1 = 0.26 + 0.6 × (1 − (1 − τ)^2.4) */
+  const RIP_R = (tau) => 0.26 + 0.6 * (1 - Math.pow(1 - tau, 2.4));
+  const ripFrames = new Map();
+  function ripOf(mode, v, pal) {
+    const key = mode + v + pal.join(';');
+    let f = ripFrames.get(key);
+    if (!f) { f = []; for (let i = 0; i < 10; i++) f.push(ramp('rip', `rip${mode}${v}_${i}`, pal)); if (ripFrames.size > 150) ripFrames.clear(); ripFrames.set(key, f); }
+    return f;
+  }
+  /* 冲击波：o 同 'ring' 粒子（x, y, s0, s1, life, a, sq, delay, z）+ side（打向哪边：波往受击方向漂一点）。按方案出不同的东西：
+     jp1 规整圆环贴图；B 生图冲击波一张（随机两张之一、随机镜像）；A / AB 涟漪序列帧（两套噪声之一、随机镜像） */
+  function wave(pal, o) {
+    const mx = R() < 0.5 ? -1 : 1, my = R() < 0.5 ? -1 : 1, v = (R() * 2) | 0;
+    const drift = o.side ? { vx: -o.side * 0.1 * Math.abs(o.s1 - o.s0) / o.life } : {};   // 扩一圈的工夫往受击方向漂出约一成半径
+    if (SCHEME === 'jp1') return spawn({ m: 'ring', img: ringImg(pal), ...o });
+    if (SCHEME === 'B') return spawn({ m: 'ring', img: ramp('rip', 'ringB' + v, pal), mx, my, ...drift, ...o });
+    return spawn({ m: 'flip', frames: ripOf(SCHEME, v, pal), mx, my, ...drift, ...o, a: Math.min(1, (o.a || 1) * 1.15) });
+  }
+
   /* 第一层：瞬闪（≤ 0.06 s）+ 冲击波。四角星闪一下就收、一团光，冲击波 0.18 s 从 0.3 扩到 1.2、透明度 1 → 0，
      外圈晚 0.03 s 再荡一道更淡更大的。全部普通混合：色带自己从白到暗边，亮底图上也立得住 */
   function flash(x, y, s, pal, o = {}) {
     const k = Math.min(s, 1.8), Rr = (o.R || 64) * k;
     spawn({ m: 'spr', img: glow('flare', pal), x, y, w: 170 * k, s0: 1.25, s1: 0.5, life: 0.07, a: 1, fo: 0.6, fi: 0, z: 1 });
     spawn({ m: 'spr', img: glow('mote', pal), x, y, w: 90 * k, s0: 0.8, s1: 1.3, life: 0.06, a: 0.95, fo: 0.7, fi: 0, z: 1 });
-    spawn({ m: 'ring', img: ringImg(pal), x, y, s0: Rr * 0.3, s1: Rr * 1.2, life: 0.18, a: 1, sq: o.sq || 0.78, z: 1 });
-    spawn({ m: 'ring', img: ringImg(pal), x, y, s0: Rr * 0.5, s1: Rr * 1.65, life: 0.26, a: 0.45, sq: o.sq || 0.78, delay: 0.03, z: 1 });
+    wave(pal, { x, y, s0: Rr * 0.3, s1: Rr * 1.2, life: 0.18, a: 1, sq: o.sq || 0.78, z: 1, side: o.side });
+    wave(pal, { x, y, s0: Rr * 0.5, s1: Rr * 1.65, life: 0.26, a: 0.45, sq: o.sq || 0.78, delay: 0.03, z: 1, side: o.side });
   }
   /* 锥形火花：头宽尾尖、顺速度拉长 */
   function sparks(x, y, side, s, n, pal, o = {}) {
@@ -318,7 +398,7 @@ const TrioFX = (function () {
     /* 通用撞击：橙闪 + 冲击波；暖橙锥形火花 + 灰褐碎块 + 一撮灰；余烬是落下来的橙色小光粒 */
     thud: layered({
       tint: [255, 224, 186],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.ember),
+      flash: (x, y, side, s) => flash(x, y, s, PAL.ember, { side }),
       body(x, y, side, s) {
         sparks(x, y, side, s, n(18, s), PAL.ember);
         chips(x, y, side, n(8, s), ['shard0', 'shard1', 'chip0'], PAL.grit, { sp0: 170 * kk(s), sp1: 460 * kk(s), g: 980, w0: 14, w1: 24, l0: 0.6, l1: 1.0, flip: 8, vrot: 14 });
@@ -331,7 +411,7 @@ const TrioFX = (function () {
     /* 打懵：金闪；大金星绕头公转（orb）+ 小金星飞散 + 金色火花；余烬是一闪一闪的小四角星 */
     star: layered({
       tint: [255, 242, 196],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.gold),
+      flash: (x, y, side, s) => flash(x, y, s, PAL.gold, { side }),
       body(x, y, side, s) {
         const k = kk(s);
         for (let i = 0; i < n(5, s); i++)
@@ -345,7 +425,7 @@ const TrioFX = (function () {
     /* 奶茶：焦糖闪；焦糖液滴（顺速度拉长）+ 深褐珍珠弹开 + 几团浆糊住（drag 大，停在身上）；余烬是往下滴的小滴 */
     splash: layered({
       tint: [246, 226, 198],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.caramel, { R: 58 }),
+      flash: (x, y, side, s) => flash(x, y, s, PAL.caramel, { side, R: 58 }),
       body(x, y, side, s) {
         const k = kk(s);
         puffs(x, y, side, n(5, s), PAL.caramel, { sp0: 90 * k, sp1: 260 * k, drag: 0.86, w0: 40 * k, w1: 64 * k, l0: 1.0, l1: 1.5, a: 0.7, s0: 0.5, s1: 1.1 });
@@ -359,7 +439,7 @@ const TrioFX = (function () {
     /* 枕头：浅粉一闪（小）；羽毛打着旋翻着往下飘（flip + sway，重力小）+ 几团绒；余烬是更小的绒羽慢落 */
     feather: layered({
       tint: [255, 238, 240],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.fluff, { R: 50 }),
+      flash: (x, y, side, s) => flash(x, y, s, PAL.fluff, { side, R: 50 }),
       body(x, y, side, s) {
         const k = kk(s);
         puffs(x, y, side, n(4, s), PAL.fluff, { sp0: 60 * k, sp1: 220 * k, w0: 50 * k, w1: 80 * k, l0: 0.5, l1: 0.9, a: 0.55 });
@@ -374,7 +454,7 @@ const TrioFX = (function () {
     /* 西瓜：红闪；红瓤液滴 + 黑籽（水滴形，顺速度）+ 几片弯的绿皮 + 两团瓤糊住；余烬是往下滴的红汁和两三颗籽 */
     melon: layered({
       tint: [255, 214, 206],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.melon),
+      flash: (x, y, side, s) => flash(x, y, s, PAL.melon, { side }),
       body(x, y, side, s) {
         const k = kk(s);
         puffs(x, y, side, n(4, s), PAL.melon, { sp0: 90 * k, sp1: 240 * k, drag: 0.86, w0: 40 * k, w1: 60 * k, l0: 0.9, l1: 1.4, a: 0.7, s0: 0.5, s1: 1.05 });
@@ -389,7 +469,7 @@ const TrioFX = (function () {
     /* 斩：本色闪；两道交叉刀光（序列帧）+ 沿刀口飞的锥形火花；余烬是本色小光粒。颜色取 B23 斩痕的绿 */
     slash: layered({
       tint: [255, 242, 196],
-      flash: (x, y, side, s) => flash(x, y, s, palOf([90, 230, 110]), { R: 52 }),
+      flash: (x, y, side, s) => flash(x, y, s, palOf([90, 230, 110]), { side, R: 52 }),
       body(x, y, side, s) {
         slash(x, y, -0.5, 230, [90, 230, 110], 0.5);
         slash(x, y, 0.75, 200, [90, 230, 110], 0.5, 0.06);
@@ -397,25 +477,13 @@ const TrioFX = (function () {
       },
       ember: (x, y, side, s) => embers(x, y, s, n(6, s), palOf([90, 230, 110])),
     }),
-    /* 花束：粉闪；花瓣打着旋飘（深浅两种）+ 金色火花（包装纸反光）；余烬是慢落的小花瓣 */
-    petal: layered({
-      tint: [255, 214, 226],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.petal),
-      body(x, y, side, s) {
-        const k = kk(s);
-        chips(x, y, side, n(22, s), ['petal0', 'petal1', 'petal2'], [PAL.petal, PAL.petal, PAL.petalDeep], { sp0: 200 * k, sp1: 560 * k, up: 180, g: 140, drag: 0.987, sway: 60,
-              w0: 30, w1: 44, l0: 1.3, l1: 2.4, vrot: 3.5, flip: 3, jx: 30, jy: 40 });
-        sparks(x, y, side, s, n(8, s), PAL.gold);
-      },
-      ember(x, y, side, s) {
-        chips(x, y, side, n(7, s), ['petal1', 'petal2'], [PAL.petal, PAL.petalDeep], { all: true, sp0: 40, sp1: 140, up: 40, g: 70, drag: 0.98, sway: 40,
-              w0: 18, w1: 24, l0: 1.6, l1: 2.6, vrot: 2.5, flip: 2.5, jx: 50, jy: 40 });
-      },
-    }),
+    /* 花束：粉闪；花瓣打着旋飘（深浅两种）+ 金色火花（包装纸反光）；余烬是慢落的小花瓣。
+       第二批 P11：数量 / 范围 / 寿命有上限（默认 14 片、200 px、0.55~0.8 s），见 petals() —— 第一批 22 × s 片飞 1.3~2.4 s，s 1.7 时铺满半屏 */
+    petal: petals(),
     /* 硬东西崩碎（松果、木头）：橙闪；三角木屑（两面一明一暗，翻转）+ 橙色锥形火花 + 一撮灰；余烬是细木渣和灰 */
     debris: layered({
       tint: [226, 238, 255],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.ember, { R: 70 }),
+      flash: (x, y, side, s) => flash(x, y, s, PAL.ember, { side, R: 70 }),
       body(x, y, side, s) {
         const k = kk(s);
         chips(x, y, side, n(18, s), ['chip0', 'chip1', 'chip2'], PAL.wood, { sp0: 300 * k, sp1: 700 * k, up: 300, g: 1450, drag: 0.995, w0: 18, w1: 32, l0: 0.55, l1: 1.0, vrot: 20, flip: 10 });
@@ -431,8 +499,8 @@ const TrioFX = (function () {
       tint: [226, 196, 255],
       flash(x, y, side, s) {
         const k = kk(s);
-        spawn({ m: 'ring', img: ringImg(PAL.purple), x, y, s0: 150 * k, s1: 10 * k, life: 0.12, a: 0.9, sq: 0.85 });
-        flash(x, y, s, PAL.purple, { R: 76 });
+        wave(PAL.purple, { x, y, s0: 150 * k, s1: 10 * k, life: 0.12, a: 0.9, sq: 0.85 });
+        flash(x, y, s, PAL.purple, { side, R: 76 });
       },
       body(x, y, side, s) {
         sparks(x, y, side, s, n(8, s), PAL.red, { all: true, g: 120 });
@@ -450,7 +518,7 @@ const TrioFX = (function () {
     /* 水：水蓝闪 + 冲击波；带高光的透明水滴（顺速度拉长）+ 一层水雾；余烬是往下滴的小水珠。drip：每滴打上去溅两三颗 + 偶尔一圈小水环 */
     water: layered({
       tint: [196, 228, 255],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.water),
+      flash: (x, y, side, s) => flash(x, y, s, PAL.water, { side }),
       body(x, y, side, s) {
         const k = kk(s);
         chips(x, y, side, n(16, s), ['drop0', 'drop1'], PAL.water, { sp0: 220 * k, sp1: 620 * k, up: 220, g: 1100, w0: 20, w1: 32, l0: 0.45, l1: 0.8, vel: true, stretch: 0.0009 });
@@ -461,13 +529,13 @@ const TrioFX = (function () {
       },
       drip(x, y, side) {
         chips(x, y, side, 2, ['drop1'], PAL.water, { sp0: 120, sp1: 300, up: 160, g: 1100, w0: 13, w1: 18, l0: 0.3, l1: 0.5, vel: true, stretch: 0.0012 });
-        if (R() < 0.3) spawn({ m: 'ring', img: ringImg(PAL.water), x, y, s0: 8, s1: 34, life: 0.16, a: 0.8, sq: 0.78 });
+        if (R() < 0.3) wave(PAL.water, { x, y, s0: 8, s1: 34, life: 0.16, a: 0.8, sq: 0.78 });
       },
     }),
     /* 篮球砸中（不碎）：橙闪 + 一道大冲击波（弹的那一下）+ 速度线式的锥形火花 + 落灰；余烬是灰 */
     ball: layered({
       tint: [255, 255, 255],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.orange, { R: 80 }),
+      flash: (x, y, side, s) => flash(x, y, s, PAL.orange, { side, R: 80 }),
       body(x, y, side, s) {
         sparks(x, y, side, s, n(14, s), PAL.orange, { all: true, g: 200, sp0: 380, sp1: 760 });
         puffs(x, y, side, n(5, s), PAL.dust, { sp0: 60, sp1: 200, w0: 50 * kk(s), w1: 84 * kk(s), l0: 0.5, l1: 0.9, a: 0.5 });
@@ -477,7 +545,7 @@ const TrioFX = (function () {
     /* 口红：玫红闪；玫红液滴 + 粉色珠子；余烬是一闪一闪的粉色小星芒 */
     rouge: layered({
       tint: [255, 170, 210],
-      flash: (x, y, side, s) => flash(x, y, s, PAL.rouge, { R: 54 }),
+      flash: (x, y, side, s) => flash(x, y, s, PAL.rouge, { side, R: 54 }),
       body(x, y, side, s) {
         const k = 0.5 + s;                                // 同 main.js rouge：档 1 尺寸给足
         chips(x, y, side, n(8, k), ['drop0', 'drop1'], PAL.rouge, { sp0: 200, sp1: 480, up: 200, g: 1000, w0: 18, w1: 28, l0: 0.45, l1: 0.8, vel: true, stretch: 0.0009 });
@@ -485,6 +553,22 @@ const TrioFX = (function () {
         sparks(x, y, side, s, n(6, k), PAL.rouge);
       },
       ember: (x, y, side, s) => embers(x, y, s, n(5, 0.5 + s), PAL.rouge, { flare: true, big: 1.4, g: 40 }),
+    }),
+    /* 防狼喷雾（第二批，G1~G3 的落点溅射）：橙一闪 + 一道橙冲击波；几团有体积的辣椒雾往四周胀开 + 一撮橙色水珠；余烬是慢慢升走的小雾团。
+       drip（每个雾团碰到脸）：一团雾 + 偶尔一颗水珠 —— 软的，不像水那样甩一把水珠（同 main.js pepper 的口径） */
+    pepper: layered({
+      tint: [255, 196, 150],
+      flash: (x, y, side, s) => flash(x, y, s, PEPPER, { side, R: 46 }),
+      body(x, y, side, s) {
+        const k = kk(s);
+        puffs(x, y, side, n(5, s), PEPPER, { sp0: 60 * k, sp1: 200 * k, w0: 50 * k, w1: 80 * k, l0: 0.45, l1: 0.75, a: 0.55, spread: 3.4, up: 20 });
+        chips(x, y, side, n(6, s), ['drop1'], PEPPER, { sp0: 160 * k, sp1: 380 * k, up: 120, g: 900, w0: 12, w1: 18, l0: 0.35, l1: 0.6, vel: true, stretch: 0.0012 });
+      },
+      ember: (x, y, side, s) => puffs(x, y - 20, side, n(2, s), PEPPER, { sp0: 30, sp1: 90, up: 90, w0: 40, w1: 60, l0: 0.5, l1: 0.8, a: 0.35, delay: 0.1 }),
+      drip(x, y, side) {
+        puffs(x, y, side, 1, PEPPER, { sp0: 60, sp1: 180, w0: 34, w1: 56, l0: 0.4, l1: 0.65, a: 0.45, spread: 2.6, up: 20, jx: 8, jy: 8 });
+        if (R() < 0.3) chips(x, y, side, 1, ['drop1'], PEPPER, { sp0: 120, sp1: 260, up: 100, g: 900, w0: 10, w1: 14, l0: 0.3, l1: 0.45, vel: true, stretch: 0.0012 });
+      },
     }),
   };
 
@@ -520,22 +604,22 @@ const TrioFX = (function () {
        中层（亮纹，流得更快）→ 芯。光身是第三版加的：只有高斯三层时 G23 的气浪读成一团半透明的雾，旧的平涂反而因为最外一层
        暗红立得住 —— 亮底图上光束也要靠轮廓（skill chashouji-fx） */
     const layers = [['halo', 'halo', Wh, 0.85, 240, 1.6], ['body', 'body', Wb, 1, 380, 1.2], ['mid', 'mid', Wm, 0.7, 560, 1.0], ['core', 'core', Wc, 1, 900, 0.8]];
-    let strips = null, pats = new WeakMap();
-    const S = { ph: 'rest', t: 0, from: null, dir: null, to: null, e: 0, k: 1, x: 0, y: 0, r: 0, acc: 0, accSp: 0, accRing: 0, hit: false };
-    function prep() { if (!strips) strips = layers.map(([n, tex]) => ramp('beam', tex, pals[n])); return strips; }
+    /* 每个方案四层各用哪条贴图（beam = 精特1 的高斯条 / 平顶光身；beam2 = 精特1b：E 被噪声啃毛的、B 生图的） */
+    const TEX = { jp1: [['beam', 'halo'], ['beam', 'body'], ['beam', 'mid'], ['beam', 'core']],
+                  B: [['beam', 'halo'], ['beam2', 'bodyB'], ['beam2', 'midB'], ['beam', 'core']],
+                  A: [['beam2', 'haloE'], ['beam2', 'bodyE'], ['beam2', 'midE'], ['beam2', 'coreE']],
+                  AB: [['beam2', 'haloE'], ['beam2', 'bodyB'], ['beam2', 'midB'], ['beam2', 'coreE']] };
+    const strips = {}, pats = new WeakMap();
+    function prep() { return strips[SCHEME] || (strips[SCHEME] = layers.map(([n], i) => ramp(TEX[SCHEME][i][0], TEX[SCHEME][i][1], pals[n]))); }
+    const S = { ph: 'rest', t: 0, from: null, dir: null, to: null, e: 0, k: 1, x: 0, y: 0, r: 0, acc: 0, accSp: 0, accRing: 0, hit: false, arcs: [] };
     function patsFor(ctx) {
-      let p = pats.get(ctx);
-      if (!p) { p = prep().map(c => ctx.createPattern(c, 'repeat')); pats.set(ctx, p); }
-      return p;
+      let m = pats.get(ctx);
+      if (!m) pats.set(ctx, (m = {}));
+      return m[SCHEME] || (m[SCHEME] = prep().map(c => ctx.createPattern(c, 'repeat')));
     }
     /* 路径：from 沿 dir 出去、弯到 to 的二次贝塞尔（dir null 或与 from→to 差不到 2° 就是直线）。返回采样点与累计弧长 */
     function path() {
-      const [x0, y0] = S.from, [x1, y1] = S.to, D = Math.hypot(x1 - x0, y1 - y0) || 1;
-      let cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, curved = false;
-      if (S.dir != null) {
-        const da = Math.atan2(Math.sin(S.dir - Math.atan2(y1 - y0, x1 - x0)), Math.cos(S.dir - Math.atan2(y1 - y0, x1 - x0)));
-        if (Math.abs(da) > 0.035) { cx = x0 + Math.cos(S.dir) * D * 0.42; cy = y0 + Math.sin(S.dir) * D * 0.42; curved = true; }
-      }
+      const [x0, y0] = S.from, [x1, y1] = S.to, [cx, cy, curved] = ctrl(S.from, S.dir, S.to);
       const N = curved ? 24 : 1, pts = [], len = [0];
       for (let i = 0; i <= N; i++) {
         const t = i / N, q = 1 - t;
@@ -569,10 +653,16 @@ const TrioFX = (function () {
         if (S.ph !== 'fire') {                             // 开轰那一下：出口大闪 + 一圈冲击波
           S.t = 0; S.acc = S.accSp = S.accRing = 0; S.hit = false;
           spawn({ m: 'spr', img: glow('flare', pals.spark), x: from[0], y: from[1], w: Wf * 4, s0: 1.3, s1: 0.6, life: 0.12, rot: R(), a: 1, fo: 0.6 });
-          spawn({ m: 'ring', img: ringImg(pals.spark), x: from[0], y: from[1], s0: Wf * 0.4, s1: Wf * 1.6, life: 0.2, a: 0.9, sq: 0.8 });
+          wave(pals.spark, { x: from[0], y: from[1], s0: Wf * 0.4, s1: Wf * 1.6, life: 0.2, a: 0.9, sq: 0.8 });
         }
         S.ph = 'fire'; S.from = from; S.dir = dir; S.to = to; S.e = e; S.k = k; S.t += dt;
         const P = path(), Ld = P.total * e, ang0 = along(P, 0)[2];
+        /* A / AB：束身上偶发的细电弧（每秒约 9 道，活 0.07 s）：从光身边上往外跳出去的一截折线，形状生下来就定（每帧不重抖 = 不闪成噪点） */
+        if (SCHEME === 'A' || SCHEME === 'AB') {
+          for (let i = S.arcs.length - 1; i >= 0; i--) if (S.t - S.arcs[i].t0 > 0.07) S.arcs.splice(i, 1);
+          if (Ld > 60 && R() < dt * 9 * k && S.arcs.length < 4)
+            S.arcs.push({ t0: S.t, u: rr(0.12, 0.92), side: R() < 0.5 ? -1 : 1, j: [0, 1, 2, 3, 4].map(() => [rr(-1, 1), rr(0.6, 1.2)]) });
+        }
         /* 出口散射：沿出口方向 ±0.9 rad 的锥形火花 */
         S.accSp += dt * 36 * k;
         while (S.accSp >= 1) {
@@ -595,7 +685,7 @@ const TrioFX = (function () {
           const [hx, hy, a] = along(P, Ld);
           if (!S.hit) { S.hit = true; S.accRing = 0.11; }   // 伸到的那一帧先溅一圈
           S.accRing += dt;
-          if (S.accRing >= 0.11) { S.accRing -= 0.11; spawn({ m: 'ring', img: ringImg(pals.spark), x: hx, y: hy, s0: Wf * 0.35, s1: Wf * 1.5, life: 0.2, a: 0.85 * k, sq: 0.8 }); }
+          if (S.accRing >= 0.11) { S.accRing -= 0.11; wave(pals.spark, { x: hx, y: hy, s0: Wf * 0.35, s1: Wf * 1.5, life: 0.2, a: 0.85 * k, sq: 0.8 }); }
           for (let i = 0; i < 2; i++) if (R() < dt * 26 * k) {
             const b = a + Math.PI + rr(-1.3, 1.3), sp = rr(220, 520);
             spawn({ m: 'vel', img: glow('spark', pals.spark), x: hx, y: hy, vx: Math.cos(b) * sp, vy: Math.sin(b) * sp, g: 650, drag: 0.98,
@@ -607,6 +697,7 @@ const TrioFX = (function () {
       draw(ctx) {
         if (!ready() || S.ph === 'rest') return;
         if (S.ph === 'charge') { drawCharge(ctx); return; }
+        if (SCHEME === 'A' || SCHEME === 'AB') { drawWavy(ctx); return; }
         const P = path(), Ld = P.total * S.e;
         if (Ld < 2) return;
         const pt = patsFor(ctx), t = S.t, k = S.k;
@@ -648,6 +739,77 @@ const TrioFX = (function () {
         ctx.restore();
       },
     };
+    /* 精特1b A / AB：束身是沿路铺的网格（band），不是直条 ——
+       · 横向波动：中线按两道往前传的正弦摆（出口 60 px 内从 0 长起、中段最大、最后四分之一收到四成），每层相位错开 → 几层不再同心，像一股在扭的能量；
+       · 宽度：出口胀 1.4 倍、落点前 24 px 收、沿长度一道往前走的脉动；
+       · 边缘：毛边贴图（haloE / bodyE 的 alpha 被噪声啃过；AB 的光身 / 中层是生图的能量流）随滚动一直在变；
+       · 外绕两股游丝（细亮线绕着中线螺旋，速度比束身快）+ 偶发细电弧（fire 里生、这里画）；
+       · 芯亮度沿长度不匀（coreE）。 */
+    function drawWavy(ctx) {
+      const P = path(), Ld = P.total * S.e;
+      if (Ld < 2) return;
+      const t = S.t, k = S.k, tex = prep(), N = 2 * Math.max(3, Math.ceil(Ld / 52));   // 一段约 26 px：软渲染下钱花在每段一次的路径填充上（14 px 时两道光束 12 ms），波长最短 120 px，26 px 还看不出折角
+      const base = [];
+      for (let i = 0; i <= N; i++) { const d = Ld * i / N, [x, y, a] = along(P, d); base.push([x, y, a, d]); }
+      const env = (d) => Math.min(1, d / 60) * (1 - 0.6 * Math.max(0, (d - Ld * 0.75) / (Ld * 0.25)));
+      const off = (d, ph, am) => env(d) * am * (Math.sin(d * 0.022 - t * 15 + ph) + 0.55 * Math.sin(d * 0.051 - t * 26 + ph * 2) + 0.35 * Math.sin(d * 0.0093 - t * 7 + ph * 3));   // 三道不公约的波：不重复成一节节
+      const amp = Math.min(26, Wb * 0.2 + 3);
+      ctx.save();
+      const A0 = ctx.globalAlpha;
+      const strand = (ph, am, wOf, uOf, step = 1) => {
+        const pts = [], hw = [], u = [];
+        for (let i = 0; i <= N; i += step) {
+          const [x, y, a, d] = base[i];
+          const o = off(d, ph, am);
+          pts.push([x - Math.sin(a) * o, y + Math.cos(a) * o]); hw.push(wOf(d)); u.push(uOf(d));
+        }
+        return [pts, hw, u];
+      };
+      for (let li = 0; li < layers.length; li++) {
+        const [, , W0, al, spd, sx] = layers[li];
+        const [pts, hw, u] = strand(li * 0.9, amp * (li === 0 ? 1.35 : 1), (d) => W0 / 2 * (0.6 + 0.4 * k) * (1 + 0.4 * Math.exp(-d / 45))
+          * (Ld - d < 24 ? 0.7 + 0.3 * (Ld - d) / 24 : 1) * (1 + 0.06 * Math.sin(d * 0.031 - t * 19 + li) + 0.05 * Math.sin(d * 0.073 - t * 31 + 2.1 * li) + 0.04 * Math.sin(d * 0.013 - t * 9)), (d) => (d - t * spd) / sx,
+          li < 3 ? 2 : 1);                                // 外晕 / 光身 / 中层隔一个点取（段长约 52 px，宽、软，折角看不出）；芯细，按 26 px
+        ctx.globalAlpha = A0 * al * k;
+        band(ctx, pts, hw, u, [{ tex: tex[li], ext: al < 1 ? 0 : 0.6 }]);
+        if (li === 2) {                                   // 游丝：两股绕中线螺旋，压在中层之上、芯之下。一股 = 暗边 + 亮芯两笔虚线描边，虚线偏移随时间滚（断续、往前流）——
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';  // 第一版每股按段铺贴图，两道光束多出 ~100 次填充；描边一股两次调用
+          const fw = Math.max(1.3, Math.min(2.6, Wm * 0.03));
+          for (const q of [0, Math.PI]) {
+            ctx.beginPath();
+            for (let i = 0; i <= N; i++) {
+              const [x, y, a, d] = base[i], o = off(d, 1.8, amp) + Wm * 0.48 * Math.sin(d * 0.032 - t * 13 + q) * Math.min(1, d / 40);
+              if (i) ctx.lineTo(x - Math.sin(a) * o, y + Math.cos(a) * o); else ctx.moveTo(x - Math.sin(a) * o, y + Math.cos(a) * o);
+            }
+            ctx.setLineDash([46 + 20 * Math.sin(q + 1), 22]); ctx.lineDashOffset = -t * 900 - q * 30;
+            ctx.globalAlpha = A0 * 0.75 * k;
+            ctx.strokeStyle = `rgb(${pals.body[0].join(',')})`; ctx.lineWidth = fw + 2; ctx.stroke();
+            ctx.strokeStyle = `rgb(${pals.core[2].join(',')})`; ctx.lineWidth = fw; ctx.stroke();
+          }
+          ctx.setLineDash([]);
+        }
+      }
+      /* 电弧：光身边上一截往外跳的折线，暗边 + 亮芯两笔 */
+      ctx.globalAlpha = A0 * k;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      for (const c of S.arcs) {
+        const d = c.u * Ld, [x, y, a] = along(P, d), o = off(d, 0.9, amp), nx = -Math.sin(a) * c.side, ny = Math.cos(a) * c.side;
+        const pts = c.j.map(([jt, jn], i) => { const r = Wb * 0.42 + i * Wb * 0.16 * jn; return [x - Math.sin(a) * o + nx * r + Math.cos(a) * (i * 7 + jt * 6), y + Math.cos(a) * o + ny * r + Math.sin(a) * (i * 7 + jt * 6)]; });
+        for (const [w, col] of [[3.2, `rgb(${pals.body[0].join(',')})`], [1.4, `rgb(${pals.core[2].join(',')})`]]) {
+          ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.stroke();
+        }
+      }
+      /* 光头一团光、出口四角星（同 jp1，光头跟着波动后的中线） */
+      const [hx, hy, ha] = along(P, Ld), ho = off(Ld, 0, amp), [fx, fy, a0] = along(P, 0);
+      const head = ramp('glow', 'mote', pals.mid), fl = ramp('glow', 'flare', pals.spark);
+      const hr = Math.max(Wf, Wb * 0.8) * (1.1 + 0.1 * Math.sin(t * 47));
+      ctx.globalAlpha = A0 * k;
+      ctx.drawImage(head, hx - Math.sin(ha) * ho - hr, hy + Math.cos(ha) * ho - hr, hr * 2, hr * 2);
+      const fr = Wf * (1.5 + 0.25 * Math.sin(t * 37)) * (t < 0.1 ? 1.6 - 6 * t : 1);
+      ctx.translate(fx, fy); ctx.rotate(a0 + t * 3);
+      ctx.drawImage(fl, -fr, -fr, fr * 2, fr * 2);
+      ctx.restore();
+    }
     function drawCharge(ctx) {
       const r = S.r, t = S.t;
       const orb = ramp('glow', 'mote', pals.mid), fl = ramp('glow', 'flare', pals.spark);
@@ -660,6 +822,538 @@ const TrioFX = (function () {
       ctx.drawImage(fl, -F, -F, F * 2, F * 2);
       ctx.restore();
     }
+  }
+
+  /* ====================================================================================================================
+     第二批（2026-10-01，自检 P4②③④ / P10 / P11）：带状物、水柱 / 喷雾、剑气飞行段、飞行物拖尾、花瓣上限。接入点见文件头第 5~11 节
+     ==================================================================================================================== */
+
+  /* ---------- 出口方向 → 路径控制点（P1 共用）----------
+     所有从手里出去的件走同一条路：from 沿 dir 出去、弯到 to 的二次贝塞尔，控制点 = from + dir × 0.42·|to − from|。
+     dir null 或与 from→to 差不到 2° → 控制点在中点（直线）。返回 [cx, cy, 弯不弯] */
+  function ctrl(from, dir, to) {
+    const dx = to[0] - from[0], dy = to[1] - from[1], D = Math.hypot(dx, dy) || 1;
+    if (dir != null) {
+      const da = Math.atan2(Math.sin(dir - Math.atan2(dy, dx)), Math.cos(dir - Math.atan2(dy, dx)));
+      if (Math.abs(da) > 0.035) return [from[0] + Math.cos(dir) * D * 0.42, from[1] + Math.sin(dir) * D * 0.42, true];
+    }
+    return [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, false];
+  }
+  const bz = (p0, c, p2, t) => { const q = 1 - t; return [q * q * p0[0] + 2 * q * t * c[0] + t * t * p2[0], q * q * p0[1] + 2 * q * t * c[1] + t * t * p2[1]]; };
+  const rgbOf = (c) => {                                 // '#rrggbb' / 'rgba(r,g,b,a)' / [r, g, b] → [r, g, b]
+    if (Array.isArray(c)) return c;
+    if (c[0] === '#') return [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+    return c.match(/[\d.]+/g).slice(0, 3).map(Number);
+  };
+
+  /* ---------- 贴图带：沿折线按段铺一条贴图条 ----------
+     每段是一个四边形（两头用顶点法线 × 半宽，邻段共用顶点 → 边是连续的，宽度可以逐点变：绸子扭转、末梢渐细），
+     四边形里按这段的局部坐标系铺 pattern：贴图 x = 沿长度的 u（调用方给每个点的 u，弧长 / 水滴序号 / 从末端量），
+     贴图 y = 横截面（行 32 = 中线）。带子细到几 px 时 pattern 缩小采样会闪 —— 按屏幕宽度挑 1 / ½ / ¼ 的预缩版（mip）。
+     段与段之间往前多铺 0.6 px（ext），盖掉抗锯齿接缝；半透明的整条带子要先画到离屏层（offLayer）再整体降透明度，不然这 0.6 px 叠出一道道深线 */
+  const patCache = new WeakMap();
+  function mipOf(tex, lv) {
+    if (!lv) return tex;
+    tex._mip = tex._mip || [];
+    if (!tex._mip[lv]) {
+      const f = 1 / (1 << lv), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(tex.width * f)); c.height = Math.max(1, Math.round(tex.height * f));
+      const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(lv > 1 ? mipOf(tex, lv - 1) : tex, 0, 0, c.width, c.height);
+      tex._mip[lv] = c;
+    }
+    return tex._mip[lv];
+  }
+  function patOf(ctx, tex, lv) {
+    let m = patCache.get(ctx);
+    if (!m) patCache.set(ctx, (m = new Map()));
+    const src = mipOf(tex, lv);
+    let p = m.get(src);
+    if (!p) { p = ctx.createPattern(src, 'repeat-x'); if (lv) p.setTransform(new DOMMatrix().scale(1 << lv)); m.set(src, p); }
+    return p;
+  }
+  /* pts [[x, y]...]、hw 每点半宽、u 每点贴图横坐标（贴图 px）。passes：[{ tex（canvas 或 i → canvas）, alpha?(i), ext? }]，依次叠；
+     ink：沿两条边各描一笔（贴图里不烧描边：段宽各不相同，烧进去的边对不上）；cap：末端也封口 */
+  function band(ctx, pts, hw, u, passes, ink, inkW = 1.2, cap = true) {
+    const n = pts.length;
+    if (n < 2) return;
+    const nx = new Float64Array(n), ny = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      let sx = 0, sy = 0;
+      for (const j of [i - 1, i]) {
+        if (j < 0 || j >= n - 1) continue;
+        const dx = pts[j + 1][0] - pts[j][0], dy = pts[j + 1][1] - pts[j][1], L = Math.hypot(dx, dy);
+        if (L > 1e-6) { sx += -dy / L; sy += dx / L; }
+      }
+      const L = Math.hypot(sx, sy) || 1; nx[i] = sx / L; ny[i] = sy / L;
+    }
+    const T = ctx.getTransform(), A0 = ctx.globalAlpha;
+    for (const ps of passes) {
+      for (let i = 0; i < n - 1; i++) {
+        const al = ps.alpha ? ps.alpha(i) : 1;
+        if (al <= 0.01) continue;
+        const a = pts[i], b = pts[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+        if (L < 1e-3) continue;
+        const cx = dx / L, cy = dy / L, ext = ps.ext === 0 || i === n - 2 ? 0 : 0.6;
+        const hm = Math.max(hw[i], hw[i + 1], 0.5), su = (u[i + 1] - u[i]) / L || 1e-3, u0 = ((u[i] % 256) + 256) % 256;
+        const lv = hm * 2 < 12 ? 2 : hm * 2 < 28 ? 1 : 0;
+        const tex = typeof ps.tex === 'function' ? ps.tex(i) : ps.tex;
+        const C = [[a[0] + nx[i] * hw[i], a[1] + ny[i] * hw[i]], [b[0] + nx[i + 1] * hw[i + 1] + cx * ext, b[1] + ny[i + 1] * hw[i + 1] + cy * ext],
+                   [b[0] - nx[i + 1] * hw[i + 1] + cx * ext, b[1] - ny[i + 1] * hw[i + 1] + cy * ext], [a[0] - nx[i] * hw[i], a[1] - ny[i] * hw[i]]];
+        ctx.setTransform(T); ctx.translate(a[0], a[1]); ctx.rotate(Math.atan2(cy, cx)); ctx.scale(1 / su, hm / 32); ctx.translate(-u0, -32);
+        ctx.beginPath();
+        for (let k = 0; k < 4; k++) {
+          const px = C[k][0] - a[0], py = C[k][1] - a[1], s = px * cx + py * cy, t = -px * cy + py * cx;
+          const X = u0 + s * su, Y = 32 + t * 32 / hm;
+          if (k) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
+        }
+        ctx.globalAlpha = A0 * al; ctx.fillStyle = patOf(ctx, tex, lv); ctx.fill();
+      }
+    }
+    ctx.setTransform(T); ctx.globalAlpha = A0;
+    if (ink) {
+      ctx.strokeStyle = ink; ctx.lineWidth = inkW; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) { const x = pts[i][0] + nx[i] * hw[i], y = pts[i][1] + ny[i] * hw[i]; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+      if (cap) for (let i = n - 1; i >= 0; i--) ctx.lineTo(pts[i][0] - nx[i] * hw[i], pts[i][1] - ny[i] * hw[i]);
+      else { ctx.moveTo(pts[0][0] - nx[0] * hw[0], pts[0][1] - ny[0] * hw[0]); for (let i = 1; i < n; i++) ctx.lineTo(pts[i][0] - nx[i] * hw[i], pts[i][1] - ny[i] * hw[i]); }
+      ctx.stroke();
+    }
+  }
+  /* 离屏层：fn(g) 在一张临时画布上画（变换与 ctx 相同），画完整块按 alpha 贴回 ctx。box = 画布坐标外框 [x0, y0, x1, y1] */
+  let LAY = null;
+  function offLayer(ctx, box, alpha, fn) {
+    const T = ctx.getTransform();
+    const xs = [], ys = [];
+    for (const [x, y] of [[box[0], box[1]], [box[2], box[1]], [box[0], box[3]], [box[2], box[3]]]) { xs.push(T.a * x + T.c * y + T.e); ys.push(T.b * x + T.d * y + T.f); }
+    const X0 = Math.max(0, Math.floor(Math.min(...xs)) - 2), Y0 = Math.max(0, Math.floor(Math.min(...ys)) - 2);
+    const X1 = Math.min(ctx.canvas.width, Math.ceil(Math.max(...xs)) + 2), Y1 = Math.min(ctx.canvas.height, Math.ceil(Math.max(...ys)) + 2);
+    const w = X1 - X0, h = Y1 - Y0;
+    if (w <= 0 || h <= 0) return;
+    if (!LAY) LAY = document.createElement('canvas');
+    if (LAY.width < w || LAY.height < h) { LAY.width = Math.max(LAY.width, w); LAY.height = Math.max(LAY.height, h); }
+    const g = LAY.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.clearRect(0, 0, w, h);
+    g.setTransform(T.a, T.b, T.c, T.d, T.e - X0, T.f - Y0);
+    fn(g);
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha *= alpha;
+    ctx.drawImage(LAY, 0, 0, w, h, X0, Y0, w, h);
+    ctx.restore();
+  }
+  const boxOf = (pts, pad) => {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+  };
+  const arcLen = (pts) => { const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])); return L; };
+
+  /* ---------- 弹簧链：带状物的惯性 ----------
+     N + 1 个节点，两头钉死（0 = 手，N = 梢 / 拳头：梢按调用方给的路径走，打中的时刻不变），中间各自被弹簧拉向"该在的位置" D[i]，
+     越靠中段弹簧越软（K × (1 − mid·sin πf)）→ 甩出去时中段落在后面、到点时中段冲过头再弹回来，收回时带一道波。
+     推进按调用方这一下的时钟 t 的差（抽打 W.t / 出拳 b.pk.t）：顿帧时 t 不动、链也不动；t 变小 = 新的一下，链从 D 重新开始 */
+  function chain(N) {
+    const x = new Float64Array(N + 1), y = new Float64Array(N + 1), vx = new Float64Array(N + 1), vy = new Float64Array(N + 1);
+    let t0 = null;
+    return {
+      x, y,
+      step(t, D, K, mid, zeta, g) {
+        if (t0 == null || t < t0 - 1e-6) {
+          for (let i = 0; i <= N; i++) { x[i] = D[i][0]; y[i] = D[i][1]; vx[i] = vy[i] = 0; }
+          t0 = t; return;
+        }
+        let left = Math.min(0.1, t - t0); t0 = t;
+        while (left > 1e-7) {
+          const h = Math.min(1 / 240, left); left -= h;
+          for (let i = 1; i < N; i++) {
+            const f = i / N, k = K * (1 - mid * Math.sin(Math.PI * f)), c = 2 * zeta * Math.sqrt(k);
+            vx[i] += (k * (D[i][0] - x[i]) - c * vx[i]) * h;
+            vy[i] += (k * (D[i][1] - y[i]) - c * vy[i] + g * Math.sin(Math.PI * f)) * h;
+            x[i] += vx[i] * h; y[i] += vy[i] * h;
+          }
+        }
+        x[0] = D[0][0]; y[0] = D[0][1]; x[N] = D[N][0]; y[N] = D[N][1];
+      },
+    };
+  }
+
+  /* ---------- 带状物（P10 / P4③）：绸、鞭剑、橡皮臂、伸缩棒 ----------
+     TrioFX.ribbon(Q, style)：每个角色一个句柄（建 Act 时）。style：
+       'silk'   绸（G9 红绸、G13 白绸）：Q = A.whip { w, taper, amp, waves, hz, color, edge, tip? }。带宽 = w × 1.6，沿长度扭转
+                （半宽 × |cos φ|，φ 沿长度转一圈多、随时间慢慢拧），翻到背面换反面色（红绸暗红、白绸淡灰蓝），受光面叠一条软光泽；
+                整条 0.85 透明；有 tip 的梢上挂一只金铃 sprite（G13，原 tip 是一截 12 × 9 px 的金线）
+       'blade'  软鞭剑（G17，金属）：Q = A.whip。剑身贴图（暗边 / 斜面 / 血槽 / 一条白刃光），螺旋甩出（中线绕一圈圈的螺旋偏移，
+                宽窄跟着螺旋相位翻），tip = 一截收尖的剑尖
+       'arm'    橡皮臂（B12）：Q = A（atk 原样：armW / skin / skinShade / skinEdge）。肉色圆柱 + 褶纹（拉得越长褶越稀 = 拉伸纹），
+                近拳头略鼓；收回时中段甩出一道波（弹簧链欠阻尼）
+       'bamboo' 伸缩棒（G29 打狗棒）：Q = A（同上，skin 当竹色）。竹节贴图，节从梢那头量 —— 伸出去时一节节从手里冒出来
+     每帧：h.draw(ctx, from, dir, to, e, t, s)
+       from  根（抽打 = handPt(P)；出拳 = 手腕 pt(P, A.wrist)）
+       dir   出口方向（弧度）：第一段切线 = dir（P1）；null = 直线 from → to
+       to    梢的落点（抽打 = o.aim(W.u)；出拳 = 拳头此刻的位置 [fx, fy]）
+       e     伸出去多少 0..1（抽打 = drawWhip 的 e；出拳传 1：拳头位置已经含伸缩）
+       t     这一下的时钟（抽打 W.t；出拳 b.pk.t）—— 弹簧链按它推进
+       s     体型 P.s
+     h.tip() → [x, y, ang]：梢此刻在哪、朝哪（出拳：拳头按它转，替换 drawArm 里的 ang） */
+  function ribbon(Q, style = 'silk') {
+    const N = 20, C = chain(N), TUBE = style === 'arm' || style === 'bamboo';
+    let pals, texName, tipImg = null;
+    if (TUBE) {
+      const sk = rgbOf(Q.skin), sh = rgbOf(Q.skinShade), ed = rgbOf(Q.skinEdge);
+      pals = { body: [ed, mix(sh, sk, 0.35), sk, mix(sk, WHITE, 0.7)] };
+      texName = style === 'arm' ? 'skin' : 'bamboo';
+    } else {
+      const c = rgbOf(Q.color), lum = (c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11) / 255;
+      const back = lum > 0.85 ? [196, 204, 226] : mix(c, INK, 0.38);
+      pals = { front: palOf(c, 0.5, 0.5), back: palOf(back, 0.5, 0.35), dark: [INK, INK, INK, mix(INK, c, 0.3)], sheen: [WHITE, WHITE, WHITE, WHITE] };
+      if (style === 'blade') pals.front = [mix(rgbOf(Q.edge), INK, 0.2), c, mix(c, WHITE, 0.55), WHITE];
+      texName = style === 'blade' ? 'blade' : 'silk';
+    }
+    const ink = TUBE ? Q.skinEdge : Q.edge || 'rgba(40,20,10,.85)';
+    let last = null;
+    const D = Array.from({ length: N + 1 }, () => [0, 0]);
+    return {
+      draw(ctx, from, dir, to, e, t, s = 1) {
+        if (!ready()) return;
+        const c = ctrl(from, dir, to);
+        /* 该在的位置：沿路 0 → e；绸 / 剑另加一道往前走的波（甩出去时大、到点后收）—— 加在 D 上，弹簧把它滤顺 */
+        const amp = TUBE ? 0 : (Q.amp || 24) * (style === 'blade' ? 1.0 : 0.8);
+        for (let i = 0; i <= N; i++) {
+          const f = i / N, p = bz(from, c, to, f * e);
+          if (amp && i > 0 && i < N) {
+            const q = bz(from, c, to, Math.min(1, f * e + 0.01)), L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+            const w = Math.sin(Math.PI * f) * amp * (1.2 - e * 0.7) * Math.sin(6.2832 * (f * (Q.waves || 1.5) - t * (Q.hz || 4)));
+            const ox = -(q[1] - p[1]) / L * w, oy = (q[0] - p[0]) / L * w;
+            p[0] += ox; p[1] += oy;
+          }
+          D[i][0] = p[0]; D[i][1] = p[1];
+        }
+        if (style === 'bamboo') C.step(t, D, 4200, 0.6, 0.7, 0);
+        else if (style === 'arm') C.step(t, D, 1500, 0.8, 0.22, 500);
+        else C.step(t, D, 900, 0.82, 0.32, style === 'blade' ? 300 : 900);
+        const pts = [];
+        for (let i = 0; i <= N; i++) pts.push([C.x[i], C.y[i]]);
+        const L = arcLen(pts), tot = L[N] || 1;
+        const hw = [], phi = [];
+        let W0;
+        if (TUBE) {
+          W0 = Q.armW * s * (1 - 0.25 * Math.min(1, tot / 500)) / 2;                     // 拉得越长越细（同旧 drawArm）
+          for (let i = 0; i <= N; i++) { const f = i / N; hw.push(W0 * (style === 'arm' ? 0.92 + 0.2 * Math.max(0, (f - 0.8) / 0.2) : 1)); }
+        } else {
+          W0 = (Q.w || 8) * s * (style === 'silk' ? 0.8 : 0.5);
+          const tp = Q.taper != null ? Q.taper : 0.5;
+          for (let i = 0; i <= N; i++) {
+            const f = i / N;
+            /* 扭转：silk φ 沿长度转 1.1 圈、随时间拧；blade 跟着螺旋相位（宽面转到侧面时窄） */
+            const ph = style === 'blade' ? 6.2832 * (f * (Q.waves || 2) - t * (Q.hz || 4)) : 1.1 + f * 7.0 + t * 2.4;
+            phi.push(ph);
+            hw.push(W0 * (1 - (1 - tp) * f) * (style === 'blade' ? 0.45 + 0.55 * Math.abs(Math.cos(ph)) : 0.16 + 0.84 * Math.abs(Math.cos(ph))) * (i === N && !Q.tip ? 0.3 : 1));
+          }
+        }
+        /* u：绸 / 剑从根量（纹路钉在布上）；臂从拳头量、褶距随拉长放稀；棒从梢量（节从手里冒出来） */
+        const u = [];
+        for (let i = 0; i <= N; i++) {
+          if (style === 'arm') u.push((tot - L[i]) * 64 / (13 * s * Math.max(1, tot / 110)));
+          else if (style === 'bamboo') u.push((tot - L[i]) * 64 / (30 * s));
+          else u.push(L[i] * 64 / (W0 * 2.6));
+        }
+        /* 剑尖：顺最后一段方向多接一截收尖 */
+        const tipA = Math.atan2(pts[N][1] - pts[N - 2][1], pts[N][0] - pts[N - 2][0]);
+        if (style === 'blade' && Q.tip) {
+          const tl = Q.tip[0] * s, tw = Q.tip[1] * s / 2;
+          for (const [k, w] of [[0.5, tw * 0.85], [1, 0.4]]) { pts.push([pts[N][0] + Math.cos(tipA) * tl * k, pts[N][1] + Math.sin(tipA) * tl * k]); hw.push(w); phi.push(0); u.push(u[u.length - 1] + tl * k * 64 / (W0 * 2.6)); }
+        }
+        last = [pts[N][0], pts[N][1], tipA];
+        const body = ramp('band', texName, TUBE ? pals.body : pals.front);
+        if (TUBE) { band(ctx, pts, hw, u, [{ tex: body }], ink, 1.4); return; }
+        const backT = ramp('band', texName, pals.back), darkT = ramp('band', texName, pals.dark), sheenT = ramp('band', 'sheen', pals.sheen);
+        const face = (i) => Math.cos((phi[i] + phi[Math.min(i + 1, phi.length - 1)]) / 2);
+        const paint = (g) => band(g, pts, hw, u, [
+          { tex: (i) => (face(i) >= 0 ? body : backT) },
+          { tex: darkT, alpha: (i) => 0.55 * (1 - Math.abs(face(i))) ** 2, ext: 0 },                    // 侧过去的那段压暗
+          { tex: sheenT, alpha: (i) => (style === 'blade' ? 0.5 : 0.85) * Math.max(0, Math.cos(phi[i] - 0.5)) ** 3, ext: 0 },   // 正对光的那段亮一条
+        ], ink, 1);
+        if (style === 'silk') offLayer(ctx, boxOf(pts, W0 + 4), 0.85, paint); else paint(ctx);
+        if (style === 'silk' && Q.tip) {                       // 金铃：挂在梢上、口朝下摆（顺最后一段方向 + 往下坠一点）
+          tipImg = tipImg || ramp('band', 'bell', palOf(rgbOf(Q.tip[2]), 0.55, 0.6));
+          const sz = Math.max(26, Q.tip[0] * s * 1.8), a = Math.atan2(Math.sin(tipA) + 1.2, Math.cos(tipA)) - Math.PI / 2;
+          ctx.save(); ctx.translate(pts[N][0], pts[N][1]); ctx.rotate(a + 0.25 * Math.sin(t * 22)); ctx.drawImage(tipImg, -sz / 2, -sz * 0.22, sz, sz); ctx.restore();
+        }
+      },
+      tip: () => last,
+    };
+  }
+
+  /* ---------- 秋千绳 / 倒挂绳（P10⑤）：麻绳纹贴图带 + 一点弯 ----------
+     TrioFX.rope(ctx, pts, w, fill, edge, bend)：pts 绳上的几个点（座板头 → 握绳的手 → 转轴高度，同 drawSwing / drawRopes / drawLine 的 pts），
+     w 绳粗（R.w × P.s）、fill / edge 同 cfg.ropes；bend：最长那一段中点往法线方向弯多少 px（荡的时候绳子被甩弯：调用方传 −摆角速度 × 几 px，
+     不传 = 直的）。纹路按弧长从第一个点量，绳子动纹路跟着动，不在绳上滑 */
+  function rope(ctx, pts, w, fill, edge, bend = 0) {
+    if (!ready() || pts.length < 2) return;
+    let li = 0, lm = 0;
+    for (let i = 0; i + 1 < pts.length; i++) { const d = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); if (d > lm) { lm = d; li = i; } }
+    const P = [pts[0]];
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i], b = pts[i + 1], n = i === li ? 10 : 1, dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+      for (let k = 1; k <= n; k++) { const f = k / n, o = i === li ? bend * 4 * f * (1 - f) : 0; P.push([a[0] + dx * f - dy / L * o, a[1] + dy * f + dx / L * o]); }
+    }
+    const L = arcLen(P), hw = P.map(() => w * 0.55), u = L.map(d => d * 64 / (w * 2.2));
+    band(ctx, P, hw, u, [{ tex: ramp('band', 'rope', palOf(rgbOf(fill), 0.5, 0.45)) }], edge, 1.2, false);
+  }
+
+  /* ---------- 水柱（P4②，B1~B4 atk.jet draw 'stream'）----------
+     水滴还是引擎的（trio.js stepJet / stepDrops：出口、仰角、断开、打中全照旧），这里只换画法 —— 替换 crew.js drawStream：
+     连着的水滴连成一条贴图带（半透明水身 + 折射暗边 + 断续高光），贴图横坐标按水滴序号走（u = seq × 45）→ 纹路跟着水往前流；
+     断开的水滴画成带高光的水珠 sprite（顺速度拉长），水沫是小水珠；出口：每三滴一小团水雾、偶尔一颗甩出去的水珠和一点闪光。
+     宽度 / 断开 / 水沫三条规则与 crew.js WATER 逐字相同（只换画法，命中手感不变）。落点溅射走 onDrip（RECIPE.water.drip，第一批已换）。
+     h = TrioFX.stream()；drawJets 里 J.draw === 'stream' 分支：h.draw(ctx, jets, b && b.jm, dir)
+       dir：出口方向（弧度，= 枪口此刻的仰角换成屏幕角 F > 0 ? −b.ja : π + b.ja）。给了就让喷口 → 第一滴那一段先沿 dir 出去（P1） */
+  const WATER = { w0: 7, w1: 20, grow: 0.3, a1: 0.55, breakT: 0.14, brk: 0.16, mist: 0.35 };
+  function stream(o = {}) {
+    const pal = o.pal || PAL.water;
+    let seen = -1;
+    const wOf = (d) => WATER.w0 + (WATER.w1 - WATER.w0) * Math.min(1, d.t / WATER.grow);
+    const aOf = (d) => 1 - (1 - WATER.a1) * Math.min(1, d.t / WATER.grow);
+    return {
+      draw(ctx, ps, m, dir) {
+        if (!ready()) return;
+        const n = ps.length, link = (p, d) => d.seq === p.seq + 1 && Math.hypot(d.x - p.x, d.y - p.y) <= 60 && !(d.t > WATER.breakT && d.j < WATER.brk);
+        const tex = ramp('band', 'water', pal), linked = new Set(), runs = [];
+        let run = n ? [ps[n - 1]] : [];
+        for (let i = n - 1; i >= 1; i--) {
+          if (link(ps[i - 1], ps[i])) run.push(ps[i - 1]);
+          else { runs.push(run); run = [ps[i - 1]]; }
+        }
+        if (run.length) runs.push(run);
+        const head = n && m && Math.hypot(ps[n - 1].x - m[0], ps[n - 1].y - m[1]) < 60 ? ps[n - 1] : null;
+        const lines = [];
+        for (const r of runs) {
+          const pts = r.map(d => [d.x, d.y]), hw = r.map(d => wOf(d) * 0.58), u = r.map(d => -d.seq * 45);
+          if (r[0] === head) {                                 // 接到喷口；给了 dir 就先沿 dir 出去一小段
+            const d0 = Math.hypot(head.x - m[0], head.y - m[1]);
+            if (dir != null && d0 > 6) { pts.unshift([m[0] + Math.cos(dir) * d0 * 0.45, m[1] + Math.sin(dir) * d0 * 0.45]); hw.unshift(WATER.w0 * 0.55); u.unshift(-(head.seq + 0.55) * 45); }
+            pts.unshift([m[0], m[1]]); hw.unshift(WATER.w0 * 0.5); u.unshift(-(head.seq + 1) * 45);
+          }
+          if (pts.length < 2) continue;
+          for (const d of r) linked.add(d);
+          lines.push([pts, hw, u]);
+        }
+        if (lines.length) {
+          const all = [].concat(...lines.map(l => l[0]));
+          offLayer(ctx, boxOf(all, 16), 0.9, (g) => { for (const [pts, hw, u] of lines) band(g, pts, hw, u, [{ tex }]); });
+        }
+        /* 断开的水珠、水沫：贴图水滴，顺速度画（头在前） */
+        const dropA = ramp('frag', 'drop0', pal), dropB = ramp('frag', 'drop1', pal);
+        ctx.save();
+        const T = ctx.getTransform();
+        for (const d of ps) {
+          const sp = Math.atan2(d.vy, d.vx);
+          if (!linked.has(d) || d.j < WATER.brk) {
+            const w = wOf(d) * (1.5 + 0.6 * ((d.j * 7) % 1)) * CELL;
+            ctx.setTransform(T); ctx.translate(d.x, d.y); ctx.rotate(sp); ctx.globalAlpha = aOf(d);
+            ctx.drawImage(dropA, -w * 0.6, -w / 2, w, w);
+          }
+          if (d.t >= WATER.breakT && d.j <= WATER.mist) {
+            const k = d.j / WATER.mist, off = (k - 0.5) * 2 * wOf(d) * 1.3, w = (5 + 6 * k) * CELL, vl = Math.hypot(d.vx, d.vy) || 1;
+            ctx.setTransform(T); ctx.translate(d.x - d.vy / vl * off, d.y + d.vx / vl * off); ctx.rotate(sp); ctx.globalAlpha = 0.9;
+            ctx.drawImage(dropB, -w * 0.6, -w / 2, w, w);
+          }
+        }
+        ctx.restore();
+        /* 出口：按新出来的水滴序号放（引擎每帧出几滴就放几次，顿帧时不出水也就不放） */
+        if (m && n) {
+          const nw = ps[n - 1];
+          if (nw.seq < seen) seen = -1;                        // 换了一个人 / 重开：序号从头
+          for (const d of ps) {
+            if (d.seq <= seen) continue;
+            const a = dir != null ? dir : Math.atan2(d.vy, d.vx);
+            if (d.seq % 3 === 0) spawn({ m: 'spr', img: ramp('dust', 'dust' + (d.seq % 4), pal), x: m[0] + Math.cos(a) * 8, y: m[1] + Math.sin(a) * 8,
+              vx: Math.cos(a) * 160 + rr(-30, 30), vy: Math.sin(a) * 160 - 20, drag: 0.9, w: rr(26, 40), s0: 0.5, s1: 1.2, life: 0.28, a: 0.35, fo: 0.6 });
+            if (d.j > 0.86) { const b = a + rr(-0.35, 0.35), sp = rr(300, 520);
+              spawn({ m: 'vel', img: dropB, x: m[0], y: m[1], vx: Math.cos(b) * sp, vy: Math.sin(b) * sp, g: 1100, drag: 0.99, w: rr(9, 13) * CELL, h: rr(9, 13) * CELL * 0.62,
+                      stretch: 0.0012, life: rr(0.25, 0.4), fo: 0.3 }); }
+            if (d.seq % 7 === 0) spawn({ m: 'spr', img: glow('flare', pal), x: m[0], y: m[1], w: 34, s0: 1, s1: 0.5, life: 0.06, fi: 0, a: 0.9, fo: 0.6 });
+          }
+          seen = nw.seq;
+        }
+      },
+    };
+  }
+
+  /* ---------- 喷雾（G1~G3 防狼喷雾 atk.jet draw 'mist'）：替换 crew.js drawMist ----------
+     每个雾团画一张尘团贴图（上亮下暗、边被噪声啃软 = 有体积，不是平涂圆）、出口小、越飞越胀越淡；出口每四团甩几颗辣椒水珠、一点闪光。
+     h = TrioFX.mist({ life: J.life })；h.draw(ctx, jets, b && b.jm, dir)。落点溅射：RECIPE.pepper.drip（下面新配方，onDrip 已经调它） */
+  const PEPPER = [[150, 46, 16], [255, 140, 70], [255, 200, 150], [255, 242, 226]];
+  function mist(o = {}) {
+    const L = o.life || 0.8, pal = o.pal || PEPPER;
+    let seen = -1;
+    return {
+      draw(ctx, ps, m, dir) {
+        if (!ready()) return;
+        ctx.save();
+        for (const d of ps) {
+          const u = Math.min(1, d.t / L), r = (7 + 22 * Math.sqrt(u)) * 2.3, a = (1 - u * u) * 0.3;
+          if (a <= 0.01) continue;
+          ctx.globalAlpha = a;
+          ctx.drawImage(ramp('dust', 'dust' + (d.seq % 4), pal), d.x - r, d.y - r, r * 2, r * 2);
+        }
+        ctx.restore();
+        if (m && ps.length) {
+          const nw = ps[ps.length - 1];
+          if (nw.seq < seen) seen = -1;
+          for (const d of ps) {
+            if (d.seq <= seen) continue;
+            const a = dir != null ? dir : Math.atan2(d.vy, d.vx);
+            if (d.seq % 4 === 0) { const b = a + rr(-0.3, 0.3), sp = rr(380, 620);
+              spawn({ m: 'vel', img: frag('drop1', pal), x: m[0], y: m[1], vx: Math.cos(b) * sp, vy: Math.sin(b) * sp, g: 500, drag: 0.97, w: rr(8, 11) * CELL, h: rr(8, 11) * CELL * 0.62,
+                      stretch: 0.0012, life: rr(0.2, 0.32), fo: 0.4 }); }
+            if (d.seq % 9 === 0) spawn({ m: 'spr', img: glow('flare', pal), x: m[0], y: m[1], w: 30, s0: 1, s1: 0.5, life: 0.06, fi: 0, a: 0.85, fo: 0.6 });
+          }
+          seen = nw.seq;
+        }
+      },
+    };
+  }
+
+  /* ---------- 喷（B20 酒雾，atk.kind 'spray'：一团团 puff 沿路飞）：替换 drawShot 的 'puff' 分支 ----------
+     h = TrioFX.spray(A.spray)
+     出一团（stepFx 里 shots.push 'puff' 那一刻）：h.emit(h0, a)   h0 出口点、a 这一团的出口方向（弧度）→ 嘴边一点酒沫、偶尔一颗酒珠
+     画（drawShot 'puff'）：h.puff(ctx, s)                       s 原样（x, y, t, life, vx, vy, j）
+     路：puff 的控制点 c 用 TrioFX.ctrl(h0, dir, p2)（dir = 出口方向）即首段切线 = dir（P1）；后排要翻头顶的仍用 over() */
+  function spray(Q) {
+    const c = Q.color || [235, 195, 110], pal = palOf(c, 0.55, 0.55), R0 = Q.r || 14;
+    return {
+      emit(h0, a) {
+        if (!ready()) return;
+        if (R() < 0.35) { const b = a + rr(-0.25, 0.25), sp = rr(420, 700);
+          spawn({ m: 'vel', img: frag('drop1', pal), x: h0[0], y: h0[1], vx: Math.cos(b) * sp, vy: Math.sin(b) * sp, g: 700, drag: 0.98, w: rr(10, 14) * CELL, h: rr(10, 14) * CELL * 0.62,
+                  stretch: 0.0012, life: rr(0.25, 0.4), fo: 0.4 }); }
+        if (R() < 0.25) spawn({ m: 'spr', img: ramp('dust', 'dust' + ((R() * 4) | 0), pal), x: h0[0], y: h0[1], vx: Math.cos(a) * 90, vy: Math.sin(a) * 90 - 20, drag: 0.9,
+                                w: rr(30, 44), s0: 0.5, s1: 1.1, life: 0.25, a: 0.4, fo: 0.6 });
+      },
+      puff(ctx, s) {
+        if (!ready()) return;
+        const u = s.t / s.life, r = R0 * (0.8 + 2.6 * u) * 2.2, a = 0.78 * Math.pow(1 - u, 1.2);
+        if (a <= 0.01) return;
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.drawImage(ramp('dust', 'dust' + ((s.j * 4) | 0), pal), s.x - r, s.y - r, r * 2, r * 2);
+        if (u < 0.5) {                                        // 团里裹着两颗酒珠，顺着飞的方向
+          const sp = Math.atan2(s.vy || 0, s.vx || 1), w = 11 * CELL, img = frag('drop0', pal);
+          ctx.globalAlpha = 1 - 2 * u;
+          for (const k of [-1, 1]) {
+            ctx.save(); ctx.translate(s.x - Math.sin(sp) * k * r * 0.25 * (s.j + 0.3), s.y + Math.cos(sp) * k * r * 0.25 * (s.j + 0.3)); ctx.rotate(sp);
+            ctx.drawImage(img, -w * 0.6, -w / 2, w, w * 0.62); ctx.restore();
+          }
+        }
+        ctx.restore();
+      },
+    };
+  }
+
+  /* ---------- 剑气飞行段（P4④，B23 G14 atk.kind 'slash'）----------
+     TrioFX.qi(from, dir, to, rgb, o) → 飞行秒数 T。从 from（刀尖 / 剑尖）沿 dir 甩出一道月牙剑气（凸面朝前、身后三道残影 + 沿路光粒和火花），
+     T 秒（默认 0.12）飞到 to，到了就地展开刀光序列帧（第一批的 slash()，o.ang / o.len / o.life 原样给它）。
+     o: { T, len（A.slash.len）, ang（s.ang）, life（A.slash.life）, delay（第几道：i × gap）, slash: false = 只飞不展开 }
+     引擎：fire() 里 slash 分支每道照旧 push，但 s.t 起点再往前挪 T（打中仍在"刀光开始 0.05 s 后"= 剑气到了之后）；
+     那一道 s.t 跨过 −T 的那一帧调 qi（from = handPt(P)，to = o.aim(s.u)）—— 刀光由 qi 到点自己放，drawShot 'slash' 不再画 */
+  function qi(from, dir, to, rgb, o = {}) {
+    if (!ready()) return 0;
+    const T = o.T || 0.12, pal = palOf(rgb, 0.7, 0.6), c = ctrl(from, dir, to), len = o.len || 230, w = len * 0.62, h = w * 160 / 256, dl = o.delay || 0;
+    spawn({ m: 'fly', img: ramp('slash', 'slash1', pal), path: [from[0], from[1], c[0], c[1], to[0], to[1]], T, x: from[0], y: from[1], w, h, life: T, a: 1, fi: 0, fo: 0.01, delay: dl });
+    spawn({ m: 'spr', img: glow('flare', pal), x: from[0], y: from[1], w: 90, s0: 1.2, s1: 0.5, life: 0.08, fi: 0, a: 1, fo: 0.6, delay: dl, z: 1 });   // 出刀一闪
+    for (let j = 1; j <= 8; j++) {                       // 沿路：按剑气经过的时刻错开出生，留在身后往两侧散
+      const e = j / 9, k = e * (0.6 + 0.4 * e), p = bz(from, c, to, k), q = bz(from, c, to, Math.min(1, k + 0.02)), a = Math.atan2(q[1] - p[1], q[0] - p[0]);
+      for (const sd of [-1, 1]) {
+        const sp = rr(40, 120);
+        spawn({ m: 'spr', img: glow('mote', pal), x: p[0], y: p[1], vx: Math.cos(a + sd * 1.571) * sp - Math.cos(a) * 40, vy: Math.sin(a + sd * 1.571) * sp - Math.sin(a) * 40, drag: 0.93,
+                w: rr(10, 16), s0: 1, s1: 0.3, life: rr(0.22, 0.34), a: 1, fo: 0.4, delay: dl + e * T });
+      }
+      if (j % 2) spawn({ m: 'vel', img: glow('spark', pal), x: p[0], y: p[1], vx: -Math.cos(a) * rr(120, 260), vy: -Math.sin(a) * rr(120, 260), drag: 0.95, g: 200,
+                         w: rr(16, 24), h: rr(5, 7), stretch: 0.0015, life: rr(0.12, 0.2), fo: 0.5, delay: dl + e * T });
+    }
+    if (o.slash !== false) slash(to[0], to[1], o.ang != null ? o.ang : Math.atan2(to[1] - c[1], to[0] - c[0]) + Math.PI / 2, len, rgb, o.life || 0.45, dl + T);
+    return T;
+  }
+
+  /* ---------- 飞行物拖尾（G16 狐火火尾、G15 项链 / G20 月牙等小件拖光）----------
+     h = TrioFX.trail(TrioFX.TRAIL.fox | gem | moon | TrioFX.trailLook(rgb, 'fire' | 'glint'))
+     stepShot 里飞行那段算完 s.x / s.y 之后（含打中弹开、钉住之后，用来让尾巴淡完）：h.track(s, dt)
+     drawShot 里画这件东西**之前**：h.draw(ctx, s)          —— 尾巴压在物件下面
+     记录挂在 s._fxTr 上（引擎不用管）。尾巴沿实际飞过的点画，首段切线就是飞行方向（P1 的 dir 由路径本身决定：throw 的控制点用 TrioFX.ctrl） */
+  const TRAIL = {
+    fox: { pal: [[16, 34, 120], [40, 140, 255], [140, 226, 255], [236, 252, 255]], w: 34, len: 0.17, fire: true },          // 青蓝狐火：火舌往上窜
+    gem: { pal: [[14, 30, 110], [60, 120, 255], [170, 210, 255], [255, 255, 255]], w: 14, len: 0.14, fire: false },          // 心形蓝宝石项链
+    moon: { pal: [[110, 60, 10], [255, 190, 40], [255, 236, 140], [255, 255, 240]], w: 16, len: 0.14, fire: false },         // 金月牙镖
+  };
+  const trailLook = (rgb, kind = 'glint', w) => ({ pal: palOf(rgb, 0.6, 0.6), w: w || (kind === 'fire' ? 30 : 14), len: kind === 'fire' ? 0.17 : 0.14, fire: kind === 'fire' });
+  function trail(look) {
+    return {
+      track(s, dt) {
+        if (!ready()) return;
+        const H = s._fxTr || (s._fxTr = { pts: [], t: 0, acc: 0 });
+        H.t += dt;
+        const flying = s.fall == null && s.stuck == null;
+        if (flying) {
+          H.pts.push([s.x, s.y, H.t]);
+          H.acc += dt * (look.fire ? 70 : 20);
+          while (H.acc >= 1) {
+            H.acc -= 1;
+            if (look.fire) spawn({ m: 'spr', img: glow('mote', look.pal), x: s.x + rr(-6, 6), y: s.y + rr(-6, 6), vx: -(s.vx || 0) * 0.08 + rr(-30, 30), vy: -(s.vy || 0) * 0.08 - rr(60, 150),
+                                   g: -160, drag: 0.94, w: rr(14, 24), s0: 1, s1: 0.2, life: rr(0.22, 0.38), a: 1, fo: 0.5 });
+            else spawn({ m: 'spr', img: glow('flare', look.pal), x: s.x + rr(-8, 8), y: s.y + rr(-8, 8), vx: rr(-20, 20), vy: rr(-20, 20), drag: 0.9,
+                         w: rr(14, 22), s0: 1, s1: 0.3, life: rr(0.22, 0.34), flip: 14, rot: R(), a: 1, fo: 0.5 });
+          }
+        }
+        while (H.pts.length && H.t - H.pts[0][2] > look.len) H.pts.shift();
+      },
+      draw(ctx, s) {
+        const H = s._fxTr;
+        if (!H || H.pts.length < 2 || !ready()) return;
+        const pts = [], hw = [];
+        for (let i = H.pts.length - 1; i >= 0; i--) {
+          const k = 1 - (H.t - H.pts[i][2]) / look.len;
+          if (k <= 0) break;
+          pts.push([H.pts[i][0], H.pts[i][1]]); hw.push(look.w / 2 * Math.pow(k, 0.8));
+        }
+        if (pts.length < 2) return;
+        const L = arcLen(pts), u = L.map(d => d * 1.6 + H.t * (look.fire ? 700 : 300));
+        const tex = ramp('band', 'trail', look.pal);
+        offLayer(ctx, boxOf(pts, look.w), look.fire ? 1 : 0.9, (g) => band(g, pts, hw, u, [{ tex }]));
+      },
+    };
+  }
+
+  /* ---------- P11 花瓣：密度 / 范围上限 ----------
+     TrioFX.petals({ max, R, life, ...}) → 一份 petal 配方（同签名）。
+       max   主体花瓣最多几片（默认 14；余烬另算，最多 max / 3）—— 旧的 22 × s，s 1.7 时 37 片
+       R     离命中点最远几 px（默认 200）：最后四分之一淡出、出界即收（粒子的 lim）—— 旧的飞到 HUD、窗户、画外
+       life  [短, 长] 秒（默认 [0.55, 0.8]）—— 旧的 1.3 ~ 2.4 s
+       pal   [主色, 深色]（默认粉 / 深粉）；shapes 用哪几张花瓣格
+     TrioFX.RECIPE.petal 就是默认值那一份；要按人换（G18 红缨一朵花、G26 蝴蝶翅）再 petals({ pal: ... }) 另挂一个名字 */
+  function petals(o = {}) {
+    const max = o.max || 14, Rm = o.R || 200, lf = o.life || [0.55, 0.8], P1 = (o.pal || [PAL.petal, PAL.petalDeep]);
+    const shapes = o.shapes || ['petal0', 'petal1', 'petal2'];
+    const pal3 = [P1[0], P1[0], P1[1]];
+    return layered({
+      tint: o.tint || [255, 214, 226],
+      flash: (x, y, side, s) => flash(x, y, s, P1[0], { side }),
+      body(x, y, side, s) {
+        const k = kk(s), nb = Math.min(max, n(11, s));
+        for (let i = 0; i < nb; i++) {
+          const [vx, vy] = fan(side, 2.5, 160 * k, 380 * k, 140);
+          spawn({ m: 'spr', img: frag(shapes[i % shapes.length], pal3[i % 3]), x: x + rr(-1, 1) * 24, y: y + rr(-1, 1) * 30, vx, vy, g: 160, drag: 0.975, sway: rr(30, 50),
+                  w: rr(30, 42) * CELL, life: rr(lf[0], lf[1]), rot: R() * 6.283, vrot: rr(-3.5, 3.5), flip: 3.2, a: 1, fo: 0.35, lim: Rm });
+        }
+        sparks(x, y, side, s, Math.min(6, n(5, s)), PAL.gold);
+      },
+      ember(x, y, side, s) {
+        const ne = Math.min(Math.ceil(max / 3), n(3, s));
+        for (let i = 0; i < ne; i++) {
+          const a = R() * 6.283, sp = rr(40, 120);
+          spawn({ m: 'spr', img: frag(shapes[1 + (i % 2)], i % 2 ? P1[1] : P1[0]), x: x + rr(-40, 40), y: y + rr(-30, 30), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30, g: 70, drag: 0.97,
+                  sway: rr(20, 35), w: rr(18, 24) * CELL, life: rr(lf[0], lf[1]) * 1.1, rot: R() * 6.283, vrot: rr(-2.5, 2.5), flip: 2.5, delay: rr(0.04, 0.12), a: 1, fo: 0.4, lim: Rm * 0.8 });
+        }
+      },
+    });
   }
 
   /* ---------- 尘土（P8）---------- */
@@ -676,7 +1370,7 @@ const TrioFX = (function () {
                 life: rr(0.38, 0.6), a: 0.9, fo: 0.6 });
       }
     }
-    spawn({ m: 'ring', img: ringImg(PAL.dust), x, y, s0: 30 * k, s1: 170 * k, life: 0.32, a: 0.7, sq: 0.22 });
+    wave(PAL.dust, { x, y, s0: 30 * k, s1: 170 * k, life: 0.32, a: 0.7, sq: 0.22 });
     for (let i = 0; i < 6; i++) {
       const d = R() < 0.5 ? -1 : 1;
       spawn({ m: 'spr', img: frag('shard' + (i % 2), PAL.grit), x: x + rr(-20, 20), y: y - 4, vx: d * rr(60, 200), vy: -rr(140, 300), g: 1400, drag: 0.99,
@@ -704,5 +1398,6 @@ const TrioFX = (function () {
 
   function clear() { while (act.length) pool.push(act.pop()); }
 
-  return { load, ready, update, draw, clear, count: () => act.length, RECIPE, beam, slash, land, skid, PAL, palOf, ramp };
+  return { load, ready, update, draw, clear, count: () => act.length, RECIPE, beam, slash, land, skid, PAL, palOf, ramp, setScheme, scheme: () => SCHEME,
+           ctrl, ribbon, rope, stream, mist, spray, qi, trail, TRAIL, trailLook, petals };
 })();
