@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>特效实验台 · trio_fx 新旧对比</title>
+<link rel="icon" href="data:,">   <!-- 不然浏览器去要 /favicon.ico，serve.py 回 404，报错列表里多一条与特效无关的噪声 -->
+<style>
+  body { margin: 0; background: #1d1b1a; color: #eee; font: 14px system-ui, "PingFang SC", sans-serif; }
+  #bar { display: flex; gap: 10px; align-items: center; padding: 8px 12px; flex-wrap: wrap; }
+  #bar label { display: flex; gap: 4px; align-items: center; }
+  #panes { display: flex; gap: 8px; padding: 0 12px; }
+  .pane { display: flex; flex-direction: column; gap: 4px; }
+  .pane canvas { width: 640px; height: 427px; background: #000; }
+  #note { padding: 6px 12px; color: #aaa; }
+  #sheet { display: none; }
+</style>
+</head>
+<body>
+<!--
+  fx_lab.html —— trio_fx.js 的独立实验台（不进正式页）。左旧右新，同一场景、同一时刻、同一随机种子。
+  旧的那一侧**不是抄的**：运行时把 main.js 的 RECIPE、trio.js 的 TRIO_RECIPE 原文切出来执行（INK 起到 Object.assign(RECIPE, TRIO_RECIPE) 前），
+  只有光束 / 斩痕两段画法是闭包里的，抄在下面 oldBeam / oldSlash（注明出处行号）。
+  URL：
+    ?mode=hit|beam|dust &recipe=<名> &look=B19|B22|G23|G30 &s=1.7 &dir=<度，光束出口方向相对直线的偏角>
+    ?film=hit|beam|dust [&recipes=a,b,..] [&looks=..]  → 离线拍胶片：固定 1/60 步长、定种子，画到 #sheet，window.FILM = dataURL
+    ?bench=1 [&frames=600]                               → 真实计时：同屏 6 人 + 主角的负载，旧 / 新各跑一遍，结果写进标题
+-->
+<div id="bar">
+  <label>模式 <select id="mode"><option value="hit">命中</option><option value="beam">光束</option><option value="dust">尘土</option></select></label>
+  <label>配方 <select id="recipe"></select></label>
+  <label>光束 <select id="look"></select></label>
+  <label>颜色 glow <input type="color" id="cGlow"> edge <input type="color" id="cEdge"></label>
+  <label>分量 s <select id="s"><option>0.55</option><option>1.0</option><option selected>1.7</option></select></label>
+  <label>出口偏角 <input type="range" id="dir" min="-40" max="40" value="0"><span id="dirv">0°</span></label>
+  <button id="go">再放一次</button>
+  <label><input type="checkbox" id="loop" checked> 循环</label>
+  <label><input type="checkbox" id="slow"> 慢放 ×0.25</label>
+</div>
+<div id="panes">
+  <div class="pane"><span>旧（现在正式页的画法）</span><canvas id="cOld" width="960" height="640"></canvas></div>
+  <div class="pane"><span>新（trio_fx.js）</span><canvas id="cNew" width="960" height="640"></canvas></div>
+</div>
+<div id="note"></div>
+<canvas id="sheet"></canvas>
+
+<script>
+/* 定种子（film / bench 用）：同 index.html 的 mulberry32 */
+(function () {
+  const sd = +(new URLSearchParams(location.search).get('seed') || 7) | 0;
+  let a = sd || 1;
+  window.seed = (n) => { a = n | 0 || 1; };
+  Math.random = function () { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+})();
+/* 模拟时钟上的 setTimeout：旧配方用 setTimeout 错开第二道环（thud / bloom）。实验台按固定步长推进模拟时间，
+   墙钟定时器在胶片里会全部错过 —— 这里把它挂到模拟时钟上，等价于正式页"没有顿帧时墙钟 ≈ 游戏时间"的那种情况 */
+const SIM = { t: 0, q: [] };
+const realSetTimeout = window.setTimeout.bind(window);
+window.setTimeout = (fn, ms) => { SIM.q.push([SIM.t + (ms || 0) / 1000, fn]); return 0; };
+function simAdvance(dt) {
+  SIM.t += dt;
+  for (let i = SIM.q.length - 1; i >= 0; i--) if (SIM.q[i][0] <= SIM.t + 1e-9) { const f = SIM.q[i][1]; SIM.q.splice(i, 1); f(); }
+}
+</script>
+<script src="fx.js"></script>
+<script src="trio_fx.js"></script>
+<script>
+'use strict';
+const Q = new URLSearchParams(location.search);
+const V = Q.get('v') || String(Date.now());
+const W = 960, VIEW = { y0: 740, h: 640 };          // 看画布 y 740 ~ 1380 这一条（两个人的身子、地板）
+const HIT = [236, 1000];                              // 命中点：女主腰（左边，side +1）
+const SIDE = +1;
+const MUZZLE = [800, 1250];                           // 光束出口（右下前景跪着的那个人的手）
+const FOOT = [600, 1330];                             // 落地点（两人之间的地板）
+
+/* ---- 光束配置：四人的 cfg.beam 原文（trio_buddy.js B22 / B19、trio_bestie.js G23 / G30） + 各自的配方 ---- */
+const LOOKS = {
+  B22: { recipe: 'water', beam: { fire: 0.6, drip: 0.1, ball: 26, glow: [120, 210, 255], edge: [30, 90, 200],
+         layers: [[34, [30, 90, 200], 0.35], [22, [90, 180, 255], 0.8], [11, [210, 240, 255], 0.95], [4, [255, 255, 255], 1]] } },
+  B19: { recipe: 'water', beam: { fire: 0.6, drip: 0.1, ball: 16, glow: [180, 230, 255], edge: [40, 110, 220],
+         layers: [[26, [40, 110, 220], 0.35], [16, [140, 210, 255], 0.8], [8, [225, 245, 255], 0.95], [3, [255, 255, 255], 1]] } },
+  G23: { recipe: 'thud', beam: { fire: 0.38, drip: 0.1, ball: 40, glow: [255, 170, 70], edge: [220, 60, 30],
+         layers: [[84, [170, 30, 20], 0.3], [64, [255, 90, 40], 0.6], [42, [255, 160, 70], 0.85], [20, [255, 230, 160], 1], [7, [255, 255, 255], 1]] } },
+  G30: { recipe: 'star', beam: { fire: 0.45, drip: 0.1, ball: 30, glow: [120, 255, 150], edge: [20, 120, 60],
+         layers: [[40, [20, 120, 60], 0.3], [28, [60, 200, 100], 0.6], [16, [140, 255, 170], 0.9], [6, [240, 255, 240], 1]] } },
+};
+/* B23 斩痕 cfg（trio_buddy.js B23 atk.slash） */
+const SLASH = { n: 3, gap: 0.08, len: 230, w: 18, life: 0.5, color: [90, 230, 110], ang: -0.5, spread: 0.25 };
+const RECIPES = ['thud', 'star', 'splash', 'feather', 'melon', 'slash', 'petal', 'debris', 'hollow', 'water', 'ball', 'rouge'];
+const WHO = { thud: 'B29', star: 'B12', splash: 'B27', feather: 'B18', melon: 'B28', slash: 'B23', petal: 'B11', debris: 'B8', hollow: 'B15', water: 'B19', ball: 'B21', rouge: 'G 口红' };
+
+let OLD = null;                                       // 旧配方（从 main.js / trio.js 原文切出来执行）
+let BG = null;
+
+/* ---- 旧画法：trio.js drawBeam（fire 分支）+ orb，trio.js:1220-1245 原样 ---- */
+function oldOrb(ctx, x, y, r, B) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, `rgba(${B.glow[0]},${B.glow[1]},${B.glow[2]},0.95)`);
+  g.addColorStop(0.75, `rgba(${B.edge[0]},${B.edge[1]},${B.edge[2]},0.6)`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
+}
+function oldBeam(ctx, B, h, tg, t, ph, chargeR) {
+  ctx.save(); ctx.globalCompositeOperation = 'source-over';
+  if (ph === 'charge') oldOrb(ctx, h[0], h[1], chargeR, B);
+  else {
+    const e = Math.min(1, t / 0.08), fade = Math.min(1, (B.fire - t) / 0.15), x1 = h[0] + (tg[0] - h[0]) * e, y1 = h[1] + (tg[1] - h[1]) * e;
+    ctx.globalAlpha = fade; ctx.lineCap = 'round';
+    for (const [w, c, a] of B.layers) {
+      ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${a})`; ctx.lineWidth = w * (1 + 0.1 * Math.sin(t * 50 + w));
+      ctx.beginPath(); ctx.moveTo(h[0], h[1]); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    oldOrb(ctx, h[0], h[1], B.ball, B); oldOrb(ctx, x1, y1, B.ball * 1.2, B);
+  }
+  ctx.restore();
+}
+/* ---- 旧画法：trio.js drawSlash（trio.js:1176-1191 原样） ---- */
+function oldSlash(ctx, s) {
+  if (s.t < 0) return;
+  const Q = SLASH, c = Q.color, R = Q.len / 2, life = Q.life || 0.45, draw = Math.min(1, s.t / 0.07), fade = Math.min(1, (life - s.t) / (life * 0.5));
+  ctx.save(); ctx.translate(s.p[0], s.p[1]); ctx.rotate(s.ang); ctx.globalAlpha = Math.max(0, fade);
+  const a0 = -0.9, a1 = a0 + 1.8 * draw;
+  for (const [w, col] of [[Q.w * 1.35, 'rgba(15,30,70,.55)'], [Q.w * 2.2, `rgba(${c[0]},${c[1]},${c[2]},.35)`], [Q.w, `rgba(${c[0]},${c[1]},${c[2]},.95)`], [Q.w * 0.35, 'rgba(255,255,255,1)']]) {
+    ctx.fillStyle = col; ctx.beginPath();
+    ctx.arc(0, R * 0.4, R, a0 - Math.PI / 2, a1 - Math.PI / 2);
+    ctx.arc(0, R * 0.4 + w, R - w * 0.2, a1 - Math.PI / 2, a0 - Math.PI / 2, true);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
+async function loadOld() {
+  const [m, t] = await Promise.all(['main.js', 'trio.js'].map(f => fetch(f + '?v=' + V).then(r => r.text())));
+  const a = m.indexOf('const INK = ['), b = m.indexOf('Object.assign(RECIPE, TRIO_RECIPE);');
+  const c = t.indexOf('const TRIO_RECIPE = (() => {'), d = t.indexOf('})();', c) + 5;
+  if (a < 0 || b < 0 || c < 0 || d < 5) throw new Error('fx_lab: main.js / trio.js 里找不到 RECIPE / TRIO_RECIPE 的边界，切片规则要跟着改');
+  const r = new Function('Particles', m.slice(a, b) + '\n' + t.slice(c, d) + '\nreturn Object.assign({}, RECIPE, TRIO_RECIPE);')(Particles);
+  return r;
+}
+const img = (src) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('加载失败 ' + src)); i.src = src; });
+async function loadBg() {
+  const [room, pose] = await Promise.all([img('assets/world/v15/room1.webp'), img('assets/world/pose_aF.webp')]);
+  const c = document.createElement('canvas'); c.width = W; c.height = VIEW.h;
+  const g = c.getContext('2d');
+  g.translate(0, -VIEW.y0);
+  g.drawImage(room, -(room.width - W) / 2, 0);
+  g.drawImage(pose, -60, 820, pose.width * 1.45, pose.height * 1.45);
+  return c;
+}
+
+/* ---- 一个场景 = 两边各一套时间线；step(dt) 推进、draw(ctxOld, ctxNew) 画 ---- */
+function scene(mode, opt) {
+  Particles.clear(); TrioFX.clear(); SIM.q.length = 0;
+  const s = opt.s;
+  if (mode === 'hit') {
+    const r = opt.recipe;
+    let fired = false, slashes = [];
+    return {
+      T: 2.0,
+      step(t, dt) {
+        if (!fired) {
+          fired = true;
+          if (r === 'slash') {                        // 旧：三道平涂月牙 + B23 的配方（star）；新：刀光序列帧 + 新 slash 配方
+            for (let i = 0; i < SLASH.n; i++) slashes.push({ t: -i * SLASH.gap, p: [HIT[0] + (Math.random() - 0.5) * 30, HIT[1] + (Math.random() - 0.5) * 40], ang: SLASH.ang + (Math.random() * 2 - 1) * SLASH.spread + (i % 2 ? Math.PI * 0.12 : 0) });
+            OLD.star.burst(HIT[0], HIT[1], SIDE, s);
+          } else OLD[r].burst(HIT[0], HIT[1], SIDE, s);
+          TrioFX.RECIPE[r].burst(HIT[0], HIT[1], SIDE, s);
+        }
+        for (const q of slashes) q.t += dt;
+      },
+      drawOld(ctx) { for (const q of slashes) oldSlash(ctx, q); },
+      drawNew() {},
+    };
+  }
+  if (mode === 'beam') {
+    const L = opt.look, B = L.beam, fx = TrioFX.beam(B);
+    const CH = 0.45, dirOff = (opt.dir || 0) * Math.PI / 180;
+    const base = Math.atan2(HIT[1] - MUZZLE[1], HIT[0] - MUZZLE[0]), dir = dirOff ? base + dirOff : null;
+    let ph = 'charge', pt = 0, hitOld = false, hitNew = false, drO = 0, drN = 0;
+    const st = { t: 0 };
+    return {
+      T: CH + B.fire + 0.6,
+      step(t, dt) {
+        pt += dt;
+        if (ph === 'charge' && pt >= CH) { ph = 'fire'; pt = 0; }
+        else if (ph === 'fire' && pt >= B.fire) { ph = 'rest'; pt = 0; fx.rest(); }
+        st.ph = ph; st.t = pt;
+        if (ph === 'charge') fx.charge(dt, MUZZLE[0], MUZZLE[1], B.ball * (0.3 + 0.7 * Math.min(1, pt / CH)) * (1 + 0.08 * Math.sin(pt * 40)));
+        if (ph === 'fire') {
+          const e = Math.min(1, pt / 0.08), k = Math.min(1, (B.fire - pt) / 0.15);
+          fx.fire(dt, MUZZLE, dir, HIT, e, k);
+          /* 打中与溅：同 trio.js beamTick —— 伸到才打中（impact 的 burst，首击 s），之后每 drip 秒 onSplash（配方 drip / 没有 drip 的用 s 0.55 的 burst） */
+          if (e >= 1) {
+            if (!hitOld) { hitOld = hitNew = true; OLD[L.recipe].burst(HIT[0], HIT[1], SIDE, s); TrioFX.RECIPE[L.recipe].burst(HIT[0], HIT[1], SIDE, s); }
+            else if ((drO += dt) >= B.drip) {
+              drO -= B.drip;
+              const o = OLD[L.recipe], n = TrioFX.RECIPE[L.recipe];
+              if (o.drip) o.drip(HIT[0], HIT[1], SIDE); else o.burst(HIT[0], HIT[1], SIDE, 0.55);
+              if (n.drip) n.drip(HIT[0], HIT[1], SIDE); else n.layers.ember(HIT[0], HIT[1], SIDE, 0.55);
+            }
+          }
+        }
+      },
+      drawOld(ctx) { if (ph !== 'rest') oldBeam(ctx, B, MUZZLE, HIT, st.t, ph, B.ball * (0.3 + 0.7 * Math.min(1, st.t / CH))); },
+      drawNew(ctx) { fx.draw(ctx); },
+    };
+  }
+  if (mode === 'dust') {
+    /* 0 s 落地（enter seq 'land'）；0.15 s 起一个人从右往左滑 0.6 s（slide / dash，接触点匀减速 900 → 200 px/s） */
+    const st = {};
+    let landed = false, x = 900;
+    return {
+      T: 1.6,
+      step(t, dt) {
+        if (!landed) { landed = true; TrioFX.land(FOOT[0], FOOT[1], 1); }
+        if (t >= 0.15 && t < 0.75) {
+          const u = (t - 0.15) / 0.6, vx = -(900 - 700 * u);
+          x += vx * dt;
+          TrioFX.skid(st, x, FOOT[1] + 20, vx, dt, 1);
+          st.x = x;
+        }
+      },
+      drawOld() {},
+      drawNew() {},
+      marker(ctx) { if (st.x != null) { ctx.fillStyle = 'rgba(40,30,30,.5)'; ctx.beginPath(); ctx.arc(st.x, FOOT[1] + 20, 6, 0, 6.283); ctx.fill(); } },
+    };
+  }
+  throw new Error('未知模式 ' + mode);
+}
+
+/* 一帧：底图 → 旧 / 新各自的特效。旧粒子走 Particles（正式页 fx.js 原样），新的走 TrioFX —— 两套池各管各的，
+   但两边画在不同的 canvas 上：Particles.draw 只画到旧那张，TrioFX.draw 只画到新那张 */
+function render(sc, cOld, cNew) {
+  for (const [c, side] of [[cOld, 'old'], [cNew, 'new']]) {
+    const g = c.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.drawImage(BG, 0, 0);
+    g.translate(0, -VIEW.y0);
+    if (side === 'old') { sc.drawOld(g); Particles.draw(g); }
+    else { sc.drawNew(g); TrioFX.draw(g); }
+    if (sc.marker) sc.marker(g);
+  }
+}
+function step(sc, t, dt) { simAdvance(dt); sc.step(t, dt); Particles.update(dt); TrioFX.update(dt); }
+
+/* ---- 胶片：固定步长推进，到采样时刻把两边裁一块贴到 sheet 上 ---- */
+function film(kind) {
+  const DT = 1 / 60, s = +(Q.get('s') || 1.7);
+  const rows = [];
+  if (kind === 'hit') for (const r of (Q.get('recipes') || RECIPES.join(',')).split(',')) rows.push({ mode: 'hit', opt: { recipe: r, s }, label: `${r}（${WHO[r]}）`,
+    times: [0.02, 0.06, 0.14, 0.3, 0.6, 1.0], crop: [HIT[0] - 190, HIT[1] - 190, 380, 380] });
+  if (kind === 'beam') for (const k of (Q.get('looks') || 'B19,B22,G23,G30').split(',')) rows.push({ mode: 'beam', opt: { look: LOOKS[k], s, dir: +(Q.get('dir') || 0) }, label: k,
+    times: [0.3, 0.47, 0.53, 0.65, 0.8, 1.0], crop: [HIT[0] - 200, MUZZLE[1] - 400, 800, 500] });
+  if (kind === 'dust') rows.push({ mode: 'dust', opt: { s }, label: '落地 + 滑行', times: [0.03, 0.1, 0.2, 0.35, 0.5, 0.7, 0.9, 1.1], crop: [330, 1100, 630, 278] });
+  const cw = kind === 'hit' ? 240 : kind === 'beam' ? 400 : 420, sc0 = cw / rows[0].crop[2], ch = Math.round(rows[0].crop[3] * sc0);
+  const ncol = rows[0].times.length, LBL = 26;
+  const sheet = document.getElementById('sheet');
+  sheet.width = ncol * cw; sheet.height = rows.length * 2 * (ch + LBL);
+  const G = sheet.getContext('2d');
+  G.fillStyle = '#111'; G.fillRect(0, 0, sheet.width, sheet.height);
+  const cOld = document.getElementById('cOld'), cNew = document.getElementById('cNew');
+  rows.forEach((row, ri) => {
+    seed(1000 + ri);
+    const sc = scene(row.mode, row.opt);
+    let t = 0, k = 0;
+    const [cx, cy, cw0, ch0] = row.crop;
+    while (k < row.times.length) {
+      step(sc, t, DT); t += DT;
+      if (t + 1e-6 >= row.times[k]) {
+        render(sc, cOld, cNew);
+        for (const [c, j, tag] of [[cOld, 0, '旧'], [cNew, 1, '新']]) {
+          const y = (ri * 2 + j) * (ch + LBL);
+          G.drawImage(c, cx, cy - VIEW.y0, cw0, ch0, k * cw, y + LBL, cw, ch);
+          G.fillStyle = j ? '#9fe' : '#fb9'; G.font = '15px system-ui';
+          G.fillText(`${tag} ${row.label}  t=${row.times[k].toFixed(2)}s`, k * cw + 6, y + 18);
+        }
+        k++;
+      }
+    }
+  });
+  return sheet.toDataURL('image/png');
+}
+
+/* ---- 压测：同屏 6 人 + 主角的特效负载（两道光束同时轰、每秒 4 次首击级命中轮换配方、每秒 10 次 drip、两条滑行尘），旧 / 新各跑一遍 ---- */
+function bench(frames) {
+  const OFF = Q.get('benchoff');                                       // 差值分账：beam 不画光束 / part 不画粒子 / all 都不画（剩下的是生成 + 更新）（skill chashouji-verify 第四节）
+  const c = document.getElementById('cNew'), g = c.getContext('2d');
+  const run = (side) => {
+    seed(5); Particles.clear(); TrioFX.clear(); SIM.q.length = 0;
+    const fxs = [TrioFX.beam(LOOKS.B22.beam), TrioFX.beam(LOOKS.G23.beam)], st = [{}, {}];
+    const ms = [], cnt = [];
+    let t = 0, last = 0;
+    for (let f = 0; f < frames; f++) {
+      const dt = 1 / 60;
+      const tA = performance.now();
+      simAdvance(dt); t += dt;
+      if (Math.floor(t * 4) !== Math.floor((t - dt) * 4)) {          // 每 0.25 s 一次首击（s 1.7）
+        const r = RECIPES[(last++) % RECIPES.length];
+        const x = 150 + (last % 3) * 60, y = 950 + (last % 4) * 40;
+        if (side === 'old') (OLD[r === 'slash' ? 'star' : r]).burst(x, y, SIDE, 1.7); else TrioFX.RECIPE[r].burst(x, y, SIDE, 1.7);
+      }
+      if (Math.floor(t * 10) !== Math.floor((t - dt) * 10)) { if (side === 'old') OLD.water.drip(240, 1000, SIDE); else TrioFX.RECIPE.water.drip(240, 1000, SIDE); }
+      const ph = (t % 1.2), firing = ph > 0.45 && ph < 1.05;
+      const from = (i) => [MUZZLE[0] - i * 200, MUZZLE[1] - i * 300], to = (i) => [HIT[0], HIT[1] - i * 80];
+      if (side === 'new') {
+        fxs.forEach((fx, i) => {
+          if (ph <= 0.45) fx.charge(dt, from(i)[0], from(i)[1], 20);
+          else if (firing) fx.fire(dt, from(i), null, to(i), Math.min(1, (ph - 0.45) / 0.08), Math.min(1, (1.05 - ph) / 0.15));
+          else fx.rest();
+        });
+        if (Q.get('benchskid') !== '0') st.forEach((o, i) => TrioFX.skid(o, 300 + 400 * ((t * 0.7 + i * 0.5) % 1), 1340, -600, dt, 1));   // 旧的没有滑行尘；&benchskid=0 对等比
+      }
+      Particles.update(dt); TrioFX.update(dt);
+      const tB = performance.now();
+      g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(BG, 0, 0); g.translate(0, -VIEW.y0);
+      g.getImageData(0, 0, 1, 1);                                     // 先把底图这一笔做完，下面只计特效的绘制
+      const tC = performance.now();
+      if (side === 'old') {
+        [LOOKS.B22.beam, LOOKS.G23.beam].forEach((B, i) => { if (ph <= 0.45 || firing) oldBeam(g, B, from(i), to(i), firing ? ph - 0.45 : ph, firing ? 'fire' : 'charge', 20); });
+        Particles.draw(g);
+      } else { if (OFF !== 'beam' && OFF !== 'all') fxs.forEach(fx => fx.draw(g)); if (OFF !== 'part' && OFF !== 'all') TrioFX.draw(g); }
+      g.getImageData(0, 0, 1, 1);                                     // 逼渲染把这一帧的绘制真做完，计时才算数
+      const tD = performance.now();
+      if (f >= 30) { ms.push((tB - tA) + (tD - tC)); cnt.push(side === 'old' ? Particles.count() : TrioFX.count()); }
+    }
+    ms.sort((a, b) => a - b);
+    const mean = ms.reduce((a, b) => a + b, 0) / ms.length;
+    return { mean: +mean.toFixed(3), p95: +ms[Math.floor(ms.length * 0.95)].toFixed(3), max: +ms[ms.length - 1].toFixed(3),
+             peak: Math.max(...cnt), avg: Math.round(cnt.reduce((a, b) => a + b, 0) / cnt.length) };
+  };
+  run('new');                                                         // 预热一遍（ramp 缓存、pattern 都建好）
+  const o = run('old'), n = run('new');
+  return { old: o, new: n, frames };
+}
+
+/* ---- 交互 ---- */
+const hex = (c) => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+const unhex = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+let cur = null, t0 = 0, tSim = 0;
+function restart() {
+  const mode = document.getElementById('mode').value;
+  const look = JSON.parse(JSON.stringify(LOOKS[document.getElementById('look').value]));
+  const gl = unhex(document.getElementById('cGlow').value), ed = unhex(document.getElementById('cEdge').value);
+  if (hex(gl) !== hex(look.beam.glow) || hex(ed) !== hex(look.beam.edge)) {     // 改了颜色：glow / edge 替换，layers 按新色重排（外层 edge、内层往 glow 和白推）
+    look.beam.glow = gl; look.beam.edge = ed;
+    const n = look.beam.layers.length;
+    look.beam.layers = look.beam.layers.map(([w, , a], i) => [w, i === n - 1 ? [255, 255, 255] : i === 0 ? ed : TrioFX.palOf(gl)[i >= n - 2 ? 2 : 1], a]);
+  }
+  cur = scene(mode, { recipe: document.getElementById('recipe').value, look, s: +document.getElementById('s').value, dir: +document.getElementById('dir').value });
+  tSim = 0;
+}
+function frame(now) {
+  const dt = Math.min(0.05, (now - t0) / 1000) * (document.getElementById('slow').checked ? 0.25 : 1); t0 = now;
+  if (cur) {
+    step(cur, tSim, dt); tSim += dt;
+    render(cur, document.getElementById('cOld'), document.getElementById('cNew'));
+    if (tSim > cur.T && document.getElementById('loop').checked) restart();
+    document.getElementById('note').textContent = `t = ${tSim.toFixed(2)} s   旧粒子 ${Particles.count()}   新粒子 ${TrioFX.count()}`;
+  }
+  requestAnimationFrame(frame);
+}
+
+(async function main() {
+  const [okFx] = await Promise.all([TrioFX.load(V), Particles.loadShapes(V, false)]);
+  if (!okFx) throw new Error('fx_lab: trio_fx 贴图没加载全');
+  OLD = await loadOld();
+  BG = await loadBg();
+  const rs = document.getElementById('recipe'), ls = document.getElementById('look');
+  for (const r of RECIPES) rs.add(new Option(`${r}（${WHO[r]}）`, r));
+  for (const k of Object.keys(LOOKS)) ls.add(new Option(k, k));
+  const syncColor = () => { const B = LOOKS[ls.value].beam; document.getElementById('cGlow').value = hex(B.glow); document.getElementById('cEdge').value = hex(B.edge); };
+  ls.onchange = () => { syncColor(); restart(); };
+  if (Q.get('mode')) document.getElementById('mode').value = Q.get('mode');
+  if (Q.get('recipe')) rs.value = Q.get('recipe');
+  if (Q.get('look')) ls.value = Q.get('look');
+  if (Q.get('s')) document.getElementById('s').value = Q.get('s');
+  syncColor();
+  for (const id of ['mode', 'recipe', 's', 'cGlow', 'cEdge']) document.getElementById(id).onchange = restart;
+  document.getElementById('dir').oninput = (e) => { document.getElementById('dirv').textContent = e.target.value + '°'; restart(); };
+  document.getElementById('go').onclick = restart;
+
+  if (Q.get('film')) { window.FILM = film(Q.get('film')); document.title = 'FILMDONE'; return; }
+  if (Q.get('bench')) { const r = bench(+(Q.get('frames') || 600)); window.BENCH = r; document.title = 'BENCHDONE ' + JSON.stringify(r); document.getElementById('note').textContent = JSON.stringify(r); return; }
+  restart();
+  t0 = performance.now();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
