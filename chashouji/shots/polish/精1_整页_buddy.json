@@ -1,0 +1,192 @@
+{
+ "side": "buddy",
+ "button": "哥们 ③",
+ "rounds": [
+  {
+   "round": 1,
+   "before": [],
+   "drawn": [
+    [
+     "ground",
+     "B2",
+     "on",
+     "aim0"
+    ],
+    [
+     "top",
+     "B12",
+     "on",
+     "idle"
+    ],
+    [
+     "floor",
+     "B25",
+     "on",
+     "pop"
+    ]
+   ],
+   "shot": {
+    "file": "/tmp/p1/精1_整页_buddy_1.png",
+    "t": 2.26,
+    "state": [
+     [
+      "ground",
+      "B2",
+      "on",
+      "idle"
+     ],
+     [
+      "top",
+      "B12",
+      "on",
+      "idle"
+     ],
+     [
+      "floor",
+      "B25",
+      "on",
+      "throw"
+     ]
+    ]
+   },
+   "errors_so_far": []
+  },
+  {
+   "round": 2,
+   "before": [
+    [
+     "ground",
+     "B2",
+     "on",
+     "aim0"
+    ],
+    [
+     "top",
+     "B12",
+     "on",
+     "idle"
+    ],
+    [
+     "floor",
+     "B25",
+     "on",
+     "pop"
+    ]
+   ],
+   "drawn": [
+    [
+     "ground",
+     "B2",
+     "on",
+     "aim2"
+    ],
+    [
+     "top",
+     "B12",
+     "on",
+     "wind"
+    ],
+    [
+     "floor",
+     "B25",
+     "on",
+     "pop"
+    ]
+   ],
+   "shot": {
+    "file": "/tmp/p1/精1_整页_buddy_2.png",
+    "t": 0.9,
+    "state": [
+     [
+      "ground",
+      "B2",
+      "on",
+      "aim3"
+     ],
+     [
+      "top",
+      "B12",
+      "on",
+      "idle"
+     ],
+     [
+      "floor",
+      "B25",
+      "on",
+      "throw"
+     ]
+    ]
+   },
+   "errors_so_far": []
+  },
+  {
+   "round": 3,
+   "before": [
+    [
+     "ground",
+     "B2",
+     null,
+     null
+    ],
+    [
+     "top",
+     "B12",
+     null,
+     null
+    ],
+    [
+     "floor",
+     "B25",
+     null,
+     null
+    ]
+   ],
+   "drawn": [
+    [
+     "ground",
+     "B1",
+     "on",
+     "aim0"
+    ],
+    [
+     "top",
+     "B18",
+     "on",
+     "idle"
+    ],
+    [
+     "floor",
+     "B22",
+     "on",
+     "throw"
+    ]
+   ],
+   "shot": {
+    "file": "/tmp/p1/精1_整页_buddy_3.png",
+    "t": 2.08,
+    "state": [
+     [
+      "ground",
+      "B1",
+      "on",
+      "idle"
+     ],
+     [
+      "top",
+      "B18",
+      "on",
+      "throw"
+     ],
+     [
+      "floor",
+      "B22",
+      "on",
+      "wind"
+     ]
+    ]
+   },
+   "errors_so_far": []
+  }
+ ],
+ "errors": []
+}
