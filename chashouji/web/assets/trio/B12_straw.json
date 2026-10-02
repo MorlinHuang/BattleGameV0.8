@@ -1,1 +1,1 @@
-{"cell": [305, 360], "cols": 2, "frames": ["idle", "wind"], "anchor": [300, 180], "residual": 0, "head": [108, 0, 196, 84], "ref": "idle", "src": "stillframes.py"}
+{"cell": [449, 415], "cols": 4, "frames": ["idle", "wind", "throw", "follow", "fly", "catch", "bounce", "idle2"], "anchor": [276.9, 12.3], "residual": 1.0, "head": [198, 68, 270, 133], "ref": "idle"}

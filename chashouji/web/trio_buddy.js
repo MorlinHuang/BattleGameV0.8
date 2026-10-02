@@ -562,17 +562,23 @@ const TRIO_BUDDY = {
     },
 
     /* ---- 单张立绘（旧，等按规范重做成帧序列） ---- */
-    B12: {      // 草帽船长：扒在右边屏幕壁上，橡皮手臂伸长弹她脑门
-      /* 2026-10-01 迁成帧序列（引擎负责人）：idle = 原单张立绘（拳头伸出去），wind = 同一张画布上只局部重绘右臂（拳头收到胸前蓄力，
-         v14/trio/buddy/B12_straw/inp/，inpaint_paste.py：框外是原图像素）。锚点、手、拳头框都和原立绘同一个像素，原来调好的数值照搬。
-         出手：收拳蓄力 → 换回伸拳那一帧、橡皮手臂从手腕伸出去弹她脑门（punch：拳头那一块画在伸出去的地方）→ 缩回来 */
+    B12: {      // 草帽船长：橡皮手臂"嗖"地伸长甩进来、一把攥住右上的船桅横杆、团身一荡吊住；收拳蓄力，橡皮手臂伸长一拳弹她脑门
+      /* 2026-10-02 换成美术新动作条（buddy/B12_straw/raw/act_a1、act_b1，frames.py 配准残差 ≤ 1 px），原"扒右屏边"单张立绘 + 局部重绘 wind 退役。
+         单手吊着：锚点 = 攥杆的拳心（idle 格内 [276.9, 12.3]），整个人绕它前后荡（leanK）；剪影面积 s 1 时 2.78 万 → s 0.85（上方对格格 2.09 万） */
       face: -1,
-      sheet: { src: 'assets/trio/B12_straw.webp', cell: [305, 360], cols: 2, names: ['idle', 'wind'] },
-      anchor: [300, 180], at: [940, 560, 1], pivot: [298, 180], leanK: 0.6,   // 绕扒墙的那只手前后倾：蓄力往后、出拳往前甩；y 620 → 580（遮挡判据第二版重扫：后排 B6 挪到 x 820 后，620 时她被挡）
-      depth: 0.5, enter: 'spring', recipe: 'star',
-      idle: { frame: 'idle', breathe: [0.014, 0.9, 0.4] },
-      atk: { kind: 'punch', seq: [['wind', 0.3], ['idle', 0.62, 'fire']],
-             fist: [0, 44, 36, 96], fistC: [16, 70], wrist: [36, 70], armW: 16, skin: '#f7cba0', skinShade: 'rgba(214,146,96,.5)', skinEdge: '#5a3420', fistZ: 1.35,
+      sheet: { src: 'assets/trio/B12_straw.webp', cell: [449, 415], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'fly', 'catch', 'bounce', 'idle2'] },
+      anchor: [276.9, 12.3], at: [860, 260, 0.85], pivot: [276.9, 12.3], leanK: 0.6,
+      depth: 0.5, recipe: 'star',
+      /* 进场：手臂伸长甩过来（fly）→ 攥住横杆（catch，落定压一下）→ 团身荡一下（bounce）→ 吊着 */
+      enter: { kind: 'leap', h: 60, air: 0.4, from: [300, 160], sq: 0.08, seq: [['fly', 0.4], ['catch', 0.12, 'land'], ['bounce', 0.2], ['idle', 9]] },
+      exit: { frame: 'fly' },
+      idle: { frame: 'idle', breathe: [0.014, 0.9, 0.4], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
+      /* 船桅横杆（buddy/make_ledges.py b12）：场景层 fixed，杆心对准攥杆的拳心，从右屏外伸进来（出画豁免同原设计：贴右边） */
+      parts: [{ src: 'assets/trio/B12_pole.webp', pivot: [0, 0], z: -1, fixed: true, at: { idle: [210, 4.3, 0] } }],
+      /* 橡皮拳：wind 拳头收到胸前蓄力 → throw 手臂往左平伸，拳头从这一格抠下来画在伸出去的地方、管子从手腕接上 → follow 收回挠头。
+         throw 前臂水平、她在左下约 50°：arm 让肩以外整条胳膊（box 里只有胳膊和拳头）绕肩转过去对准她，橡皮臂沿前臂直着伸到她脸上（精引2，不拐弯） */
+      atk: { kind: 'punch', seq: [['wind', 0.3], ['throw', 0.62, 'fire'], ['follow', 0.3]], arm: { box: [44, 116, 162, 160], pivot: [172, 145], max: 0.8 },
+             fist: [52, 122, 80, 150], fistC: [66, 136], wrist: [82, 137], armW: 15, skin: '#f7cba0', skinShade: 'rgba(214,146,96,.5)', skinEdge: '#5a3420', fistZ: 1.35,
              phases: [0.16, 0.1, 0.34], gap: [0.55, 0.9], stretch: 0.03 },
     },
   },

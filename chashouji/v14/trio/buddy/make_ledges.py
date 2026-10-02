@@ -1,4 +1,4 @@
-"""B14 方块墙、B16 神殿石檐：parts fixed 场景层（审查第七批打回：名单写"从墙里挖出来""落在墙沿"，要把墙画出来）。
+"""B14 方块墙、B16 神殿石檐、B12 船桅横杆：parts fixed 场景层（审查第七批打回：名单写"从墙里挖出来""落在墙沿"，要把墙画出来）。
 程序画：上沿要精确落在帧里的脚底那一行（接触线 ≤ 2 px），生图做不到逐像素对齐。先按 3 倍画、描黑边，再缩到格内像素（和帧同一个单位），
 上沿 = 图的第 0 行（pivot [0, 0]），cfg 里 at 写 [墙左端的格内 x, 脚底那一行]。下半截 40 px 渐隐，不然一块墙浮在半空（同 B18 墙头）。
 用法（在 chashouji 下）：python3 v14/trio/buddy/make_ledges.py"""
@@ -72,4 +72,25 @@ def b16():
     save(im, 'B16_ledge')
 
 
-b14(); b16()
+def b12():
+    """船桅横杆（B12 草帽单手吊着，2026-10-02）：圆木杆从右屏外伸进来，左端锯口；两道麻绳缠绕。杆心在第 H/2 行，
+    cfg 里 at 写 [杆左端的格内 x, 抓握点 y − H/2]，人是 z +0 画在杆前面 → 拳头盖住杆，读成攥着"""
+    L, H = 420, 16
+    im = Image.new('RGBA', (L * K, H * K), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    d.rounded_rectangle([0, 0, L * K - 1, H * K - 1], radius=6 * K, fill=(150, 98, 52, 255), outline=INK, width=2 * K)
+    d.rectangle([2 * K, H * K * 0.62, L * K - 3 * K, H * K - 3 * K], fill=(112, 70, 36, 255))          # 下半截背光
+    d.line([(3 * K, H * K * 0.28), (L * K - 4 * K, H * K * 0.28)], fill=(196, 140, 84, 255), width=2 * K)   # 上沿高光
+    rng = np.random.default_rng(12)
+    for _ in range(26):                                                                               # 木纹
+        x = rng.integers(8, L - 30) * K; y = rng.integers(4, H - 4) * K; w = rng.integers(10, 30) * K
+        d.line([(x, y), (x + w, y + rng.integers(-1, 2) * K)], fill=(96, 60, 30, 255), width=K)
+    d.ellipse([0, 0, 6 * K, H * K - 1], fill=(206, 160, 104, 255), outline=INK, width=2 * K)           # 左端锯口
+    for x0 in (52, 128):                                                                              # 麻绳
+        for k in range(4):
+            x = (x0 + k * 5) * K
+            d.line([(x, -K), (x + 4 * K, H * K + K)], fill=(222, 196, 140, 255), width=3 * K)
+            d.line([(x + 3 * K, -K), (x + 7 * K, H * K + K)], fill=INK, width=K)
+    save(im, 'B12_pole')
+
+
+b14(); b16(); b12()

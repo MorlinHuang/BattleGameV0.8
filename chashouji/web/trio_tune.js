@@ -44,7 +44,6 @@ const TRIO_TUNE = {
   B28: { dir: { throw: -65.1 } },
   B30: { dir: { throw: -40 } },
   /* 伸缩臂（punch）的前臂方向就是 atk.wrist → atk.fistC，不用 dir；arm = 出拳时整条手臂绕肩转过去对准落点（trio.js armNeed） */
-  B12: { at: { cell: [305, 360], arm: { box: [0, 44, 104, 100], pivot: [110, 78], max: 0.8 } } },   // 肩以外整条胳膊（框里只有胳膊和拳头）
   B13: { dir: { throw: 0, sword: 0 } },
   B16: { dir: { hitA: 0, hitB: 0 } },
   B19: { dir: { throw: 0 } },
