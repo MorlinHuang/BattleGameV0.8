@@ -312,12 +312,12 @@ const TRIO_BESTIE = {
          dist = 6 步 × 59.5 × s，写死：不写时引擎按 cell × s + 30 取整成 6 步、每步压短 0.3 px */
       enter: { kind: 'walk', fps: 6, bob: 6, stride: 119, dist: 299.9, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
       exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 8, flip: true, T: 0.8 },
-      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },   /* idle2 停用（2026-10-02 总控）：现有 idle2 是整张重生的人，头顶比 idle 高 56 px、站姿也变了，待机轮换时人忽大忽小；等按 idle 底局部重画（addframes inplace）再接回 */
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0], alt: { frame: 'idle2', every: [1.2, 2.2], hold: [0.6, 1.0] } },   /* idle2 = 头绕脖子歪 9°（切件，bestie/G5_tong/headidle2.py，身子逐像素同 idle）；原整张重生的 idle2 头顶高 56 px，769478b 停用后换掉 */
       /* 算盘是挂件层，和甩出去的是同一把：3D 图集 prop_abacus 最正面那一格转正（bestie/G5_tong/abacus_part.py，屏幕长边 90 px，改 s 要重跑），
          上面一根红吊绳吊在左胯，绕绳结晃；举过头顶 / 甩出去那两帧不画（在手里的是 3D 算盘）。
          ammo: true = 胯上这把就是甩出去的那把：飞出去还没落完就不画（不然 follow 帧胯上一把、空中一把），落完从吊绳结长回来 */
       parts: [{ src: 'assets/trio/G5_abacus.webp', pivot: [55, 3], z: 1, sway: [0.1, 0.9, 0], ammo: true,
-                at: { idle: [118, 238, 0], follow: [118, 246, 0], walk1: [124, 250, 0], walk2: [118, 250, 0], walk3: [124, 250, 0], walk4: [118, 250, 0], idle2: [128, 238, 0] } }],
+                at: { idle: [118, 238, 0], follow: [118, 246, 0], walk1: [124, 250, 0], walk2: [118, 250, 0], walk3: [124, 250, 0], walk4: [118, 250, 0], idle2: [118, 238, 0] } }],   // idle2 身子同 idle
       /* 两手举过头顶（后排：出手点在女生头顶以上）→ 往前甩出 → 捂胸叹气。3D 算盘照道具表 r 40 cell 115 scale 1.35，转速 π / T */
       atk: { kind: 'throw', item: 'abacus', r: 40, atlas: { src: 'assets/trio/prop_abacus.webp', n: 36, cols: 6, cell: 115, scale: 1.35 },
              seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.1], ['through', 0.12], ['follow', 0.25]],   // 精闺1 P6：release 出手瞬间 / through 跟随（bestie/tools/addframes.py）
