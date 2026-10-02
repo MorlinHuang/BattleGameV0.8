@@ -5,7 +5,7 @@
  * p90 92，三人组彩度 p90 55~74 是背景的 2~3 倍 —— 人是按白天棚拍的亮度画的，贴在夜里的房间上，就是贴纸。
  * 所以三样东西在引擎层统一做，60 人和男女主走同一套（男女主不做的话，三人组压暗了反而衬得主角更像贴纸）：
  *
- * 1. 接地阴影（contact）：每一帧的剪影底边自动量出来（profile：贴图缩到 1/4 读 alpha，一帧量一次缓存），
+ * 1. 接地阴影（contact）：每一帧的剪影底边自动量出来（profile：贴图缩到 1/4 读 alpha，在 Worker 里量、按格缓存），
  *    贴地的几段（脚、轮子、趴着的身子）各一团深的接触影，整片靠近地面的部分一团大而淡的环境影，略往背光那边偏。
  *    离地（进场跳起、腾空、走路一颠）按离地高度变淡变散。站在场景层（墙沿、石台）上的人，影子画在台面上（场景层之后、人之前）。
  * 2. 吃场景光（grade）：人乘一层"此处的光色"（multiply，房间底色 × 亮度 + 附近每盏灯按距离加回来），
@@ -116,36 +116,64 @@ const Light = (() => {
 
   /* ---- 剪影底边（接地阴影的形状）---- */
   const PROF = new Map(), Q = 4;
-  let probe = null;
   /* 贴图 img 上 (sx, sy, sw, sh) 这一格的剪影底边 → 贴图像素：
      yb 最低的不透明行；touch 贴地的几段 [x0, x1, 这一段最低点 y]（最低点离 yb 在 4% 格高以内的列，断开 > 2 列算两段）；
      near 靠近地面的几片 [x0, x1, y]（15% 以内，断开 > 40 像素算两片 —— 男女主一张图里两个人，各一片；没有 = null） */
   const keyOf = (img, sx, sy, sw, sh) => img.src + '|' + sx + ',' + sy + ',' + sw + ',' + sh;
-  /* 缩到 1/Q 画进 probe 再读回（读回要等 GPU，一张图集一次读完，别一格一次） */
-  function readSmall(img, sx, sy, sw, sh) {
-    const w = Math.max(1, Math.ceil(sw / Q)), h = Math.max(1, Math.ceil(sh / Q));
-    if (!probe) probe = document.createElement('canvas');
-    if (probe.width < w || probe.height < h) { probe.width = Math.max(probe.width, w); probe.height = Math.max(probe.height, h); }
-    const c = probe.getContext('2d', { willReadFrequently: true });
-    c.clearRect(0, 0, w, h); c.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
-    return { d: c.getImageData(0, 0, w, h).data, W: w };
+  /* 量剪影要读回像素。**不在主线程读**：主线程 drawImage 一张图集再 getImageData = 强制解码 + 等 GPU 交回像素，
+     平时一张 50~90 ms，送礼正忙时一张 5~10 秒（2026-10-02 用户"频繁点礼物会卡死"，tools/load/stress.py 实测：
+     预取队列 66 张图集挨个量，主线程被堵住几十秒）。改成 Worker 里 fetch 原图 → createImageBitmap 解码 → OffscreenCanvas 缩到 1/Q 读 alpha，
+     主线程只收结果。同一张图（img.src）一次读完所有格；没有 Worker / OffscreenCanvas 的浏览器不画接地影（has.shadow = false）。 */
+  const canWork = typeof Worker === 'function' && typeof OffscreenCanvas === 'function' && typeof createImageBitmap === 'function';
+  let worker = null, seq = 0;
+  const WAIT = new Map(), BUSY = new Map();
+  function workerOf() {
+    if (worker) return worker;
+    const src = `'use strict'; const Q = ${Q};\n${scan.toString()}\n` +
+      `onmessage = async (e) => { const { id, src, cells } = e.data;
+        try {
+          const bm = await createImageBitmap(await (await fetch(src)).blob());
+          const W = Math.max(1, Math.ceil(bm.width / Q)), H = Math.max(1, Math.ceil(bm.height / Q));
+          const c = new OffscreenCanvas(W, H).getContext('2d', { willReadFrequently: true });
+          c.drawImage(bm, 0, 0, W, H); bm.close();
+          const d = c.getImageData(0, 0, W, H).data;
+          postMessage({ id, profs: cells.map(([sx, sy, sw, sh]) => scan(d, W, Math.floor(sx / Q), Math.floor(sy / Q), Math.ceil(sw / Q), Math.ceil(sh / Q))) });
+        } catch (err) { postMessage({ id, err: String(err) }); } };`;
+    worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    worker.onmessage = (e) => { const w = WAIT.get(e.data.id); WAIT.delete(e.data.id); w(e.data); };
+    return worker;
   }
+  /* 量 img 上这几格（[sx, sy, sw, sh]），结果进 PROF；返回量完的 promise。同一张图正在量就并到那一次后面 */
+  function measure(img, cells) {
+    const todo = cells.filter(([sx, sy, sw, sh]) => !PROF.has(keyOf(img, sx, sy, sw, sh)));
+    if (!todo.length) return Promise.resolve();
+    if (!canWork) { api.has.shadow = false; return Promise.resolve(); }
+    const prev = BUSY.get(img.src) || Promise.resolve();
+    const run = prev.then(() => new Promise((ok) => {
+      const left = todo.filter(([sx, sy, sw, sh]) => !PROF.has(keyOf(img, sx, sy, sw, sh)));
+      if (!left.length) return ok();
+      const id = ++seq;
+      WAIT.set(id, ({ profs, err }) => {
+        if (err) console.warn('light: 量剪影失败', img.src, err);
+        else left.forEach(([sx, sy, sw, sh], i) => PROF.set(keyOf(img, sx, sy, sw, sh), profs[i]));
+        ok();
+      });
+      workerOf().postMessage({ id, src: img.src, cells: left });
+    }));
+    BUSY.set(img.src, run);
+    return run;
+  }
+  /* 这一格的剪影底边；还没量好 = null（这一帧不画接地影），顺手发起量 */
   function profile(img, sx, sy, sw, sh) {
-    const key = keyOf(img, sx, sy, sw, sh);
-    let p = PROF.get(key);
-    if (p) return p;
-    const { d, W } = readSmall(img, sx, sy, sw, sh);
-    p = scan(d, W, 0, 0, Math.ceil(sw / Q), Math.ceil(sh / Q));
-    PROF.set(key, p);
-    return p;
+    const p = PROF.get(keyOf(img, sx, sy, sw, sh));
+    if (!p) measure(img, [[sx, sy, sw, sh]]);
+    return p || null;
   }
-  /* 一张图集的每一格一起量（Act.load 加载完就调：量剪影要读回像素，放在加载时做，不在人第一次出场那一帧做） */
+  /* 一张图集的每一格一起量（Act.load 加载完就调，等它量完再算 ready —— 人出场时剪影一定已经有了） */
   function profiles(img, cw, ch, n, cols) {
-    const { d, W } = readSmall(img, 0, 0, img.width, img.height);
-    for (let i = 0; i < n; i++) {
-      const sx = (i % cols) * cw, sy = Math.floor(i / cols) * ch, key = keyOf(img, sx, sy, cw, ch);
-      if (!PROF.has(key)) PROF.set(key, scan(d, W, Math.floor(sx / Q), Math.floor(sy / Q), Math.ceil(cw / Q), Math.ceil(ch / Q)));
-    }
+    const cells = [];
+    for (let i = 0; i < n; i++) cells.push([(i % cols) * cw, Math.floor(i / cols) * ch, cw, ch]);
+    return measure(img, cells);
   }
   /* 读回的 alpha（行宽 W）里 (ox, oy) 起 w × h 这一块 → 剪影底边（贴图像素，相对这一格） */
   function scan(d, W, ox, oy, w, h) {

@@ -334,8 +334,9 @@ function Act(cfg) {
     return (loading = Promise.all([one(SH ? SH.src : cfg.src), A.prop ? one(A.prop) : null, A.atlas ? one(A.atlas.src) : null, ...PARTS.map(q => one(q.src))])
       .then(([a, p, t, ...ps]) => {
         img = a; prop = p; atlas = t; ps.forEach((im, i) => { partImg[i] = im; });
-        if (a && SH) Light.profiles(a, SH.cell[0], SH.cell[1], SH.names.length, SH.cols);   // 接地阴影的剪影底边：加载时一次量完（light.js）
-        ready = true; return !!a;
+        /* 接地阴影的剪影底边：加载时一次量完（light.js，在 Worker 里量），量完才算 ready —— 出场那一帧剪影一定已经有了 */
+        const measured = a ? (SH ? Light.profiles(a, SH.cell[0], SH.cell[1], SH.names.length, SH.cols) : Light.profiles(a, a.width, a.height, 1, 1)) : null;
+        return Promise.resolve(measured).then(() => { ready = true; return !!a; });
       }));
   }
 
@@ -488,7 +489,7 @@ function Act(cfg) {
     const p2 = tgt || o.aim(u), w = d != null && p2 && ballistic(h, p2, d, pad);
     shots.push({ kind: A.kind === 'camera' ? 'photo' : A.item, x: h[0], y: h[1], p0: h, tgt, u, t: 0, T: w ? w.T : A.T * rnd(0.9, 1.1),
                  arc, ang: b ? b.hang : 0, spin: (A.spin || 0) * (A.atlas || Math.random() < 0.5 ? 1 : -1), miss, j: Math.random(),
-                 way: w ? { d } : null, c: w ? w.c : null });
+                 way: w ? { d } : null, c: w ? w.c : null, p2: p2 ? [p2[0], p2[1]] : null });   // 落点出手时就定：连线（drawTether）可能在第一次 stepShot 之前就画
   }
 
 
@@ -1699,7 +1700,7 @@ function Act(cfg) {
     const fl = (cfg.depth || 1) >= 0.8 ? 'floor' : 'air';
     if (!SH || !PARTS.some(q => q.fixed)) return (sup = fl);
     const i = SH.names.indexOf(cfg.idle.frame), [cw, ch] = SH.cell, pr = Light.profile(img, (i % SH.cols) * cw, Math.floor(i / SH.cols) * ch, cw, ch);
-    if (!pr.touch.length) return (sup = fl);
+    if (!pr || !pr.touch.length) return (sup = fl);
     const [ax, ay, s] = cfg.at, mx = pr.touch.reduce((a, q) => a + q[0] + q[1], 0) / pr.touch.length / 2;
     const X = ax + (mx - cfg.anchor[0]) * s, Y = ay + (pr.yb - cfg.anchor[1]) * s;
     const on = PARTS.some((q, k) => {
@@ -1730,7 +1731,7 @@ function Act(cfg) {
   /* 地上 / 台面上的接触影：贴地几段换到屏幕；离地（dy < 0）时影子留在到位时那条地面上、按高度变淡变散；从下面进场的（dy > 0）影子跟着脚走 */
   function shadeFloor(ctx, P) {
     const pr = profileNow(), L = light();
-    if (!pr.near) return;
+    if (!pr || !pr.near) return;                                      // 没量出来（Worker 读图失败）：不画
     const se = TE + b.stay, flip = SH && b.t > se && cfg.exit && cfg.exit.flip, ax = P.at(cfg.anchor)[0];
     const X = (x, y) => { const p = pt(P, [x, y]); return [flip ? 2 * ax - p[0] : p[0], p[1]]; };
     const lift = Math.max(0, -P.dy), k = shownK(P);

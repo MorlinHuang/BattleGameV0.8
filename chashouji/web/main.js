@@ -1917,7 +1917,7 @@ class PoseView {
     const img = this.imgs[name], m = WORLD.poses[name];
     if (!img || !Light.on) return;
     const pr = Light.profile(img, 0, 0, img.width, img.height), k = m.w / img.width;
-    if (!pr.near) return;
+    if (!pr || !pr.near) return;                                      // 剪影还在 Worker 里量（light.js）：这一帧先不画
     const seg = ([a, b, v]) => [x - m.ax + a * k, x - m.ax + b * k, y - m.ay + v * (m.h / img.height)];
     Light.contact(ctx, pr.touch.map(seg), pr.near.map(seg), 1, lift, 1, this.light(x, m));
   }
