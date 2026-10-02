@@ -42,47 +42,8 @@
   {
    "name": "through",
    "base": "throw",
-   "box": [
-    0,
-    0,
-    330,
-    290
-   ],
-   "screen": "magenta",
-   "K": 2.18978,
-   "ox": 151,
-   "oy": 62,
-   "fixed": [
-    220,
-    358,
-    274,
-    390
-   ],
-   "added": true,
-   "paste": "box",
-   "feather": 10
-  },
-  {
-   "name": "idle2",
-   "base": "idle",
-   "box": [
-    0,
-    0,
-    330,
-    280
-   ],
-   "screen": "magenta",
-   "K": 2.18978,
-   "ox": 151,
-   "oy": 62,
-   "fixed": [
-    220,
-    358,
-    274,
-    390
-   ],
-   "paste": "box",
-   "feather": 10
+   "paste": "cell",
+   "added": true
   }
  ]
 }

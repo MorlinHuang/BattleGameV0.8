@@ -1,7 +1,7 @@
 """G7 待机换姿势 idle2（精闺1 P7，2026-10-02 总控）：idle 帧前面那只小臂绕肘往上收 100°，手立到胸前（活动手指 / 整理手套）。
 原 idle2 是整张重生的人（头顶高 25 px、站姿也变），769478b 停用；按规范要以 idle 为底只改局部，这里用切件：
 idle 帧肘以外（x 262~345、150~215 行）只有前臂和手套，抠出来绕肘点转、贴回 —— 身子逐像素同 idle，待机轮换不忽大忽小。
-直接替换图集里 idle2 那一格；重新 build 图集（frames.py / addframes.py）之后再跑一次。在 chashouji 下：python3 v14/trio/bestie/G7_yor/armidle2.py"""
+直接替换图集里 idle2 那一格；addframes.json 里没有 idle2 条目，build 时 idle2 按原图集保留，不用重跑。在 chashouji 下：python3 v14/trio/bestie/G7_yor/armidle2.py"""
 import json, os
 import numpy as np
 from PIL import Image
