@@ -449,14 +449,14 @@ const TRIO_BESTIE = {
 
     G18: {      // 挂帅女将（穆桂英式京剧武旦）：从左上一跃落下、单膝点地，起身亮相，翎子一甩；红缨枪举过头顶掷出去（3D）
       face: +1,
-      sheet: { src: 'assets/trio/G18_mu.webp', cell: [335, 351], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'leap', 'land', 'rise', 'idle2'] },
+      sheet: { src: 'assets/trio/G18_mu.webp', cell: [365, 351], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'leap', 'land', 'rise', 'idle2', 'release', 'through'] },
       /* 锚点 = 前脚厚底靴鞋底：出手四帧按这只靴子配准（残差 0.17 px）。人那一层 idle 剪影 2.80 万 × 0.88² ≈ 2.17 万（上方样板 G11 2.06 万） */
       anchor: [273.7, 323.2], at: [496, 640, 0.88], pivot: [273, 323], leanK: 0,
       depth: 0.5, recipe: 'petal',
       /* 从左上画外抛物线跃下（腾空收腿张臂）→ 单膝落在墙沿上（压扁）→ 起身张臂 → 亮相待机 */
       enter: { kind: 'leap', from: [-320, -380], h: 120, air: 0.5, T: 0.9, seq: [['leap', 0.5], ['land', 0.2, 'land'], ['rise', 0.14], ['idle', 9]], sq: 0.1 },
       exit: { frame: 'leap' },
-      idle: { frame: 'idle', breathe: [0.014, 0.7, 0] },
+      idle: { frame: 'idle', breathe: [0.014, 0.7, 0], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
       /* 墙沿场景层（bestie/G18_mu/ledge.py 程序画一截城墙顶：青砖墙顶面 + 错缝墙面、下半截渐隐），fixed 钉在世界里、左端出画。
          墙顶面是一条带（3/4 侧身，远脚 y 323、近脚 y 346）：前沿 = 格内 y 346 = land 单膝 / 脚尖、idle / rise 后脚的最低一行，后沿 314。
          左端格内 x −340：at x 260 → 380 后墙往左接长 136；修12 落脚区（G8 蓄力瞄男主的冰锥扫过左靴）人挪到 at x 496、墙再接长 134，左端仍在屏幕 x −44 出画 */
@@ -464,13 +464,13 @@ const TRIO_BESTIE = {
               /* 翎子、靠旗是定妆拆好的两层（ref/G18_feathers.png、G18_flags.png，part.py 按人那一层同一个比例 330/1424 缩）：都在人身后。
                  pivot：翎子 = 两根翎管插进盔头的那一点、靠旗 = 四根旗杆在背上并拢的插座。每帧的 at = idle 上的位置 + 这一帧的头相对 idle 的位移（头模板匹配） */
               { src: 'assets/trio/G18_flags.webp', pivot: [73.9, 118.5], z: -1, sway: [0.04, 0.7, 0],
-                 at: { idle: [133.4, 65.4, 0], wind: [144.4, 66.4, 0], throw: [155.4, 66.4, 0], follow: [128.4, 59.4, 0], leap: [133.4, 159.4, 0], land: [131.4, 130.4, 0], rise: [133.4, 72.4, 0] } },
+                 at: { idle: [133.4, 65.4, 0], idle2: [136.4, 60.4, 0], wind: [144.4, 66.4, 0], throw: [155.4, 66.4, 0], release: [155.4, 66.4, 0], through: [155.4, 66.4, 0], follow: [128.4, 59.4, 0], leap: [133.4, 159.4, 0], land: [131.4, 130.4, 0], rise: [133.4, 72.4, 0] } },
               { src: 'assets/trio/G18_feathers.webp', pivot: [89.9, 169.0], z: -1, sway: [0.12, 0.9, 0],
-                 at: { idle: [147.3, 20.2, 0], wind: [158.3, 21.2, 0], throw: [169.3, 21.2, 0], follow: [142.3, 14.2, 0], leap: [147.3, 114.2, 0], land: [145.3, 85.2, 0], rise: [147.3, 27.2, 0] } }],
+                 at: { idle: [147.3, 20.2, 0], idle2: [150.3, 15.2, 0], wind: [158.3, 21.2, 0], throw: [169.3, 21.2, 0], release: [169.3, 21.2, 0], through: [169.3, 21.2, 0], follow: [142.3, 14.2, 0], leap: [147.3, 114.2, 0], land: [145.3, 85.2, 0], rise: [147.3, 27.2, 0] } }],
       /* 红缨枪照道具表 3D：r 95 cell 200 scale 1.02（审查第五批返工，引擎负责人：屏幕长 152~195 px，枪头始终朝右），转速 π / T；命中炸红（bloom） */
       atk: { kind: 'throw', item: 'spear', r: 95, atlas: { src: 'assets/trio/prop_spear.webp', n: 36, cols: 6, cell: 200, scale: 1.02 },
-             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
-             hold: { wind: [132, 16], throw: [318, 72] },
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.1], ['through', 0.12], ['follow', 0.25]],   // 精闺1 P6：release 手臂平推到最远离手、through 手臂顺势落到右下 45°（release / through 只重画右臂，头身同 throw，翎子靠旗同 throw）
+             hold: { wind: [132, 16], release: [338, 90], throw: [318, 72] }, dir: { release: -19.8 },   // wind → release 手位移 −19.8°（引擎原量 −16.8°）；idle2 翎子靠旗 = idle + 头位移 (+3, −5)（头模板匹配）
              T: 0.55, arc: 0.18, spin: 5.7, idleSpin: 0.6, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
     G13: {      // 白衣古墓仙子（小龙女式）：躺在一根横拉的麻绳上从左边滑进来、随绳颠着荡；支起身子一甩白绸，绸梢金铃"叮当"抽过去
@@ -499,7 +499,7 @@ const TRIO_BESTIE = {
     },
     G14: {      // 金发剑之公主（希瑞式）：左上一道蓝白闪光里举剑变身现身，剑指前方、扛剑站定；双手举剑过头一劈，金色剑光斩在他身上
       face: +1,
-      sheet: { src: 'assets/trio/G14_shera.webp', cell: [335, 433], cols: 4, names: ['idle', 'wind', 'throw', 'follow'] },
+      sheet: { src: 'assets/trio/G14_shera.webp', cell: [395, 433], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'swing', 'through', 'idle2'] },
       /* 锚点 = 前脚金靴底：按这只靴子配准、缩放也按它（scale_by fixed：按头找时 idle 比其余三帧小一圈），残差 0.18 px。
          剑是她自己的（不飞出去），画在帧里；剪影约 3.5 万格内像素 × 0.77² ≈ 2.07 万屏幕像素，同 G11 */
       anchor: [222.4, 425.4], at: [170, 520, 0.7], pivot: [222, 425], leanK: 0.3,
@@ -507,7 +507,7 @@ const TRIO_BESTIE = {
       /* 闪电变身（appear 闪光，蓝白）：淡入时双手举剑指天（变身），淡入完剑指前方 → 扛剑站定（淡入后换两次帧） */
       enter: { kind: 'appear', fx: 'flash', color: [200, 230, 255], fade: 0.3, seq: [['wind', 0.35], ['follow', 0.3, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'wind' },
-      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },   // 精闺1 idle2：叉腰的左手抬起把金发拨到肩后
       /* 脚下的水晶城堡石台（审查第九批打回：两只金靴底悬在鱼缸玻璃中段）：bestie/G14_shera/ledge.py 程序画，fixed 钉在世界里、z −1、左端出画（屏幕 x −47）。
          不站鱼缸盖：鱼缸是长卷背景，镜头随拖拽卷动、三间房只有客厅有，人按屏幕 at 钉住，一拖鱼缸就滑走；场景层跟人走。
          顶面一条带：前沿 = 格内 y 429 = 后脚（左）靴底最低一行，前脚（右）靴底 425 落在带里，后沿 407 */
@@ -515,8 +515,9 @@ const TRIO_BESTIE = {
       /* 身后飘着的长金发 + 红披风：身子那一侧（右边）钉住，往左飘（框上、下、左三边透明） */
       flex: { idle: [[0, 143, 106, 336, 'r', 12, 0.9]] },
       /* 剑光（slash，引擎画在他身上）：举剑过头 → 劈下，出手段 0.3 秒盖住两道（gap 0.12 + 划出） */
-      atk: { kind: 'slash', seq: [['wind', 0.32], ['throw', 0.3, 'fire'], ['follow', 0.35]],
+      atk: { kind: 'slash', seq: [['wind', 0.26], ['swing', 0.06], ['throw', 0.3, 'fire'], ['through', 0.12], ['follow', 0.25]],   // 精闺1 P6 / 审查 q9：举过头 → swing 剑在前上方约 55°（挥动中）→ 劈到右下 → through 剑尖顺势指地 → 收
              slash: { n: 2, gap: 0.12, len: 240, w: 20, life: 0.5, color: [255, 215, 110], ang: 0.79, spread: 0.2 },   // 精闺1 / 自检 4.6 第 5 条：弦线顺劈向往右下约 45°（原 −0.6 弦线往右上，和往右下劈的剑划向相反）
+             hold: { throw: [297, 352] },   // 剑尖（throw 格量；剑气从这里飞出，精引3）
              gap: [0.9, 1.3] },
     },
     G16: {      // 狐尾妖姬（妲己式）：一团狐火橙烟里九条白尾巴裹着她现身，伸个懒腰、托腮一笑；掌心托一团青蓝狐火，举过头顶甩出去

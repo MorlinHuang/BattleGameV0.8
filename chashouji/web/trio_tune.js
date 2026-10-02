@@ -59,7 +59,7 @@ const TRIO_TUNE = {
   G11: { dir: { throw: 22.3 }, alt: ALT, at: { cell: [315, 343], hold: { idle2: [176, 172] } } },
   G12: { dir: { idle: 0 } },
   G13: { dir: { throw: 18 } },
-  G14: { dir: { throw: -45 }, at: { cell: [335, 433], hold: { throw: [297, 352] } } },   // 剑气从剑尖出（throw 格量）；美术重排图集（cell 改了）后要重量
+  G14: { dir: { throw: -45 } },   // 剑尖 hold.throw 已写进角色数据（trio_bestie.js）
   G15: { dir: { throw: -20.4 }, alt: ALT, trail: 'gem' },
   G16: { dir: { throw: -53 }, alt: ALT, trail: 'fox', at: { cell: [288, 401], hold: { idle2: [263, 89] } } },
   G17: { dir: { throw: -45 }, alt: ALT, band: 'blade' },
