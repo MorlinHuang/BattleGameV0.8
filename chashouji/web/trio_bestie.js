@@ -355,7 +355,7 @@ const TRIO_BESTIE = {
       /* 细刺刀是平面图（bestie/G7_yor/knife.py：原图 180 px 刀身提亮一档、加 3 px 深紫褐描边，186 px × 0.65 ≈ 屏幕 121 px，刀尖最细处连描边 ≈ 4.5 px）：
          手指夹着举过头顶（后排：出手点在女生头顶以上）→ 甩出去刀尖朝前直飞（aim：不自转，尖头顺着飞行方向，拿在手里也指着他） */
       atk: { kind: 'throw', item: 'knife', prop: 'assets/world/trio_g7_knife.webp', scale: 0.65,
-             seq: [['wind', 0.22], ['release', 0.06, 'fire'], ['throw', 0.22], ['follow', 0.25]],   /* through 停用（2026-10-02）：整张重生、头顶比 throw 高 30 px，跟随一闪人变高；throw 多停 0.12 s，总时长不变 */   // 精闺1 P6：release 出手瞬间 / through 跟随（bestie/tools/addframes.py）
+             seq: [['wind', 0.22], ['release', 0.06, 'fire'], ['throw', 0.1], ['through', 0.12], ['follow', 0.25]],   /* through（2026-10-02 重做）：throw 帧手臂绕肩往下转 40°（bestie/G7_yor/armswing.py），身子逐像素同 throw */   // 精闺1 P6：release 出手瞬间 / through 跟随（bestie/tools/addframes.py）
              hold: { wind: [124, 40], release: [395, 72], throw: [356, 110] }, dir: { release: -6.7 },   // dir = 手的运动方向（wind → release），dircheck 验过
              T: 0.4, arc: 0.12, spin: 0, aim: true, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
