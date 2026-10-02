@@ -179,7 +179,7 @@ const TRIO_BESTIE = {
     },
     G30: {      // 葫芦山蛇精式妖女：像蛇一样左右扭着从左下角滑进来、斜倚坐起，举如意放一道绿光吸住他
       face: +1,
-      sheet: { src: 'assets/trio/G30_snake.webp', cell: [577, 385], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'slither1', 'slither2', 'wind2', 'idle2'] },
+      sheet: { src: 'assets/trio/G30_snake.webp', cell: [577, 385], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'slither1', 'slither2', 'wind2', 'idle2', 'release'] },
       anchor: [268.2, 386.8], at: [200, 1332, 1], pivot: [268, 386],
       leanK: 0,   // 斜倚在地上：整体前后倾会把贴地的蛇尾裙摆翘起来
       depth: 1.3, recipe: 'star',
@@ -255,12 +255,14 @@ const TRIO_BESTIE = {
       face: +1,
       sheet: { src: 'assets/trio/G29_huangrong.webp', cell: [444, 387], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'vault', 'swing', 'land', 'idle2', 'release'] },
       anchor: [228.4, 371.7], at: [180, 1328, 0.98], pivot: [228, 371],
-      leanK: 0,   // 蹲着、一只手撑地：整体前后倾会把撑地的手和靴子带起来
+      leanK: 0,   // 蹲着：整体前后倾会把撑地的手和靴子带起来
       depth: 1.3, recipe: 'thud',
       /* 撑棒跃进：双手握棒顶腾空（vault）→ 收腿荡过去（swing）→ 落地蹲下单手撑地（land）→ 待机 */
       enter: { kind: 'leap', h: 120, air: 0.45, sq: 0.1, seq: [['vault', 0.25], ['swing', 0.2], ['land', 0.14, 'land'], ['idle', 9]] },
       exit: { frame: 'vault' },
       idle: { frame: 'idle', breathe: [0.018, 0.75, 0] },
+      /* idle / idle2 / wind / throw 原图两只手各有去处（举拳握棒 + 前伸 / 扶膝 / 握短棒）却还画着一只撑地的手 = 三只手（2026-10-02 用户指出）：
+         撑地那条前臂局部重绘成膝盖和衣摆（bestie/G29_huangrong/nohand/：蒙版、生成图、reg.py 配回原格），land / release 只有一只手在别处，撑地手保留 */
       /* 打狗棒：定妆拆好的挂件层（bestie/ref/G29_staff.png → tools/part.py h 281），挂点 = 握棒处（棒长 80% 那一点）。
          待机 / 落地：握在举起的左拳里、斜靠在背后；腾空两帧：双手握棒顶、棒子往下（转 π，荡的那帧更竖）；
          wind / throw / follow 不画（这几帧手里画着一截短竹棒，捅出去的就是它） */

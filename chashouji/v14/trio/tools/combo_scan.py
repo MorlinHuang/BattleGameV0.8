@@ -339,6 +339,9 @@ def sheet_person(c, at, foot, side):
             want += [E['seq'][-1][0]]
         pump = (sw or {}).get('pump')
         if pump: want += [pump['fwd'], pump['back']]
+        # 出手 / 进场 / 待机引用的帧必须在 sheet.names 里：引擎按名字找格，找不到 indexOf = -1，这一段整个人不画（G30 release 漏写，放光 0.5 秒人消失、光像从半空射出）
+        miss = [f for f in dict.fromkeys(want) if f not in sh['names'] and f != 'aim']
+        if miss: raise SystemExit(f'{name}: seq / enter / idle 用到的帧 {miss} 不在 sheet.names {sh["names"]} 里')
         want = [f for f in dict.fromkeys(want) if f in sh['names']]
         hr = head_out(name); hb, refc = (hr[0], cell(hr[1])) if hr else (None, None)   # 头框量在参考帧上（不一定是 idle：G4 是 wind）
         cells = [(f, cell(f)) for f in want]
