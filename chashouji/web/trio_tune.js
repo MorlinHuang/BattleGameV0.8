@@ -8,6 +8,8 @@
  *   atlasAim → atk.atlas.aim { cell, tip }：3D 转盘道具朝前飞时定格在第几格、这一格里尖头朝哪（弧度，图上量）
  *   alt      → idle.alt      { frame, every: [秒, 秒], hold: [秒, 秒] }：待机轮换
  *   at.arm   → atk.arm       { box, pivot, max }：伸缩臂出拳时整条手臂绕肩转过去对准落点（box 框里只能有手臂和拳头）
+ *   band     → atk.band  精引3 带状物 / 伸缩臂的画法（trio_fx.js 第 5 节）：抽打默认 'silk'，G17 'blade'（软鞭剑）；伸缩臂默认 'arm'，G29 'bamboo'（打狗棒）
+ *   trail    → atk.trail 精引3 飞行物拖尾（trio_fx.js 第 10 节）：TrioFX.TRAIL 的名字 'fox' / 'gem' / 'moon'，或 [[r, g, b], 'fire' | 'glint']
  *   at       → 贴图坐标的点（alt 帧手里东西拿在哪 hold、挂件挂在哪 parts.<挂件图名>）；cell 是量的那一版图集的格子大小，
  *              美术重排图集以后（cell 变了）整块作废，连同 alt 一起不用（trio.js tuned）。地板 G21 G25~G27 G29 按 6038a76 加边（+40, +40~60）重算过
  *
@@ -27,10 +29,10 @@ const TRIO_TUNE = {
   B7: { dir: { swing: -45 } },
   B8: { dir: { swing: 38.4 } },
   B9: { dir: { swing: -12.3 } },
-  B10: { dir: { swing: -70.5 } },
+  B10: { dir: { swing: -70.5 }, at: { cell: [480, 425], hold: { throw: [108, 224] } } },   // 线上图集出手帧（throw）张开的手掌；ce7d459 起 hold 只写了 wind / swing，出手点读空抛错停主循环
   /* 上方 / 地板 */
   B11: { dir: { throw: 16 } },
-  B23: { dir: { throw: 60 } },                       // 三刀往左上扫（复核 4.6-5：刀尖往左上 ≈ 60°）
+  B23: { dir: { throw: 60 }, at: { cell: [510, 294], hold: { throw: [124, 41] } } },   // 三刀往左上扫（复核 4.6-5：刀尖往左上 ≈ 60°）；剑气从上面那把刀的刀尖出（throw 格量）
   B14: { dir: { throw: -67 } },
   // B15：指尖弹出的光球是能量（走直线、不受重力）—— 手没对准落点，进补帧名单，不写 dir（不让光球按抛物线落）
   B17: { dir: { throw: 0 } },
@@ -57,13 +59,13 @@ const TRIO_TUNE = {
   G11: { dir: { throw: 22.3 }, alt: ALT, at: { cell: [315, 343], hold: { idle2: [176, 172] } } },
   G12: { dir: { idle: 0 } },
   G13: { dir: { throw: 18 } },
-  G14: { dir: { throw: -45 } },
-  G15: { dir: { throw: -20.4 }, alt: ALT },
-  G16: { dir: { throw: -53 }, alt: ALT, at: { cell: [288, 401], hold: { idle2: [263, 89] } } },
-  G17: { dir: { throw: -45 }, alt: ALT },
+  G14: { dir: { throw: -45 }, at: { cell: [335, 433], hold: { throw: [297, 352] } } },   // 剑气从剑尖出（throw 格量）；美术重排图集（cell 改了）后要重量
+  G15: { dir: { throw: -20.4 }, alt: ALT, trail: 'gem' },
+  G16: { dir: { throw: -53 }, alt: ALT, trail: 'fox', at: { cell: [288, 401], hold: { idle2: [263, 89] } } },
+  G17: { dir: { throw: -45 }, alt: ALT, band: 'blade' },
   G18: { dir: { throw: -16.8 }, atlasAim: { cell: 33, tip: 0.18 } },   // 长枪定格在侧面最长那一格、枪尖顺着飞；idle2 落脚区被 G4 挡 5 px（combo_scan），先不接 alt
   G19: { dir: { throw: -20.4 }, atlasAim: { cell: 33, tip: -1.66 }, alt: ALT },       // 火箭定格在侧面带舷窗那一格（图上尖头朝上）
-  G20: { dir: { throw: -41.7 }, alt: ALT, at: { cell: [234, 338], hold: { idle2: [228, 72] } } },
+  G20: { dir: { throw: -41.7 }, alt: ALT, trail: 'moon', at: { cell: [234, 338], hold: { idle2: [228, 72] } } },
   G21: { dir: { throw: 10.5 }, alt: ALT, at: { cell: [377, 344], hold: { idle2: [156, 217] } } },
   // G22：idle2 底边到 y 1342（地板最低 1334，combo_scan 出画 9 px）：美术把 at.y 上移或重切 idle2 后再接 alt
   G23: { dir: { throw: 1.5 }, alt: ALT },
@@ -72,7 +74,7 @@ const TRIO_TUNE = {
   G26: { dir: { throw: 3.6 }, alt: ALT, at: { cell: [413, 376], hold: { idle2: [193, 122] } } },
   G27: { dir: { throw: 27.3 }, alt: ALT, at: { cell: [412, 354], hold: { idle2: [156, 158] } } },
   G28: { dir: { throw: 17 } },
-  G29: { alt: ALT, at: { cell: [389, 379], parts: { G29_staff: { idle2: [160, 157, 0] } },
+  G29: { band: 'bamboo', alt: ALT, at: { cell: [389, 379], parts: { G29_staff: { idle2: [160, 157, 0] } },
                         arm: { box: [276, 176, 349, 212], pivot: [274, 197] } } },   // 袖口以外的前臂 + 打狗棒，绕袖口（肘在袖子里）转
   G30: { dir: { throw: 20 }, alt: ALT },
 };

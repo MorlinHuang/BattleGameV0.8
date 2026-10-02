@@ -32,6 +32,9 @@ const TRIO = {
   /* 精引2（docs/三人组角色规范.md「出手方向」「待机轮换与换帧淡入」）。三个开关只给改前 / 改后对比胶片用（main.js：?triodir=0 / ?trioalt=0 / ?triofade=0） */
   dir: true,                                    // 出手方向 atk.dir：第一段沿手臂 / 道具出去再弯向落点；false = 退回"出口 → 落点"的老路线
   alt: true,                                    // 待机轮换 idle.alt（idle2）
+  /* 精引3：特效师第二批件（trio_fx.js 第 5~10 节：绸 / 鞭剑 / 橡皮臂 / 竹棒、秋千绳、水柱 / 喷雾、喷、剑气飞行段、飞行物拖尾）由 TrioFX 画；
+     false = 照旧引擎自己画（改前胶片、整页 bench 配对用，main.js ?triofx2=0）。贴图没到（TrioFX.ready() 假）时同样照旧画 */
+  fx2: true,
   fade: 0.04,                                   // 换姿势交叉淡入最长几秒（实际 = min(fade, 两帧里短的那一帧停留 × FADE_K)，两帧剪影重合不到 FADE_IOU 的硬切），0 = 硬切
   /* 自由组合（2026-10-01 用户："点击一次同时出现 3 个角色自由组合，一个从上面，一个在地上，一个趴着的或者从下方出现的"）：
      每次送礼三个槽位（后排地面 / 上方 / 前景地板）各自从本边名单里独立随机抽一人，每边 10 × 10 × 10 种；在场时再送，在场的各自续，
@@ -433,7 +436,7 @@ function Act(cfg) {
       }
       case 'drop': {  // 倒挂垂下：顺着一根丝 / 绳从上面掉下来，冲过头再弹回（蹦极）；在场绕 pivot（绳顶，画外）轻轻荡；离场被拽回去
         dy = -(E.len || 700) * (t < TE ? 1 - backOut(u) : out * out);
-        if (t >= TE && t <= se) rot = (E.sway != null ? E.sway : 0.04) * Math.sin(t * 1.7 + b.ph);
+        if (t >= TE && t <= se) { const sw = E.sway != null ? E.sway : 0.04; rot = sw * Math.sin(t * 1.7 + b.ph); w = sw * 1.7 * Math.cos(t * 1.7 + b.ph); }
         break;
       }
       case 'appear':  // 原地出现（闪现、变身、钻出、坐上墙头）：不走位，显形在 drawBody（淡入 + 由小弹大，或从一条线后面升上来）+ 闪光 / 烟
@@ -489,12 +492,16 @@ function Act(cfg) {
     const p2 = tgt || o.aim(u), w = d != null && p2 && ballistic(h, p2, d, pad);
     shots.push({ kind: A.kind === 'camera' ? 'photo' : A.item, x: h[0], y: h[1], p0: h, tgt, u, t: 0, T: w ? w.T : A.T * rnd(0.9, 1.1),
                  arc, ang: b ? b.hang : 0, spin: (A.spin || 0) * (A.atlas || Math.random() < 0.5 ? 1 : -1), miss, j: Math.random(),
-                 way: w ? { d } : null, c: w ? w.c : null, p2: p2 ? [p2[0], p2[1]] : null });   // 落点出手时就定：连线（drawTether）可能在第一次 stepShot 之前就画
+                 way: w ? { d } : null, c: w ? w.c : null, item: true, p2: p2 ? [p2[0], p2[1]] : null });   // 落点出手时就定：连线（drawTether）可能在第一次 stepShot 之前就画
   }
 
 
   function update(dt) {
-    for (let i = shots.length - 1; i >= 0; i--) if (!stepShot(shots[i], dt)) shots.splice(i, 1);
+    for (let i = shots.length - 1; i >= 0; i--) {
+      const s = shots[i], on = stepShot(s, dt);
+      if (TRL && s.item) TRL.track(s, dt);                     // 拖尾记飞过的点（打中弹开 / 钉住以后不再记，旧点按寿命淡完；trio_fx 第 10 节）
+      if (!on) shots.splice(i, 1);
+    }
     for (let i = marks.length - 1; i >= 0; i--) if ((marks[i].t += dt) > marks[i].life) marks.splice(i, 1);
     if (jets.length) stepDrops(dt);
     if (!b || !ready) return;                                   // 叫到了但图还没到：原地等，错开进场的 wait 从加载完才开始数
@@ -702,10 +709,14 @@ function Act(cfg) {
       return;
     }
     if (A.kind === 'slash') {
-      const Q = A.slash, u = rnd(0.2, 0.6);
-      /* 有出手方向的：弦顺着劈下去的方向（dir）划，弧往刀背那边鼓（左右两边镜像，flip）；没写照旧按 slash.ang */
+      /* 有出手方向的：弦顺着劈下去的方向（dir）划，弧往刀背那边鼓（左右两边镜像，flip）；没写照旧按 slash.ang。
+         剑气（精引3，trio_fx 第 9 节）：每道先从刀尖飞 QI_T 秒到落点（stepShot 跨过 −QI_T 那一刻放 TrioFX.qi），到了再在落点划开 ——
+         起点整体往前挪 QI_T，打中仍是"刀光开始 0.05 秒后"。剑气是能量，走直线（同光束）；地板的人挑不隔着自己主角的落点（P9） */
+      /* 剑气要从刀尖出：帧序列得在出手帧写了刀尖（atk.from / hold[出手帧]，trio_tune at.hold 也行）；没写的不飞剑气，刀光直接在落点划开（改前的画法） */
+      const tipKnown = !SH || !!(A.from || (A.hold && A.hold[A.seq[FI][0]]));
+      const Q = A.slash, qi = fx2On() && tipKnown ? QI_T : 0, h = qi ? handPt(P) : null, u = qi ? pickU(rnd(0.2, 0.6), (p2) => linePts(h, p2)) : rnd(0.2, 0.6);
       const d = dirAt(P, FIRE_FN);
-      for (let i = 0; i < Q.n; i++) shots.push({ kind: 'slash', t: -i * Q.gap, u: u + rnd(-0.12, 0.12), flip: d != null ? F : 1,
+      for (let i = 0; i < Q.n; i++) shots.push({ kind: 'slash', t: -i * Q.gap - qi, qi, way: d == null ? null : { d }, u: u + rnd(-0.12, 0.12), flip: d != null ? F : 1,
                                                  ang: (d != null ? d : Q.ang) + rnd(-1, 1) * Q.spread + (i % 2 ? Math.PI * 0.12 * (d != null ? F : 1) : 0) });
       return;
     }
@@ -737,6 +748,15 @@ function Act(cfg) {
     }
     if (s.kind === 'slash') {                                             // 斩痕：一道弧光在落点划出来（0.07 秒），划到那一下打中，之后淡掉
       s.t += dt;
+      if (s.qi && !s.qp && s.t >= -s.qi && b) {
+        /* 剑气出刀：刀尖（手）→ 落点直线飞 qi 秒。落点此刻定下来（s.p），刀光就在剑气到的地方划开、打中也在那里。
+           只飞不展开（slash: false）：落点的刀光仍是引擎画（drawSlash）—— 它按 flip 镜像弧往刀背那边鼓，TrioFX 的展开没有 flip，哥们那边弧会反 */
+        const h = handPt(place()), to = o.aim(s.u);
+        if (to) {
+          s.p = to; s.qp = [h, [(h[0] + to[0]) / 2, (h[1] + to[1]) / 2], to];
+          FX2.qi(h, null, to, A.slash.color, { T: s.qi, len: A.slash.len, slash: false });
+        }
+      }
       if (s.t < 0) return true;
       if (!s.p) s.p = o.aim(s.u);
       if (!s.p) return false;
@@ -855,6 +875,7 @@ function Act(cfg) {
         const dd = S.way && dirAt(P, frameName()), wb = dd != null && ballistic(h, p2, dd + rnd(-0.5, 0.5) * (Q.spread || 0.12), (Q.r || 14) * 2.8);
         const c = wb ? wb.c : over(h, p2, (h[1] + p2[1]) / 2, (Q.r || 14) * 2.8);
         shots.push({ kind: 'puff', x: h[0], y: h[1], p0: h, c, p2, T, vx: 0, vy: 0, t: 0, life: T * rnd(1.3, 1.8), j: Math.random() });
+        if (SPR && fx2On()) SPR.emit(h, Math.atan2(c[1] - h[1], c[0] - h[0]));   // 嘴边酒沫 / 酒珠，沿这一团的出口切线（trio_fx 第 8 节）
       }
       if (tg && S.t >= (Q.T || 0.3) + S.h * Q.tick && S.t <= Q.dur + (Q.T || 0.3)) {
         if (S.h === 0 || !o.onSplash) hit(tg[0], tg[1]); else o.onSplash(tg[0], tg[1]);
@@ -969,7 +990,9 @@ function Act(cfg) {
   }
   function drawJets(ctx) {
     ctx.save();
-    if (J.draw === 'mist') drawMist(ctx, jets); else drawStream(ctx, jets, b && b.jm ? { m: b.jm } : null);
+    /* 第二批（trio_fx 第 7 节）：第 4 参 = 枪口此刻的屏幕角（水滴出口速度 (F·cos ja, −sin ja) 的方向），喷口 → 第一滴先沿它出去 */
+    if (JFX && fx2On()) JFX.draw(ctx, jets, b && b.jm, b && b.ja != null ? (F > 0 ? -b.ja : Math.PI + b.ja) : null);
+    else if (J.draw === 'mist') drawMist(ctx, jets); else drawStream(ctx, jets, b && b.jm ? { m: b.jm } : null);
     ctx.restore();
   }
 
@@ -1005,6 +1028,16 @@ function Act(cfg) {
      蓄力 / 开轰 / 歇按逻辑帧推（beamFx，stepFrames 里调），drawOver 只画 */
   const BFX = A.kind === 'beam' && typeof TrioFX !== 'undefined' ? TrioFX.beam(A.beam) : null;
   const fxOn = () => typeof TrioFX !== 'undefined' && TrioFX.ready();
+  /* 第二批件（精引3，trio_fx.js 第 5~10 节）：每人一个句柄，建 Act 时取。画的时候 fx2On() 真才用，假（贴图没到 / ?triofx2=0）照旧引擎画。
+     带状物的样式 atk.band：抽打默认 'silk'（绸），G17 'blade'（软鞭剑）；伸缩臂默认 'arm'（橡皮臂），G29 'bamboo'（打狗棒）。
+     拖尾 atk.trail：TrioFX.TRAIL 的名字（'fox' / 'gem' / 'moon'）或 [rgb, 'fire' | 'glint'] → trailLook */
+  const FX2 = typeof TrioFX !== 'undefined' && TrioFX.ribbon ? TrioFX : null;
+  const fx2On = () => TRIO.fx2 && !!FX2 && FX2.ready();
+  const RIB = !FX2 ? null : A.kind === 'whip' ? FX2.ribbon(A.whip, A.band || 'silk') : A.kind === 'punch' && A.armW ? FX2.ribbon(A, A.band || 'arm') : null;
+  const JFX = FX2 && J ? (J.draw === 'mist' ? FX2.mist({ life: J.life }) : FX2.stream()) : null;
+  const SPR = FX2 && A.kind === 'spray' ? FX2.spray(A.spray) : null;
+  const TRL = FX2 && A.trail ? FX2.trail(Array.isArray(A.trail) ? FX2.trailLook(A.trail[0], A.trail[1]) : FX2.TRAIL[A.trail]) : null;
+  const QI_T = 0.12;                                     // 剑气从刀尖飞到落点几秒（trio_fx 第 9 节 FLY）
   const chargeR = (S) => A.beam.ball * (0.3 + 0.7 * Math.min(1, S.t / (SH ? LEAD : A.beam.charge))) * (1 + 0.08 * Math.sin(S.t * 40));
   function beamFx(dt) {
     const S = b && b.bm;
@@ -1136,14 +1169,25 @@ function Act(cfg) {
   /* 倒挂垂下的丝 / 绳：从 enter.line（贴图上系住的点，默认 pivot 正下方的脚）一直拉到绳顶（pivot 那么高，画外），跟人一起荡 */
   function drawLine(ctx, P) {
     const L = E.line || [cfg.pivot[0], 0], a = P.at(L), c = P.at([L[0], cfg.pivot[1]]);
-    ctx.lineCap = 'round';
-    for (const [w, col] of [[(E.w || 3) + 2, E.edge || 'rgba(60,60,70,.7)'], [E.w || 3, E.fill || '#f2f2f2']]) {
-      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]); ctx.stroke();
+    rope(ctx, [a, c], E.w || 3, E.fill || '#f2f2f2', E.edge || 'rgba(60,60,70,.7)', -P.w * 14, 2);
+  }
+  /* 一根绳：第二批开着时 TrioFX.rope（麻绳纹贴图带，荡的时候被甩弯 bend px，trio_fx 第 6 节），否则描两遍（描边 + 本色，描边比本色粗 grow） */
+  function rope(ctx, pts, w, fill, edge, bend, grow = 3) {
+    if (fx2On()) { FX2.rope(ctx, pts, w, fill, edge, bend); return; }
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const [lw, c] of [[w + grow, edge], [w, fill]]) {
+      ctx.strokeStyle = c; ctx.lineWidth = lw; ctx.beginPath(); pts.forEach((p, j) => (j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.stroke();
     }
   }
   /* 横绳：ends 两个屏幕点之间一根绳，被人压在 enter.touch（贴图上压着绳的点）那里往下坠成两段弧；画在人之下 */
   function drawSling(ctx, P) {
     const [e0, e1] = E.ends, m = pt(P, E.touch), sag = (E.sag || 18);
+    if (fx2On()) {                                                 // 第二批：两段坠弧各取 12 段折成点列交给 TrioFX.rope（段长 < 30 px，看不出折）
+      const pts = [], arc = (a, c) => { for (let i = 1; i <= 12; i++) pts.push(bez(a, [(a[0] + c[0]) / 2, Math.max(a[1], c[1]) + sag], c, i / 12)); };
+      pts.push(e0); arc(e0, m); arc(m, e1);
+      FX2.rope(ctx, pts, E.w || 6, E.fill || '#e9dcc0', E.edge || 'rgba(70,45,20,.85)', 0);
+      return;
+    }
     ctx.save(); ctx.lineCap = 'round';
     for (const [w, col] of [[(E.w || 6) + 3, E.edge || 'rgba(70,45,20,.85)'], [E.w || 6, E.fill || '#e9dcc0']]) {
       ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(e0[0], e0[1]);
@@ -1289,9 +1333,7 @@ function Act(cfg) {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     R.ends.forEach((e, i) => {
       const pts = [P.at(e)]; if (g[i]) pts.push(P.at(g[i])); pts.push(P.at([e[0], cfg.pivot[1]]));
-      for (const [w, c] of [[R.w * P.s + 3, R.edge], [R.w * P.s, R.fill]]) {
-        ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); pts.forEach((p, j) => (j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.stroke();
-      }
+      rope(ctx, pts, R.w * P.s, R.fill, R.edge, -P.w * 14);
       if (R.flowers) for (let j = 0; j + 1 < pts.length; j++) ropeFlowers(ctx, pts[j], pts[j + 1], R.flowers, i * 3 + j);
     });
     const [bx0, by0, bx1, by1] = R.board, [px0, py0] = P.at([bx0, by0]), [px1, py1] = P.at([bx1, by1]), h = py1 - py0;
@@ -1323,9 +1365,7 @@ function Act(cfg) {
     const R = cfg.ropes;
     for (const x of R.x) {
       const [ax, ay] = P.at([x, R.y]), [, py] = P.at([x, cfg.pivot[1]]);
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = R.edge; ctx.lineWidth = R.w * P.s + 3; ctx.beginPath(); ctx.moveTo(ax, ay + 2); ctx.lineTo(ax, py); ctx.stroke();
-      ctx.strokeStyle = R.fill; ctx.lineWidth = R.w * P.s; ctx.beginPath(); ctx.moveTo(ax, ay + 2); ctx.lineTo(ax, py); ctx.stroke();
+      rope(ctx, [[ax, ay + 2], [ax, py]], R.w * P.s, R.fill, R.edge, -P.w * 14);
     }
   }
 
@@ -1351,6 +1391,8 @@ function Act(cfg) {
     const d = W.way && dirAt(P, frameName());
     const c = d != null ? rayC(h, tg, d, W.way.lam) : over(h, tg, (h[1] + tg[1]) / 2, (Q.amp || 24) * 1.2 + (Q.w || 8) * P.s), arch = d != null || c[1] < (h[1] + tg[1]) / 2 - 1;
     W.path = [h, c, tg];
+    /* 第二批（trio_fx 第 5 节）：带子沿同一条中线（控制点 c 原样传 = 路线与判打中的那条逐点一致），波 / 扭转 / 甩影 / 惯性由 TrioFX 画 */
+    if (RIB && fx2On()) { RIB.draw(ctx, h, c, tg, e, t, P.s); return; }
     const pts = [];
     for (let i = 0; i <= N; i++) {
       const f = i / N, w = Math.sin(Math.PI * f) * (Q.amp || 24) * (1.2 - e) * Math.sin(6.2832 * (f * (Q.waves || 1.5) - t * (Q.hz || 4)));
@@ -1400,6 +1442,7 @@ function Act(cfg) {
   function drawShot(ctx, s) {
     if (s.kind === 'ghost') { drawGhost(ctx, s); return; }
     if (s.kind === 'slash') { drawSlash(ctx, s); return; }
+    if (s.kind === 'puff' && SPR && fx2On()) { SPR.puff(ctx, s); return; }
     if (s.kind === 'puff') {
       const Q = A.spray, c = Q.color, u = s.t / s.life, r = (Q.r || 14) * (0.8 + 2.6 * u);   // 越飞越大：一股雾是个锥
       const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
@@ -1407,6 +1450,7 @@ function Act(cfg) {
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, 6.2832); ctx.fill();
       return;
     }
+    if (TRL && s.item && fx2On()) TRL.draw(ctx, s);                // 拖尾压在物件下面
     const a = s.stuck != null ? Math.min(1, ((A.stick || 2.2) - s.stuck) / 0.4) : s.fall != null ? Math.min(1, s.fall / 0.3) : 1;
     ctx.save(); ctx.globalAlpha = a; ctx.translate(s.x, s.y);
     if (s.kind === 'photo') { drawPhoto(ctx, s); ctx.restore(); return; }
@@ -1451,6 +1495,7 @@ function Act(cfg) {
     };
     for (const s of shots) {
       if (s.kind === 'ghost') one('ghost', s.path, s.way);
+      else if (s.kind === 'slash') { if (s.qp && s.t < 0) one('qi', s.qp, s.way); }
       else if (s.kind !== 'puff' && s.c && s.p2 && s.fall == null && s.stuck == null) one(s.kind, [s.p0, s.c, s.p2], s.way);
     }
     const pf = shots.filter(s => s.kind === 'puff').pop();                // 雾团一秒几十团，只报最新那一团
@@ -1511,20 +1556,29 @@ function Act(cfg) {
     const ux = Math.cos(d), uy = Math.sin(d), D = Math.max(0, (tg[0] - fr[0]) * ux + (tg[1] - fr[1]) * uy);
     const fx = fr[0] + ux * D * k, fy = fr[1] + uy * D * k;
     b.pk.path = [fr, [fr[0] + ux * D / 2, fr[1] + uy * D / 2], [fr[0] + ux * D, fr[1] + uy * D]]; b.pk.d = d; b.pk.r = r;
-    const len = Math.hypot(fx - wr[0], fy - wr[1]), nx = -uy, ny = ux;
-    const sag = b.pk.t < A.phases[0] + A.phases[1] ? 0 : len * 0.12 * Math.sin(b.pk.t * 38);
-    const cx = (wr[0] + fx) / 2 + nx * sag, cy = (wr[1] + fy) / 2 + ny * sag;
-    const tube = (w, c, dx = 0, dy = 0) => {
-      ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath();
-      ctx.moveTo(wr[0] + dx, wr[1] + dy); ctx.quadraticCurveTo(cx + dx, cy + dy, fx + dx, fy + dy); ctx.stroke();
-    };
-    const W = A.armW * s * (1 - 0.25 * Math.min(1, len / 500));       // 拉得越长越细
-    ctx.save(); ctx.lineCap = 'round';
-    tube(W + 5, A.skinEdge); tube(W, A.skin); tube(W * 0.45, A.skinShade, -nx * W * 0.22, -ny * W * 0.22);
-    tube(W * 0.22, 'rgba(255,240,220,.85)', nx * W * 0.25, ny * W * 0.25);
+    ctx.save();
+    let ang;                                                       // 拳头朝哪（管子末端的方向）
+    if (RIB && fx2On()) {
+      /* 第二批（trio_fx 第 5 节 'arm' / 'bamboo'）：腕 → 拳头沿前臂方向 d 出去（拳头本来就在前臂线上 = 直的），粗细 / 褶纹 / 收回的弹由 TrioFX 画 */
+      RIB.draw(ctx, wr, d, [fx, fy], 1, b.pk.t, s);
+      ang = RIB.tip()[2];
+    } else {
+      const len = Math.hypot(fx - wr[0], fy - wr[1]), nx = -uy, ny = ux;
+      const sag = b.pk.t < A.phases[0] + A.phases[1] ? 0 : len * 0.12 * Math.sin(b.pk.t * 38);
+      const cx = (wr[0] + fx) / 2 + nx * sag, cy = (wr[1] + fy) / 2 + ny * sag;
+      const tube = (w, c, dx = 0, dy = 0) => {
+        ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath();
+        ctx.moveTo(wr[0] + dx, wr[1] + dy); ctx.quadraticCurveTo(cx + dx, cy + dy, fx + dx, fy + dy); ctx.stroke();
+      };
+      const W = A.armW * s * (1 - 0.25 * Math.min(1, len / 500));       // 拉得越长越细
+      ctx.lineCap = 'round';
+      tube(W + 5, A.skinEdge); tube(W, A.skin); tube(W * 0.45, A.skinShade, -nx * W * 0.22, -ny * W * 0.22);
+      tube(W * 0.22, 'rgba(255,240,220,.85)', nx * W * 0.25, ny * W * 0.25);
+      ang = Math.atan2(fy - cy, fx - cx);
+    }
     /* 拳头：从贴图里抠那一块，放大一点（远处也认得出是拳头），跟着前臂转（甩的时候转到管子末端的方向） */
     const [fx0, fy0, fx1, fy1] = A.fist, c = A.fistC, z = s * A.fistZ;
-    ctx.translate(fx, fy); ctx.rotate(Math.atan2(fy - cy, fx - cx) - Math.atan2(A.fistC[1] - A.wrist[1], A.fistC[0] - A.wrist[0]));
+    ctx.translate(fx, fy); ctx.rotate(ang - Math.atan2(A.fistC[1] - A.wrist[1], A.fistC[0] - A.wrist[0]));
     const fi = SH ? SH.names.indexOf(A.seq[FI][0]) : 0, ox = SH ? (fi % SH.cols) * SH.cell[0] : 0, oy = SH ? Math.floor(fi / SH.cols) * SH.cell[1] : 0;   // 帧序列：拳头从出手帧那一格抠
     ctx.drawImage(img, ox + fx0, oy + fy0, fx1 - fx0, fy1 - fy0, (fx0 - c[0]) * z, (fy0 - c[1]) * z, (fx1 - fx0) * z, (fy1 - fy0) * z);
     ctx.restore();
@@ -1864,6 +1918,8 @@ function tuned(id, c) {
   const atk = { ...c.atk }, idle = { ...c.idle };
   if (t.dir && !atk.dir) atk.dir = t.dir;
   if (t.atlasAim && atk.atlas && !atk.atlas.aim) atk.atlas = { ...atk.atlas, aim: t.atlasAim };
+  if (t.band && !atk.band) atk.band = t.band;
+  if (t.trail && !atk.trail) atk.trail = t.trail;
   const same = !!(t.at && c.sheet && t.at.cell[0] === c.sheet.cell[0] && t.at.cell[1] === c.sheet.cell[1]);
   let parts = c.parts;
   if (same && t.at.hold) atk.hold = { ...t.at.hold, ...atk.hold };

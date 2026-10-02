@@ -1,6 +1,7 @@
 """立体感的性能（docs/三人组角色规范.md「立体感 · 性能」）：桌面里真 GUI Chrome（DISPLAY=:1，非 headless、无虚拟时间）跑 ?bench=1&benchtrio=1，
 两边三人组常驻 + 男女主，?light=0 / ?light=1 交替各跑 N 遍，读页面 #stat 那一行（main.js bench 的读数）。
 用法：DISPLAY=:1 python3 bench.py <base url> <N> "<额外参数>" ["0;1" 或 "0;shadow;grade;rim;1"]
+     交替的不是 light 而是别的开关时，变体直接写成参数："triofx2=0;triofx2=1"（精引3 第二批件整页增量，light 照默认开）
 口径：每帧 = 逻辑 + 底版层 + 角色层 + 特效层（main.js bench）；立体感只动角色层，差值 = 它的代价。
 这台桌面没有 GPU（SwiftShader 软渲染），绝对毫秒数不代表手机；看的是开 / 关的相对差和占比。"""
 import asyncio, os, re, sys, time
@@ -16,8 +17,9 @@ async def one(p, light):
     errs = []
     pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.on('console', lambda m: errs.append(m.text) if m.type == 'error' else None)
-    await pg.goto(f'{BASE}?bench=1&benchtrio=1&benchframes=600&seed=9&light={light}&{EXTRA}', timeout=120000)
-    await pg.wait_for_function("document.title === 'BENCHDONE'", timeout=300000)
+    var = light if '=' in light else f'light={light}'
+    await pg.goto(f'{BASE}?bench=1&benchtrio=1&benchframes=600&seed=9&{var}&{EXTRA}', timeout=900000)
+    await pg.wait_for_function("document.title === 'BENCHDONE'", timeout=900000)
     st = await pg.evaluate("document.getElementById('stat').textContent")
     await b.close()
     return st, errs

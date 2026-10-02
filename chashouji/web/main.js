@@ -2615,6 +2615,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   if (Q0.get('triodir') === '0') TRIO.dir = false;
   if (Q0.get('trioalt') === '0') TRIO.alt = false;
   if (Q0.get('triofade') === '0') TRIO.fade = 0;
+  if (Q0.get('triofx2') === '0') TRIO.fx2 = false;                       // 精引3：特效师第二批件改回引擎旧画法（改前胶片 / 整页 bench 配对）
   Light.use(bgName, WORLD.rooms);
   /* 首帧只等首帧画得到的东西（docs/首屏加载诊断.md P1、P2：改之前把 38.8 MB 全部 await 完才起主循环、绑按钮，5 Mbps 首帧 66 秒）：
      长卷背景、待机循环那几张姿势、HUD 头像（三样一起下）。其余登记进预取队列（preload.js），首帧之后按下面的顺序在后台加载：
