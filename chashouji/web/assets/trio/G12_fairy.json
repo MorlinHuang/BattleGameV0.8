@@ -1,1 +1,1 @@
-{"cell": [280, 420], "cols": 2, "frames": ["idle", "kiss", "through"], "anchor": [145, 0], "residual": 0, "head": [124, 52, 192, 128], "ref": "idle", "src": "stillframes.py"}
+{"cell": [280, 420], "cols": 2, "frames": ["idle", "kiss", "through", "blow", "idle2"], "anchor": [145, 0], "residual": 0, "head": [124, 52, 192, 128], "ref": "idle", "src": "stillframes.py"}

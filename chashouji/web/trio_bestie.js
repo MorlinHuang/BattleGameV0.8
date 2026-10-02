@@ -426,7 +426,7 @@ const TRIO_BESTIE = {
     /* ---- 上方（左上，男女主头顶以下；样板 G11） ---- */
     G15: {      // 船头红发少女（泰坦尼克 Rose 式）：站在一截白色船头上从左边平着滑出来，捂着心口 → 张开双臂"飞"；举起心形蓝宝石项链一抛（3D）砸他
       face: +1,
-      sheet: { src: 'assets/trio/G15_rose.webp', cell: [562, 435], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'grip', 'step', 'open', 'idle2'] },
+      sheet: { src: 'assets/trio/G15_rose.webp', cell: [612, 435], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'grip', 'step', 'open', 'idle2', 'release', 'through'] },
       /* 船头画在帧里，在场六帧（idle / wind / throw / follow / open / idle2）都是 idle 那一份（bestie/G15_rose/bow.py 垫进去：蕾丝、小腿在栏杆后，鞋在栏杆前；
          frames.py build 之后要重跑），逐像素和 idle 一样（shots/trio_bestie/bow_G15.txt）。
          船尾往左接长 200（bow.py 顺着甲板斜度把栏杆、船体一列列接出去，立柱按间距复制，格加宽到 562、格内坐标 + 200）：船尾左端到屏幕 x −119，读成船从画外伸进来。锚点 = 两只高跟鞋之间的船头甲板；按两只鞋配准（残差 0.22 px）。
@@ -437,13 +437,13 @@ const TRIO_BESTIE = {
       /* 船头从左边画外平着滑进来（fly，from 在同一高度偏左、dy 小），减速到位；滑行时捂着心口 → 双臂半张 → 到位张开双臂（露面后换两次帧，最后标 land） */
       enter: { kind: 'fly', from: [-420, -30], air: 0.75, tilt: 0.04, seq: [['follow', 0.35], ['open', 0.3], ['idle', 9, 'land']], sq: 0.05 },
       exit: { frame: 'follow' },
-      idle: { frame: 'idle', breathe: [0.014, 0.6, 0] },
+      idle: { frame: 'idle', breathe: [0.014, 0.6, 0], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
       /* 往后飘的长卷发：根在右边钉住，框上、下、左三边透明 */
       flex: { idle: [[242, 45, 340, 152, 'r', 6, 0.8]] },   // 框里连着张开的左手：飘发和手一起随风轻晃
       /* 心形蓝宝石项链照道具表 3D：r 26 cell 79 scale 1.39，转速 π / T */
       atk: { kind: 'throw', item: 'necklace', r: 26, atlas: { src: 'assets/trio/prop_necklace.webp', n: 36, cols: 6, cell: 79, scale: 1.39 },
-             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
-             hold: { wind: [450, 14], throw: [552, 52] },
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.1], ['through', 0.12], ['follow', 0.25]],   // 精闺1 P6：release 手臂平伸到最远、手指张开离手；throw 接着当跟随，through 手臂顺势落到右下 45°
+             hold: { wind: [450, 14], release: [580, 80], throw: [552, 52] }, dir: { release: -26.9 },   // wind → release 手位移 −26.9°（引擎原量 throw −20.4°，差 6.5°）
              T: 0.55, arc: 0.2, spin: 5.7, idleSpin: 1.2, stretch: 0.03, gap: [1.0, 1.4], onHit: 'bounce' },
     },
 
@@ -612,14 +612,14 @@ const TRIO_BESTIE = {
          v14/trio/bestie/G12_fairy/inp/，inpaint_paste.py：框外是原图像素，纱一点没动）。绳子、座板画在帧里（ropes.x：引擎只接帧顶往上那一截）。
          出手：荡到最前面之前 kiss（手送到唇边）→ 换回托掌那一帧、两颗爱心从掌心飞出去（飞吻） */
       face: +1,
-      sheet: { src: 'assets/trio/G12_fairy.webp', cell: [280, 420], cols: 2, names: ['idle', 'kiss'] },
+      sheet: { src: 'assets/trio/G12_fairy.webp', cell: [280, 420], cols: 2, names: ['idle', 'kiss', 'through', 'blow', 'idle2'] },
       at: [165, 210, 1],   /* 2026-10-01 自由组合：原 y 360 秋千荡下来压后排地面的头，抬 130；7c027a6 蓄力道具计入遮挡后再抬 20（组合遮挡矩阵_bestie 建议站位） */
       anchor: [145, 0], pivot: [145, -480], leanK: 1,
       depth: 0.5, enter: 'swing', recipe: 'rouge', ropes: { ...ROPE, x: [100, 190], fill: '#a7864f' },
       swing: { a0: 1.3, a: 0.12, tau: 0.5, w: 2.4 },
-      idle: { frame: 'idle', breathe: [0.012, 0.8, 0.4] },
+      idle: { frame: 'idle', breathe: [0.012, 0.8, 0.4], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
       atk: { kind: 'throw', item: 'heart', n: 2, color: [255, 70, 130], T: 0.55, arc: 0.1, spin: 0, onHit: 'lips',
-             seq: [['kiss', 0.42], ['idle', 0.3, 'fire']], hold: { idle: [238, 115] } },
+             seq: [['kiss', 0.42], ['idle', 0.3, 'fire'], ['through', 0.14]], hold: { idle: [238, 115] } },   // 精闺1 P6：飞吻出手后手落到膝上（through，出手方向交接表 G12 引擎条目）
     },
   },
 
