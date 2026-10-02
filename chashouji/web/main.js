@@ -64,6 +64,17 @@ const P = {
      gaitSlip 是在这个基础上的倍率：1 = 脚不打滑；调大 = 步子更碎更快，但脚会在地上往后蹭。
      以前固定 100（四格版），步频是地板的五倍多，看着像在冰上倒腾。 */
   gaitSlip: 1,
+  /* 一步一拽（10-02 用户「一方倒、另一方拉着退后，需要有明显的左右脚交替向后退」）。
+     地板一米只有 55 像素，画里一步却要跨 150~245 像素（3~4.5 米）：脚钉在地上连续走的话，正常拖速
+     0.5~1.5 米/秒要 2~9 秒才迈一步，开到封顶 3 米/秒也不到一秒一步 —— 看上去是站着往后滑。
+     人拽重物本来就是"蹬住、拽、退一步"：画面上两人的位置（FX.walkPos）不再逐帧贴着 S.pos，
+     落后够 stepAt 步就用 stepT 秒迈完整一步，背景和脚一起走（脚照样钉在地上），迈完站住接着拽。
+     胜负、距离条仍按 S.pos，画面和它最多差半步。
+     gaitMode：'step' 一步一拽；'nail' 旧版按位移连续走（?gait=nail 对照）。 */
+  gaitMode: 'step',
+  stepT: 0.5,       // 迈一步用几秒（人正常走一步约 0.5 秒）
+  stepAt: 0.5,      // 画面落后真实位置多少步就迈下一步：半步 = 画面在真实位置前后半步之内来回
+  walkFollow: 6,    // 没有步态的档（僵持、过渡帧）画面位置追 S.pos 的快慢（指数趋近系数，1/秒）
   /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
      来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
   loopFps: 8,
@@ -162,6 +173,8 @@ const FX = {
   phoneX: MID, phoneY: 750,          // 手机在屏幕上的位置 —— 弹幕打它、气泡从它冒
   struggle: 1,                       // 僵持度 0~1，气泡的冒出节奏读它
   gaitPh: 0,                         // 步态相位（循环数，带小数），只随位移变
+  walkPos: 0,                        // 画面上两个人在哪（米）：一步一拽时按步走，追着 S.pos（见 P.gaitMode）
+  step: null,                        // 正在迈的这一步 { t 进度 0~1, from 起点米数, d 方向 ±1, ph0 起步相位 }
   tween: null,                       // 正在播的过渡帧（按播放顺序），换档那一刻由 startTween 定，播完照常进循环/步态
 
   hitX: 0, hitV: 0,                  // 角色被推开的位移与速度
@@ -334,7 +347,7 @@ let matchGen = 0;                                   // 第几局（档 4 等素�
 function startMatch() {
   matchGen++;
   S.p = 50; S.fA = S.fB = 0;
-  S.pos = 0; S.vel = 0;
+  S.pos = 0; S.vel = 0; FX.walkPos = 0; FX.step = null;
   S.debA = S.debB = S.debKA = S.debKB = 0;
   S.clock = NUM.MATCH; S.phase = 'play';
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
@@ -423,6 +436,7 @@ function derive(dt) {
   if (pose !== FX.pose) {
     FX.tween = tweenOf(FX.pose, pose);
     FX.pose = pose; FX.poseT = 0; FX.gaitPh = 0;     // 步态从这一档的原图（第 0 格）起步，接得上过渡帧的最后一格
+    FX.step = null;                                  // 迈到一半换档：这一步作废，画面位置留在原处，新档从站姿起步
   } else FX.poseT += dt;
 
   /* 这一帧用哪张图。刚换档先播过渡帧；僵持走时间循环；被拉倒的各档有步态帧的（world.json 的 gaits）
@@ -438,7 +452,24 @@ function derive(dt) {
   } else if (gait) {
     // 往赢的那一方拖 = 正着走（倒退）；被拽回来 = 倒着播（往前走）
     const toward = FX.pose[0] === 'a' ? 1 : -1;
-    FX.gaitPh += S.vel * toward * dt * P.pxPerM * P.gaitSlip / gait.cycle;
+    if (P.gaitMode === 'step') {
+      /* 一步 = 半个循环（第 0 格、第 8 格是两脚着地的站姿）。相位和画面位置用同一条进度曲线推，
+         所以迈步时站地的脚照样钉在地板上；smoothstep 让起步、落脚都有个缓。 */
+      const stride = gait.cycle / 2 / P.pxPerM;      // 一步多少米
+      const lag = S.pos - FX.walkPos;
+      if (!FX.step && Math.abs(lag) >= stride * P.stepAt) FX.step = { t: 0, from: FX.walkPos, d: Math.sign(lag), ph0: FX.gaitPh };
+      const st = FX.step;
+      if (st) {
+        st.t = Math.min(1, st.t + dt / P.stepT);
+        const e = st.t * st.t * (3 - 2 * st.t);
+        FX.walkPos = st.from + st.d * stride * e;
+        FX.gaitPh = st.ph0 + st.d * toward * 0.5 * e;
+        if (st.t >= 1) FX.step = null;
+      }
+    } else {
+      FX.gaitPh += S.vel * toward * dt * P.pxPerM * P.gaitSlip / gait.cycle;
+      FX.walkPos = S.pos;
+    }
     const n = gait.frames.length, ph = FX.gaitPh - Math.floor(FX.gaitPh);
     if (gait.at) {
       /* 新版后退步态（v14/walk，16 格两步）：at[i] 是第 i 格站地那只脚**量出来的**位置（占一个循环的几分之几）。
@@ -461,8 +492,9 @@ function derive(dt) {
   /* 镜头：两个人在世界里的位置 = 客厅正中 − 米数 × 每米像素（往左拖是正）。
      镜头跟着他们走，但不出世界的边 —— 走到头时镜头停住、人往画面边上走，
      这正是"拖到墙根了"的样子。 */
+  if (!gait || FX.poseT < tweenT) FX.walkPos += (S.pos - FX.walkPos) * approach(dt, P.walkFollow);   // 没在走步态：画面位置追上真实位置
   if (WORLD) {
-    const wx = WORLD.center - S.pos * P.pxPerM;
+    const wx = WORLD.center - FX.walkPos * P.pxPerM;
     FX.camX = clamp(wx, MID, WORLD.total - MID);
     FX.pairX = MID + (wx - FX.camX);
     Scuff.tick(dt, wx, FX.frame, FX.pose);
@@ -2659,7 +2691,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       (resN ? ` · 结算 ${resN}` : '') + ` · 预取 ${Preload.stats().n} 项 ${(Preload.stats().ms / 1000).toFixed(1)}s`;
   });
   /* 胶片 / 压测 / ?live 截图这些诊断模式要可复现：照旧等全部加载完再开始（不走首帧后的后台队列） */
-  const FULL = ['live', 'strip', 'loopstrip', 'gaitstrip', 'tweenstrip', 'ammostrip', 'bubblestrip', 'fxstrip', 'bench', 'preload'].some(k => Q0.has(k));
+  const FULL = ['live', 'strip', 'loopstrip', 'gaitstrip', 'walkfilm', 'tweenstrip', 'ammostrip', 'bubblestrip', 'fxstrip', 'bench', 'preload'].some(k => Q0.has(k));
   if (FULL) { await Preload.all(); await loadedMsg(); }
   else Preload.onIdle(loadedMsg);
 
@@ -2712,7 +2744,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   }
   if (Q.has('p')) { S.p = clamp(+Q.get('p'), 0, 100); S.auto = false; }
   // ?pos=<米> 直接把两个人摆到某个位置（正 = 往左、进女生卧室），截各房间的样子用
-  if (Q.has('pos')) S.pos = clamp(+Q.get('pos'), -NUM.END, NUM.END);
+  if (Q.has('pos')) FX.walkPos = S.pos = clamp(+Q.get('pos'), -NUM.END, NUM.END);
+  if (Q.has('gait')) P.gaitMode = Q.get('gait');   // ?gait=nail 旧版连续步态，对照一步一拽
   /* 自动演示默认就是关的（见 S.auto），?auto=1 才打开 —— 展示时它会自己来回
      拽手机，观众分不清哪一下是刷礼物推的。?auto=0 保留着，写脚本时不用管
      默认值是什么。 */
@@ -2920,7 +2953,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   if (Q.has('strip')) {
     const cells = [[50, 0], [68, 4], [81, 12], [95, 24], [32, -4], [19, -12], [5, -24]];
     filmstrip(cells.length, (i) => {
-      [S.p, S.pos] = cells[i]; S.vel = (S.p - 50) / 50 * NUM.V_Z; S.t = 3.0;
+      [S.p, S.pos] = cells[i]; FX.walkPos = S.pos; S.vel = (S.p - 50) / 50 * NUM.V_Z; S.t = 3.0;
       FX.pose = 'n'; FX.poseT = 0;
       for (let k = 0; k < 240; k++) derive(1 / 60);   // 逐档每档停 stageHold，要走够
     }, (i) => `p=${cells[i][0]} pos=${cells[i][1]}m  ${FX.pose}/${FX.frame}`);
@@ -2948,6 +2981,30 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       FX.gaitPh = G.at ? G.at[i] : (i + 0.5) / g.length;
       derive(0);
     }, (i) => `${FX.frame}`);
+    return;
+  }
+
+  /* ?walkfilm=bL 实拍一段被拖的过程（给一步一拽 / 旧版连续步态拍对照片）：直接进这一档，按 ?walkv=<米/秒>
+     匀速拖 ?walkt=<秒>，每 1/15 秒一格，裁到地面一带排成网格（每行 10 格），外面切成动图看。 */
+  if (Q.has('walkfilm')) {
+    const name = Q.get('walkfilm') || 'bL', v = +(Q.get('walkv') || 1) * (name[0] === 'a' ? 1 : -1);
+    const n = Math.round(+(Q.get('walkt') || 6) * 15), cols = 10, sc = 0.5, y0 = 560, ch = 760;
+    const out = document.createElement('canvas'), o = out.getContext('2d');
+    out.width = cols * W * sc; out.height = Math.ceil(n / cols) * ch * sc;
+    S.p = { K: 68, F: 81, L: 95 }[name[1]]; if (name[0] === 'b') S.p = 100 - S.p;
+    S.pos = FX.walkPos = 0; S.vel = v; FX.pose = name; FX.poseT = 99; FX.tween = null; FX.gaitPh = 0; FX.step = null;
+    for (let i = 0; i < n; i++) {
+      for (let k = 0; k < 4; k++) { S.pos += v / 60; derive(1 / 60); }
+      render();
+      const dx = (i % cols) * W * sc, dy = Math.floor(i / cols) * ch * sc;
+      for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, 0, y0, W, ch, dx, dy, W * sc, ch * sc);
+    }
+    const stage = document.getElementById('stage');
+    stage.style.width = out.width + 'px';
+    stage.style.aspectRatio = `${out.width}/${out.height}`;
+    stage.innerHTML = '';
+    out.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+    stage.appendChild(out);
     return;
   }
 
