@@ -438,8 +438,8 @@ const TRIO_BUDDY = {
       parts: [{ src: 'assets/trio/B16_ledge.webp', pivot: [0, 0], z: -1, fixed: true, at: { idle: [0, 338, 0], wind: [0, 338, 0], hitA: [0, 338, 0], hitB: [0, 338, 0], assemble: [0, 338, 0], land: [0, 338, 0], victory: [0, 338, 0], idle2: [0, 338, 0] } }],
       exit: { frame: 'assemble' },
       idle: { frame: 'idle', breathe: [0.012, 0.8, 0.4] },
-      /* 光速拳：收拳蓄力 0.3 秒 → 两拳交替 0.6 秒，每 0.1 秒一道拳影（hitA / hitB 前伸那只拳头）飞过去、金色速度线 → 举拳 */
-      atk: { kind: 'rush', seq: [['wind', 0.3], [['hitA', 'hitB'], 0.6, 'fire'], ['victory', 0.4]], fps: 10, from: [14, 110],
+      /* 光速拳：收拳蓄力 0.3 秒 → 出拳 / 收拳交替 0.6 秒（hitA → 收 → hitB → 收：hitA、hitB 只差拳高，直接连切读成定住，2026-10-02 插 wind 当收拳），每 0.1 秒一道拳影（hitA / hitB 前伸那只拳头）飞过去、金色速度线 → 举拳 */
+      atk: { kind: 'rush', seq: [['wind', 0.3], [['hitA', 'wind', 'hitB', 'wind'], 0.6, 'fire'], ['victory', 0.4]], fps: 10, from: [14, 110],
              rush: { n: 6, every: 0.1, T: 0.1, line: '#ffd84a',
                      ghost: [{ frame: 'hitA', box: [12, 96, 75, 124] }, { frame: 'hitB', box: [14, 121, 77, 149] }] },
              gap: [0.7, 1.1], stretch: 0.03 },
