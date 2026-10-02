@@ -262,17 +262,20 @@ const TRIO_BESTIE = {
       exit: { frame: 'vault' },
       idle: { frame: 'idle', breathe: [0.018, 0.75, 0] },
       /* idle / idle2 / wind / throw 原图两只手各有去处（举拳握棒 + 前伸 / 扶膝 / 握短棒）却还画着一只撑地的手 = 三只手（2026-10-02 用户指出）：
-         撑地那条前臂局部重绘成膝盖和衣摆（bestie/G29_huangrong/nohand/：蒙版、生成图、reg.py 配回原格），land / release 只有一只手在别处，撑地手保留 */
+         撑地那条前臂局部重绘成膝盖和衣摆（bestie/G29_huangrong/nohand/：蒙版、生成图、reg.py 配回原格），land / release 只有一只手在别处，撑地手保留。
+         release 原来只把上半身（格内 y < 172）贴回 throw 底格，拼缝横穿后面那只胳膊（上截新画、下截旧袖子、中间半透明过渡带）：10-02 改成整张用生图（addframes.json 去掉 paste: 'box'），出手手位 (+1, −5) 跟着平移 */
       /* 打狗棒：定妆拆好的挂件层（bestie/ref/G29_staff.png → tools/part.py h 281），挂点 = 握棒处（棒长 80% 那一点）。
          待机 / 落地：握在举起的左拳里、斜靠在背后；腾空两帧：双手握棒顶、棒子往下（转 π，荡的那帧更竖）；
          wind / throw / follow 不画（这几帧手里画着一截短竹棒，捅出去的就是它） */
       parts: [{ src: 'assets/trio/G29_staff.webp', pivot: [107, 222], z: -1, sway: [0.04, 0.7, 0],
                 at: { idle: [160, 157, 0], land: [151, 235, 0], vault: [222, 52, 3.1416], swing: [210, 120, 3.44] } }],
-      /* 伸缩棒（帧序列 punch）：棒头从 throw 帧里抠，伸出去的"管子"填竹子色；收势 = 收棒回腰（用 wind 帧）——
-         A 条 follow（棒扛肩）那格两腿站位画得不一样（配准残差 6.7 px），不上场 */
-      atk: { kind: 'punch', seq: [['wind', 0.3], ['release', 0.55, 'fire'], ['throw', 0.12], ['wind', 0.2]], dir: { release: 40 },   // 精闺1：release 前臂 + 竹棒往前上捅（前臂 35°、画里竹棒 46°，伸长方向取 40°；所需 33°），伸出去的棒沿 wrist → fistC
-             fist: [315, 82, 342, 106], fistC: [328, 94], wrist: [309, 110], armW: 8,
-             skin: '#6cbf45', skinShade: 'rgba(40,110,30,.55)', skinEdge: '#1f3d12', fistZ: 1.3, phases: [0.16, 0.12, 0.22],
+      /* 伸缩棒（帧序列 punch）：手握着不动，棒头（release 帧画里竹棒的末端）沿竹棒轴线伸出去，中间的"管子"填竹子色；收势 = 收棒回腰（用 wind 帧）——
+         A 条 follow（棒扛肩）那格两腿站位画得不一样（配准残差 6.7 px），不上场。
+         10-02（用户：手臂还是不对）：原来 fist 框的是握棒的手，出手时手被抠走送到棒尖、胳膊上只剩空袖口，伸出去的管子还比画里的棒低 12~15 px、角度差 6°（读成两根棒）。
+         现在 wrist = 棒从手里出来那一点、fistC / fist = 棒尖，两点都在画里竹棒的轴线上（release 帧 x > 345 的不透明像素拟合：34°，y = 300.8 − 0.679x），管子粗 ≈ 画里棒粗 7 */
+      atk: { kind: 'punch', seq: [['wind', 0.3], ['release', 0.55, 'fire'], ['throw', 0.12], ['wind', 0.2]], dir: { release: 34 },   // 画里竹棒 34°（所需 33°），伸出去的棒沿 wrist → fistC
+             fist: [400, 10, 420, 33], fistC: [410, 22.4], wrist: [346, 66], armW: 7,
+             skin: '#6cbf45', skinShade: 'rgba(40,110,30,.55)', skinEdge: '#1f3d12', fistZ: 1, phases: [0.16, 0.12, 0.22],
              stretch: 0, gap: [1.0, 1.4] },
     },
     /* ---- 后排地面（站在女生身后左边、画在主角之后；样板 B5，规范 4.3 / 6.4 后排出手翻过自己主角头顶） ---- */
