@@ -6,7 +6,7 @@
   谁在后面：按 depth（上方 0.5 < 后排 0.8 < 地板 1.3，main.js 按它排远近，小的先画）。前面那个人不算被挡。
   对后面那个人的**每一帧**（前面那个人取他全部在场帧的并集 —— 两人各自出手、时机不定，哪一帧碰上哪一帧都可能）：
     · 被挡剪影占比 ≤ 8%（被挡像素 / 这一帧自己的剪影像素）；
-    · 头框被挡 0 px：frames.json 的 head（参考帧上量的头框，映射到图集输出像素）在每一帧里按模板重新找一次位置；前面那人外扩 4px 再比；
+    · 头框被挡 0 px：图集 json 写了 heads[帧]（逐帧量的框）就用它；没写的帧拿 frames.json 的 head（参考帧上量的头框，映射到图集输出像素）在这一帧里按模板重新找一次位置；前面那人外扩 4px 再比；
     · 认人点被挡 0 px：落脚区（FOOTED 的人，见第二版第 8 条）、挂件层（扇子、流苏、牛丸串……）、手里拿着的道具（hold 点；形状按 drawHeld 的画法，见 held_shape）、躯干
       （头框下沿到"头下沿 + 45% × 头下沿到脚底"那几行、头框中心左右各 1.2 个头宽以内 —— 招牌服装都在这一块），前面那人同样外扩 4px。
   前景地板在后排地面前面，挡住后排一点脚和小腿（躯干以下）本来就对，只要不超 8%。
@@ -342,9 +342,12 @@ def sheet_person(c, at, foot, side):
         want = [f for f in dict.fromkeys(want) if f in sh['names']]
         hr = head_out(name); hb, refc = (hr[0], cell(hr[1])) if hr else (None, None)   # 头框量在参考帧上（不一定是 idle：G4 是 wind）
         cells = [(f, cell(f)) for f in want]
-        heads = {f: (find_head(cc, refc, hb) if hb else est_head(cc[..., 3] > 40)) for f, cc in cells}
-        # 画在帧里的招牌道具：图集 json 的 ident（每帧各自的框）优先；cfg.ident 是参考帧上的框，每帧按模板重找
+        # 头框：图集 json 的 heads（美术逐帧量的框，图集格内像素 {帧: [x0, y0, x1, y1]}）优先；没写的帧拿参考帧的头按模板找。
+        # 模板找不可靠的情形：头侧仰 / 张嘴喊的新帧最高分只有 0.46~0.48，过了 0.4 的阈值却落在胸口（B8 新 release，报"头被挡 485 px"，实际头高过男主头顶）
         meta = json.load(open(os.path.join(WEB, 'assets/trio', name + '.json')))
+        hd = meta.get('heads') or {}
+        heads = {f: (list(hd[f]) if f in hd else find_head(cc, refc, hb) if hb else est_head(cc[..., 3] > 40)) for f, cc in cells}
+        # 画在帧里的招牌道具：图集 json 的 ident（每帧各自的框）优先；cfg.ident 是参考帧上的框，每帧按模板重找
         # {帧: {名: 框}}（crewframes.py ident）；美术重出的图集写成 {帧: [框, ...]}（没名字），按 道具1、道具2 编号
         idf = lambda v: list(v.items()) if isinstance(v, dict) else [(f'道具{k + 1}', bx) for k, bx in enumerate(v or [])]
         idents = {f: idf(meta.get('ident', {}).get(f)) for f, _ in cells}
