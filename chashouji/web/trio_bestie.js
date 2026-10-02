@@ -540,7 +540,7 @@ const TRIO_BESTIE = {
     },
     G20: {      // 复古歌后（邓丽君式）：坐在一弯金月亮上从正上方缓缓降下来，挥手 → 张开双臂唱 → 坐定捂心口轻唱；指尖捏一枚月牙镖举过头顶一弹，打着转飞过去
       face: +1,
-      sheet: { src: 'assets/trio/G20_teresa.webp', cell: [234, 338], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wave', 'sing', 'bow', 'idle2'] },
+      sheet: { src: 'assets/trio/G20_teresa.webp', cell: [264, 338], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wave', 'sing', 'bow', 'idle2', 'release', 'through'] },
       /* 月亮拆成挂件层（审查第八批打回：生图每帧重画的月亮不一样，月牙尖一换帧跳 6 px）：bestie/G20_teresa/moon.py 从每一帧里把月亮拿掉，
          挂件 = idle 那一份月亮（被人挡住的地方按月牙极坐标补），八帧同一张图、同一个位置，z −1 垫在人后面，照 G19 无人机。
          人按臀部 + 大腿（坐在月亮上的那一块）平移到和 idle 对齐（各帧原来差 0.4~7.6 格内 px），坐在同一张月亮上的接触线各帧一致。
@@ -551,15 +551,15 @@ const TRIO_BESTIE = {
       /* 月亮降下（fly，从正上方）：一手扶月尖一手挥 → 张开双臂仰头唱 → 坐定（露面后换两次帧） */
       enter: { kind: 'fly', from: [0, -720], air: 0.9, tilt: 0.03, seq: [['wave', 0.45], ['sing', 0.35], ['idle', 9, 'land']], sq: 0.04 },
       exit: { frame: 'wave' },
-      idle: { frame: 'idle', breathe: [0.014, 0.7, 0] },
+      idle: { frame: 'idle', breathe: [0.014, 0.7, 0], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
       /* 月亮：不甩（它是人坐着的东西，跟人一起降下来、一起呼吸）；pivot = 锚点在挂件图上的位置，八帧 at 都是锚点 */
       parts: [{ src: 'assets/trio/G20_moon.webp', pivot: [104.5, 177.5], z: -1,
-                 at: { idle: [105.5, 181.5, 0], wind: [105.5, 181.5, 0], throw: [105.5, 181.5, 0], follow: [105.5, 181.5, 0], wave: [105.5, 181.5, 0], sing: [105.5, 181.5, 0], bow: [105.5, 181.5, 0], idle2: [105.5, 181.5, 0] } }],
+                 at: { idle: [105.5, 181.5, 0], wind: [105.5, 181.5, 0], throw: [105.5, 181.5, 0], follow: [105.5, 181.5, 0], wave: [105.5, 181.5, 0], sing: [105.5, 181.5, 0], bow: [105.5, 181.5, 0], idle2: [105.5, 181.5, 0], release: [105.5, 181.5, 0], through: [105.5, 181.5, 0] } }],
       /* 月牙镖是平面图（bestie/G20_teresa/raw/crescent_src.png 抠出来，110 px 宽 × 0.5）：待机托在伸出去的掌心上慢慢转（次级摆动）；
          wind 捏着举过头顶 → throw 手腕一弹、从手里飞出去，平面内打着转飞（2D 转就是它本来的样子，道具表 7.1） */
       atk: { kind: 'throw', item: 'crescent', prop: 'assets/world/trio_g20_crescent.webp', scale: 0.5,
-             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
-             hold: { idle: [222, 80], wind: [167.2, 1.9], throw: [223.7, 52.2] },   // wind / throw 跟着 moon.py 的平移（−2.84, −2.12 / −0.34, +0.21）
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.1], ['through', 0.12], ['follow', 0.25]],   // 精闺1 P6：过顶甩，release 手臂从头顶甩到前上 35° 指尖一弹离手；through 手臂顺势落到右下 30°
+             hold: { idle: [222, 80], idle2: [228, 72], wind: [167.2, 1.9], release: [215, 40], throw: [223.7, 52.2] }, dir: { release: -38.6 },   // wind → release 手位移 −38.6°（引擎原量 −41.7°）；idle2 抄 trio_tune   // wind / throw 跟着 moon.py 的平移（−2.84, −2.12 / −0.34, +0.21）
              T: 0.5, arc: 0.2, spin: 12, idleSpin: 3, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
 
