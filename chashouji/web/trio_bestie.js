@@ -191,8 +191,8 @@ const TRIO_BESTIE = {
       /* 发髻上垂下的翠玉流苏：顶钉住（'t'），框左、右、下三边透明 */
       flex: { follow: [[290, 223, 300, 248, 't', 6, 1.1]] },
       /* 如意画在帧里：往后抡（wind2）→ 举过头顶（wind）→ 指向他放光（throw）→ 收回膝前（follow = 待机） */
-      atk: { kind: 'beam', seq: [['wind2', 0.18], ['wind', 0.2], ['release', 0.5, 'fire'], ['follow', 0.3]], dir: { release: 70 },   // 精闺1：举如意的手臂 70°（所需 69°），光从如意头直出
-             hold: { wind2: [254, 227], wind: [280, 124], throw: [522, 234], release: [488, 40] }, stretch: 0, gap: [1.0, 1.4],
+      atk: { kind: 'beam', seq: [['wind2', 0.18], ['wind', 0.2], ['release', 0.5, 'fire'], ['follow', 0.3]], dir: { release: 59 },   // release = throw 手臂连如意绕肩上举 50°（切件，bestie/G30_snake/armrelease.py；原局部重绘帧上半身比例不对、缺一条），手臂 59°（所需 69°，差 10°），光从如意头直出
+             hold: { wind2: [254, 227], wind: [280, 124], throw: [522, 234], release: [449.3, 126.1] }, stretch: 0, gap: [1.0, 1.4],
              beam: { fire: 0.45, drip: 0.1, ball: 30, glow: [120, 255, 150], edge: [20, 120, 60],
                      layers: [[40, [20, 120, 60], 0.3], [28, [60, 200, 100], 0.6], [16, [140, 255, 170], 0.9], [6, [240, 255, 240], 1]] } },
     },

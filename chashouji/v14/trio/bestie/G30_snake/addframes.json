@@ -1,31 +1,5 @@
 {
- "frames": [
-  {
-   "name": "release",
-   "base": "throw",
-   "box": [
-    225,
-    0,
-    497,
-    185
-   ],
-   "screen": "magenta",
-   "fixed": [
-    0,
-    185,
-    225,
-    275
-   ],
-   "scale_by": "fixed",
-   "paste": "inplace",
-   "feather": 10,
-   "check": null,
-   "K": 1.55979,
-   "ox": 62,
-   "oy": 212,
-   "added": true
-  }
- ],
+ "frames": [],
  "pad": [
   40,
   110,
