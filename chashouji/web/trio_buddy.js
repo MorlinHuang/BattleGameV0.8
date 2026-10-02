@@ -292,18 +292,18 @@ const TRIO_BUDDY = {
 
     B7: {       // 卷发大少：踩着电动平衡车滑进来、甩头发、急刹后仰，站在车上伸手指人；把一张红纸条举过头顶一甩，贴在她身上
       face: -1,
-      sheet: { src: 'assets/trio/B7_f4.webp', cell: [361, 461], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'swerve', 'brake', 'idle0', 'swing', 'thru', 'idle2'] },
+      sheet: { src: 'assets/trio/B7_f4.webp', cell: [369, 461], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'swerve', 'brake', 'idle0', 'swing', 'release', 'thru', 'idle2'] },
       /* 后排地面；平衡车画在帧里，锚点 = 车底中点。[740, 1040]：同组 B25 在场四帧相交 0（1070 时 234px） */
-      anchor: [198.1, 453.1], at: [820, 1040, 0.83], pivot: [198.3, 453], leanK: 0,
+      anchor: [206, 453.1], at: [820, 1040, 0.83], pivot: [206.2, 453], leanK: 0,
       depth: 0.8, recipe: 'feather',
       enter: { kind: 'ride', T: 1.0, tilt: 0.1, seq: [['cruise', 0.4], ['swerve', 0.3], ['brake', 9, 'land']], sq: 0.08 },   // 插兜滑行 → 甩头发拐弯 → 急刹后仰
       exit: { frame: 'cruise', flip: true },
       idle: { frame: 'idle', breathe: [0.02, 0.8], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
-      flex: { idle: [[147.3, 8, 239.3, 55, 'b', 4, 0.8]] },   // 爆炸卷发顶：底边（头皮）钉住，发顶颤
+      flex: { idle: [[155.2, 8, 247.2, 55, 'b', 4, 0.8]] },   // 爆炸卷发顶：底边（头皮）钉住，发顶颤
       /* 精美1（P6）：wind 举过头顶 → swing 往前甩到额头前上方、身子前倾卷发外套后拖（这一拍离手，出手点 [92, 48] 仍高过男生头顶 ~90 px）→ throw → thru 手甩到身前低处 → follow；
          idle2 = 手插进卷发往后撩（等引擎 P7）。红牌重画（审查 B7 B）：红纸写白字「红牌」、两头卷边看得出纸厚（raw/prop_src2.png），scale 0.45 → 0.55 让字读得出 */
       atk: { kind: 'throw', item: 'paper', prop: 'assets/trio/B7_redslip.webp', scale: 0.55,
-             seq: [['wind', 0.26], ['swing', 0.07, 'fire'], ['throw', 0.12], ['thru', 0.12], ['follow', 0.33]], hold: { wind: [126.3, 14], swing: [92, 48] },
+             seq: [['wind', 0.22], ['swing', 0.08], ['release', 0.1, 'fire'], ['thru', 0.1], ['follow', 0.33]], dir: { release: 0.7 }, hold: { wind: [134.2, 14], swing: [277, 88], release: [20, 85] },
              T: 0.5, arc: 0.25, spin: 5, gap: [0.6, 1.0], onHit: 'wear' },
     },
 
@@ -351,21 +351,20 @@ const TRIO_BUDDY = {
 
     B10: {      // 麻将大叔：拎着折起来的小马扎晃着肚子走进来，把马扎一撑一屁股坐下；捏两张麻将举过头顶一甩，3D 麻将翻着砸过去，喊"胡了"
       face: -1,
-      sheet: { src: 'assets/trio/B10_mahjong.webp', cell: [480, 425], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'plop', 'idle0', 'swing', 'thru', 'idle2'] },
+      sheet: { src: 'assets/trio/B10_mahjong.webp', cell: [557, 425], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'plop', 'idle0', 'swing', 'release', 'thru', 'idle2'] },
       /* 后排地面，锚点 = 两只人字拖中间的地面。坐在马扎上待机、出手（条 1 按马扎配准）。[740, 1020]：同组 B29 在场各帧外扩 4px 相交 0（1040 时 wind 371 px） */
-      anchor: [284.4, 419.4], at: [860, 1000, 0.8], pivot: [284.4, 419], leanK: 0,
+      anchor: [361.6, 419.4], at: [858, 1000, 0.8], pivot: [361.6, 419], leanK: 0,
       depth: 0.8, recipe: 'thud',
       /* 走进来：四帧同一张底图（walk1 / walk2 生图，walk3 / walk4 蒙版重绘腿和手臂），马扎四帧都在近侧手：后 → 胯边 → 前 → 胯边。
          stride 159.5（walkfix pivot，蓝人字拖；walk1 / walk3 鞋尖距 158 / 161），5 步 × 63.8 = 319（最终站位 s 0.8）；精美1 加帧后重跑 walkfix，stride 158.5、dist 5 × 63.4 = 317；第 5 步换成一屁股坐下（plop），
          plop 在图集里已经往前挪了一步（cellshift −80），坐下那一刻马扎就落在站位上，换待机不跳 */
-      enter: { kind: 'walk', fps: 6, bob: 6, stride: 158.5, dist: 317, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.66667], ['plop', 9, 'land']], sq: 0.12 },
+      enter: { kind: 'walk', fps: 6, bob: 6, stride: 159, dist: 318, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 0.66667], ['plop', 9, 'land']], sq: 0.12 },
       exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 7, flip: true, T: 0.8 },
       idle: { frame: 'idle', breathe: [0.02, 0.8], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
       /* wind 帧捏着牌的拳头举过头顶（拳顶 y 3，头顶 y 62），两张一起离手 */
       /* 精美1（P6 / P7，美术补帧，蒙版局部重绘）：wind 直举 → swing 手臂弯向前、牌在额前上方（这一拍离手）→ throw → thru 手垂到膝前 → follow 举手胡了；idle2 = 打哈欠挠后脑。图集往左扩 7.4。idle0 = 旧的重画 idle（不用），idle2 等引擎 P7 随机切 */
-      /* swing 暂不进 seq：这张屏幕最右出画（combo_scan），重画中 */
       atk: { kind: 'throw', item: 'mahjong', n: 2, r: 20, atlas: { src: 'assets/trio/prop_mahjong.webp', n: 36, cols: 6, cell: 77, scale: 1.37 },
-             seq: [['wind', 0.26], ['throw', 0.12, 'fire'], ['thru', 0.12], ['follow', 0.38]], hold: { wind: [208.4, 8], swing: [184, 76] },
+             seq: [['wind', 0.22], ['swing', 0.08], ['release', 0.1, 'fire'], ['thru', 0.1], ['follow', 0.36]], dir: { release: 15 }, hold: { wind: [285.6, 8], swing: [437, 187], release: [115, 101] },
              T: 0.5, arc: 0.35, spin: 6.3, stretch: 0.03, gap: [0.6, 1.0] },
     },
 

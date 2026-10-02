@@ -1,1 +1,1 @@
-{"cell": [480, 425], "cols": 4, "frames": ["idle", "wind", "throw", "follow", "walk1", "walk2", "walk3", "walk4", "plop", "idle0", "swing", "thru", "idle2"], "anchor": [284.4, 419.4], "residual": 0.38, "head": [242, 62, 321, 141], "ref": "idle"}
+{"cell": [557, 425], "cols": 4, "frames": ["idle", "wind", "throw", "follow", "walk1", "walk2", "walk3", "walk4", "plop", "idle0", "swing", "release", "thru", "idle2"], "anchor": [361.6, 419.4], "residual": 0.37, "head": [319, 62, 398, 141], "ref": "idle"}
