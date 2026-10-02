@@ -475,7 +475,7 @@ const TRIO_BESTIE = {
     },
     G13: {      // 白衣古墓仙子（小龙女式）：躺在一根横拉的麻绳上从左边滑进来、随绳颠着荡；支起身子一甩白绸，绸梢金铃"叮当"抽过去
       face: +1,
-      sheet: { src: 'assets/trio/G13_xiaolongnv.webp', cell: [421, 303], cols: 4, names: ['idle', 'wind', 'throw', 'follow'] },
+      sheet: { src: 'assets/trio/G13_xiaolongnv.webp', cell: [421, 303], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'swing', 'through', 'idle2'] },
       /* 锚点 = 腰臀压在绳上那一点；按伸直的那条腿 + 脚配准（残差 ≤ 2.0 px）。绳子引擎画（rope，画在人之下），帧里不画绳。
          剪影（含垂下的长发、绸带）约 4.8 万格内像素 × 0.66² ≈ 2.1 万屏幕像素，同 G11 */
       anchor: [206.5, 166.1], at: [175, 500, 0.66], pivot: [206, 166], leanK: 0.3,
@@ -486,14 +486,15 @@ const TRIO_BESTIE = {
       enter: { kind: 'rope', ends: [[-80, 512], [515, 468]], touch: [206.5, 166.1], sag: 16, sway: 5, w: 6, fill: '#b98a4e', edge: '#5a3a1a',
                seq: [['follow', 0.45], ['idle', 9, 'land']], sq: 0.04 },
       exit: { frame: 'follow' },
-      idle: { frame: 'idle', breathe: [0.012, 0.7, 0] },
+      idle: { frame: 'idle', breathe: [0.012, 0.7, 0], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },   // 精闺1 idle2：搭在膝上的手顺着膝盖往前一伸、手腕耷拉
       /* 墙钉 + 绳结场景层（bestie/G13_xiaolongnv/peg.py 程序画：铁底板钉在墙上、下挂铁环，绳头穿环打结、垂一截绳尾）。
          fixed 钉在世界里，z −1 画在绳之后（引擎先画绳）、人之前；pivot = 绳结中心，at = 绳右端 [515, 468] 换成格内坐标。改 at / ends 要重跑 peg.py */
       parts: [{ src: 'assets/trio/G13_peg.webp', pivot: [18.2, 34.8], z: -1, fixed: true, at: [721.7, 117.6, 0] }],
       /* 垂下去的长发、身下垂着的裙摆绸带：上沿（压在身下那一行）钉住，梢晃（框左、右、下三边透明） */
       flex: { idle: [[0, 216, 165, 300, 't', 5, 0.8], [200, 210, 404, 300, 't', 5, 0.7]] },
-      /* 金铃索（whip）：支起身子手举过头 → 往右一甩，白绸末端一对金铃抽过去 */
-      atk: { kind: 'whip', seq: [['wind', 0.3], ['throw', 0.44, 'fire'], ['follow', 0.3]], from: [290, 45], phases: [0.14, 0.08, 0.22],
+      /* 金铃索（whip）：支起身子手举过头 → 往右一甩，白绸末端一对金铃抽过去。
+         精闺1 P6：wind → swing（手臂扫到前上 40°，挥动中）→ throw（甩直，dir 18 沿手臂轴）→ through（手放平、手腕耷拉）→ follow */
+      atk: { kind: 'whip', seq: [['wind', 0.24], ['swing', 0.06], ['throw', 0.44, 'fire'], ['through', 0.12], ['follow', 0.2]], from: [290, 45], phases: [0.14, 0.08, 0.22],
              whip: { w: 10, taper: 0.5, amp: 26, waves: 1.3, hz: 3, color: '#f6f4f8', edge: 'rgba(120,120,150,.9)', tip: [18, 13, '#e8b52c'] }, gap: [0.9, 1.3] },
     },
     G14: {      // 金发剑之公主（希瑞式）：左上一道蓝白闪光里举剑变身现身，剑指前方、扛剑站定；双手举剑过头一劈，金色剑光斩在他身上
@@ -520,7 +521,7 @@ const TRIO_BESTIE = {
     },
     G16: {      // 狐尾妖姬（妲己式）：一团狐火橙烟里九条白尾巴裹着她现身，伸个懒腰、托腮一笑；掌心托一团青蓝狐火，举过头顶甩出去
       face: +1,
-      sheet: { src: 'assets/trio/G16_daji.webp', cell: [288, 401], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wrap', 'stretch', 'lean', 'idle2', 'through'] },
+      sheet: { src: 'assets/trio/G16_daji.webp', cell: [328, 401], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'wrap', 'stretch', 'lean', 'idle2', 'through', 'release'] },
       /* 九尾宝座画在每一帧里：按交叠的大腿 + 臀配准（残差 0.27 px），scale_by sheet（wind 仰头按头找会放大到 1.15、stretch 缩到 0.85）。
          锚点 = 最低点（鞋 / 裙摆）。人（不算白尾巴）约 3.2 万格内像素 × 0.8² ≈ 2.05 万屏幕像素，同 G11 */
       anchor: [159.6, 383.7], at: [275, 550, 0.8], pivot: [159, 383], leanK: 0.3,
@@ -528,12 +529,12 @@ const TRIO_BESTIE = {
       /* 九尾托着出现（appear 烟，狐火橙）：淡入时尾巴裹着身子只露眼睛 → 淡入完伸懒腰 → 托腮坐定 → 待机（淡入后换两次帧） */
       enter: { kind: 'appear', fx: 'smoke', color: [255, 140, 50], seq: [['wrap', 0.35], ['stretch', 0.25], ['lean', 0.2, 'land'], ['idle', 9]], sq: 0.04 },
       exit: { frame: 'wrap' },
-      idle: { frame: 'idle', breathe: [0.014, 0.7, 0] },
+      idle: { frame: 'idle', breathe: [0.014, 0.7, 0], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
       /* 狐火是平面图（bestie/G16_daji/raw/foxfire_src.png 抠出来，100 px × 0.45）：待机浮在托起的掌心上打旋（次级摆动）；
          wind 举过头顶 → throw 甩出去、一路打着旋（道具表：狐火是光效，不做 3D） */
       atk: { kind: 'throw', item: 'foxfire', prop: 'assets/world/trio_g16_foxfire.webp', scale: 0.45,
-             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['through', 0.14], ['follow', 0.25]],   // 精闺1 / 自检 4.5：follow 和 throw 几乎同一张（剪影差 0.09）→ 补 through：甩完的手顺势落到膝上
-             hold: { idle: [272, 92], wind: [207, 0], throw: [272, 86] },
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.1], ['through', 0.14], ['follow', 0.2]],   // 精闺1 P6：release 手臂前上 25° 掌心推出离手   // 精闺1 / 自检 4.5：follow 和 throw 几乎同一张（剪影差 0.09）→ 补 through：甩完的手顺势落到膝上
+             hold: { idle: [272, 92], idle2: [263, 89], wind: [207, 0], release: [292, 98], throw: [272, 86] }, dir: { release: -49 },   // wind → release 手位移 −49°（引擎原量 −53°）；idle2 掌心位置抄 trio_tune（格子只加了右边，坐标不变）
              T: 0.5, arc: 0.2, spin: 10, idleSpin: 6, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
     G20: {      // 复古歌后（邓丽君式）：坐在一弯金月亮上从正上方缓缓降下来，挥手 → 张开双臂唱 → 坐定捂心口轻唱；指尖捏一枚月牙镖举过头顶一弹，打着转飞过去
@@ -563,7 +564,7 @@ const TRIO_BESTIE = {
 
     G19: {      // 网红主播：戴猫耳耳机、举着手机直播，坐着白色四旋翼无人机从左边飞进来（前倾冲 → 后仰急刹 → 挥手打招呼）；甩出一枚打赏小火箭（3D）砸他
       face: +1,
-      sheet: { src: 'assets/trio/G19_streamer.webp', cell: [315, 315], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'zoom', 'brake', 'wave', 'idle2'] },
+      sheet: { src: 'assets/trio/G19_streamer.webp', cell: [345, 315], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'zoom', 'brake', 'wave', 'idle2', 'release', 'through'] },
       /* 人和无人机分开生（bestie/G19_streamer/raw/act_a1g / act_b1g 是"坐在看不见的座上"的人，drone.png 单独一张）：无人机做成挂件层垫在身后，
          每一帧同一张图、同一个位置（第七轮 G15 船头的要求）。人按屁股 + 大腿配准（残差 ≤ 0.40 px）；锚点 = 屁股坐在机身顶面的那一点。
          大小：人 idle 剪影 2.53 万格内像素 × 0.9² ≈ 2.05 万（上方样板 G11 2.06 万）；wind 头 0.92 是举过头顶的手压进了头框，同一张条缩放 1.00 */
@@ -572,21 +573,21 @@ const TRIO_BESTIE = {
       /* 从左边画外平着飞进来减速（fly，from 同一高度偏左）：前倾冲、头发往后拖 → 后仰急刹、两脚往前踢 → 到位挥手（露面后换两次帧，最后标 land） */
       enter: { kind: 'fly', from: [-460, -60], T: 1.0, air: 1.0, tilt: 0.08, seq: [['zoom', 0.45], ['brake', 0.25], ['wave', 9, 'land']], sq: 0.05 },
       exit: { frame: 'zoom' },
-      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
       flex: { idle: [[38, 60, 72, 162, 'r', 5, 0.8]] },   // 身后垂着的长发：根在右边钉住，框上、下、左三边透明（flexcheck 0 / 0 / 0）
       /* 无人机：pivot = 机身顶面（她坐的地方），整机绕它轻轻晃（悬停），画在人后面 */
       parts: [{ src: 'assets/trio/G19_drone.webp', pivot: [150, 38], z: -1, sway: [0.03, 1.1, 0],
-                 at: { idle: [140, 192, 0], wind: [140, 192, 0], throw: [140, 192, 0], follow: [140, 192, 0], zoom: [140, 192, 0], brake: [140, 192, 0], wave: [140, 192, 0], idle2: [140, 192, 0] } }],
+                 at: { idle: [140, 192, 0], wind: [140, 192, 0], throw: [140, 192, 0], follow: [140, 192, 0], zoom: [140, 192, 0], brake: [140, 192, 0], wave: [140, 192, 0], idle2: [140, 192, 0], release: [140, 192, 0], through: [140, 192, 0] } }],
       /* 打赏小火箭照道具表 3D：r 28 cell 106 scale 1.35。另一只手一直举着手机直播，扔火箭的是前侧那只手：举过头顶 → 往右甩出去 */
       atk: { kind: 'throw', item: 'rocket', r: 28, atlas: { src: 'assets/trio/prop_rocket.webp', n: 36, cols: 6, cell: 106, scale: 1.35 },
-             seq: [['wind', 0.3], ['throw', 0.1, 'fire'], ['follow', 0.35]],
-             hold: { wind: [72, 14], throw: [292, 96] },
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.1], ['through', 0.12], ['follow', 0.25]],   // 精闺1 P6：release 手臂平伸到最远、手指张开离手；through 手臂顺势落到右下 40°
+             hold: { wind: [72, 14], release: [285, 113], throw: [292, 96] }, dir: { release: -24.9 },   // wind → release 手位移 −24.9°（引擎原量 −20.4°）
              T: 0.55, arc: 0.2, spin: 5.7, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
 
     G17: {      // 恋柱（甘露寺式）：脚踝拴着绳从左上倒挂着掉下来、弹两下，捧着脸颊笑；握着剑柄一甩，粉色软鞭剑螺旋着抽过去，打中迸樱花瓣
       face: +1,
-      sheet: { src: 'assets/trio/G17_mitsuri.webp', cell: [245, 349], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'plunge', 'bounce', 'settle', 'idle2'] },
+      sheet: { src: 'assets/trio/G17_mitsuri.webp', cell: [245, 349], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'plunge', 'bounce', 'settle', 'idle2', 'swing', 'through'] },
       /* 上方；倒挂，锚点 = 两只脚踝（绳子拴的那一点）。两条腿每帧都并拢伸直，缩放和配准都按腿（scale_by fixed，残差 ≤ 0.51 px）。
          蓝幕（身上粉 + 嫩绿，品红 / 绿幕都会吃掉头发），bestie/G17_mitsuri/bluekey.py 先抠成透明再进 frames.py。
          大小：idle 剪影 1.84 万 × 1.06² ≈ 2.07 万（上方样板 G11 2.06 万）。站位临时：脚踝 y 240 在 HUD（拉力行 ≤ 180）下面，辫梢最低 594 */
@@ -596,10 +597,11 @@ const TRIO_BESTIE = {
       enter: { kind: 'drop', len: 700, line: [120, 15], T: 0.8, w: 3, fill: '#8a6a44', edge: 'rgba(60,40,20,.9)',
                seq: [['plunge', 0.35], ['bounce', 0.25], ['settle', 0.2, 'land'], ['idle', 9]], sq: 0.06 },
       exit: { frame: 'plunge' },
-      idle: { frame: 'idle', breathe: [0.014, 0.9, 0.3] },
+      idle: { frame: 'idle', breathe: [0.014, 0.9, 0.3], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
       flex: { idle: [[90, 280, 146, 338, 't', 5, 0.8]] },   // 垂着的两根麻花辫：顶边钉住，辫梢晃（flexcheck 下、左、右三边 0）
-      /* 鞭剑（whip，引擎画）：手里只画剑柄（粉绿圆镡 + 白柄），wind 抡到身后 → throw 甩到右下、软剑从镡上螺旋抽出去（waves 2），末端一截剑尖 */
-      atk: { kind: 'whip', seq: [['wind', 0.3], ['throw', 0.44, 'fire'], ['follow', 0.3]], from: [236, 278], phases: [0.14, 0.08, 0.22],
+      /* 精闺1 P6：wind（抡到左后）→ swing（手臂垂直往下扫过）→ throw（甩到右下，dir −45）→ through（手臂顺势甩到右下 20°）→ follow。
+         鞭剑（whip，引擎画）：手里只画剑柄（粉绿圆镡 + 白柄），wind 抡到身后 → throw 甩到右下、软剑从镡上螺旋抽出去（waves 2），末端一截剑尖 */
+      atk: { kind: 'whip', seq: [['wind', 0.24], ['swing', 0.06], ['throw', 0.44, 'fire'], ['through', 0.12], ['follow', 0.2]], from: [236, 278], phases: [0.14, 0.08, 0.22],
              whip: { w: 7, taper: 0.55, amp: 26, waves: 2, hz: 4, color: '#f7a3c6', edge: 'rgba(120,30,70,.9)', tip: [30, 6, '#ffd6e6'] }, gap: [0.9, 1.3] },
     },
 
