@@ -307,7 +307,7 @@ const TRIO_BESTIE = {
          dist = 6 步 × 59.5 × s，写死：不写时引擎按 cell × s + 30 取整成 6 步、每步压短 0.3 px */
       enter: { kind: 'walk', fps: 6, bob: 6, stride: 119, dist: 299.9, seq: [[['walk1', 'walk2', 'walk3', 'walk4'], 9]] },
       exit: { frame: ['walk1', 'walk2', 'walk3', 'walk4'], fps: 8, flip: true, T: 0.8 },
-      idle: { frame: 'idle', breathe: [0.014, 0.8, 0], alt: { frame: 'idle2', every: [2, 4], hold: [0.9, 1.4] } },
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },   /* idle2 停用（2026-10-02 总控）：现有 idle2 是整张重生的人，头顶比 idle 高 56 px、站姿也变了，待机轮换时人忽大忽小；等按 idle 底局部重画（addframes inplace）再接回 */
       /* 算盘是挂件层，和甩出去的是同一把：3D 图集 prop_abacus 最正面那一格转正（bestie/G5_tong/abacus_part.py，屏幕长边 90 px，改 s 要重跑），
          上面一根红吊绳吊在左胯，绕绳结晃；举过头顶 / 甩出去那两帧不画（在手里的是 3D 算盘）。
          ammo: true = 胯上这把就是甩出去的那把：飞出去还没落完就不画（不然 follow 帧胯上一把、空中一把），落完从吊绳结长回来 */
@@ -349,13 +349,13 @@ const TRIO_BESTIE = {
       /* 阴影一闪：淡入（0.35 秒）时蹲着低头，淡入完起身撩发 → 站起张手 → 待机（淡入结束后换了两次帧） */
       enter: { kind: 'appear', fx: 'smoke', color: [60, 20, 70], seq: [['crouch', 0.35], ['rise', 0.18], ['emerge', 0.14, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'crouch' },
-      idle: { frame: 'idle', breathe: [0.014, 0.8, 0], alt: { frame: 'idle2', every: [2, 4], hold: [0.9, 1.4] } },   // idle2 = 把头发别到耳后、半闭眼（精闺1 P7；原 idle2 是重画的 idle、不上场，换掉）
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },   /* idle2 停用（2026-10-02 总控）：现有 idle2 是整张重生的人，头顶比 idle 高 25 px、站姿也变了，待机轮换时人忽大忽小；等按 idle 底局部重画（addframes inplace）再接回 */   // idle2 = 把头发别到耳后、半闭眼（精闺1 P7；原 idle2 是重画的 idle、不上场，换掉）
       /* 身后的长发梢连同垂着的后手一起慢慢晃（根在右边钉住；框上、下、左三边透明） */
       flex: { idle: [[49, 122, 106, 236, 'r', 5, 0.8]] },
       /* 细刺刀是平面图（bestie/G7_yor/knife.py：原图 180 px 刀身提亮一档、加 3 px 深紫褐描边，186 px × 0.65 ≈ 屏幕 121 px，刀尖最细处连描边 ≈ 4.5 px）：
          手指夹着举过头顶（后排：出手点在女生头顶以上）→ 甩出去刀尖朝前直飞（aim：不自转，尖头顺着飞行方向，拿在手里也指着他） */
       atk: { kind: 'throw', item: 'knife', prop: 'assets/world/trio_g7_knife.webp', scale: 0.65,
-             seq: [['wind', 0.22], ['release', 0.06, 'fire'], ['throw', 0.1], ['through', 0.12], ['follow', 0.25]],   // 精闺1 P6：release 出手瞬间 / through 跟随（bestie/tools/addframes.py）
+             seq: [['wind', 0.22], ['release', 0.06, 'fire'], ['throw', 0.22], ['follow', 0.25]],   /* through 停用（2026-10-02）：整张重生、头顶比 throw 高 30 px，跟随一闪人变高；throw 多停 0.12 s，总时长不变 */   // 精闺1 P6：release 出手瞬间 / through 跟随（bestie/tools/addframes.py）
              hold: { wind: [124, 40], release: [395, 72], throw: [356, 110] }, dir: { release: -6.7 },   // dir = 手的运动方向（wind → release），dircheck 验过
              T: 0.4, arc: 0.12, spin: 0, aim: true, stretch: 0.03, gap: [0.9, 1.3], onHit: 'bounce' },
     },
