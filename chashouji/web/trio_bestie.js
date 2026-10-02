@@ -154,8 +154,8 @@ const TRIO_BESTIE = {
       flex: { idle: [[488, 235, 529, 302, 'l', 7, 0.8]] },
       /* 金护甲：bestie/tools/prop_nailguard.py 程序画的（她手指上的护甲跟手指叠着，抠不出来） */
       atk: { kind: 'throw', item: 'nailguard', prop: 'assets/world/trio_g24_nailguard.webp', scale: 0.45,
-             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.12], ['follow', 0.26]], dir: { release: 60 },   // 精闺1：release 出手瞬间（手臂甩到最前上方、手在最远点，自检 4.4 所需角度）→ 原 throw 帧接着当跟随；dir = 肩 → 手（图集上量）
-             hold: { wind: [167, 144], throw: [461, 169], release: [428, 20] },
+             seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.12], ['follow', 0.26]], dir: { release: 47 },   // release = throw 袖口以外小臂连手往上扬 40°（切件，bestie/G24_huafei/armrelease.py；原局部重绘帧头画小、袖子被框边切断、旧手飘在框外）→ 原 throw 帧接着当跟随；dir = 袖口 → 手
+             hold: { wind: [167, 144], throw: [461, 169], release: [436.7, 120.3] },
              T: 0.5, arc: 0.2, spin: 12, stretch: 0, gap: [1.0, 1.4], onHit: 'bounce' },
     },
     G25: {      // 大针筒护士：踩着输液架轮座从左下角滑进来、跳下来半跪扶着输液架，甩一支巨型针筒飞镖，扎在他头上
@@ -303,7 +303,7 @@ const TRIO_BESTIE = {
 
     G5: {       // 客栈老板娘（佟湘玉式）：腰侧挂着大算盘、叉着腰扭着走进来，惊呼"额滴神"；摘下算盘举过头顶，一把 3D 算盘甩出去砸他
       face: +1,
-      sheet: { src: 'assets/trio/G5_tong.webp', cell: [399, 464], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'release', 'through', 'idle2'] },
+      sheet: { src: 'assets/trio/G5_tong.webp', cell: [399, 464], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'idle2', 'release', 'through'] },
       /* 锚点 = 前脚（右脚）鞋底：出手四帧按这只鞋配准（残差 0.23 px）。站姿高约 350 px；站位按 shots/trio_std/建议站位_最终.md */
       anchor: [230.4, 458.3], at: [150, 980, 0.84], pivot: [230, 458], leanK: 0,
       depth: 0.8, recipe: 'debris',
