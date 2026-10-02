@@ -421,7 +421,7 @@ const TRIO_BUDDY = {
       flex: { idle: [[160, 5, 290, 45, 'b', 3, 0.8]] },   // 冲天白发顶：底边钉住，发梢颤
       /* 紫色光球（raw/orb_src.png，part.py w 140；平面贴图，圆的，转着飞）：wind 帧聚在举起的指尖上方，throw 帧指尖一弹射出去 */
       atk: { kind: 'throw', item: 'orb', prop: 'assets/trio/B15_orb.webp', scale: 0.5,
-             seq: [['wind', 0.35], ['throw', 0.1, 'fire'], ['follow', 0.45]], hold: { wind: [86, -20], throw: [0, 90] },
+             seq: [['wind', 0.35], ['throw', 0.1, 'fire'], ['follow', 0.45]], hold: { wind: [86, -20], throw: [6.5, 164.9] },   // throw 手臂往下转 38° 对准她（buddy/B15_gojo/armswing.py）
              T: 0.4, arc: 0.1, spin: 8, stretch: 0.03, gap: [0.6, 1.0] },
     },
 
