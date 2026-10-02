@@ -354,7 +354,7 @@ const TRIO_BESTIE = {
       /* 阴影一闪：淡入（0.35 秒）时蹲着低头，淡入完起身撩发 → 站起张手 → 待机（淡入结束后换了两次帧） */
       enter: { kind: 'appear', fx: 'smoke', color: [60, 20, 70], seq: [['crouch', 0.35], ['rise', 0.18], ['emerge', 0.14, 'land'], ['idle', 9]], sq: 0.05 },
       exit: { frame: 'crouch' },
-      idle: { frame: 'idle', breathe: [0.014, 0.8, 0] },   /* idle2 停用（2026-10-02 总控）：现有 idle2 是整张重生的人，头顶比 idle 高 25 px、站姿也变了，待机轮换时人忽大忽小；等按 idle 底局部重画（addframes inplace）再接回 */   // idle2 = 把头发别到耳后、半闭眼（精闺1 P7；原 idle2 是重画的 idle、不上场，换掉）
+      idle: { frame: 'idle', breathe: [0.014, 0.8, 0], alt: { frame: 'idle2', every: [1.2, 2.2], hold: [0.6, 1.0] } },   /* idle2 = 前面那只小臂收到胸前（切件，bestie/G7_yor/armidle2.py，身子逐像素同 idle）；原整张重生的 idle2 头顶高 25 px，769478b 停用后换掉 */
       /* 身后的长发梢连同垂着的后手一起慢慢晃（根在右边钉住；框上、下、左三边透明） */
       flex: { idle: [[49, 122, 106, 236, 'r', 5, 0.8]] },
       /* 细刺刀是平面图（bestie/G7_yor/knife.py：原图 180 px 刀身提亮一档、加 3 px 深紫褐描边，186 px × 0.65 ≈ 屏幕 121 px，刀尖最细处连描边 ≈ 4.5 px）：
