@@ -231,7 +231,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B23_zoro.webp', cell: [510, 294], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'skid', 'slide', 'set', 'idle0', 'swing', 'thru', 'idle2'] },
       /* 锚点 = 前脚和跪地膝之间的地面；在场帧最低点屏幕 y 1332。剪影面积 2.89 万（樱木 +9%，刀算在剪影里） */
-      anchor: [279.9, 288.6], at: [820, 1330, 1], pivot: [279.5, 288.5],
+      anchor: [279.9, 288.6], at: [780, 1330, 1], pivot: [279.5, 288.5],
       leanK: 0,   // 单膝跪地：整体前后倾会把跪地的膝盖翘起来
       depth: 1.3, recipe: 'star',
       /* 滑步（刀往后拖）→ 刹住后仰 → 落膝（压扁）→ 三刀架势。进场条上排两格头后多一小截黑结（模型画的），只在前 0.3 秒 */
@@ -241,8 +241,7 @@ const TRIO_BUDDY = {
       flex: { idle: [[334.5, 102.5, 352.5, 129.5, 'l', 5, 1.3]] },   // 左臂头巾结的两条尾巴：结那头钉住，尾梢甩
       /* 斩痕画在她身上（引擎 slash），出手那一段 0.35 秒盖住三道（gap 0.08 × 2 + 划出 0.07） */
       /* 精美1（P6 / P7，美术补帧，蒙版局部重绘）：wind 双刀在右肩后 → swing 两刀横扫到胸前、刀身后拖 → throw 斩 → thru 双臂扫到左前最远、衣角前甩 → follow；idle2 = 斜眼、拇指推刀镡。三把刀每帧都在。图集扩 (119.5, 9.5)。idle0 = 旧的重画 idle（不用），idle2 等引擎 P7 随机切 */
-      /* swing 暂不进 seq：这张屏幕最右出画（combo_scan），重画中 */
-      atk: { kind: 'slash', seq: [['wind', 0.24], ['throw', 0.3, 'fire'], ['thru', 0.12], ['follow', 0.25]],
+      atk: { kind: 'slash', seq: [['wind', 0.2], ['swing', 0.06], ['throw', 0.3, 'fire'], ['thru', 0.12], ['follow', 0.25]],
              slash: { n: 3, gap: 0.08, len: 230, w: 18, life: 0.5, color: [90, 230, 110], ang: -0.5, spread: 0.25 },
              gap: [0.6, 1.0] },
     },
@@ -269,7 +268,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B6_shanghai.webp', cell: [464, 521], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'stop', 'idle0', 'swing', 'thru', 'idle2'] },
       /* 后排地面：站在男生身后右边。原想用 B5 的 [740, 1070]，同组 B27 蹲滑的头和锅铲会碰上（外扩 4px 相交 851px），退到 1040 后在场四帧 × B27 在场五帧相交 0 */
-      anchor: [214.5, 506.2], at: [820, 980, 0.81], pivot: [214.7, 506], leanK: 0,
+      anchor: [214.5, 506.2], at: [700, 940, 0.81], pivot: [214.7, 506], leanK: 0,
       depth: 0.8, recipe: 'star',
       /* 慢步走：两腿都是黑西裤，生图两次、改图一次都没把接地腿换过来（颜色一样也看不出换没换），四张取同一张生图里的四格。
          钉脚：buddy/walkfix.py 按"继续着地那只脚"把四帧横向对齐（-25 / +6 / -24 / 0 → 以 walk1 为 0），stride = 一个循环四次换帧鞋位差之和 / 2。
@@ -284,9 +283,8 @@ const TRIO_BUDDY = {
               walk4: [[383, 300, 432, 398, 'l', 7, 1.6]], stop: [[358, 273, 415, 383, 'l', 6, 1.2]] },
       /* 手举过头顶弹：出手点 [28, 15] 在帽顶以上（后排出手从男生头顶翻过去，规范 6.4） */
       /* 精美1（P6 / P7，美术补帧，蒙版局部重绘）：wind 手在胯边 → swing 手往上抡到额前、风衣下摆围巾后拖 → throw 直举过头弹出 → thru 手落到胸前、衣摆往前甩 → follow 压帽檐；idle2 = 压帽檐闭眼。thru 手更靠左，图集往左扩 61.7。idle0 = 旧的重画 idle（不用），idle2 等引擎 P7 随机切 */
-      /* swing 暂不进 seq：这张屏幕最右出画（combo_scan），重画中 */
       atk: { kind: 'throw', item: 'coin', r: 20, atlas: { src: 'assets/trio/prop_coin.webp', n: 36, cols: 6, cell: 63, scale: 1.13 },
-             seq: [['wind', 0.24], ['throw', 0.1, 'fire'], ['thru', 0.12], ['follow', 0.3]], hold: { wind: [117.7, 300], throw: [89.7, 15], swing: [168, 101] },   // 待机不拿：3D 银元侧着转到 90° 时是一块黑盘子，比捏着的手指还大
+             seq: [['wind', 0.2], ['swing', 0.06], ['throw', 0.1, 'fire'], ['thru', 0.12], ['follow', 0.3]], hold: { wind: [117.7, 300], throw: [89.7, 15], swing: [168, 101] },   // 待机不拿：3D 银元侧着转到 90° 时是一块黑盘子，比捏着的手指还大
              T: 0.5, arc: 0.3, spin: 6.3, stretch: 0.03, gap: [0.6, 1.0] },
     },
 
@@ -311,7 +309,7 @@ const TRIO_BUDDY = {
       face: -1,
       sheet: { src: 'assets/trio/B9_rider.webp', cell: [438, 504], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'cruise', 'drift', 'brake', 'idle0', 'swing', 'thru', 'idle2'] },
       /* 后排地面；电驴画在帧里（两张条都按车身 + 后轮配准、scale_by fixed），锚点 = 两轮着地中点 */
-      anchor: [197.4, 489.6], at: [785, 1022, 0.8], pivot: [197, 490], leanK: 0,
+      anchor: [197.4, 489.6], at: [805, 1042, 0.8], pivot: [197, 490], leanK: 0,
       depth: 0.8, recipe: 'splash',
       enter: { kind: 'ride', T: 1.0, tilt: 0.15, seq: [['cruise', 0.4], ['drift', 0.3], ['brake', 9, 'land']], sq: 0.08 },   // 伏低飞驰 → 漂移甩尾、一脚点地 → 急刹两脚落地
       exit: { frame: 'cruise', flip: true },
@@ -319,7 +317,7 @@ const TRIO_BUDDY = {
       /* wind 帧手掌托过头顶（掌心顶 y 4，头顶 y 71），外卖盒托在掌上、在那一刻离手；throw 帧是甩完往前下的手 */
       /* 精美1（P6 / P7，美术补帧，蒙版局部重绘）：wind 托盒过头 → swing 往前抡到额前上方、上身前压（这一拍离手，盒心 [312, 0] 高过男生头顶）→ throw → thru 手落到车头前 → follow 敬礼；idle2 = 低头看腕上手机。图集往左扩 60.7。idle0 = 旧的重画 idle（不用），idle2 等引擎 P7 随机切 */
       atk: { kind: 'throw', item: 'takeout', r: 26, atlas: { src: 'assets/trio/prop_takeout.webp', n: 36, cols: 6, cell: 96, scale: 1.32 },
-             seq: [['wind', 0.3], ['wind', 0.06, 'fire'], ['throw', 0.14], ['follow', 0.4]], hold: { wind: [343, -20], swing: [251.3, 0] },   // swing / thru 暂不进 seq：两张都压到上方 B19 的脚（combo_scan 8.1% > 8%），重画中；先按原来在 wind 举过头顶那一下离手
+             seq: [['wind', 0.24], ['swing', 0.06, 'fire'], ['throw', 0.14], ['thru', 0.12], ['follow', 0.3]], hold: { wind: [343, -20], swing: [251.3, 0] },   // swing 离手（trio_tune dir.swing 按这一格量）；swing / thru 原先压 B19 的脚，2026-10-02 按 combo_scan 建议站位挪位后接上
              T: 0.5, arc: 0.35, spin: 6.3, stretch: 0.02, gap: [0.6, 1.0] },
     },
 
@@ -549,7 +547,7 @@ const TRIO_BUDDY = {
       sheet: { src: 'assets/trio/B29_crutch.webp', cell: [308, 358], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'walk1', 'walk2', 'walk3', 'walk4', 'stop', 'idle0', 'swing', 'thru', 'idle2', 'release'] },
       /* 地板前排（站着弓腰），锚点 = 两脚之间的地面。剪影面积 2.85 万（樱木 +8%，含帧里的拐）。at.y 1326：各帧剪影最低一行屏幕 y 最大 1333.2（1328 时 1335.2，超 1.2）。
          拐杖在 idle / wind / 走路帧里画着（拄着、推销、抡起来），throw 帧手空了、飞出去的是 3D 拐杖 */
-      anchor: [193.3, 347.9], at: [830, 1326, 1], pivot: [193, 348.1], leanK: 0,
+      anchor: [193.3, 347.9], at: [830, 1326, 0.98], pivot: [193, 348.1], leanK: 0,
       depth: 1.3, recipe: 'thud',
       /* 瘸：步长恒定（引擎一帧一步），瘸靠 walk3 伤腿着地时身子下沉、压着拐（审查第三轮第 4 条）；bob 跟帧。
          拄拐的过渡帧也是一前一后两脚着地（后脚撑着），钉脚按手写的换帧链对齐（walkfix.py，平移 +18 / -12 / -9 / -48）；dist = 6 步 × 59.25 */
@@ -559,7 +557,7 @@ const TRIO_BUDDY = {
       flex: { idle: [[101, 60.1, 181, 95.1, 'b', 3, 0.8]] },   // 雷锋帽顶的毛：底边钉住，帽顶颤
       /* 精美1（P6 / P7，美术补帧，蒙版局部重绘）：第二轮（物理一致性，审查第 4 节所需 143°）：wind 拐在头后 → swing 双手握拐收到右胯后（拐画在帧里，同一根）→ release 手臂往左上伸直、拐刚离手（这一拍离手，3D 拐从 hold.release 飞出；双拳中心 swing→release 140°、肩→手 141.1°）→ thru 空手继续往左上扬、大衣前甩 → follow；idle2 = 手拢嘴边吆喝。swing / thru 的头按老帧重画过（同一顶军绿帽、浅棕毛边）。图集扩 (19.5, 44.2)。idle0 = 旧的重画 idle（不用），idle2 等引擎 P7 随机切 */
       atk: { kind: 'throw', item: 'crutch', r: 86, atlas: { src: 'assets/trio/prop_crutch.webp', n: 36, cols: 6, cell: 190, scale: 1.07 },   // 3D 拐返工（引擎负责人 2026-10-01）：浅木双杆长拐，长边 163~183px ≈ 帧里那根
-             seq: [['wind', 0.22], ['swing', 0.08], ['release', 0.12, 'fire'], ['follow', 0.36]], dir: { release: 40 }, hold: { throw: [19, 102.1], release: [23.6, 40.7] },   // thru（手再往上扬、身子前送）压到后排 B7 的腿（combo_scan 9.4% > 8%），暂不进 seq
+             seq: [['wind', 0.22], ['swing', 0.08], ['release', 0.12, 'fire'], ['thru', 0.1], ['follow', 0.26]], dir: { release: 40 }, hold: { throw: [19, 102.1], release: [23.6, 40.7] },   // thru（手再往上扬、身子前送）压到后排 B7 的腿（combo_scan 9.4% > 8%），暂不进 seq
              T: 0.5, arc: 0.2, spin: 6.3, stretch: 0.02, gap: [0.6, 1.0] },
     },
 
