@@ -64,14 +64,14 @@ const TRIO_BESTIE = {
     /* ---- 帧序列（新标准） ---- */
     G11: {      // 花饰格格：秋千从左上画外荡进来（往前荡伸腿、往后荡收腿），荡到最前面抛绣球砸他的头
       face: +1,
-      sheet: { src: 'assets/trio/G11_gege.webp', cell: [315, 343], cols: 4, names: ['idle', 'raise', 'throw', 'follow', 'wind', 'tuck', 'kick', 'idle2'] },
+      sheet: { src: 'assets/trio/G11_gege.webp', cell: [315, 343], cols: 4, names: ['idle', 'raise', 'throw', 'follow', 'wind', 'tuck', 'kick', 'idle2', 'release', 'through'] },
       anchor: [128, 212.3], at: [170, 480, 1], pivot: [128, -530], leanK: 0.5,   // y 640 → 540 → 500（引擎负责人 2026-10-01，遮挡判据第二版：后排 G5 挪到 [230, 960] 以后 540 时她被挡 15.5%）
       depth: 0.5, recipe: 'petal',
       /* 进场：0.4 秒从左上画外露面时收着腿俯冲（tuck），0.6 秒荡到最低点（摆角过零）伸腿（kick）往前荡，0.75 秒接出手 */
       enter: { kind: 'swing', seq: [['tuck', 0.6], ['kick', 9]] },
       /* 绳子、座板由引擎画（帧里的座板已抠掉）：ends 座板两头、grip 这一帧哪只手握着绳 [左手, 右手]、board 座板的框 */
       ropes: { ...ROPE, ends: [[50, 207], [208, 207]], board: [44, 205, 214, 222], flowers: '#f59ab8',
-               grip: { idle: [[49, 63]], raise: [[44, 63]], throw: [[69, 76]], follow: [[57, 60]], wind: [[25, 72]],
+               grip: { idle: [[49, 63]], raise: [[44, 63]], throw: [[69, 76]], release: [[69, 76]], through: [[69, 76]], follow: [[57, 60]], wind: [[25, 72]],
                        tuck: [[98, 60], [227, 63]], kick: [[47, 66], [176, 60]] } },
       swing: { a0: 1.3, a: 0.13, tau: 0.45, w: 2.6, pump: { fwd: 'kick', back: 'tuck', min: 0.3 } },
       exit: { frame: 'tuck' },
@@ -79,10 +79,10 @@ const TRIO_BESTIE = {
       /* 帽子后面那根流苏：下端贴着肩膀，画不出三边透明的 flex 框，拆成挂件层（frames.json 的 lift，帧里原位置已补画）。
          顶上的结挂住，自己慢慢晃（0.08 rad，尖上 ±4 px），秋千摆的时候往后拖（跟摆 0.25 × 摆的角速度） */
       parts: [{ src: 'assets/trio/G11_tassel.webp', pivot: [7, 0], z: 1, sway: [0.08, 0.8, 0.25],
-                at: { idle: [80, 30, 0], raise: [84.5, 24, 0], throw: [107, 43, 0], follow: [81, 30, 0], wind: [54.5, 39, 0], tuck: [135, 34, 0], kick: [58.5, 39, 0], idle2: [79, 34, 0] } }],
+                at: { idle: [80, 30, 0], raise: [84.5, 24, 0], throw: [107, 43, 0], release: [107, 43, 0], through: [107, 43, 0], follow: [81, 30, 0], wind: [54.5, 39, 0], tuck: [135, 34, 0], kick: [58.5, 39, 0], idle2: [79, 34, 0] } }],
       atk: { kind: 'throw', item: 'ball', prop: 'assets/world/trio_prop_ball.webp', scale: 0.5,
-             seq: [['raise', 0.12], ['wind', 0.24], ['throw', 0.1, 'fire'], ['follow', 0.3]],
-             hold: { idle: [176, 172], raise: [63, 26], wind: [14, 146], throw: [277, 38] },
+             seq: [['raise', 0.12], ['wind', 0.24], ['release', 0.06, 'fire'], ['throw', 0.1], ['through', 0.12], ['follow', 0.25]],   // 精闺1 P6：release 手臂伸到最远离手，through 手腕下垂（只重画右臂，头身 = throw）
+             hold: { idle: [176, 172], raise: [63, 26], wind: [14, 146], release: [292, 48], throw: [277, 38] }, dir: { release: 19.4 },   // wind → release 手位移 19.4°（引擎原量 throw 22.3°）
              T: 0.5, arc: 0.25, spin: 5, idleSpin: 0.8, stretch: 0.04, onHit: 'bounce' },
     },
 
