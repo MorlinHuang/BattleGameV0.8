@@ -176,9 +176,9 @@ const TRIO_BUDDY = {
     },
     B30: {      // 杀马特：跪着往后仰滑进来、指天定格，跪地捂脸，指间转着一把蓝梳子，甩飞过去
       face: -1,
-      sheet: { src: 'assets/trio/B30_smart.webp', cell: [365, 368], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'kneeslide', 'arrive', 'stop', 'idle0', 'swing', 'release', 'thru', 'idle2'] },
+      sheet: { src: 'assets/trio/B30_smart.webp', cell: [375, 368], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'kneeslide', 'arrive', 'stop', 'idle0', 'swing', 'release', 'thru', 'idle2'] },
       /* 锚点 = 两膝和靴尖之间的地面；在场帧最低点屏幕 y 1333.3。名单里的发胶喷雾引擎还没有 spray，这一版只有飞梳子 */
-      anchor: [217.2, 362.9], at: [795, 1330, 0.92], pivot: [216.9, 360.2],
+      anchor: [227.9, 362.9], at: [795, 1330, 0.92], pivot: [227.6, 360.2],
       leanK: 0,   // 跪在地上：整体前后倾会把膝盖翘起来
       /* anchor y 比图集 json 的 360.9 大 2：加帧重 build 后脚底整体比老图集低 0.9 输出 px，屏幕最低到 1334.7（地板线 1334，combo_scan 记出画），往上提 2（combo_scan 按 alpha > 8 量，羽化边比 alpha 40 的轮廓再低 0.9）回到老图集的位置 */
       depth: 1.3, recipe: 'star',
@@ -186,10 +186,10 @@ const TRIO_BUDDY = {
       exit: { frame: 'kneeslide' },
       idle: { frame: 'idle', breathe: [0.02, 0.9, 0], alt: { frame: 'idle2', every: [0.5, 1.2], hold: [0.6, 1.0] } },
       /* 次级摆动：梳子在指间一直转（idleSpin 大，平面道具按 hang × 0.2 转） */
-      /* 精美1（P6 / P7，美术补帧，蒙版局部重绘）：第二轮（物理一致性，审查第 4 节所需 140°）：wind 指间转梳子 → swing 手收到身后胯旁、手腕后弯 → release 手臂往左上甩直、手指刚松（这一拍离手；握点 swing→release 145.2°、肩→手 146.1°）→ follow；thru（第一轮的往下甩 / 第二轮手往回缩）不进 seq。idle2 = 眨眼比耶。idle0 = 旧的重画 idle（不用），idle2 等引擎 P7 随机切 */
+      /* 精美1（P6 / P7，美术补帧，蒙版局部重绘）：第二轮（物理一致性，审查第 4 节所需 140°）：wind 指间转梳子 → swing 手收到身后胯旁、手腕后弯 → release 手臂往左上甩直、手指刚松（这一拍离手；握点 swing→release 145.2°、肩→手 146.1°）→ follow；→ thru 手臂仍伸直、比 release 更往前压、身体前倾头发往左甩（2026-10-02 第三版；前两版往下甩 / 手往回缩）→ follow。idle2 = 眨眼比耶。idle0 = 旧的重画 idle（不用），idle2 等引擎 P7 随机切 */
       atk: { kind: 'throw', item: 'comb', prop: 'assets/trio/prop_comb.webp', scale: 1.4,   // 1 倍（64px 长）飞起来太小，看不出是梳子
-             seq: [['wind', 0.22], ['swing', 0.08], ['release', 0.1, 'fire'], ['follow', 0.32]], dir: { release: 35.4 },
-             hold: { idle: [164.9, 237.2], wind: [137.9, 67.2], throw: [77.9, 117.2], swing: [344, 256], release: [32, 34], idle2: [164.9, 237.2] },
+             seq: [['wind', 0.22], ['swing', 0.08], ['release', 0.1, 'fire'], ['thru', 0.1], ['follow', 0.26]], dir: { release: 35.4 },
+             hold: { idle: [175.6, 237.2], wind: [148.6, 67.2], throw: [88.6, 117.2], swing: [354.7, 256], release: [42.7, 34], idle2: [175.6, 237.2] },
              T: 0.42, arc: 0.15, spin: 16, idleSpin: 12, stretch: 0.03, gap: [0.5, 0.9], onHit: 'bounce' },
     },
     B22: {      // 悟空：从右下角低身冲刺、一滑落成半跪，双手在腰侧蓄气 → 往前推出水版气功波

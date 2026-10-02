@@ -9,3 +9,5 @@
   swing 生图用 raw/p6d_swing_mask_gen.png（保留原 wind 头发椭圆），贴回用 raw/p6d_swing_mask.png（腰以上全换）。
   swing inpaint-1790849214397-2（f 1.0）、release inpaint-1790848932787-3（f 0.87）、thru inpaint-1790849079978-2（f 0.88）。
   量点（新格内输出像素）：P(351,256) R(32,34) S(148,112) thru 手(56,44)；P→R 145.2°、S→R 146.1°。对比图 p6dcmp.py。
+- thru 重做（2026-10-02 总控）：旧 thru 手往回缩（审查判不进 seq）。底 = p6d_thru_base、蒙版 p6d_thru_mask，提示词"FOLLOW-THROUGH，手臂仍伸直、比 release 更往前、身体前倾、头发往左甩"，
+  inpaint-1790939631376-2，`p6dpaste.py thru <gen> 0.88`（scale 0.660、score 0.948）。图集 cell 365 → 375、anchor x +10.7（cfg 的 anchor / pivot / hold 一起平移）。seq 接回 thru。
