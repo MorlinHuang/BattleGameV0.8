@@ -470,15 +470,17 @@ STRUGGLE_FEATHER = 8
 # （近脚低、远脚高，交替就看在这里）—— 把拖鞋贴在这些位置上再让模型只画腿，挑拖鞋落位最准的候选（walk/score.py）。
 # 播哪一格按**量出来的**站地脚位置定（walk_load 的 at），不按格号平分：某一格站地脚比计划偏了几像素，就晚几像素再换到它。
 WALK_N = 16
+WALK_SLIPPER_H = 80     # 拖鞋高度上限（原图像素）：地面带从抬脚最高处再往上留这么多
 
 
-def slipper_blobs(a, mask, girl):
-    """赢方拖鞋色块 [(中心 x, 鞋底 y)]：女生白兔拖鞋 = 亮且不偏色，男生黑猫拖鞋 = 暗。只在蒙版放开区的地面带里找。"""
+def slipper_blobs(a, mask, girl, band):
+    """赢方拖鞋色块 [(中心 x, 鞋底 y)]：女生白兔拖鞋 = 亮且不偏色，男生黑猫拖鞋 = 暗。只在蒙版放开区的地面带 band = (y0, y1) 里找。
+    地面带按 plan.json 的地面线定，不按蒙版底边往上数：蒙版一直放到图底，扑倒档拖鞋在 786~807 行，"蒙版底往上 200 行"一只都框不到（10-02 构建报错）"""
     r, g, b = (a[..., k].astype(int) for k in range(3))
     s = ((np.minimum(np.minimum(r, g), b) > 200) & (a.max(2).astype(int) - a.min(2) < 40)) if girl else (a.max(2) < 70)
-    ys = np.nonzero(mask.any(1))[0]
     s &= mask
-    s[:ys.max() - 200] = False
+    s[:band[0]] = False
+    s[band[1]:] = False
     lab, n = ndimage.label(ndimage.binary_closing(ndimage.binary_opening(s, np.ones((5, 5))), np.ones((9, 9))))
     out = []
     for k in range(1, n + 1):
@@ -498,9 +500,10 @@ def walk_load(name):
     tgt = {0: {'0': dict(x=plan['back'], line=plan['lines'][0], lift=0), '1': dict(x=plan['front'], line=plan['lines'][1], lift=0)}}
     tgt.update({f['i']: f['feet'] for f in plan['frames']})
     h = WALK_N // 2
+    band = (int(min(plan['lines']) - plan['lift'] - WALK_SLIPPER_H), int(max(plan['lines']) + 20))   # 抬到最高的拖鞋顶 ~ 最低鞋底
     def stance_x(i, foot):
         t = tgt[i][foot]
-        blobs = slipper_blobs(np.array(Image.open(paths[i]).convert('RGB')), mask, name[0] == 'a')
+        blobs = slipper_blobs(np.array(Image.open(paths[i]).convert('RGB')), mask, name[0] == 'a', band)
         return min(blobs, key=lambda q: abs(q[0] - t['x']) + abs(q[1] - t['line']))[0]
     xs = [stance_x(i, '0' if i < h else '1') for i in range(WALK_N)]
     S = abs(stance_x(0, '1') - xs[0])         # 一步长 = base 里两只拖鞋的间距
