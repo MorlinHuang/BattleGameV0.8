@@ -109,6 +109,9 @@
  *       甩影逐段贴图 × 4 帧 → 每帧一整块渐变（只铺靠梢 55 %、最多 2 块）；臂 / 棒不画甩影（顺着自己的轴伸缩，叠在本体上看不出）
  *       粒子（一颗约 37 µs）：水柱落点 drip 按模拟时间限流（DRIP_GAP）、狐火火星 70 → 30 / s、剑气沿路光粒 16 → 6、水柱出口尘团 1/3 → 1/4、水沫 j ≤ 0.2
  *       段数：水柱每三滴一个点、绸 / 臂按弧长抽点（thin）—— 合计约 0.25 ms
+ *   精特2b（折角 / 臂直，用户："路飞的手臂拐弯了…不符合真实物理"）：臂 / 棒直；绸 / 剑节点钉在路上、链只管横向 + 张力、按长度缩形、
+ *     出手段沿出口；所有带子过样条 smooth（按转角取点）。bands.py 中线最大转角 绸 / 剑 149~172° → 13~14°、臂 0°。
+ *     增量同时段背靠背：HEAD 3.81 ms / 精特2b 3.79 ms（负载 60~85，比 3.65 那次高；读数与做法见 shots/polish/精特2b_压测与折角.txt）
  *     软渲染下绝对值不可信、相对比可信；真机未测。第一批光束（两道 6.5 ms）仍双线性，没动（不在本轮判据里，记 docs/待办.md）
  *
  * ---------- 接入清单（给引擎；行号 = 工作区 trio.js / main.js 2026-10-01 精特2 收口时复核，引擎改动未提交，会漂，以函数名为准）----------
@@ -368,11 +371,12 @@ const TrioFX = (function () {
     if (p.tex) {                                          // 能量尾：身后 0.075 s 飞过的路铺一条生图能量流（beam2 bodyB / midB），宽窄、横向都按 wob 抖，越往后越细
       const t1 = p.age, t0 = Math.max(0, t1 - 0.075), M = 8, pts = [], hw = [], u = [];
       for (let j = 0; j <= M; j++) {
-        const tt = t0 + (t1 - t0) * j / M, [x, y, a] = flyAt(p, tt), f = j / M, o = p.w * 0.16 * wob(j * 70, t1, p.fph) * (1 - f);
-        pts.push([x - Math.sin(a) * o, y + Math.cos(a) * o]); hw.push(p.h * 0.28 * Math.pow(f, 1.3) * (1 + 0.4 * wob(j * 55, t1, 1 + p.fph)) + 1); u.push(-tt * 2400);
+        /* 横摆 / 宽窄抖的 wob 自变量每点只走 14 / 11（原来 70 / 55：wob 主频 0.051，一点跳 3.6 rad = 采样不到，尾巴抖成之字）；再过样条 */
+        const tt = t0 + (t1 - t0) * j / M, [x, y, a] = flyAt(p, tt), f = j / M, o = p.w * 0.16 * wob(j * 14, t1, p.fph) * (1 - f);
+        pts.push([x - Math.sin(a) * o, y + Math.cos(a) * o]); hw.push(p.h * 0.28 * Math.pow(f, 1.3) * (1 + 0.4 * wob(j * 11, t1, 1 + p.fph)) + 1); u.push(-tt * 2400);
       }
       ctx.setTransform(T); ctx.globalAlpha = al * 0.9;
-      band(ctx, pts, hw, u, [{ tex: comp([[p.tex, 1], [p.tex2, 1]]), smooth: true }]);   // 双线性：生图能量流宽、颗粒细，最近点在胶片上起毛；只活 0.12 s，开销零头
+      band(ctx, ...smooth(pts, [hw, u], 40, 0.25), [{ tex: comp([[p.tex, 1], [p.tex2, 1]]), smooth: true }]);   // 双线性：生图能量流宽、颗粒细，最近点在胶片上起毛；只活 0.12 s，开销零头
     }
     for (let k = 2; k >= 0; k--) {                       // 两道残影（原来三道贴图；现画的月牙一道 6 次 fill，三道剑气同飞时压测多 0.2 ms）
       const t = p.age - k * 0.03;
@@ -1051,32 +1055,84 @@ const TrioFX = (function () {
       ctx.stroke();
     }
   }
-  /* 抽点：沿弧长每隔至少 minSeg px 留一个点（头尾必留）。弹簧链 21 个点是给物理用的；画的时候一段 20~30 px 的直段看不出折，
-     每段一次 fill 有固定开销（水柱 / 绸 / 臂三处抽点合计，配对压测约 0.25 ms） */
+  /* 抽点：沿弧长每隔至少 minSeg px 留一个点（头尾必留）。只给直的臂 / 棒用（段只带粗细变化）；弯的带子走 smooth（按转角取点） */
   const thin = (L, minSeg) => { const k = [0]; for (let i = 1; i < L.length - 1; i++) if (L[i] - L[k[k.length - 1]] >= minSeg) k.push(i); k.push(L.length - 1); return k; };
   const arcLen = (pts) => { const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])); return L; };
+  /* 顺滑：把控制点（弹簧链节点 / 水滴 / 飞过的点）当成一条向心 Catmull-Rom 样条的过点，按弯的程度重新取点再交给 band。
+     直接把控制点连成折线（精特2 收口时绸按弧长抽到 ≥ 20 px 一段、水柱三滴一个点）在波峰处折成可见的尖角（用户：不符合真实物理）；
+     样条曲率连续，取点规则：切向比上一个留下的点将要转过 maxTurn（默认 7°：一圈 52 边，圆看着就是圆；留转过之前那个采样点）或弧长到 maxSeg 才留 ——
+     直的地方段长、弯的地方自动加密，段数（每段一次 fill）和原来抽点差不多。
+     attrs：每个控制点的一组标量 [[hw…], [u…], …]，按同一个参数插值（第一组 = 半宽：Catmull-Rom 同样顺滑、下限 0.3；其余线性，u 保持单调）；
+     宽度变化超过 25 % 也留点（扭转的窄处不被一段直线抹平）。返回 [pts, ...attrs] */
+  function smooth(P, attrs, maxSeg = 28, maxTurn = 0.12, maxDw = 0.25) {
+    const n = P.length;
+    if (n < 3) return [P, ...attrs];
+    const at = (i) => P[Math.max(0, Math.min(n - 1, i))];
+    const dense = [[P[0][0], P[0][1]]], A = attrs.map(a => [a[0]]);
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = i ? at(i - 1) : [2 * P[0][0] - P[1][0], 2 * P[0][1] - P[1][1]], p1 = P[i], p2 = P[i + 1],
+            p3 = i + 2 < n ? P[i + 2] : [2 * P[n - 1][0] - P[n - 2][0], 2 * P[n - 1][1] - P[n - 2][1]];
+      const d01 = Math.max(1e-3, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) ** 0.5), d12 = Math.max(1e-3, Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) ** 0.5),
+            d23 = Math.max(1e-3, Math.hypot(p3[0] - p2[0], p3[1] - p2[1]) ** 0.5);
+      /* 向心参数化的切向（Barry–Goldman 化成 Hermite）：不会在点挤在一起的地方打圈 / 出尖 */
+      const m1 = [0, 1].map(k => (p1[k] - p0[k]) / d01 - (p2[k] - p0[k]) / (d01 + d12) + (p2[k] - p1[k]) / d12).map(v => v * d12),
+            m2 = [0, 1].map(k => (p2[k] - p1[k]) / d12 - (p3[k] - p1[k]) / (d12 + d23) + (p3[k] - p2[k]) / d23).map(v => v * d12);
+      const m = Math.max(1, Math.ceil(d12 * d12 / 3));
+      for (let j = 1; j <= m; j++) {
+        const t = j / m, t2 = t * t, t3 = t2 * t, h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+        dense.push([h00 * p1[0] + h10 * m1[0] + h01 * p2[0] + h11 * m2[0], h00 * p1[1] + h10 * m1[1] + h01 * p2[1] + h11 * m2[1]]);
+        attrs.forEach((a, k) => {
+          if (k) { A[k].push(a[i] + (a[i + 1] - a[i]) * t); return; }
+          const a0 = a[Math.max(0, i - 1)], a3 = a[Math.min(n - 1, i + 2)];      // 均匀 Catmull-Rom
+          A[0].push(Math.max(0.3, 0.5 * (2 * a[i] + (a[i + 1] - a0) * t + (2 * a0 - 5 * a[i] + 4 * a[i + 1] - a3) * t2 + (3 * a[i] - a0 - 3 * a[i + 1] + a3) * t3)));
+        });
+      }
+    }
+    const D = dense.length, out = [dense[0]], O = A.map(a => [a[0]]);
+    let li = 0, run = 0;
+    const dirAt = (j) => { const a = dense[Math.max(0, j - 1)], b = dense[Math.min(D - 1, j + 1)]; return Math.atan2(b[1] - a[1], b[0] - a[0]); };
+    let d0 = dirAt(0);
+    const keep = (j) => { out.push(dense[j]); A.forEach((a, k) => O[k].push(a[j])); li = j; d0 = dirAt(j); };
+    const turnAt = (j) => { const dj = dirAt(j); return Math.abs(Math.atan2(Math.sin(dj - d0), Math.cos(dj - d0))); };
+    for (let j = 1; j < D; j++) {
+      const sj = Math.hypot(dense[j][0] - dense[j - 1][0], dense[j][1] - dense[j - 1][1]);
+      run += sj;
+      if (j === D - 1) { keep(j); break; }
+      /* 转过 maxTurn 时留的是上一个采样点（转到这一点之前）：留这一点的话急弯处每个顶点多转一整步（3 px 一步，半径 25 px 的弯一步就 7°） */
+      if (turnAt(j) > maxTurn && j - 1 > li) { keep(j - 1); run = sj; }
+      const wl = A[0][li];
+      if (run >= maxSeg || turnAt(j) > maxTurn || Math.abs(A[0][j] - wl) > maxDw * Math.max(wl, 2)) { keep(j); run = 0; }
+    }
+    return [out, ...O];
+  }
 
   /* ---------- 弹簧链：带状物的惯性 ----------
      N + 1 个节点，两头钉死（0 = 手，N = 梢 / 拳头：梢按调用方给的路径走，打中的时刻不变），中间各自被弹簧拉向"该在的位置" D[i]，
      越靠中段弹簧越软（K × (1 − mid·sin πf)）→ 甩出去时中段落在后面、到点时中段冲过头再弹回来，收回时带一道波。
+     ribbon 只拿它算横向偏移（D[i] = [w, 0]，x = 沿法线的偏移）：节点本身钉在路上，见 ribbon 里"节点钉在路上"一段
+     ten：相邻节点之间的张力（拉普拉斯项 + 同样形式的阻尼）—— 没有它每个节点是一只各自固有频率的独立振子，摆上几百 ms 相位就散开，
+     相邻节点一上一下 = 手边一截细碎的锯齿（bands.py：收回末段中线 30~40° 的拐都是这个）；有张力才是一根绳，高频的节点间模态被压住。
      推进按调用方这一下的时钟 t 的差（抽打 W.t / 出拳 b.pk.t）：顿帧时 t 不动、链也不动；t 变小 = 新的一下，链从 D 重新开始 */
   function chain(N) {
     const x = new Float64Array(N + 1), y = new Float64Array(N + 1), vx = new Float64Array(N + 1), vy = new Float64Array(N + 1);
     let t0 = null;
     return {
       x, y,
-      step(t, D, K, mid, zeta, g) {
+      step(t, D, K, mid, zeta, g, ten = 0) {
         if (t0 == null || t < t0 - 1e-6) {
           for (let i = 0; i <= N; i++) { x[i] = D[i][0]; y[i] = D[i][1]; vx[i] = vy[i] = 0; }
           t0 = t; return;
         }
         let left = Math.min(0.1, t - t0); t0 = t;
+        x[0] = D[0][0]; y[0] = D[0][1]; x[N] = D[N][0]; y[N] = D[N][1];
+        const td = 0.15 * Math.sqrt(ten);
         while (left > 1e-7) {
           const h = Math.min(1 / 240, left); left -= h;
           for (let i = 1; i < N; i++) {
             const f = i / N, k = K * (1 - mid * Math.sin(Math.PI * f)), c = 2 * zeta * Math.sqrt(k);
-            vx[i] += (k * (D[i][0] - x[i]) - c * vx[i]) * h;
-            vy[i] += (k * (D[i][1] - y[i]) - c * vy[i] + g * Math.sin(Math.PI * f)) * h;
+            const lx = ten * (x[i - 1] - 2 * x[i] + x[i + 1]) + td * (vx[i - 1] - 2 * vx[i] + vx[i + 1]), ly = ten * (y[i - 1] - 2 * y[i] + y[i + 1]) + td * (vy[i - 1] - 2 * vy[i] + vy[i + 1]);
+            vx[i] += (k * (D[i][0] - x[i]) - c * vx[i] + lx) * h;
+            vy[i] += (k * (D[i][1] - y[i]) - c * vy[i] + g * Math.sin(Math.PI * f) + ly) * h;
             x[i] += vx[i] * h; y[i] += vy[i] * h;
           }
         }
@@ -1093,7 +1149,7 @@ const TrioFX = (function () {
        'blade'  软鞭剑（G17，金属）：Q = A.whip。剑身贴图（暗边 / 斜面 / 血槽 / 一条白刃光），螺旋甩出（中线绕一圈圈的螺旋偏移，
                 宽窄跟着螺旋相位翻），tip = 一截收尖的剑尖
        'arm'    橡皮臂（B12）：Q = A（atk 原样：armW / skin / skinShade / skinEdge）。肉色圆柱 + 褶纹（拉得越长褶越稀 = 拉伸纹），
-                近拳头略鼓；收回时中段甩出一道波（弹簧链欠阻尼）
+                前臂粗 → 中段拉细 → 拳前鼓；路径沿 from → to 直（精特2b：伸长肢体不弯，见 draw 里的注释）
        'bamboo' 伸缩棒（G29 打狗棒）：Q = A（同上，skin 当竹色）。竹节贴图，节从梢那头量 —— 伸出去时一节节从手里冒出来
      每帧：h.draw(ctx, from, dir, to, e, t, s)
        from  根（抽打 = handPt(P)；出拳 = 手腕 pt(P, A.wrist)）
@@ -1104,6 +1160,8 @@ const TrioFX = (function () {
        s     体型 P.s
      h.tip() → [x, y, ang]：梢此刻在哪、朝哪（出拳：拳头按它转，替换 drawArm 里的 ang） */
   const PHB = 16;
+  /* 顺滑的 |x|（0..1 → 0..1）：|cos φ| 在侧身那一刻导数跳变，宽度在那里折一下 = 带子边上一个尖角 */
+  const sabs = (x) => (Math.sqrt(x * x + 0.03) - 0.1732) / 0.8417;
   function ribbon(Q, style = 'silk') {
     const N = 20, C = chain(N), TUBE = style === 'arm' || style === 'bamboo';
     let pals, texName, tipImg = null;
@@ -1128,30 +1186,44 @@ const TrioFX = (function () {
     return {
       draw(ctx, from, dir, to, e, t, s = 1) {
         if (!ready()) return;
-        const c = ctrl(from, dir, to), tot0 = Math.hypot(to[0] - from[0], to[1] - from[1]);
+        /* 臂 / 棒是伸长的肢体 / 硬杆（精引2 物理口径）：一律沿 from → to 直着出去，不走出口方向的弯（拳头本来就在前臂延长线上：drawArm 把它放在
+           "落点在前臂线上的投影"），也不加横向波 —— 精特2 收口版臂上叠了"整条弓 + 往拳头走的小波"，胶片上是一根之字折线（用户：路飞的手臂拐弯了）。
+           去几何感改靠粗细（前臂 → 中段收细 → 拳头前鼓）、皮肤贴图的明暗和随拉长放稀的拉伸褶 */
+        const c = TUBE ? [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2, false] : ctrl(from, dir, to), tot0 = Math.hypot(to[0] - from[0], to[1] - from[1]);
         /* 该在的位置：沿路 0 → e，再加横向位移（加在 D 上，弹簧把它滤顺）：
              绸 / 剑  一道往前走的大波（甩出去时大、到点后收）+ 一层碎的三频抖（布被风吹的颤，不是一条正弦）
-             橡皮臂   整条往一侧弓、弓的方向来回甩、慢慢收（橡皮的弹），叠一道往拳头走的小波
-             竹棒     捅出去时整根被甩弯、来回弹几下再收住（竹子的韧），叠一层细颤 */
+             竹棒     捅出去的反冲让整根轻轻弯一下（一个整体的弧，最多 1.5 % 长度、12 px），很快收直
+             橡皮臂   不加 */
+        /* 节点钉在路上（沿路弧长 f·e 处），弹簧链只管横向偏移 w（沿该点法线）：原来链节点在平面里各自追目标点，伸缩快时靠梢的节点
+           顺着路冲过钉死的梢 → 折回成钩、收回时打结（bands.py 读数：绸 / 剑中线最大转角 149~172°，都在 81~91 % 处）。只剩横向 → 沿路的次序不会乱。
+           横波的包络：根上 smoothstep（斜率 0 → 首段切线 = 出口方向；原来 sin πf 在根上斜率最大，首段偏 dir 51~60°），
+           幅度再按 grow = g² 收（见下 Lsc）；
+           碎抖 wob 的自变量用弧长 px（原来 f × 620：带子短时波长跟着缩到 20 多 px = 之字）。下垂：链的重力改成静态的 droop × 法线的竖直分量 */
         const amp = TUBE ? 0 : (Q.amp || 24) * (style === 'blade' ? 1.0 : 0.8), fw0 = (Q.w || 8) * s;
+        const droop = style === 'silk' ? 6 : style === 'blade' ? 2 : 0;
+        /* 链里存的是"横向偏移 / (此刻伸出去的长度 × g)"，g = min(1, 长度 / 300)：收回时带子变短，链上挂着的形状跟着缩（存 px 的话偏移还在、
+           节点间距先缩了 → 之字），而且多缩一个 g —— 波长 ∝ 长度、幅度 ∝ 长度²，曲率与长度无关（只按长度等比缩的话，收到 120 px 时整条的波
+           挤成手边半径 15 px 的弯）。短的带子近乎直 = 被拽回手里绷紧 */
+        const Lsc = Math.max(1, e * tot0), g = Math.min(1, Lsc / 300), grow = g * g, B = [], NX = [], NY = [];
         for (let i = 0; i <= N; i++) {
-          const f = i / N, p = bz(from, c, to, f * e);
-          if (i > 0 && i < N) {
-            const q = bz(from, c, to, Math.min(1, f * e + 0.01)), L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1, sn = Math.sin(Math.PI * f);
-            let w;
-            if (style === 'arm') w = sn * Math.min(70, tot0 * 0.09) * (Math.sin(t * 17 + 1.3) * Math.exp(-t * 2.5) + 0.45 * Math.sin(9.42 * f - t * 23));
-            else if (style === 'bamboo') w = sn * Math.min(36, tot0 * 0.07) * (Math.sin(t * 30 + 0.6) * Math.exp(-t * 3) + 0.25 * Math.sin(t * 71));
-            else w = sn * (amp * (1.2 - e * 0.7) * Math.sin(6.2832 * (f * (Q.waves || 1.5) - t * (Q.hz || 4))) + fw0 * (style === 'blade' ? 0.5 : 1.1) * wob(f * 620, t, 1.1));
-            const ox = -(q[1] - p[1]) / L * w, oy = (q[0] - p[0]) / L * w;
-            p[0] += ox; p[1] += oy;
+          const f = i / N, p = bz(from, c, to, f * e), q = bz(from, c, to, Math.min(1, f * e + 0.01)), pr = bz(from, c, to, Math.max(0, f * e - 0.01));
+          const dx = q[0] - pr[0], dy = q[1] - pr[1], L = Math.hypot(dx, dy) || 1;
+          B.push(p); NX.push(-dy / L); NY.push(dx / L);
+          let w = 0;
+          if (i > 0 && i < N && style !== 'arm') {
+            const sn = Math.sin(Math.PI * f), r = Math.min(1, f / 0.22), env = sn * r * r * (3 - 2 * r);
+            if (style === 'bamboo') w = env * Math.min(12, tot0 * 0.015) * Math.sin(t * 30 + 0.6) * Math.exp(-t * 6);
+            else w = env * grow * (amp * (1.2 - e * 0.7) * Math.sin(6.2832 * (f * (Q.waves || 1.5) - t * (Q.hz || 4))) + fw0 * (style === 'blade' ? 0.4 : 0.7) * wob(f * Lsc, t, 1.1))
+                     + env * grow * droop * NY[i];
           }
-          D[i][0] = p[0]; D[i][1] = p[1];
+          D[i][0] = w / (Lsc * g); D[i][1] = 0;
         }
         if (style === 'bamboo') C.step(t, D, 4200, 0.6, 0.7, 0);
-        else if (style === 'arm') C.step(t, D, 1500, 0.8, 0.22, 500);
-        else C.step(t, D, 900, 0.82, 0.32, style === 'blade' ? 300 : 900);
+        else if (style !== 'arm') C.step(t, D, 900, 0.82, 0.32, 0, 4000);
         const pts = [];
-        for (let i = 0; i <= N; i++) pts.push([C.x[i], C.y[i]]);
+        /* 出手那一截：横向偏移再乘一个按弧长的 smoothstep（0 → max(40 px, 两成长度)：节点 25 px 一个，只铺 40 px 的话只盖住一个节点）—— 张力会把弯一路传到根上，乘上它根上偏移和斜率都是 0（首段沿出口方向），
+           且导数连续（钉死节点的话钉住段和自由段之间是个折角） */
+        for (let i = 0; i <= N; i++) { const r = Math.min(1, i / N / Math.max(40 * s / Lsc, 0.2)), w = style === 'arm' ? 0 : C.x[i] * Lsc * g * r * r * (3 - 2 * r); pts.push([B[i][0] + NX[i] * w, B[i][1] + NY[i] * w]); }
         const L = arcLen(pts), tot = L[N] || 1;
         const hw = [], phi = [];
         let W0;
@@ -1159,8 +1231,10 @@ const TrioFX = (function () {
           W0 = Q.armW * s * (1 - 0.25 * Math.min(1, tot / 500)) / 2;                     // 拉得越长越细（同旧 drawArm）
           for (let i = 0; i <= N; i++) {
             const f = i / N;
-            /* 臂：一道往拳头走的鼓包（橡皮被拽出去的肉浪）+ 近拳头鼓；棒：竹节处略粗、整根粗细不匀一点 */
-            hw.push(W0 * (style === 'arm' ? (0.9 + 0.2 * Math.max(0, (f - 0.8) / 0.2)) * (1 + 0.16 * Math.sin(L[i] * 0.05 - t * 26) * Math.sin(Math.PI * f) + 0.07 * wob(L[i], t, 0.4))
+            /* 臂：前臂端粗 → 中段被拉细 → 近拳头鼓回来（肌肉被拽长的样子）+ 一道往拳头走的轻微肉浪（只动粗细、不动路径）；
+               棒：竹节处略粗、整根粗细不匀一点 */
+            hw.push(W0 * (style === 'arm' ? (1.05 - 0.17 * Math.sin(Math.PI * Math.min(1, f / 0.85)) + 0.2 * Math.max(0, (f - 0.8) / 0.2) ** 2)
+                                            * (1 + 0.08 * Math.sin(L[i] * 0.05 - t * 26) * Math.sin(Math.PI * f))
                                           : 1 + 0.08 * wob(L[i] * 2, 0, 2.2)));
           }
         } else {
@@ -1168,12 +1242,12 @@ const TrioFX = (function () {
           const tp = Q.taper != null ? Q.taper : 0.5;
           for (let i = 0; i <= N; i++) {
             const f = i / N;
-            /* 扭转：silk φ 沿长度转 1.1 圈、随时间拧；blade 跟着螺旋相位（宽面转到侧面时窄）。侧过去最窄只到 0.36（第一版 0.16，
-               胶片上一侧身就是一根线）；再叠一层沿长度的宽窄抖 */
-            const ph = style === 'blade' ? 6.2832 * (f * (Q.waves || 2) - t * (Q.hz || 4)) : 1.1 + f * 7.0 + t * 2.4;
+            /* 扭转：silk φ 每 px 转 0.014 rad（按伸出去的布量：500 px 转 1.1 圈；原来按 f 量，刚甩出去的短带子也挤满 1.1 圈，侧身处边线折得很急）、随时间拧；blade 跟着螺旋相位（宽面转到侧面时窄）。侧过去最窄只到 0.36（第一版 0.16，
+               胶片上一侧身就是一根线）；沿长度的宽窄抖在样条取点之后按弧长加（波长 90 px，节点 30 px 一个采不住，会抖成锯齿） */
+            const ph = style === 'blade' ? 6.2832 * (f * (Q.waves || 2) - t * (Q.hz || 4)) : 1.1 + L[i] * 0.014 + t * 2.4;
             phi.push(ph);
-            hw.push(W0 * (1 - (1 - tp) * f) * (style === 'blade' ? 0.45 + 0.55 * Math.abs(Math.cos(ph)) : 0.36 + 0.64 * Math.abs(Math.cos(ph)))
-                    * (1 + 0.2 * wob(L[i] * 1.4, t, 2.0)) * (i === N && !Q.tip ? 0.3 : 1));
+            hw.push(W0 * (1 - (1 - tp) * f) * (style === 'blade' ? 0.45 + 0.55 * sabs(Math.cos(ph)) : 0.36 + 0.64 * sabs(Math.cos(ph)))
+                    * (i === N && !Q.tip ? 0.3 : 1));
           }
         }
         /* u：绸 / 剑从根量（纹路钉在布上）；臂从拳头量、褶距随拉长放稀；棒从梢量（节从手里冒出来） */
@@ -1190,6 +1264,13 @@ const TrioFX = (function () {
           for (const [k, w] of [[0.5, tw * 0.85], [1, 0.4]]) { pts.push([pts[N][0] + Math.cos(tipA) * tl * k, pts[N][1] + Math.sin(tipA) * tl * k]); hw.push(w); phi.push(0); u.push(u[u.length - 1] + tl * k * 64 / (W0 * 2.6)); }
         }
         last = [pts[N][0], pts[N][1], tipA];
+        /* 绸 / 剑：弹簧链节点当样条过点重新取点（smooth）—— 节点间 25~30 px，直接连是折线，波峰处折成尖角 */
+        let SP = pts, SW = hw, SU = u, SF = phi;
+        if (!TUBE) {
+          [SP, SW, SU, SF] = smooth(pts, [hw, u, phi], 40, 0.12, 0.4);
+          const SL = arcLen(SP);
+          SW = SW.map((w, j) => w * (1 + 0.2 * wob(SL[j] * 1.4, t, 2.0)));
+        }
         /* 甩影：先画（压在本体下面）。只画梢比这一帧挪开 6 px 以上的那几帧（停住时不花钱）。每帧一整块（sheet），只铺靠梢的 55 %
            （根几乎不动，那半截的甩影本来就看不见），沿长度由透明渐到实。每 0.03 s 记一帧、留 0.05 s = 最多 2 块（原来逐段贴图 × 4 帧 = 40 次 fill；
            整块渐变的面积开销仍不小：压测配对差值里甩影约 0.75 ms，砍掉根那半截和第 4 块） */
@@ -1204,24 +1285,24 @@ const TrioFX = (function () {
         }
         if (SMEAR && (!hist.length || t - hist[hist.length - 1].t >= 0.03)) {
           const gp = [], gh = [];
-          for (let i = Math.round(N * 0.45); i < pts.length; i += 2) { gp.push([pts[i][0], pts[i][1]]); gh.push(Math.max(hw[i] * 1.05, 2)); }
+          const SL = arcLen(SP), from45 = SL[SL.length - 1] * 0.45;
+          for (let i = 0; i < SP.length; i++) if (SL[i] >= from45) { gp.push(SP[i]); gh.push(Math.max(SW[i] * 1.05, 2)); }
           hist.push({ t, pts: gp, hw: gh });
         }
         const body = ramp('band', texName, TUBE ? pals.body : pals.front);
-        if (TUBE) { const k = thin(L, 32 * s); band(ctx, k.map(i => pts[i]), k.map(i => hw[i]), k.map(i => u[i]), [{ tex: body }], ink, 1.4); return; }
+        if (TUBE) { const k = thin(L, 48 * s);            // 臂 / 棒是直的（棒至多一道 12 px 的整体弯），段只用来带粗细变化
+           band(ctx, k.map(i => pts[i]), k.map(i => hw[i]), k.map(i => u[i]), [{ tex: body }], ink, 1.4); return; }
         const backT = ramp('band', texName, pals.back), darkT = ramp('band', texName, pals.dark), sheenT = ramp('band', 'sheen', pals.sheen);
         /* 每段按扭转相位 φ（取两端平均）挑一张合成条：正 / 反面本体 + 侧过去压暗 + 正对光亮一条。φ 量化成 PHB 档（每档 22.5°，
            原来三遍逐段 alpha 连续变、每段 3 次 fill；现在 1 次，档间差一点点亮度，段本来就是逐段一个值） */
         const shine = style === 'blade' ? 0.5 : 0.85;
         const faceTex = (i, i1) => {
-          const b = ((Math.round((phi[i] + phi[i1]) / 2 / 6.2832 * PHB) % PHB) + PHB) % PHB;
+          const b = ((Math.round((SF[i] + SF[i1]) / 2 / 6.2832 * PHB) % PHB) + PHB) % PHB;
           if (!faces[b]) { const p = b * 6.2832 / PHB, f = Math.cos(p);
             faces[b] = comp([[f >= 0 ? body : backT, 1], [darkT, 0.55 * (1 - Math.abs(f)) ** 2], [sheenT, shine * Math.max(0, Math.cos(p - 0.5)) ** 3]]); }
           return faces[b];
         };
-        /* 绸身抽点（每段 ≥ 20 px；鞭剑有剑尖那两个点，不抽）：21 点是给弹簧链的，扭转一圈多也只要十几段 */
-        const ki = style === 'silk' ? thin(L, 20 * s) : pts.map((_, i) => i);
-        band(ctx, ki.map(i => pts[i]), ki.map(i => hw[i]), ki.map(i => u[i]), [{ tex: (j) => faceTex(ki[j], ki[j + 1]) }], ink, 1);
+        band(ctx, SP, SW, SU, [{ tex: (j) => faceTex(j, j + 1) }], ink, 1);
         if (style === 'silk' && Q.tip) {                       // 金铃：挂在梢上、口朝下摆（顺最后一段方向 + 往下坠一点）
           tipImg = tipImg || ramp('band', 'bell', palOf(rgbOf(Q.tip[2]), 0.55, 0.6));
           const sz = Math.max(26, Q.tip[0] * s * 1.8), a = Math.atan2(Math.sin(tipA) + 1.2, Math.cos(tipA)) - Math.PI / 2;
@@ -1292,7 +1373,7 @@ const TrioFX = (function () {
           }
           if (pts.length < 2) continue;
           for (const d of r) linked.add(d);
-          lines.push([pts, hw, u]);
+          lines.push(smooth(pts, [hw, u], 70));            // 三滴一个点 + 横摆：直接连在横摆处折角，过样条
         }
         if (lines.length) {
           /* 水身 + 一条断续的白高光（sheen 条的亮丝沿 u 走 = 跟着水流）合成一张条，每段铺一次 + 折射暗边（实体靠轮廓：第一版没边，
@@ -1483,12 +1564,13 @@ const TrioFX = (function () {
           P.push([pts[i][0] - dy / dl * o, pts[i][1] + dx / dl * o]);
           hw[i] *= 1 + (look.fire ? 0.45 : 0.3) * wob(L[i] * 3, H.t, 2.4);
         }
-        const u = L.map(d => d * 1.6 + H.t * (look.fire ? 700 : 300)), halo = hw.map(w => w * 1.6);
+        const u0 = L.map(d => d * 1.6 + H.t * (look.fire ? 700 : 300));
+        const [SP, halo, u] = smooth(P, [hw.map(w => w * 1.6), u0], 40, 0.25);      // 一帧一个点 + 横飘：低帧率 / 飞得快时点稀，直接连有折角。软光带、没有墨线：14° 一折看不出
         const tex = ramp('band', 'trail', look.pal), flow = ramp('beam2', look.fire ? 'bodyB' : 'midB', look.pal);
         /* 外面一圈软光（0.4）+ 本体（生图能量流 + 一缕亮丝，占中间 1 / 1.6）合成一张条，按外晕的宽铺一次（原来三遍 + 离屏层；
            外晕原来 1.9 倍宽，最外一圈贴图本来就近乎透明，收到 1.6 少铺三成面积） */
         ctx.save(); ctx.globalAlpha *= look.fire ? 1 : 0.9;
-        band(ctx, P, halo, u, [{ tex: comp([[tex, 0.4], [flow, 1, 1 / 1.6], [tex, 1, 1 / 1.6]]) }]);
+        band(ctx, SP, halo, u, [{ tex: comp([[tex, 0.4], [flow, 1, 1 / 1.6], [tex, 1, 1 / 1.6]]) }]);
         ctx.restore();
       },
     };

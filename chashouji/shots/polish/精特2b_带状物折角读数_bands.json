@@ -1,0 +1,117 @@
+{
+ "G9": {
+  "style": "silk",
+  "frames": 23,
+  "a0max": 17.2,
+  "a0at": 0.05,
+  "cTurnMax": 13.2,
+  "cTurnAt": [
+   0.05,
+   0.36
+  ],
+  "eTurnMax": 19,
+  "eTurnAt": [
+   0.05,
+   0.36
+  ],
+  "devMax": null,
+  "early": {
+   "frames": 3,
+   "a0max": 5.9,
+   "spanMax": 53
+  },
+  "dirNote": "dir = 控制点 rayC（首段切线 = d = -28.6°）"
+ },
+ "G13": {
+  "style": "silk",
+  "frames": 23,
+  "a0max": 15.1,
+  "a0at": 0.067,
+  "cTurnMax": 12.9,
+  "cTurnAt": [
+   0.083,
+   0.11
+  ],
+  "eTurnMax": 16.6,
+  "eTurnAt": [
+   0.083,
+   0.11
+  ],
+  "devMax": null,
+  "early": {
+   "frames": 2,
+   "a0max": 5.4,
+   "spanMax": 53
+  },
+  "dirNote": "dir = 控制点 rayC（首段切线 = d = -28.6°）"
+ },
+ "G17": {
+  "style": "blade",
+  "frames": 23,
+  "a0max": 15,
+  "a0at": 0.333,
+  "cTurnMax": 13.8,
+  "cTurnAt": [
+   0.033,
+   0.26
+  ],
+  "eTurnMax": 25.8,
+  "eTurnAt": [
+   0.033,
+   0.15
+  ],
+  "devMax": null,
+  "early": {
+   "frames": 3,
+   "a0max": 2.2,
+   "spanMax": 82
+  },
+  "dirNote": "dir = 控制点 rayC（首段切线 = d = -28.6°）"
+ },
+ "B12": {
+  "style": "arm",
+  "frames": 34,
+  "a0max": 0,
+  "a0at": 0.567,
+  "cTurnMax": 0,
+  "cTurnAt": [
+   0.45,
+   0.4
+  ],
+  "eTurnMax": 3.2,
+  "eTurnAt": [
+   0.483,
+   0.4
+  ],
+  "devMax": 0,
+  "early": {
+   "frames": 0,
+   "a0max": 0,
+   "spanMax": 0
+  }
+ },
+ "G29": {
+  "style": "bamboo",
+  "frames": 29,
+  "a0max": 2.9,
+  "a0at": 0.05,
+  "cTurnMax": 3.2,
+  "cTurnAt": [
+   0.05,
+   0.4
+  ],
+  "eTurnMax": 3.7,
+  "eTurnAt": [
+   0.05,
+   0.4
+  ],
+  "devMax": 4.5,
+  "early": {
+   "frames": 0,
+   "a0max": 0,
+   "spanMax": 0
+  }
+ },
+ "_trio_fx_len": 102054,
+ "_errs": []
+}
