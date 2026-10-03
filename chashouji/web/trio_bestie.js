@@ -171,7 +171,7 @@ const TRIO_BESTIE = {
       /* 前脚鞋尖点地：脚踝钉住（'l'），往右越翘越高（框上、右、下三边透明） */
       flex: { idle: [[268, 365, 298, 401, 'l', 7, 1.0]] },
       /* 巨型针筒：tools/3d/syringe.py 3D 转盘；扎在头上那一支用平面图（onHit 'wear' 只画 prop） */
-      atk: { kind: 'throw', item: 'syringe', r: 36, atlas: { src: 'assets/trio/prop_syringe.webp', n: 36, cols: 6, cell: 128, scale: 1.10 },
+      atk: { kind: 'throw', item: 'syringe', r: 36, atlas: { src: 'assets/trio/prop_syringe.webp', n: 36, cols: 6, cell: 128, scale: 1.10, aim: { cell: 15, tip: 1.55 } },   // 飞镖针头朝前飞：定格第 15 格（竖直侧面、针头朝下 1.55 rad，主轴量），不转盘
              prop: 'assets/world/trio_g25_syringe.webp',
              seq: [['wind', 0.26], ['release', 0.06, 'fire'], ['throw', 0.12], ['follow', 0.26]], dir: { release: 47 },   // 精闺1：release 出手瞬间（手臂甩到最前上方、手在最远点，所需 47°）→ 原 throw 帧接着当跟随；dir = 肩 → 手（图集上量）
              hold: { idle: [158, 150], wind: [140, 132], throw: [337, 169], release: [262, 42] },
