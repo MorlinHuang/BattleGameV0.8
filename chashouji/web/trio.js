@@ -149,6 +149,24 @@ const TRIO_RECIPE = (() => {
         }
       },
     },
+    /* 针扎（G25 护士的针筒飞镖）：trio_fx.js 同名配方没加载时的退路，口径相同 —— 一点小闪 + 贴着针头的小环 + 几道细火花 +
+       两三滴药水往下滴，尺寸按 min(s, 1.2) 封顶（10-03 用户嫌借来的口红 rouge 太大太胡） */
+    jab: {
+      tint: [255, 196, 226],
+      burst(x, y, side, s) {
+        const k = Math.min(s, 1.2);
+        P.spawn({ kind: 'dot', x, y, r: 6 * k, r1: 22 * k, life: 0.08, rgb: [255, 236, 246], a: 0.95 });
+        P.spawn({ kind: 'ring', x, y, r: 4 * k, r1: 34 * k, life: 0.16, rgb: [255, 112, 176], lw: 3 * k });
+        for (let i = 0; i < Math.round(3 * s); i++) {
+          const a = (Math.random() - 0.5) * 1.4, sp = 200 + Math.random() * 220;
+          P.spawn({ kind: 'spark', x, y, vx: -side * Math.cos(a) * sp, vy: Math.sin(a) * sp - 60, g: 900, drag: 0.985,
+                    life: 0.14 + Math.random() * 0.12, rgb: [255, 150, 200], lw: 2.5 });
+        }
+        for (let i = 0; i < Math.round(1.5 * s); i++)
+          P.spawn({ kind: 'dot', x: x + (Math.random() - 0.5) * 10, y, vx: -side * (20 + Math.random() * 60), vy: -40 + Math.random() * 40, g: 1100,
+                    life: 0.4 + Math.random() * 0.2, r: 4, r1: 3, rgb: [255, 132, 186], a: 1 });
+      },
+    },
   };
 })();
 

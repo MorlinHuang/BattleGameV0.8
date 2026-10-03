@@ -1845,7 +1845,10 @@ const phonePos = () => [FX.phoneX, FX.phoneY];
    只记时刻不叠透明度：同一块地一秒被蹭六十次，叠起来会越蹭越黑，而真实的擦痕蹭一次和蹭十次差不多。
    颜色：灰色的一整片（2026-10-01 用户：「地上的拖痕是金色的，而且特别细碎。改成灰色的，大块一些，不要三条细线」）。
    以前是米白擦亮 + 深木色外沿的三道细线，在米色地板上读成金色碎线。现在每格画一根竖条，高度按平滑噪声起伏、
-   相邻格连成一片，边缘参差；按长段（约 30~60 像素）偶尔断开，读成一块一块的灰印。两遍：外圈淡、内芯浓，边不发硬。 */
+   相邻格连成一片，边缘参差；按长段（约 30~60 像素）偶尔断开，读成一块一块的灰印。两遍：外圈淡、内芯浓，边不发硬。
+   痕是**拖过之后**才露出来的（2026-10-03 用户：「拖动的轨迹在拉动后生成。现在即时生成在身下，会让人物看着都飘起来了」）：
+   以前蹭到哪格当帧就画，灰印垫在贴地那几段底下、还比最低点低几像素，读成人浮在一道影子上。现在输方此刻身子
+   横跨的那一段地板（贴地各段的最左到最右，再放宽 cover 像素）一律不画；人被拖走、那块地露出来，痕再用 rise 秒淡入。 */
 const SCUFF = {
   cell: 3,          // 地板按世界横坐标每几像素记一格
   life: 5,          // 蹭上之后多少秒完全消失（用户定的 5 秒）
@@ -1861,6 +1864,8 @@ const SCUFF = {
   a: 0.5,           // 内芯透明度（外圈再乘 0.5）
   rgb: [112, 110, 106],      // 灰（略偏暖一点点，不发蓝）
   dustEvery: 0.09,  // 拖动时每隔几秒在输方最前面那段贴地处扬一小团灰
+  cover: 12,        // 输方身子横跨的地板两头再各放宽几像素不画（痕的噪声起伏会探出身子轮廓一点）
+  rise: 0.25,       // 地板从身子底下露出来以后，痕多少秒淡入到原样（直接蹦出来像贴片）
 };
 const Scuff = (() => {
   let at = null, ys = null, clock = 0, prevWx = null, prevFrame = null, dustT = 0;
@@ -1892,6 +1897,14 @@ const Scuff = (() => {
                             drag: 0.94, r: 6, r1: 16 + Math.random() * 10, life: 0.55, rgb: [214, 196, 170], a: 0.32 });
         }
       }
+      /* 输方此刻身子横跨的那段地板：上面的痕时刻刷成"刚蹭上"，于是 rise 淡入把它压成 0（不画），等身子挪走、
+         这段地露出来才开始淡入、开始算 life */
+      if (m && m.drag && m.drag.length && pose !== 'n') {
+        const c = SCUFF.cell;
+        const x0 = wx + Math.min(...m.drag.map(d => d[0])) - SCUFF.cover, x1 = wx + Math.max(...m.drag.map(d => d[1])) + SCUFF.cover;
+        for (let i = Math.max(0, Math.floor(x0 / c)), e = Math.min(at.length - 1, Math.ceil(x1 / c)); i <= e; i++)
+          if (clock - at[i] < SCUFF.life) at[i] = clock;
+      }
       prevWx = wx; prevFrame = frame;
     },
     /* 画在背景层（地板上、人底下）；ox = 世界 x 到屏幕 x 的偏移 */
@@ -1907,7 +1920,7 @@ const Scuff = (() => {
         for (let i = i0; i <= i1; i++) {
           const age = clock - at[i];
           if (age >= SCUFF.life || hash(Math.floor(i / SCUFF.gap), 3) < SCUFF.gapP) continue;
-          const k = Math.min(1, (SCUFF.life - age) / SCUFF.fade);
+          const k = Math.min(1, (SCUFF.life - age) / SCUFF.fade, age / SCUFF.rise);
           const h = SCUFF.h * (0.6 + 0.6 * noise(i, 1)) * (pass ? SCUFF.core : 1);
           const cy = GROUND + SCUFF.y + ys[i] + (noise(i, 5) - 0.5) * 4;     // 中线上下飘一点，边不是一条直线
           ctx.globalAlpha = SCUFF.a * k * (0.75 + 0.25 * noise(i, 9)) * (pass ? 1 : 0.5);

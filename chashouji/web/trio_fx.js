@@ -22,7 +22,7 @@
  *      TrioFX.RECIPE 的每一项和旧 RECIPE 同签名：{ tint, burst(x, y, side, s), drip?(x, y, side) }，impact() 不用改。
  *      接法：Object.assign(RECIPE, TrioFX.RECIPE) 放在 Object.assign(RECIPE, TRIO_RECIPE) 之后（同名覆盖旧的）；
  *      只想先换三人组：三人组 cfg.recipe 改写成 'fx_' 前缀另挂一份也行 —— 名字表见 TrioFX.RECIPE 的 key：
- *        thud star splash feather melon slash petal debris hollow water ball rouge（12 种，tint 与旧配方逐字一致）
+ *        thud star splash feather melon slash petal debris hollow water ball rouge（12 种，tint 与旧配方逐字一致）；之后加的 pepper jab 等同理
  *      每项还带 layers: { flash, body, ember } 三个函数，可单独调某一层（比如 drip 只放余烬）。
  *      side / s 语义同 impact：side +1 打向左（女方），-1 打向右；s 0.55 / 1.0 / 1.7 / 2.8。尺寸内部按 min(s, 1.8) 封顶
  *      （skill：密度靠数量不靠单颗更大），数量按 s 线性。
@@ -652,6 +652,23 @@ const TrioFX = (function () {
         sparks(x, y, side, s, n(6, k), PAL.rouge);
       },
       ember: (x, y, side, s) => embers(x, y, s, n(5, 0.5 + s), PAL.rouge, { flare: true, big: 1.4, g: 40 }),
+    }),
+    /* 针扎（G25 护士的巨型针筒飞镖，扎中后插在头上）：10-03 用户「命中特效有点太大太胡」—— 原来借口红的 rouge，首击 s 1.7
+       时是 290 px 的光芒 + 两道冲击波 + 18 颗液滴 + 13 颗珠子 + 13 道火花 + 11 颗星芒，把脸整个糊住，读不出"扎了一针"。
+       针扎进去是一个点：白芯小闪 0.06 s + 一道贴着针头的小环；几道细火花顺着扎的方向迸开；两三颗药水珠往下滴；不放余烬。
+       尺寸按 min(s, 1.2) 封顶，数量照 s 线性（首击 5 道火花 3 滴，后面每下 2 道 1 滴） */
+    jab: layered({
+      tint: [255, 196, 226],
+      flash(x, y, side, s) {
+        const k = Math.min(s, 1.2);
+        spawn({ m: 'spr', img: glow('flare', PAL.rouge), x, y, w: 96 * k, s0: 1.1, s1: 0.4, life: 0.06, a: 1, fo: 0.6, fi: 0, z: 1 });
+        wave(PAL.rouge, { x, y, s0: 10 * k, s1: 40 * k, life: 0.14, a: 0.8, sq: 0.78, z: 1, side });
+      },
+      body(x, y, side, s) {
+        sparks(x, y, side, Math.min(s, 1.2), n(3, s), PAL.rouge, { sp0: 200, sp1: 420, spread: 1.4 });
+        chips(x, y, side, n(1.5, s), ['drop0', 'drop1'], PAL.rouge, { sp0: 60, sp1: 160, up: 40, g: 1100, w0: 10, w1: 14, l0: 0.4, l1: 0.6, vel: true, stretch: 0.0009, spread: 1.2 });
+      },
+      ember() {},
     }),
     /* 防狼喷雾（第二批，G1~G3 的落点溅射）：橙一闪 + 一道橙冲击波；几团有体积的辣椒雾往四周胀开 + 一撮橙色水珠；余烬是慢慢升走的小雾团。
        drip（每个雾团碰到脸）：一团雾 + 偶尔一颗水珠 —— 软的，不像水那样甩一把水珠（同 main.js pepper 的口径） */

@@ -163,7 +163,7 @@ const TRIO_BESTIE = {
       sheet: { src: 'assets/trio/G25_nurse.webp', cell: [394, 402], cols: 4, names: ['idle', 'wind', 'throw', 'follow', 'ride', 'hop', 'wind2', 'idle2', 'release'] },
       anchor: [232.3, 398.5], at: [185, 1330, 1], pivot: [232, 398],
       leanK: 0,   // 半跪：整体前后倾会把着地的膝盖和脚带起来
-      depth: 1.3, recipe: 'rouge',
+      depth: 1.3, recipe: 'jab',   // 针扎（trio_fx.js）：原来借口红的 rouge，10-03 用户嫌太大太胡
       /* 输液架画在帧里（她一直扶着）：进场踩在轮座上滑、跳下来落成半跪 */
       enter: { kind: 'slide', seq: [['ride', 0.42], ['hop', 0.14], ['idle', 9, 'land']], sq: 0.1 },
       exit: { frame: 'ride' },
