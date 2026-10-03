@@ -311,7 +311,10 @@ function giveGift(side, key, pick) {
     if (side > 0) S.fB *= 0.5; else S.fA *= 0.5;
   }
   if (it.tier >= 1) {
-    const g = GIFT[ITEM_OF[side > 0 ? 'L' : 'R'][it.tier]];
+    const key = ITEM_OF[side > 0 ? 'L' : 'R'][it.tier], g = GIFT[key];
+    /* 连送计数：要在召人 / 发射之前判"这一件还在演"（召完人就一定在场了）。档 4 的「×N」在名字条上，不进这里 */
+    if (!(g.style === 'crew' && CREW[g.crew].members))
+      comboHit(side, key, g.style === 'crew' ? CREW[g.crew].all.some(a => a.active()) : g.style === 'rain' && RAIN[g.rain].active());
     if (g.style === 'crew') {
       /* 新来的人有出场视频（intro.js）：先放视频、她候场，放完从视频里走出来；续时间不放。
          视频没缓冲够（预取队列最后才轮到它）begin 返回 false，人直接从画外冲进来 */
@@ -351,7 +354,7 @@ function startMatch() {
   S.debA = S.debB = S.debKA = S.debKB = 0;
   S.clock = NUM.MATCH; S.phase = 'play';
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
-  S.overT = 0; S.giftA = S.giftB = 0; S.board = [];
+  S.overT = 0; S.giftA = S.giftB = 0; S.board = []; combos.length = 0;
   stains.length = 0; Scuff.reset();
   for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); for (const t of TIDE_OF.values()) t.reset(); Clash.reset(); Foam.reset();
   IntroVideo.stop();
@@ -2362,6 +2365,52 @@ function drawPowerText(ctx) {
   ctx.restore();
 }
 
+/* ---- 连送计数「×N」（2026-10-03 用户："哥们和闺蜜释放过程中，如果玩家继续点击，当前的哥们闺蜜会继续持续时间，且要像最终礼物那样，
+   弹出来×几，这样才能明确给玩家反馈，他当前送了什么，其他礼物的逻辑也是一致的"）----
+   每边每件礼物一串：这一件还在演（三人组：这边还有人在场或正在离场 —— 再送就是给他们续时间；档 1 / 2：上一件送出后 COMBO.window 秒内、
+   或榴莲 / 袜子雨还在下）时再送 = 同一串 +1，否则从 1 重数。徽章在自己那一侧、拉力牌下面：第一件只写名字，之后「名字 ×N」，
+   每 +1 弹一下（放大回落）；最后一下之后停 stay 秒再淡掉。同一边几件礼物各一枚，最新的在最上。
+   档 4 不进这里：她 / 他的名字条本来就带「×N」（crew.js renew，drawIntroName1），两处同时弹是重复 */
+const COMBO = { window: 3, stay: 2.2, out: 0.3, pop: 0.25, slide: 0.18, y: 236, h: 64, gap: 74, max: 3 };
+const combos = [];                                   // { side, key, n, t0（最后一下的 HUD.t）, t1（这一串第一下的 HUD.t） }
+function comboHit(side, key, alive) {
+  let c = combos.find(q => q.side === side && q.key === key);
+  if (c && (alive || HUD.t - c.t0 < COMBO.window)) c.n++;
+  else { if (c) combos.splice(combos.indexOf(c), 1); c = { side, key, n: 1, t1: HUD.t }; combos.push(c); }
+  c.t0 = HUD.t;
+}
+function drawCombos(ctx) {
+  for (let i = combos.length - 1; i >= 0; i--) if (HUD.t - combos[i].t0 >= COMBO.stay + COMBO.out) combos.splice(i, 1);
+  for (const side of [+1, -1]) {
+    const mine = combos.filter(c => c.side === side).sort((a, b) => b.t0 - a.t0).slice(0, COMBO.max);
+    mine.forEach((c, i) => {
+      const age = HUD.t - c.t0, A = side > 0;
+      const a = age < COMBO.stay ? 1 : 1 - (age - COMBO.stay) / COMBO.out;
+      const u = Math.min(1, (HUD.t - c.t1) / COMBO.slide), e = 1 - Math.pow(1 - u, 3);
+      const p = Math.min(1, age / COMBO.pop), k = 1 + 0.45 * (1 - p) * (1 - p);   // 每 +1 弹一下：放大 1.45 倍回落
+      const name = GIFT[c.key].name, cy = COMBO.y + i * COMBO.gap;
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.font = 'bold 34px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+      const nw = ctx.measureText(name).width;
+      ctx.font = 'italic 900 50px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+      const xn = c.n > 1 ? '×' + c.n : '', xw = xn ? ctx.measureText(xn).width + 14 : 0;
+      const w = nw + xw + 44, x = A ? 14 - (1 - e) * (w + 20) : W - 14 - w + (1 - e) * (w + 20), y = cy - COMBO.h / 2;
+      plateFill(ctx, x, y, w, COMBO.h, 10, .78);
+      ctx.fillStyle = rgba(A ? GREEN : RED, 1); ctx.fillRect(A ? x : x + w - 6, y + 6, 6, COMBO.h - 12);   // 队色一道边，同拉力牌
+      ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.lineJoin = 'round';
+      ctx.font = 'bold 34px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+      txt(ctx, name, x + 22, cy, '#fff', 6);
+      if (xn) {
+        ctx.translate(x + 22 + nw + 14, cy); ctx.scale(k, k);
+        ctx.font = 'italic 900 50px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+        txt(ctx, xn, 0, 2, '#ffd45a', 8);
+      }
+      ctx.restore();
+    });
+  }
+}
+
 function drawHUD(ctx) {
   ctx.save();
   drawDistBar(ctx);
@@ -2930,7 +2979,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* 结算全屏接管：演出图铺满整幅，距离条不再画。结果已经写在画面里
        （谁在抡枕头、谁跪着哭），再摆一遍是重复。 */
     if (S.phase === 'over') Result.draw(fctx);
-    else { drawIntroName(fctx); drawHUD(fctx); }
+    else { drawIntroName(fctx); drawHUD(fctx); drawCombos(fctx); }
     Particles.drawFlash(fctx, W, H);
   }
 
