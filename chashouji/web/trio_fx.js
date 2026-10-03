@@ -1238,9 +1238,9 @@ const TrioFX = (function () {
         if (style === 'bamboo') C.step(t, D, 4200, 0.6, 0.7, 0);
         else if (style !== 'arm') C.step(t, D, 900, 0.82, 0.32, 0, 4000);
         const pts = [];
-        /* 出手那一截：横向偏移再乘一个按弧长的 smoothstep（0 → max(40 px, 两成长度)：节点 25 px 一个，只铺 40 px 的话只盖住一个节点）—— 张力会把弯一路传到根上，乘上它根上偏移和斜率都是 0（首段沿出口方向），
+        /* 出手那一截：横向偏移再乘一个按弧长的 smoothstep（0 → max(70 px, 三成长度)：节点 25 px 一个，只铺 40 px 的话只盖住一个节点；40 px / 两成时 bands.py 首段偏 15~17°，70 px / 三成压到 ≤ 9.4°）—— 张力会把弯一路传到根上，乘上它根上偏移和斜率都是 0（首段沿出口方向），
            且导数连续（钉死节点的话钉住段和自由段之间是个折角） */
-        for (let i = 0; i <= N; i++) { const r = Math.min(1, i / N / Math.max(40 * s / Lsc, 0.2)), w = style === 'arm' ? 0 : C.x[i] * Lsc * g * r * r * (3 - 2 * r); pts.push([B[i][0] + NX[i] * w, B[i][1] + NY[i] * w]); }
+        for (let i = 0; i <= N; i++) { const r = Math.min(1, i / N / Math.max(70 * s / Lsc, 0.3)), w = style === 'arm' ? 0 : C.x[i] * Lsc * g * r * r * (3 - 2 * r); pts.push([B[i][0] + NX[i] * w, B[i][1] + NY[i] * w]); }
         const L = arcLen(pts), tot = L[N] || 1;
         const hw = [], phi = [];
         let W0;
