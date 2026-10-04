@@ -46,7 +46,7 @@ const IntroVideo = (() => {
        尾帧对齐色差 7.3）；近景时她重心在视频宽 54.5%，open 往左 58 像素让她居中，4.4~5.6 秒她飘回左上时移回 box。
        视频由 vframes.py 原片 -s change1_up.webp --fx cloud 出（云海按"不像夜空"认，整条保留；法术潮进画面的帧盖掉再抠一次人物）。 */
     /* 2026-09-29 嫦娥站位下移 70（G4STAND.change 908 → 978，给头顶的月光束光点让出拉力条下的位置）：box / open 的 y 跟着 +70，尾帧照样对齐 */
-    change: { src: 'assets/video/change_intro_alpha.webm', box: [7.6, 203.5, 973.4, 1297.8], vw: 834, end: { s: 0.754, x: -12, y: -15 }, tide: 953, seaAt: 5.4,
+    change: { src: 'assets/video/change_intro_alpha.webm', box: [7.6, 203.5, 973.4, 1297.8], vw: 834, end: { s: 0.754, x: -12, y: -15 }, tide: 953, seaAt: 5.4, feather: 0.06,
               open: [-50.5, 203.5], move: [4.4, 5.6] },
     /* 绿茶妹妹（2026-09-29）：男女主抢的那部手机亮了，兔耳先探出来、她从屏幕里钻出来 → 贴到镜头前撒娇、瞟姐姐装怕、躲手机后偷笑眨眼
        → 往后一蹦退到右边定成立绘姿势；底下奶盖泡泡海从右涌进来。制作包 video/sister。
@@ -57,7 +57,9 @@ const IntroVideo = (() => {
   };
   /* seaAt（秒）：视频里的海从这一刻起涌进来（底边一条的 alpha 由 ~0.3 升到 1：白娘子 5.75、嫦娥 6.5、绿茶妹妹 6.25 秒满，ffmpeg 逐 0.25 秒量），
      提前游戏海推满要的 1.4 秒左右。视频框下沿（1602 / 1501 / 1432）到画布底 1707 之间视频里什么都没有 —— 从 seaAt 起游戏自己那片海
-     从同一侧推进来、垫在视频底下（seaUnder → main.js tideUpdate），海面停在视频尾帧的海面高度（tide），放完 handoff 原地接上。 */
+     从同一侧推进来、垫在视频底下（seaUnder → main.js tideUpdate），海面停在视频尾帧的海面高度（tide），放完 handoff 原地接上。
+     feather（视频高的几成）：底边那一截渐隐（嫦娥云海面 tide 953 到底边 1112 只有 159 视频像素，羽化 0.06 ≈ 67，留上面一大半实的云）。嫦娥视频里是云海、游戏里是月夜银河，硬接一道水平分界线（2026-10-04 待办）；
+     白娘子、绿茶妹妹视频里的海和游戏的海同一种东西，不羽化。 */
   const POP = 0.35, FADE = 0.45;         // 浮现几秒、结尾淡掉几秒
   /* VP9 透明只有 Chromium 内核认。按 UA 判（Safari 的 canPlayType 也说能放 webm，但透明通道丢掉，变黑底） */
   const ALPHA_OK = /Chrom(e|ium)\/|Edg\//.test(navigator.userAgent);
@@ -78,6 +80,10 @@ const IntroVideo = (() => {
         position: 'absolute', width: w / W * 100 + '%', height: h / H * 100 + '%',
         objectFit: 'fill', visibility: 'hidden', pointerEvents: 'none',
       });
+      if (c.feather) {                    // 底边羽化（嫦娥）：视频的云海渐隐进游戏垫在底下的月夜银河，不留一道水平硬边
+        const m = `linear-gradient(to bottom, #000 ${((1 - c.feather) * 100).toFixed(1)}%, transparent)`;
+        v.style.maskImage = m; v.style.webkitMaskImage = m;
+      }
       place(v, c, 0);
       stage.insertBefore(v, stage.querySelector('#hud'));
       vids[k] = v;

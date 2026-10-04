@@ -986,8 +986,8 @@ const RECIPE = {
          0.36 秒横切过她的身子和裙子；放脚下读成"刹车的气浪往下拍"。 */
       const cy = y + 320 * s;
       Particles.spawn({ kind: 'dot', x, y: cy, r: 30 * s, r1: 150 * s, life: 0.2, rgb: [196, 255, 120], a: 0.7 });
-      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 260 * s, life: 0.36, rgb: [28, 120, 46], lw: 9 * s });
-      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 254 * s, life: 0.36, rgb: [156, 238, 96], lw: 4.5 * s });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 260 * s, life: 0.36, rgb: [28, 120, 46], lw: 9 * s, wob: 0.22 });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 254 * s, life: 0.36, rgb: [156, 238, 96], lw: 4.5 * s, wob: 0.22 });
       for (let i = 0; i < 10; i++) {
         const a = Math.random() * 6.283, sp = 260 + Math.random() * 300;
         Particles.spawn({ kind: 'star', x, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 400, drag: 0.96,
@@ -1041,8 +1041,8 @@ const RECIPE = {
     arrive(x, y, s) {                  // (x, y) = 他的腰胯；冲击环炸在脚底下（同女神）
       const cy = y + 300 * s;
       Particles.spawn({ kind: 'dot', x, y: cy, r: 30 * s, r1: 150 * s, life: 0.2, rgb: [200, 140, 255], a: 0.7 });
-      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 260 * s, life: 0.36, rgb: [40, 10, 60], lw: 9 * s });
-      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 254 * s, life: 0.36, rgb: [255, 120, 220], lw: 4.5 * s });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 260 * s, life: 0.36, rgb: [40, 10, 60], lw: 9 * s, wob: 0.22 });
+      Particles.spawn({ kind: 'ring', x, y: cy, r: 40 * s, r1: 254 * s, life: 0.36, rgb: [255, 120, 220], lw: 4.5 * s, wob: 0.22 });
       for (let i = 0; i < 10; i++) {
         const a = Math.random() * 6.283, sp = 260 + Math.random() * 300;
         Particles.spawn({ kind: 'star', x, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 400, drag: 0.96,
@@ -1081,8 +1081,8 @@ const RECIPE = {
     },
     arrive(x, y, s) {                  // (x, y) = 腰；飞到位"定"住：身周一圈冷白光环往外冲 + 一团泡沫 + 小震屏
       Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 220 * s, life: 0.24, rgb: [200, 236, 255], a: 0.7 });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [20, 70, 160], lw: 10 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [170, 225, 255], lw: 5 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [20, 70, 160], lw: 10 * s, wob: 0.22 });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [170, 225, 255], lw: 5 * s, wob: 0.22 });
       Foam.spawn(x, y, 1.5);
       Particles.addShake(6);
     },
@@ -1124,8 +1124,8 @@ const RECIPE = {
     },
     arrive(x, y, s) {                   // (x, y) = 腰；飞到位"定"住：一圈金色佛光往外冲 + 几个金字四散 + 小震屏
       Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 220 * s, life: 0.24, rgb: [255, 226, 140], a: 0.75 });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [120, 60, 10], lw: 10 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [255, 214, 90], lw: 5 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [120, 60, 10], lw: 10 * s, wob: 0.22 });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [255, 214, 90], lw: 5 * s, wob: 0.22 });
       for (let i = 0; i < 8; i++) this.glyph(x, y, 34, 300, 560);
       Particles.addShake(6);
     },
@@ -1164,8 +1164,8 @@ const RECIPE = {
     },
     arrive(x, y, s) {                  // (x, y) = 腰；飞到位"定"住：一圈银白月光环往外冲 + 几弯月牙四散 + 小震屏
       Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 220 * s, life: 0.24, rgb: [220, 230, 255], a: 0.7 });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [40, 50, 130], lw: 10 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [214, 226, 255], lw: 5 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 380 * s, life: 0.42, rgb: [40, 50, 130], lw: 10 * s, wob: 0.22 });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 372 * s, life: 0.42, rgb: [214, 226, 255], lw: 5 * s, wob: 0.22 });
       for (let i = 0; i < 8; i++) this.moon(x, y, 36, 300, 560);
       Particles.addShake(6);
     },
@@ -1207,8 +1207,8 @@ const RECIPE = {
     },
     arrive(x, y, s) {                  // (x, y) = 腰；蹦到位"定"住：一圈粉光环往外冲 + 几颗爱心四散 + 小震屏
       Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 200 * s, life: 0.24, rgb: [255, 220, 238], a: 0.7 });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 360 * s, life: 0.42, rgb: [120, 20, 70], lw: 10 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 352 * s, life: 0.42, rgb: [255, 160, 205], lw: 5 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 360 * s, life: 0.42, rgb: [120, 20, 70], lw: 10 * s, wob: 0.22 });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 352 * s, life: 0.42, rgb: [255, 160, 205], lw: 5 * s, wob: 0.22 });
       for (let i = 0; i < 8; i++) this.heart(x, y, 34, 300, 560);
       Particles.addShake(5);
     },
@@ -1250,8 +1250,8 @@ const RECIPE = {
     },
     arrive(x, y, s) {                  // 飞到位"定"住：一圈日轮火光往外冲 + 一把火星 + 小震屏
       Particles.spawn({ kind: 'dot', x, y, r: 40 * s, r1: 230 * s, life: 0.24, rgb: [255, 220, 150], a: 0.75 });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 390 * s, life: 0.42, rgb: [130, 30, 6], lw: 10 * s });
-      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 382 * s, life: 0.42, rgb: [255, 170, 50], lw: 5 * s });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 390 * s, life: 0.42, rgb: [130, 30, 6], lw: 10 * s, wob: 0.22 });
+      Particles.spawn({ kind: 'ring', x, y, r: 60 * s, r1: 382 * s, life: 0.42, rgb: [255, 170, 50], lw: 5 * s, wob: 0.22 });
       this.embers(x, y, 16, 300, 620);
       Particles.addShake(6);
     },

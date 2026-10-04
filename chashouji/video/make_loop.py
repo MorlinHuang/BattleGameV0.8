@@ -11,6 +11,10 @@ cap：手上那件东西（真相女神的红罐盖、白娘子的水球、嫦�
   hit：只在立绘 muzzle 附近一个窗里找（track.win，原片像素），颜色按 track.hit 判，取形心；
   tmpl：颜色跟周围分不开的（绿茶妹妹淡粉手机 vs 手），取第 0 帧 muzzle 周围 ±tmpl 像素做模板，每帧在 ±win 里按差的平方和找最像的位置。
 beats（只有真相女神）：罐子往后猛震的时刻（罐盖一帧往回跳 > 8 立绘像素），游戏在这些时刻让喷口焰炸一下。
+抠像之后、去毛边之前先 unmix（贴边 12 像素里"人和幕布混着"的按混合模型解开，飘发 / 动态模糊发梢的偏粉、偏橄榄）。
+首尾接缝：最后 SEAM 帧往第 0 帧融（smoothstep），cap / head 一起收到 0。
+deflame（只有真相女神）：即梦在每下后坐都自己画了 3~4 帧卡通火（提示词没要），游戏同一刻也炸喷口焰 → 两层火。
+  出火的帧把罐口往外那半边（过罐盖中心、垂直罐轴的半平面）整块换成第 0 帧的，按罐身模板匹配的位移对齐：火、火星没了，罐盖还在。
 """
 import os, sys, json, subprocess, tempfile
 from concurrent.futures import ProcessPoolExecutor
@@ -26,6 +30,7 @@ import build, crewart
 FF = imageio_ffmpeg.get_ffmpeg_exe()
 FPS = 24                                  # 即梦原片 24.06 fps（容器标 60，按 60 解码每帧重复 2~3 次）
 V14 = os.path.join(HERE, '../v14')
+SEAM = 6                                  # 首尾接缝融几帧（见 main）
 
 
 def cut_truth(path):
@@ -50,7 +55,8 @@ ROLES = {
                   ref_of=lambda x, y: ((x + 88 - 202) * 0.86 + 243, (y + 32 - 42) * 0.86 + 207),
                   crop=(130, 28), K=0.4, size=(426, 654), up=1.5, cut=cut_truth, muzzle=(370, 334),
                   glow=[(21, 26, (255, 170, 40)), (9, 10, (255, 225, 120)), (3, 3, (255, 252, 220))],
-                  track=dict(win=130, hit=lambda a: (a[..., 0] > 170) & (a[..., 1] < 80) & (a[..., 2] < 80)), beats=True),
+                  track=dict(win=130, hit=lambda a: (a[..., 0] > 170) & (a[..., 1] < 80) & (a[..., 2] < 80)), beats=True,
+                  deflame=dict(axis=(0.81, 0.58), back=24, body=(316, 292), xmin=300)),   # 罐轴朝右下 ~35°；罐身模板取罐盖后面的指示灯 / 银圈；她的腿在 x < 300（立绘）
     # 参考图 = v14/baisu/src1.png 原大放到 1600 方图 (173, 173)；抠像 / 光同 v14/baisu/make.py
     'baisu': dict(ref='baisu_loop/白娘子_循环_首尾帧.png', screen='magenta', src='baisu/src1.png', key=(12, 150), spill='all',
                   ref_of=lambda x, y: (x + 173, y + 173), K=0.6, size=(825, 800), up=1.0, muzzle=(732, 447),
@@ -139,6 +145,28 @@ def track_tmpl(R, fit, paths, pt=None, T=None, W=None):
     return out
 
 
+def unmix(rgb, al, path, band=12, res_max=0.2):
+    """贴边 band 像素里"人和幕布混着"的像素按混合模型解开（2026-10-04：真相女神后坐时被吹散的发梢整片偏粉、绿茶妹妹飘发偏橄榄）。
+    即梦把飘动的发丝画成动态模糊的半透明，又经 4:2:0 压缩，细发整根混进了幕布色；键按色差抠，这些像素几乎不透明，
+    去溢色只削掉"比幕布更偏"的那份（品红幕 min(R, B) − G > 0），奶金发混进两成品红只是 G 低了十几，判不出来。
+    观测色 C = α·F + (1 − α)·M（M 幕布色取原片透明区中位数，F 从里面 band 像素外的干净颜色扩出来）：
+    α = (C − M)·(F − M) / |F − M|²；只解落在 M—F 连线附近的（离线距离 / |F − M| < res_max）——头发的深色描边、手机和头发交界这类
+    "本来就是另一种颜色"的不在线上，不动（放到 0.3 手机边、肩膀会过冲出品红描边）。解开的颜色 = M + (C − M) / α，α 太小（< 0.25）直接用 F。"""
+    a = np.array(Image.open(path).convert('RGB')).astype(np.float32)
+    body = al > 0.05
+    Mc = np.median(a[al < 0.01], 0)
+    inner = ndimage.binary_erosion(body, iterations=band)
+    F = crewart.edge_extend(rgb.copy(), inner.astype(np.float32), it=band + 30)
+    d, c = F - Mc, a - Mc
+    dd = np.maximum((d * d).sum(-1), 1)
+    au = (c * d).sum(-1) / dd
+    res = np.sqrt(((c - au[..., None] * d) ** 2).sum(-1) / dd)
+    m = body & ~inner & (au < 0.98) & (res < res_max)
+    est = np.where((au > 0.25)[..., None], np.clip(Mc + c / np.maximum(au, 0.25)[..., None], 0, 255), F)
+    rgb[m] = est[m]
+    return rgb, np.where(m, np.minimum(al, np.clip(au, 0, 1)), al)
+
+
 def defringe(rgb, al, path, screen):
     """轮廓外沿去毛边（2026-10-04 用户："绿茶妹妹特效周围一圈好像有明显的毛边"，四条都有）。
     原片是 h264 4:2:0，压缩把幕布色往人里面晕进三四像素；按键抠出来这些混色像素几乎不透明，去溢色只削掉多出来的那份绿 / 品红，
@@ -158,10 +186,41 @@ def defringe(rgb, al, path, screen):
     return rgb, np.where(outer, al * 0.5, al)
 
 
+def deflame(R, fit, paths):
+    """把原片里出火的帧就地改掉（见文件头 deflame）。返回改了哪些帧"""
+    D = R['deflame']
+    x0, y0, sx, sy = geom(R, fit)
+    up = R['up']
+    raw = lambda x, y: (x0 + x * up * sx, y0 + y * up * sy)
+    ux, uy = D['axis']
+    px, py = raw(R['muzzle'][0] - ux * D['back'], R['muzzle'][1] - uy * D['back'])
+    xmin = raw(D['xmin'], 0)[0]
+    pos = track_tmpl(R, fit, paths, D['body'], 30, 24)       # 罐身每帧在哪（立绘像素）
+    f0 = np.array(Image.open(paths[0]).convert('RGB'))
+    h, w = f0.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w]
+    done = []
+    for i, p in enumerate(paths):
+        dx, dy = (pos[i][0] - pos[0][0]) * up * sx, (pos[i][1] - pos[0][1]) * up * sy
+        Z = ((xx - px - dx) * ux + (yy - py - dy) * uy > 0) & (xx > xmin)
+        a = np.array(Image.open(p).convert('RGB'))
+        r, g, b = (a[..., c].astype(int) for c in range(3))
+        sh = np.array(Image.fromarray(f0).transform((w, h), Image.AFFINE, (1, 0, -dx, 0, 1, -dy), Image.BICUBIC, fillcolor=tuple(int(v) for v in f0[0, -1])))   # 移出来的边补幕布色
+        s0 = sh.astype(int)
+        empty = ~ndimage.binary_dilation(s0[..., 1] >= 90, iterations=6)   # 第 0 帧这里是幕布、离罐盖 6 像素外（罐盖边上的亮红高光不算火）
+        fire = Z & empty & (r > 180) & (g > 90) & (b < 200) & (r - b > 60) & (g - b > 25)   # 橙、黄、奶白的火芯（罐盖的粉红高光 g ≈ b 不算）
+        if fire.sum() < 40:
+            continue
+        a[Z] = sh[Z]
+        Image.fromarray(a).save(p)
+        done.append(i)
+    return done
+
+
 def frame_job(args):
     name, i, path, fit, tmp = args
     R = setup(name)
-    rgb, al = defringe(*R['cut'](path), path, R['screen'])
+    rgb, al = defringe(*unmix(*R['cut'](path), path), path, R['screen'])
     px = np.dstack([rgb, al * 255]).clip(0, 255).astype(np.uint8)
     src = Image.fromarray(px, 'RGBA')
     up = R['up']
@@ -204,6 +263,8 @@ def main(name, src):
     frames = sorted(os.listdir(raw))
     iou, a, dx, dy = fit_first(R, os.path.join(raw, frames[0]))
     print('fit first frame: IoU %.4f  scale %.4f  shift (%d, %d)' % (iou, a, dx, dy))
+    if 'deflame' in R:
+        print('deflame frames', deflame(R, (a, dx, dy), [os.path.join(raw, f) for f in frames]))
     with ProcessPoolExecutor() as ex:
         res = dict(ex.map(frame_job, [(name, i, os.path.join(raw, f), (a, dx, dy), tmp) for i, f in enumerate(frames)]))
     if 'tmpl' in R['track']:
@@ -231,6 +292,21 @@ def main(name, src):
                 beats.append(t)
     print('frames', len(frames), 'track miss', len(miss), 'cap0 (sprite px)', cap[0].round(1), 'vs muzzle', R['muzzle'],
           'max off', np.abs(off).max(0).round(1), 'beats', beats)
+    # 首尾接缝：即梦的尾帧只是"接近"首帧（白娘子 / 嫦娥尾→首一跳是平常每帧的两倍，循环时一顿）。
+    # 最后 SEAM 帧按 smoothstep 往第 0 帧融（预乘 alpha 混，免得半透明边发黑），cap / head 同样往 0 收
+    n = len(frames)
+    f0 = np.array(Image.open(os.path.join(tmp, '0000.png'))).astype(np.float32) / 255
+    pm = lambda f: np.dstack([f[..., :3] * f[..., 3:], f[..., 3:]])
+    for j in range(SEAM):
+        i = n - SEAM + j
+        w = (j + 1) / (SEAM + 1); w = w * w * (3 - 2 * w)
+        p = os.path.join(tmp, '%04d.png' % i)
+        f = pm(np.array(Image.open(p)).astype(np.float32) / 255) * (1 - w) + pm(f0) * w
+        al = f[..., 3:]
+        Image.fromarray(np.dstack([f[..., :3] / np.maximum(al, 1e-4), al]).clip(0, 1).__mul__(255).round().astype(np.uint8), 'RGBA').save(p)
+        off[i] *= 1 - w
+        if head is not None:
+            head[i] *= 1 - w
     subprocess.run([FF, '-v', 'error', '-y', '-framerate', str(FPS), '-i', os.path.join(tmp, '%04d.png'),
                     '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '26',
                     '-row-mt', '1', '-deadline', 'good', '-cpu-used', '2', '-auto-alt-ref', '0', out], check=True)

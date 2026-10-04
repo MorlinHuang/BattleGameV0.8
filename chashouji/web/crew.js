@@ -33,14 +33,29 @@
    json（make_loop.py 一起出）：cap 每帧手上那件东西（罐口 / 水球 / 月牙 / 手机）相对第 0 帧挪了多少（立绘像素，喷口、罐尾、掌心光团跟着挪），
    beats 罐子往后猛震的时刻（只有真相女神；喷口焰在这一下炸开、重开一段"呲——"，见 Crew update）。白娘子、嫦娥、绿茶妹妹同一套。
    只有 Chromium 放得出 VP9 透明（同 intro.js ALPHA_OK）；视频还没缓冲好、或 ?loopvideo=0，照旧画立绘、走立绘的晃法。
-   <video> 挂在页面上、1 像素、不透明度 0：不挂 / display:none 的视频在桌面 Chrome 里不出新帧（intro.js release）。 */
+   <video> 挂在页面上、1 像素、不透明度 0：不挂 / display:none 的视频在桌面 Chrome 里不出新帧（intro.js release）。
+   **游戏不直接画 <video>**：每出一帧新画面（requestVideoFrameCallback）拷进一张离屏画布 cv，drawOne 画 cv ——
+   视频 24 帧 / 秒只拷 24 次（原来游戏每帧都从视频取一次），cap / head / beats 按 cv 上那一帧的媒体时间（metadata.mediaTime）取，
+   喷口、光环跟画出来的那一帧严格对齐（原来按 currentTime，跟画出来的那帧可能差一两帧）。
+   （2026-10-04 桌面容器上量到放视频 5~6 秒后整页停几秒：只挂一个视频、什么都不画的空白页同样停，出场视频也一样 ——
+   是这台共享桌面的问题（宿主负载 56、IO 等待 35%），见记忆 baijia-fx-capture-loop「帧率不可信」；不是这里的写法。） */
 function LoopVideo(L) {
   if (!/Chrom(e|ium)\/|Edg\//.test(navigator.userAgent) || new URLSearchParams(location.search).get('loopvideo') === '0') return null;
   const v = document.createElement('video');
   v.src = L.src; v.preload = 'none'; v.muted = true; v.loop = true; v.playsInline = true;
   Object.assign(v.style, { position: 'fixed', left: '0', top: '0', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' });
   document.body.appendChild(v);
-  let J = null, on = null, last = 0;
+  const cv = document.createElement('canvas'), cx = cv.getContext('2d');
+  let J = null, on = null, last = 0, mt = -1, gen = 0;   // mt：cv 上那一帧的媒体时间（−1 = 这一轮还没拷到帧）；gen：第几轮（停了马上又开，旧一轮的回调链就此断掉）
+  const idx = () => Math.min(J.frames - 1, Math.floor(mt * J.fps + 1e-3));
+  const watch = (g) => v.requestVideoFrameCallback((now, md) => grab(g, md));
+  function grab(g, md) {
+    if (!on || g !== gen) return;
+    if (cv.width !== v.videoWidth) { cv.width = v.videoWidth; cv.height = v.videoHeight; }
+    cx.clearRect(0, 0, cv.width, cv.height); cx.drawImage(v, 0, 0);
+    mt = md.mediaTime;
+    watch(g);
+  }
   return {
     /* 预取队列最后（main.js，跟出场视频一起）：先拿 json，再缓冲视频 */
     load: () => fetch(L.src.replace('_alpha.webm', '.json')).then(r => r.json()).then((j) => { J = j; }).catch(() => {})
@@ -50,29 +65,25 @@ function LoopVideo(L) {
         v.addEventListener('error', ok, { once: true });
         v.preload = 'auto'; v.load();
       })),
-    /* 这个人开始在场（出场视频放完 / 从画外冲进来那一刻）：从第 0 帧放。没缓冲好返回 false，她就照旧是立绘 */
+    /* 这个人开始在场（出场视频放完 / 从画外冲进来那一刻）：从第 0 帧放。没缓冲好返回 false，她就照旧是立绘。
+       拷到第一帧之前 frame 给 null（画立绘 = 第 0 帧的姿势） */
     start(b) {
       if (!J || v.readyState < 2) return false;
-      on = b; last = 0; v.currentTime = 0;
+      on = b; last = 0; mt = -1; v.currentTime = 0;
+      watch(++gen);
       v.play().catch(() => { if (on === b) on = null; });
       return true;
     },
     stop(b) { if (b && on !== b) return; on = null; v.pause(); },
-    frame: (b) => (on === b && v.readyState >= 2 ? v : null),
+    frame: (b) => (on === b && mt >= 0 ? cv : null),
     /* 罐口这一帧挪了多少 [dx, dy]（立绘像素） */
-    cap(b) {
-      if (on !== b) return null;
-      return J.cap[Math.min(J.frames - 1, Math.floor(v.currentTime * J.fps))];
-    },
+    cap: (b) => (on === b && mt >= 0 ? J.cap[idx()] : null),
     /* 脸这一帧挪了多少（json 有 head 的才有：真相女神、嫦娥 —— 头顶的天使环 / 头后的光轮跟着转头、歪头走） */
-    head(b) {
-      if (on !== b || !J.head) return null;
-      return J.head[Math.min(J.frames - 1, Math.floor(v.currentTime * J.fps))];
-    },
+    head: (b) => (on === b && mt >= 0 && J.head ? J.head[idx()] : null),
     /* 上次调用以来视频走过了几个 beat（循环绕回来的也算） */
     beats(b) {
-      if (on !== b) return 0;
-      const t = v.currentTime, hit = (a, z) => J.beats.filter(x => x > a && x <= z).length;
+      if (on !== b || mt < 0) return 0;
+      const t = mt, hit = (a, z) => J.beats.filter(x => x > a && x <= z).length;
       const n = t >= last ? hit(last, t) : hit(last, Infinity) + hit(-1, t);
       last = t;
       return n;
@@ -1262,7 +1273,12 @@ function drawMoonBeams(ctx, b, g, T, what) {
     }
     ctx.fillStyle = rgbaOf(St.edge, 0.55 * vis);                 // 托底一圈深靛：轮廓微微起伏的一笔（front thr null = 不断）
     FxShape.front(ctx, x, y, R * 0.62, 1, 2 * s, null, b.t, H, 0);
-    ctx.fillStyle = rgbaOf(St.core, vis); ctx.beginPath(); ctx.arc(x, y, R * 0.55, 0, 6.283); ctx.fill();
+    /* 芯：边上软、轮廓微微不圆、慢慢转的一团白（原来是一个实心正圆，硬边一眼就是"圆"） */
+    const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.62);
+    cg.addColorStop(0, rgbaOf(St.core, vis)); cg.addColorStop(0.55, rgbaOf(St.core, 0.92 * vis)); cg.addColorStop(1, rgbaOf(St.rgb, 0));
+    ctx.save(); ctx.translate(x, y); ctx.rotate(b.t * 0.7 + i * 2);
+    ctx.fillStyle = cg; FxShape.blob(ctx, 0, 0, R * 0.62, 1260 + i); ctx.fill();
+    ctx.restore();
     if (S && S.k === i && S.ph === 'charge') {
       ctx.fillStyle = rgbaOf(St.rgb, 0.8 * c * vis);              // 往里收的光环：刚开始蓄断成几截，越蓄越连（u = 1 − c）
       FxShape.ring(ctx, x, y, R * (3.2 - 2.2 * c), 1, 3.4 * s, 1 - c, b.t, H);
@@ -1271,7 +1287,8 @@ function drawMoonBeams(ctx, b, g, T, what) {
       if (m.k !== i) continue;
       const u = m.t / m.life, d = B.mote.R * s * (1 - u);
       ctx.fillStyle = rgbaOf(St.core, (0.4 + 0.6 * u) * vis);
-      ctx.beginPath(); ctx.arc(x + Math.cos(m.a) * d, y + Math.sin(m.a) * d, (2 + 2 * u) * s, 0, 6.283); ctx.fill();
+      const ca = Math.cos(m.a), sa = Math.sin(m.a), tl = (8 + 10 * u) * s;   // 往里吸的一笔：头朝光点、尾巴拖在外面（原来是圆点）
+      FxShape.streak(ctx, x + ca * (d + tl), y + sa * (d + tl), x + ca * d, y + sa * d, (2 + 2 * u) * s * 2);
     }
   });
   ctx.restore();
@@ -1321,7 +1338,7 @@ const HOUYI_FX = {
            tail: 1.4, trail: [[12, [255, 90, 20], 0.35], [7, [255, 200, 60], 0.5], [3, [255, 250, 225], 0.8]] },
 };
 /* 一支箭：箭头尖在 (x, y)、朝 (ux, uy)、全长 L（屏幕像素），不透明度 a；stuck：钉在身上，箭头那截埋进去（只画后半截） */
-function drawArrow(ctx, x, y, ux, uy, s, L, a, stuck) {
+function drawArrow(ctx, x, y, ux, uy, s, L, a, stuck, t = 0) {
   const A = HOUYI_FX.arrow, nx = -uy, ny = ux;
   const bx = x - ux * L, by = y - uy * L, hx = x - ux * A.head[0] * s, hy = y - uy * A.head[0] * s;
   const from = stuck ? 0.45 : 0;                  // 钉住：箭头和前一截在身子里
@@ -1344,9 +1361,20 @@ function drawArrow(ctx, x, y, ux, uy, s, L, a, stuck) {
   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(hx + nx * hw, hy + ny * hw); ctx.lineTo(hx - nx * hw, hy - ny * hw); ctx.closePath();
   ctx.fillStyle = rgbaOf([255, 226, 130], a); ctx.fill();
   ctx.lineWidth = 1.5 * s; ctx.strokeStyle = rgbaOf(A.edge, 0.8 * a); ctx.stroke();
-  const R = 18 * s, g = ctx.createRadialGradient(x, y, 0, x, y, R);
-  g.addColorStop(0, rgbaOf([255, 250, 220], 0.9 * a)); g.addColorStop(0.4, rgbaOf(A.fire, 0.6 * a)); g.addColorStop(1, rgbaOf(A.fire, 0));
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.283); ctx.fill();
+  /* 火：顺着飞的方向往后拉长的一团（原来是一个正圆渐变）+ 三条往后舔、长短各自跳的火舌 */
+  const R = 18 * s;   // t：火苗跳的时钟（飞着的箭各自错开）
+  ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(uy, ux));
+  ctx.save(); ctx.scale(1, 0.5);
+  const g = ctx.createRadialGradient(-R * 0.25, 0, 0, -R * 0.25, 0, R * 1.5);
+  g.addColorStop(0, rgbaOf([255, 250, 220], 0.85 * a)); g.addColorStop(0.35, rgbaOf(A.fire, 0.55 * a)); g.addColorStop(1, rgbaOf(A.fire, 0));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(-R * 0.25, 0, R * 1.5, 0, 6.283); ctx.fill();
+  ctx.restore();
+  for (let k = 0; k < 3; k++) {
+    const fl = 0.5 + 0.5 * Math.sin(t * (23 + 7 * k) + k * 2.1), Lk = R * (1.1 + 0.9 * fl), o = (k - 1) * R * 0.28;
+    ctx.fillStyle = rgbaOf(k === 1 ? [255, 236, 170] : A.fire, (k === 1 ? 0.8 : 0.6) * a);
+    FxShape.streak(ctx, -Lk - R * 0.2, o * 1.6, -R * 0.15, o * 0.4, R * (k === 1 ? 0.45 : 0.36));
+  }
+  ctx.restore();
 }
 /* 飞着的箭（粒子）：先画火尾，再画箭；钉住的只画后半截、最后一段淡掉 */
 function drawArrows(ctx, ps) {
@@ -1358,11 +1386,14 @@ function drawArrows(ctx, ps) {
     const sp = Math.hypot(d.vx, d.vy) || 1, ux = d.vx / sp, uy = d.vy / sp;
     if (d.stuck != null) { drawArrow(ctx, d.x, d.y, ux, uy, s, A.L * s, 1 - d.stuck / HOUYI.fluid.stick, true); continue; }
     const TL = A.L * A.tail * s * Math.min(1, d.t / 0.08);   // 刚离弦时火尾还没拖出来
-    for (const [w, c, a] of A.trail) {
-      ctx.lineWidth = w * s; ctx.strokeStyle = rgbaOf(c, a);
-      ctx.beginPath(); ctx.moveTo(d.x - ux * A.head[0] * s, d.y - uy * A.head[0] * s); ctx.lineTo(d.x - ux * TL, d.y - uy * TL); ctx.stroke();
-    }
-    drawArrow(ctx, d.x, d.y, ux, uy, s, A.L * s, 1, false);
+    /* 火尾：三层从箭头往后收尖（原来是三条等宽圆头直线），外层最长、各层长短跟着火苗跳 */
+    const hx = d.x - ux * A.head[0] * s, hy = d.y - uy * A.head[0] * s;
+    A.trail.forEach(([w, c, a], k) => {
+      const Lk = TL * (1 - 0.18 * k) * (0.88 + 0.12 * Math.sin(d.t * 31 + d.j * 9 + k * 1.7));
+      ctx.fillStyle = rgbaOf(c, a);
+      FxShape.streak(ctx, d.x - ux * Lk, d.y - uy * Lk, hx, hy, w * s * 1.5);
+    });
+    drawArrow(ctx, d.x, d.y, ux, uy, s, A.L * s, 1, false, d.t + d.j * 10);
   }
   ctx.restore();
 }
@@ -1402,7 +1433,7 @@ function drawBow(ctx, b, s, at, q) {
   if (q.arrow > 0) {
     /* 箭尾在搭箭点，箭头伸出箭台 30 像素（× s）：满弓时箭长 ≈ 搭箭点到箭台 + 30，比飞出去的那支（arrow.L）长 —— 飞得快，看不出来 */
     const dx = G[0] - N[0], dy = G[1] - N[1], L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L, len = L + 30 * s;
-    drawArrow(ctx, N[0] + ux * len, N[1] + uy * len, ux, uy, s, len, q.arrow, false);
+    drawArrow(ctx, N[0] + ux * len, N[1] + uy * len, ux, uy, s, len, q.arrow, false, b.t);
   }
   ctx.restore();
 }
@@ -1479,18 +1510,21 @@ function drawChatter(ctx, ps) {
     const sz = C.size[0] + (C.size[1] - C.size[0]) * e;
     const line = C.lines[((d.seq / C.every | 0) % C.lines.length + C.lines.length) % C.lines.length];
     ctx.font = `800 ${sz.toFixed(1)}px "PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif`;
-    const w = ctx.measureText(line).width + sz * 1.1, h = sz * 1.7, x = d.x - w / 2, y = d.y - h / 2, r = h / 2;
     const sp = Math.hypot(d.vx, d.vy) || 1, tx = -d.vx / sp;          // 尾巴朝她（往来的方向）那一侧
-    ctx.globalAlpha = Math.max(0, fade);
-    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(Math.sin(d.t * 4 + d.j * 6) * 0.08); ctx.translate(-d.x, -d.y);
+    /* 从手机里冒出来：刚出手时气泡靠她那一侧的边贴着手机、往外长，0.4 秒内移回以粒子为中心。
+       以粒子为中心长的话，手机贴在脸边，刚出手那一句半个气泡盖在她眼睛上（2026-10-04 胶片） */
+    const w = ctx.measureText(line).width + sz * 1.1, h = sz * 1.7, u = Math.min(1, d.t / 0.4), cx = d.x - tx * w / 2 * (1 - u * u * (3 - 2 * u));
+    const x = cx - w / 2, y = d.y - h / 2, r = h / 2;
+    ctx.globalAlpha = Math.max(0, Math.min(fade, d.t / 0.12));
+    ctx.save(); ctx.translate(cx, d.y); ctx.rotate(Math.sin(d.t * 4 + d.j * 6) * 0.08); ctx.translate(-cx, -d.y);
     ctx.beginPath();
     ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2);
     ctx.lineTo(x + r, y + h); ctx.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
-    const bx = d.x + tx * w * 0.32, by = y + h;                      // 尾巴：气泡下沿靠她那一侧
+    const bx = cx + tx * w * 0.32, by = y + h;                      // 尾巴：气泡下沿靠她那一侧
     ctx.moveTo(bx - sz * 0.35, by - 1); ctx.lineTo(bx + tx * sz * 0.5, by + sz * 0.55); ctx.lineTo(bx + sz * 0.35, by - 1);
     ctx.lineWidth = Math.max(2, sz * 0.16); ctx.strokeStyle = rgbaOf(C.edge, 1); ctx.stroke();
     ctx.fillStyle = rgbaOf(C.fill, 0.96); ctx.fill();
-    ctx.fillStyle = rgbaOf(C.ink, 1); ctx.fillText(line, d.x, d.y + 1);
+    ctx.fillStyle = rgbaOf(C.ink, 1); ctx.fillText(line, cx, d.y + 1);
     heartPath(ctx, x + w - r * 0.35, y + r * 0.1, sz * 0.32); ctx.fillStyle = rgbaOf(C.heart, 1); ctx.fill();
     ctx.restore();
   }

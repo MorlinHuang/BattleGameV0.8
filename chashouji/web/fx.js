@@ -80,11 +80,11 @@ const FxShape = (() => {
     ctx.fill();
   }
   /* 冲击波：主波 + 内侧余波（0.78 R、细一半、断得更早）。u 0..1 = 年龄（越老断得越多），t 秒（谐波漂移） */
-  function ring(ctx, x, y, r, sq, w, u, t, H) {
-    front(ctx, x, y, r, sq, w, 0.75 * u - 0.12, t, H, 0);   // 前三成寿命基本连着（命中那一下要读得出"一圈"），之后越来越碎
+  function ring(ctx, x, y, r, sq, w, u, t, H, wob = 0.11) {
+    front(ctx, x, y, r, sq, w, 0.75 * u - 0.12, t, H, 0, wob);   // 前三成寿命基本连着（命中那一下要读得出"一圈"），之后越来越碎
     const A = ctx.globalAlpha;
     ctx.globalAlpha = A * 0.6;
-    front(ctx, x, y, r * 0.78, sq, w * 0.55, 0.1 + 0.7 * u, t, H, 2.7);
+    front(ctx, x, y, r * 0.78, sq, w * 0.55, 0.1 + 0.7 * u, t, H, 2.7, wob);
     ctx.globalAlpha = A;
   }
   /* 速度线 / 火花：尾 (x0, y0) 收尖 → 头 (x1, y1) 圆头宽 w。替换 lineCap round 的等宽直线 */
@@ -467,6 +467,7 @@ const Particles = (function () {
     p.rot = o.rot || 0; p.vrot = o.vrot || 0;
     p.w = o.w || 0; p.h = o.h || 0;
     p.lw = o.lw || 3;
+    p.wob = o.wob || 0.11;     // ring 轮廓起伏（半径的几成）：档 4 到位那圈半径 380，0.11 看着还是正椭圆，给 0.22
     p.edge = o.edge || null;   // 实体描边色，明亮底图上靠它把碎片从背景里拔出来
     p.spin = o.spin || 0;      // 绕出生点公转的半径，星星绕头转用
     p.sway = o.sway || 0;      // 横向摆幅，羽毛飘落用
@@ -712,7 +713,7 @@ const Particles = (function () {
       } else if (p.kind === 'ring') {                     // 涟漪（原来是 ctx.ellipse 描边的正椭圆）：半径 / 粗细 / 透明度的语义不变
         const r = p.r + (p.r1 - p.r) * (1 - k);
         ctx.fillStyle = p.fill;
-        FxShape.ring(ctx, p.x, p.y, r, 0.5, (p.lw * k + 0.6) * 1.6, 1 - k, p.maxLife - p.life, p.H);
+        FxShape.ring(ctx, p.x, p.y, r, 0.5, (p.lw * k + 0.6) * 1.6, 1 - k, p.maxLife - p.life, p.H, p.wob);
       }
     }
     ctx.restore();
