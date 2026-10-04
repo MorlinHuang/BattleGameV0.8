@@ -1,5 +1,5 @@
 """档 4 在场循环视频：即梦首尾帧原片（纯色幕布，首尾帧 = video/<名>_loop/ 里那张参考图）→ 游戏用的透明循环 webm + 每帧量点。
-用法：python3 video/make_loop.py <名> 原片.mp4        名 = truth / baisu / change（ROLES）
+用法：python3 video/make_loop.py <名> 原片.mp4        名 = truth / baisu / change / sister（ROLES）
   → web/assets/video/<名>_loop_alpha.webm + <名>_loop.json（cap 手上那件东西每帧偏移、beats 后坐时刻；crew.js LoopVideo 运行时读）
 
 **每一帧都摆在立绘贴图的坐标系里**（放大 up 倍），所以游戏拿它直接顶替立绘画（crew.js drawOne：塞进同一个框），
@@ -57,6 +57,11 @@ ROLES = {
                    ref_of=lambda x, y: (x * 0.9 + 143, (y - 33) * 0.9 + 123), K=0.6, size=(654, 948), up=1.0, muzzle=(581, 355),
                    glow=[(25, 30, (150, 180, 255)), (11, 12, (215, 228, 255)), (3, 3, (255, 255, 255))],
                    track=dict(win=60, hit=lambda a: a.min(-1) > 225), beats=False),
+    # 参考图 = v14/sister/pose/P3a.png 抠出剪影（左上 (306, 13)）缩 0.9 放到 1200×1600 纯绿 (372, 151)；抠像 / 光同 v14/sister/make.py
+    'sister': dict(ref='sister_loop/绿茶妹妹_循环_首尾帧.png', screen='green', src='sister/pose/P3a.png', key=(40, 150), spill='edge',
+                   ref_of=lambda x, y: ((x - 306) * 0.9 + 372, (y - 13) * 0.9 + 151), K=0.65, size=(425, 1032), up=1.0, muzzle=(73, 225),
+                   glow=[(25, 30, (255, 150, 200)), (11, 12, (255, 215, 235)), (3, 3, (255, 255, 255))],
+                   track=dict(win=70, hit=lambda a: (a[..., 0] > 200) & (a[..., 1] > 110) & (a[..., 1] < 185) & (a[..., 2] > 150) & (a[..., 2] - a[..., 1] > 15)), beats=False),
 }
 
 
