@@ -808,22 +808,13 @@ function drawAura(ctx, b, s, at, probe) {
   const k = Math.min(1, b.t / 0.3), R = A.R * s;                 // 冲进来的头 0.3 秒里长出来
   ctx.save();
   if (!probe) {                                                  // measure 不量光芒（见 drawOne 的 probe）
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-    g.addColorStop(0, `rgba(${A.rgb},${(A.a * k).toFixed(3)})`); g.addColorStop(0.45, `rgba(${A.rgb},${(A.a * 0.45 * k).toFixed(3)})`);
-    g.addColorStop(1, `rgba(${A.rgb},0)`);
-    ctx.fillStyle = g; ctx.beginPath();
-    for (let i = 0; i < A.rays; i++) {
-      const a = i / A.rays * 6.283 + b.t * A.spin, w = A.ray * (i % 2 ? 0.6 : 1);   // 一长一短交替，不像齿轮
-      ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a - w) * R, cy + Math.sin(a - w) * R); ctx.lineTo(cx + Math.cos(a + w) * R, cy + Math.sin(a + w) * R);
-    }
-    ctx.fill();
+    /* 精特4：一团会呼吸的金色云气垫底 + 一道道两头收细、微弯、各自明灭的光柱（原来是一圈等宽直三角，用户："不要那么硬的直线"） */
+    FxShape.glow(ctx, cx, cy, R * 0.55, A.halo2, A.rgb, 0.3 * k, b.t, 11);
+    FxShape.rays(ctx, cx, cy, A.rays, R * 0.1, R, A.ray, A.rgb, A.a * k, b.t, A.spin, 12);
   }
-  const y = hy - A.haloY * s + Math.sin(b.t * 2.4) * 3 * s, rx = A.halo[0] * s, ry = A.halo[1] * s;
-  ctx.globalAlpha = k;
-  ctx.lineWidth = A.haloW[0] * s; ctx.strokeStyle = `rgba(${A.halo1},0.85)`;
-  ctx.beginPath(); ctx.ellipse(hx, y, rx, ry, 0, 0, 6.283); ctx.stroke();
-  ctx.lineWidth = A.haloW[1] * s; ctx.strokeStyle = `rgb(${A.halo2})`;
-  ctx.beginPath(); ctx.ellipse(hx, y, rx, ry, 0, 0, 6.283); ctx.stroke();
+  /* 天使环：笔触式的一圈金光（粗细沿圈起伏、外一层柔光、芯是断开的高光、两颗闪光绕圈走）—— 原来是两条正椭圆描边 */
+  const y = hy - A.haloY * s + Math.sin(b.t * 2.4) * 3 * s, rx = A.halo[0] * s;
+  FxShape.halo(ctx, hx, y, rx, A.halo[1] / A.halo[0], A.haloW[0] * s, A.halo1, [255, 214, 90], A.halo2, k, b.t, 13);
   ctx.restore();
 }
 /* F：配色尺寸表（TRUTH_FX / DEMON_FX），C：角色配置（寿命在 C.fluid / C.exhaust）。真相女神、灭迹恶魔共用这一套画法，只换颜色。 */
@@ -837,7 +828,7 @@ function drawFog(F, C, ctx, ps) {
       if (d.j < F.star) continue;
       const u = us(d), r = (F.r0 + (F.r1 - F.r0) * Math.sqrt(u)) * (d.ex ? F.exK : 1) + pad;   // 尾焰小几号
       ctx.fillStyle = rgba(col, (1 - u * u) * a);
-      ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, 6.283); ctx.fill();
+      FxShape.puff(ctx, d.x, d.y, r, (d.j * 997) | 0, d.j * 6.283 + d.t * 0.9); ctx.fill();   // 不规则雾团、随寿命慢慢翻（精特4，原来正圆）
     }
   }
   /* 亮芯：刚出口的一小段（u < 0.25）叠一层近白，读成"高压喷出来的"而不是飘出来的 */
@@ -845,22 +836,20 @@ function drawFog(F, C, ctx, ps) {
     const u = us(d);
     if (d.j < F.star || u > 0.25) continue;
     ctx.fillStyle = rgba(F.core, (1 - u / 0.25) * 0.35);
-    ctx.beginPath(); ctx.arc(d.x, d.y, F.r0 * 0.8 + 20 * u, 0, 6.283); ctx.fill();
+    FxShape.puff(ctx, d.x, d.y, F.r0 * 0.8 + 20 * u, (d.j * 997) | 0, d.j * 6.283 + d.t * 0.9); ctx.fill();
   }
 }
 function drawSpray(F, C, ctx, ps, b) {
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
   const us = (d) => Math.min(1, d.t / (d.ex ? C.exhaust.life : C.fluid.life));
   drawFog(F, C, ctx, ps);
-  /* 喷口焰：八角尖星 + 深绿描边，大小随后坐（b.kick）跳 */
+  /* 喷口焰：长短不一、每帧都跳的尖芒 + 不规则亮芯（FxShape.burst，精特4；原来是规整的 16 角星），深色托底大一号垫在下面，大小随后坐（b.kick）跳 */
   if (b && b.m) {
     const r = F.flare[0] + (F.flare[1] - F.flare[0]) * b.kick, [mx, my] = b.m;
-    ctx.save(); ctx.translate(mx, my); ctx.rotate(b.t * 3);
-    ctx.beginPath();
-    for (let i = 0; i < 16; i++) { const a = i * 0.3927, rr = i % 2 ? r * 0.38 : r; i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(rr, 0); }
-    ctx.closePath();
-    ctx.fillStyle = rgba(F.body, 0.9); ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = rgba(F.rim, 0.9); ctx.stroke();
-    ctx.fillStyle = rgba(F.core, 0.95); ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, 6.283); ctx.fill();
+    ctx.save();
+    ctx.fillStyle = rgba(F.rim, 0.7); FxShape.burst(ctx, mx, my, r * 1.15, b.t, 31);
+    ctx.fillStyle = rgba(F.body, 0.9); FxShape.burst(ctx, mx, my, r, b.t, 31);
+    ctx.fillStyle = rgba(F.core, 0.95); FxShape.blob(ctx, mx, my, r * 0.3, FxShape.hash(32, Math.floor(b.t * 18))); ctx.fill();
     ctx.restore();
   }
   /* 星星、气泡：实体、描边，盖在雾上；越飞越大、最后 30% 淡掉 */
@@ -952,33 +941,28 @@ function drawDemonAura(ctx, b, s, at, probe) {
   const k = Math.min(1, b.t / 0.3), R = A.R * s;
   ctx.save();
   if (!probe) {                                                  // measure 不量烟雾、裂光（见 drawOne 的 probe）
-    /* 烟雾：几团大软球绕胸口慢慢转，各自一呼一吸 —— 不是一个圆盘 */
+    /* 烟雾：几团烟绕胸口慢慢转，各自一呼一吸；每团是一片拉长、慢慢转、在胀缩的软光（FxShape.glow lobes 1，精特4），不是一个个正圆 */
     for (let i = 0; i < A.puffs; i++) {
       const a = i / A.puffs * 6.283 + b.t * A.spin, rr = R * (0.35 + 0.25 * Math.sin(i * 2.1 + b.t * 0.8));
       const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.8, r = R * (0.38 + 0.08 * Math.sin(i * 1.7 + b.t * 1.3));
-      const c = A.smoke[i % 2], g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, `rgba(${c},${(A.a * k).toFixed(3)})`); g.addColorStop(1, `rgba(${c},0)`);
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+      FxShape.glow(ctx, x, y, r, A.smoke[i % 2], A.smoke[i % 2], A.a * k * 1.1, b.t, 40 + i, 0.8, 1);
     }
-    /* 裂光：从胸口往外几道折线，一闪一闪 */
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    /* 裂光：从胸口往外劈出去的电弧，根粗尖细、折点每 1/8 秒重抖一次（劈啪地闪）；暗红宽托底 + 亮芯两遍（FxShape.bolt，精特4；原来是等宽三段折线） */
     for (let i = 0; i < A.cracks; i++) {
       const a0 = i / A.cracks * 6.283 + 0.4 + b.t * A.spin * 0.5, fl = 0.55 + 0.45 * Math.sin(b.t * 7 + i * 2.3);
-      ctx.strokeStyle = `rgba(${A.crack},${(A.crackA * fl * k).toFixed(3)})`; ctx.lineWidth = 5 * s;
-      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a0) * R * 0.25, cy + Math.sin(a0) * R * 0.25);
-      for (let j = 1; j <= 3; j++) {
-        const a = a0 + (j % 2 ? 0.12 : -0.1), d = R * (0.25 + j * 0.22);
-        ctx.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
-      }
-      ctx.stroke();
+      /* 从身子轮廓外一点起劈（0.38 R 起、长 0.2~0.3 R）、三遍：一层宽的红色柔光、暗红身、亮芯 —— 读成发光的裂纹。
+         第一版从 0.2 R 起劈到 0.75 R：根都藏在他身后，露出来的只剩细尾巴，像几道红色划痕横穿房间 */
+      const x0 = cx + Math.cos(a0) * R * 0.38, y0 = cy + Math.sin(a0) * R * 0.38, len = R * (0.2 + 0.1 * fl);
+      ctx.fillStyle = `rgba(255,40,90,${(0.16 * fl * k).toFixed(3)})`; FxShape.bolt(ctx, x0, y0, a0, len, 34 * s, 70 + i, b.t); ctx.fill();
+      ctx.fillStyle = `rgba(${A.crack},${(A.crackA * 0.6 * fl * k).toFixed(3)})`; FxShape.bolt(ctx, x0, y0, a0, len, 12 * s, 70 + i, b.t); ctx.fill();
+      ctx.fillStyle = `rgba(255,170,190,${(A.crackA * fl * k).toFixed(3)})`; FxShape.bolt(ctx, x0, y0, a0, len, 4 * s, 70 + i, b.t); ctx.fill();
     }
   }
   /* 角：两团品红光垫在角尖后面 */
-  for (const q of A.horns) {
-    const [x, y] = at(q), r = A.hornR * s * (0.85 + 0.15 * Math.sin(b.t * 4)), g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(${A.horn},${(0.9 * k).toFixed(3)})`); g.addColorStop(1, `rgba(${A.horn},0)`);
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
-  }
+  A.horns.forEach((q, i) => {
+    const [x, y] = at(q), r = A.hornR * s * (0.85 + 0.15 * Math.sin(b.t * 4));
+    FxShape.glow(ctx, x, y, r, A.horn, A.horn, 1.1 * k, b.t, 90 + i);
+  });
   ctx.restore();
 }
 const DEMON = {
@@ -1063,23 +1047,24 @@ function drawBaisuAura(ctx, b, s, at, probe) {
   ctx.save();
   if (!probe) {                                                  // measure 不量身后的光和水珠（特效层，同女神的光芒）
     const br = 1 + G.breath[1] * Math.sin(b.t * G.breath[0]), R = G.R * s * br;
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-    g.addColorStop(0, rgba(G.core, G.a * k)); g.addColorStop(0.4, rgba(G.rgb, G.a * 0.55 * k)); g.addColorStop(1, rgba(G.rgb, 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.283); ctx.fill();
-    /* 水珠：椭圆轨道绕胸口转，各自半径不同、忽远忽近（前半圈大、后半圈小一点 —— 读成绕着她转，不是贴在平面上） */
+    FxShape.glow(ctx, cx, cy, R, G.core, G.rgb, G.a * k * 1.1, b.t, 21);     // 精特4：三片错开在漂的冷光，不是一个正圆
+    /* 水珠：椭圆轨道绕胸口转，各自半径不同、忽远忽近（前半圈大、后半圈小一点 —— 读成绕着她转，不是贴在平面上）。
+       精特4：每颗是顺着走向拉长的不规则水滴（FxShape.blob）+ 身后一缕水痕 + 偏一边的高光，原来是三个同心正圆 */
     for (let i = 0; i < M.n; i++) {
-      const a = i / M.n * 6.283 + b.t * M.spin * (i % 2 ? 1 : -0.7), rr = (M.R[0] + (M.R[1] - M.R[0]) * ((i * 0.618) % 1)) * s;
+      const dir = i % 2 ? 1 : -0.7, a = i / M.n * 6.283 + b.t * M.spin * dir, rr = (M.R[0] + (M.R[1] - M.R[0]) * ((i * 0.618) % 1)) * s;
       const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.55, r = (M.r[0] + (M.r[1] - M.r[0]) * ((i * 0.37) % 1)) * s * (0.8 + 0.2 * Math.sin(a));
-      ctx.fillStyle = rgba(M.edge, 0.7 * k); ctx.beginPath(); ctx.arc(x, y, r + 2, 0, 6.283); ctx.fill();
-      ctx.fillStyle = rgba(M.fill, 0.95 * k); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
-      ctx.fillStyle = rgba([255, 255, 255], k); ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.3, 0, 6.283); ctx.fill();
+      const tx = -Math.sin(a) * Math.sign(dir), ty = Math.cos(a) * 0.55 * Math.sign(dir), tl = Math.hypot(tx, ty) || 1;
+      ctx.fillStyle = rgba(M.fill, 0.35 * k); FxShape.streak(ctx, x - tx / tl * r * 5, y - ty / tl * r * 5, x, y, r * 1.3);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(ty, tx)); ctx.scale(1.35, 0.8);
+      ctx.fillStyle = rgba(M.edge, 0.7 * k); FxShape.blob(ctx, 0, 0, r + 2, 500 + i); ctx.fill();
+      ctx.fillStyle = rgba(M.fill, 0.95 * k); FxShape.blob(ctx, 0, 0, r, 500 + i); ctx.fill();
+      ctx.fillStyle = rgba([255, 255, 255], k); FxShape.blob(ctx, r * 0.25, -r * 0.35, r * 0.32, 600 + i); ctx.fill();
+      ctx.restore();
     }
   }
   /* 掌心水球的光：跟着人画（算"人"的一部分，measure 量它） */
   const O = BAISU_FX.orb, [ox, oy] = at(BAISU.spr.muzzle), R = O.R * s * (1 + 0.25 * b.kick + 0.08 * Math.sin(b.t * 5));
-  const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, R);
-  g.addColorStop(0, rgba([255, 255, 255], 0.85 * k)); g.addColorStop(0.35, rgba(O.rgb, 0.5 * k)); g.addColorStop(1, rgba(O.rgb, 0));
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ox, oy, R, 0, 6.283); ctx.fill();
+  FxShape.glow(ctx, ox, oy, R, [255, 255, 255], O.rgb, 1.2 * k, b.t, 22);
   ctx.restore();
 }
 const BAISU = {
@@ -1137,28 +1122,18 @@ function drawGodAura(F, spr, ctx, b, s, at, probe) {
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
   ctx.save();
   if (!probe) {                                                  // measure 不量身后的光（特效层，同女神的光芒）
-    const G = F.glow, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, G.R * s);
-    g.addColorStop(0, rgba(G.core, G.a * k)); g.addColorStop(0.45, rgba(G.rgb, G.a * 0.5 * k)); g.addColorStop(1, rgba(G.rgb, 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, G.R * s, 0, 6.283); ctx.fill();
-    /* 放射金光：一道道细长的扇形，慢慢转，一明一暗 */
-    const R = F.rays;
-    for (let i = 0; i < R.n; i++) {
-      const a = i / R.n * 6.283 + b.t * R.spin, fl = 0.6 + 0.4 * Math.sin(b.t * 2.3 + i * 1.9);
-      const r0 = R.R[0] * s, r1 = R.R[1] * s * (0.8 + 0.2 * Math.sin(i * 2.7));
-      const rg = ctx.createRadialGradient(cx, cy, r0, cx, cy, r1);
-      rg.addColorStop(0, rgba(R.rgb, R.a * fl * k)); rg.addColorStop(1, rgba(R.rgb, 0));
-      ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r1, a - R.w, a + R.w); ctx.closePath(); ctx.fill();
-    }
+    /* 精特4：身后一团三片错开、在漂的光（原来一个正圆）；放射光是两头收细、微弯、各自明灭的光柱（原来是等宽扇形，FxShape.rays） */
+    const G = F.glow, R = F.rays, sd = spr.chest[0];
+    FxShape.glow(ctx, cx, cy, G.R * s, G.core, G.rgb, G.a * k * 1.1, b.t, sd);
+    FxShape.rays(ctx, cx, cy, R.n, R.R[0] * s, R.R[1] * s, R.w, R.rgb, R.a * 1.2 * k, b.t, R.spin, sd + 1);
   }
-  /* 头后光轮：算"人"的一部分（measure 量它） */
-  const H = F.halo, [hx, hy] = at(spr.halo), hr = H.R * s;
-  ctx.lineWidth = (H.lw + 4) * s; ctx.strokeStyle = rgba(H.edge, 0.55 * k); ctx.beginPath(); ctx.arc(hx, hy, hr, 0, 6.283); ctx.stroke();
-  ctx.lineWidth = H.lw * s; ctx.strokeStyle = rgba(H.rgb, 0.9 * k); ctx.beginPath(); ctx.arc(hx, hy, hr, 0, 6.283); ctx.stroke();
+  /* 头后光轮：算"人"的一部分（measure 量它）。精特4：里面一层淡淡的光盘 + 笔触式光环（粗细起伏、芯断开、两颗闪光绕圈）—— 原来是两条正圆描边 */
+  const H = F.halo, [hx, hy] = at(spr.halo), hr = H.R * s, sd = spr.chest[0];
+  FxShape.glow(ctx, hx, hy, hr * 0.95, F.glow.core, H.rgb, 0.22 * k, b.t, sd + 2);
+  FxShape.halo(ctx, hx, hy, hr, 1, H.lw * s, H.edge, H.rgb, F.glow.core, k, b.t, sd + 3);
   /* 掌心金光团：念的时候（kick）胀一下 */
   const O = F.orb, [ox, oy] = at(spr.muzzle), orR = O.R * s * (1 + 0.3 * b.kick + 0.08 * Math.sin(b.t * 6));
-  const og = ctx.createRadialGradient(ox, oy, 0, ox, oy, orR);
-  og.addColorStop(0, rgba([255, 255, 240], 0.95 * k)); og.addColorStop(0.35, rgba(O.rgb, 0.6 * k)); og.addColorStop(1, rgba(O.rgb, 0));
-  ctx.fillStyle = og; ctx.beginPath(); ctx.arc(ox, oy, orR, 0, 6.283); ctx.fill();
+  FxShape.glow(ctx, ox, oy, orR, [255, 255, 240], O.rgb, 1.3 * k, b.t, sd + 4);
   ctx.restore();
 }
 /* 咒语：每颗粒子画一个金字（按 seq 轮着取字），身后一团金光、拖一小截金色残影；出手时小、飞 grow 秒长到全尺寸 */
@@ -1252,13 +1227,12 @@ function drawMoonBeams(ctx, b, g, T, what) {
     const dx = E[0] - O[0], dy = E[1] - O[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
     for (let i = 0; i < M.sparks; i++) {
       const u = (b.t * 2.6 + i / M.sparks) % 1, o = Math.sin(i * 7.3 + b.t * 9) * w * 0.9, r = (3 + (i % 3) * 1.5) * s;
+      const px = O[0] + dx * u + nx * o, py = O[1] + dy * u + ny * o;   // 精特4：往下冲的一笔（头圆尾尖），原来是圆点
       ctx.fillStyle = rgbaOf(F.star.core, 0.9 * env);
-      ctx.beginPath(); ctx.arc(O[0] + dx * u + nx * o, O[1] + dy * u + ny * o, r, 0, 6.283); ctx.fill();
+      FxShape.streak(ctx, px - dx / L * r * 6, py - dy / L * r * 6, px, py, r * 1.6);
     }
-    /* 落点一团白光 */
-    const R = w * 2.4, rg = ctx.createRadialGradient(E[0], E[1], 0, E[0], E[1], R);
-    rg.addColorStop(0, rgbaOf(F.star.core, 0.95 * env)); rg.addColorStop(0.4, rgbaOf(F.star.rgb, 0.6 * env)); rg.addColorStop(1, rgbaOf(F.star.rgb, 0));
-    ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(E[0], E[1], R, 0, 6.283); ctx.fill();
+    /* 落点一团白光（三片在漂的光，精特4） */
+    FxShape.glow(ctx, E[0], E[1], w * 2.4, F.star.core, F.star.rgb, 1.2 * env, b.t, 1240);
   }
   /* 光点：依次亮起；轮到的那个蓄力时胀大、一圈光环往里收、四周的光往里吸，轰的时候最亮 */
   const St = F.star;
@@ -1268,9 +1242,7 @@ function drawMoonBeams(ctx, b, g, T, what) {
     let c = 0;
     if (S && S.k === i) c = S.ph === 'charge' ? S.pt / B.T.charge : S.ph === 'fire' ? 1 : Math.max(0, 1 - S.pt / B.T.gap);
     const R = St.R * s * (1 + St.grow * c) * (1 + 0.06 * Math.sin(b.t * 5 + i * 2));
-    const gl = ctx.createRadialGradient(x, y, 0, x, y, R * 2.8);
-    gl.addColorStop(0, rgbaOf(St.core, 0.95 * vis)); gl.addColorStop(0.3, rgbaOf(St.rgb, 0.55 * vis)); gl.addColorStop(1, rgbaOf(St.rgb, 0));
-    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(x, y, R * 2.8, 0, 6.283); ctx.fill();
+    FxShape.glow(ctx, x, y, R * 2.8, St.core, St.rgb, 1.5 * vis, b.t, 1250 + i);   // 三片在漂的光（精特4，原来一个正圆渐变）
     /* 芒：四道从中心往外收尖的光（原来是两根等宽直线交叉），每道长短各自一闪一闪，慢慢转，蓄力时拉长 */
     const fl = R * St.flare * (1 + c), a0 = b.t * 0.6 + i, H = ORB_H[i % 3];
     ctx.fillStyle = rgbaOf(St.core, 0.85 * vis);
@@ -1467,14 +1439,11 @@ function drawSisterAura(ctx, b, s, at, probe) {
   const F = SISTER_FX, k = Math.min(1, b.t / 0.4);
   ctx.save();
   if (!probe) {
-    const G = F.glow, [cx, cy] = at(SISTER.spr.chest), g = ctx.createRadialGradient(cx, cy, 0, cx, cy, G.R * s);
-    g.addColorStop(0, rgbaOf(G.core, G.a * k)); g.addColorStop(0.45, rgbaOf(G.rgb, G.a * 0.5 * k)); g.addColorStop(1, rgbaOf(G.rgb, 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, G.R * s, 0, 6.283); ctx.fill();
+    const G = F.glow, [cx, cy] = at(SISTER.spr.chest);
+    FxShape.glow(ctx, cx, cy, G.R * s, G.core, G.rgb, G.a * k * 1.1, b.t, 1466);   // 精特4：三片在漂的粉光，原来一个正圆
   }
   const O = F.screen, [ox, oy] = at(SISTER.spr.muzzle), r = O.R * s * (1 + 0.3 * b.kick + 0.08 * Math.sin(b.t * 6));
-  const og = ctx.createRadialGradient(ox, oy, 0, ox, oy, r);
-  og.addColorStop(0, rgbaOf([255, 255, 255], 0.9 * k)); og.addColorStop(0.4, rgbaOf(O.rgb, 0.55 * k)); og.addColorStop(1, rgbaOf(O.rgb, 0));
-  ctx.fillStyle = og; ctx.beginPath(); ctx.arc(ox, oy, r, 0, 6.283); ctx.fill();
+  FxShape.glow(ctx, ox, oy, r, [255, 255, 255], O.rgb, 1.25 * k, b.t, 1467);
   ctx.restore();
 }
 function heartPath(ctx, x, y, r) {          // 爱心：尖朝下，(x, y) 是中心，r 约等于半宽

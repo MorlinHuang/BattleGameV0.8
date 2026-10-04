@@ -44,13 +44,13 @@ const FxShape = (() => {
   const sstep = (e0, e1, x) => { const k = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return k * k * (3 - 2 * k); };
 
   /* 一道波前：半径 R（y 压 sq）、最宽 w；thr 越大断得越多（≤ −0.2 基本不断），null = 一整圈不断（只起伏）。宽度 = w × 包络，包络在断口两侧平滑收到 0 */
-  function front(ctx, x, y, R, sq, w, thr, t, H, sh) {
+  function front(ctx, x, y, R, sq, w, thr, t, H, sh, wob = 0.11) {
     const N = Math.max(28, Math.min(84, Math.round(R * 0.45)));
     const ox = new Float32Array(N), oy = new Float32Array(N), ix = new Float32Array(N), iy = new Float32Array(N), on = new Uint8Array(N);
     let any = 0, gap = -1;
     for (let i = 0; i < N; i++) {
       const a = i / N * TAU, th = a + H.rot;
-      const rr = R * (1 + 0.11 * n(H, a, t, sh)), m = 0.5 + 0.5 * n(H, a, t * 0.7, sh + 1.9);
+      const rr = R * (1 + wob * n(H, a, t, sh)), m = 0.5 + 0.5 * n(H, a, t * 0.7, sh + 1.9);
       const k = thr == null ? 1 : sstep(thr, thr + 0.22, m), hw = w * 0.5 * k * (0.55 + 0.9 * m);
       on[i] = hw > 0.25; if (on[i]) any = 1; else if (gap < 0) gap = i;
       const c = Math.cos(th), s = Math.sin(th);
@@ -166,7 +166,130 @@ const FxShape = (() => {
       ctx.closePath(); ctx.fill();
     });
   }
-  return { rng, hash, harm, n, ring, front, streak, blob, slash, wavyBand };
+  /* —— 档 4 的光（精特4，2026-10-04，用户："4 档除视频之外的特效，周围的光晕、天使的头环、光环这类代码做的特效都比较粗糙，
+     不要那么硬的直线或者标准的圆，要更像设定中的效果"）—— */
+  const HC = new Map();
+  const harmOf = (seed) => { let H = HC.get(seed); if (!H) { H = harm(seed); HC.set(seed, H); } return H; };
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, a).toFixed(3)})`;
+  /* 身后的一团光（替换"一个正圆径向渐变"）：三团错开的光叠成一片，各自绕中心慢慢漂、胀缩、拉长转向 —— 等亮线不是同心圆，
+     读成一团在呼吸的云气。core 亮芯色、rgb 光色、a 中心不透明度（三团叠起来约等于原来一团的 a）；sq 纵向压扁；
+     lobes 几片（本身就是一大片里的一小团的，如恶魔身后九团烟里的一团，给 1：一片拉长、慢慢转的光，已经不圆，填充只要三分之一） */
+  function glow(ctx, x, y, R, core, rgb, a, t, seed, sq = 1, lobes = 3) {
+    const H = harmOf(seed);
+    for (let i = 0; i < lobes; i++) {
+      const ph = i * 2.1, wgt = lobes === 1 ? 0.9 : [0.55, 0.38, 0.3][i];
+      const ox = R * 0.14 * n(H, ph, t * 0.35), oy = R * 0.11 * n(H, ph + 1.3, t * 0.3);
+      const r = R * (0.62 + 0.12 * i + 0.08 * n(H, ph + 2.6, t * 0.5)), st = 1 + 0.2 * n(H, ph + 3.1, t * 0.25);
+      ctx.save();
+      ctx.translate(x + ox, y + oy); ctx.rotate(H.rot + i * 1.1 + 0.3 * n(H, ph + 4, t * 0.2)); ctx.scale(st, sq / st);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+      g.addColorStop(0, rgba(core, a * wgt)); g.addColorStop(0.4, rgba(rgb, a * wgt * 0.55)); g.addColorStop(1, rgba(rgb, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();   // 只填圆：外接方框的四角全透明，软渲染下白填 27% 像素
+      ctx.restore();
+    }
+  }
+  /* 放射的光芒（替换"一圈等宽直三角"）：每道是一束从根往外张开、微微弯、长短粗细各自一闪一闪的光；角度不等分（出生时各抖一点）、
+     各自慢慢漂。三遍由宽到窄、由淡到亮叠出来 —— 边是软的，不是一刀切的三角；末端不收尖，靠渐变淡出去
+     （第一版两头收尖，一道道细针，用户要的"不硬"反而更像直线）。
+     n 几道、r0 → r1 从多远到多远、w 每道半张角（rad）、spin 整体转速 */
+  const RAYS = new Map();
+  function rays(ctx, x, y, nn, r0, r1, w, rgb, a, t, spin, seed) {
+    const H = harmOf(seed);
+    let P = RAYS.get(seed + ':' + nn);
+    if (!P) {
+      const r = rng(seed * 7 + 1); P = [];
+      for (let i = 0; i < nn; i++) P.push({ a: (i + (r() - 0.5) * 0.7) / nn * TAU, w: 0.55 + 0.9 * r(), L: 0.78 + 0.22 * r(), f: 1.2 + 2.2 * r(), ph: r() * TAU, c: (r() - 0.5) * 0.5 });
+      RAYS.set(seed + ':' + nn, P);
+    }
+    const M = 7;
+    /* 亮度：三层叠起来，伸出人身外那一段（半径 0.4~0.8）跟原来一整块三角差不多亮 —— 第一版每层 0.22 / 0.4 / 0.7、渐变 0.45 处就掉一半，
+       光柱又只伸到 0.6~1 倍，露在人外面的部分只剩一成多，整圈光芒等于没了 */
+    for (const [wk, ak] of [[1.7, 0.3], [1.0, 0.5], [0.45, 0.8]]) {
+      const g = ctx.createRadialGradient(x, y, r0 * 0.5, x, y, r1);
+      g.addColorStop(0, rgba(rgb, a * ak)); g.addColorStop(0.6, rgba(rgb, a * ak * 0.55)); g.addColorStop(1, rgba(rgb, 0));
+      ctx.fillStyle = g; ctx.beginPath();
+      P.forEach((p, i) => {
+        const fl = 0.5 + 0.5 * Math.sin(t * p.f + p.ph), a0 = p.a + t * spin + 0.06 * n(H, i * 1.7, t * 0.4);
+        const L = r0 + (r1 - r0) * p.L * (0.85 + 0.15 * fl), hw = w * p.w * wk * (0.65 + 0.35 * fl);
+        const side = (sg) => {
+          const pts = [];
+          for (let j = 0; j <= M; j++) {
+            const f = j / M, d = r0 + (L - r0) * f, env = 0.3 + 0.7 * Math.sqrt(f);       // 根窄、往外张开
+            const ang = a0 + p.c * f * f * w * 3 + sg * hw * env;
+            pts.push([x + Math.cos(ang) * d, y + Math.sin(ang) * d]);
+          }
+          return pts;
+        };
+        const A = side(1), B = side(-1);
+        ctx.moveTo(A[0][0], A[0][1]); for (const q of A) ctx.lineTo(q[0], q[1]);
+        for (let j = B.length - 1; j >= 0; j--) ctx.lineTo(B[j][0], B[j][1]);
+        ctx.closePath();
+      });
+      ctx.fill();
+    }
+  }
+  /* 光环（替换"一条正圆 / 正椭圆描边"）：笔触式的一圈 —— 粗细沿圈起伏、轮廓轻轻颤（wob 3%）；外一层宽而淡的柔光、
+     中间一层本色、最里一道细亮芯（芯会断开几处，像高光不是描边）；两颗闪光沿着环绕圈走。sq 纵向压扁（头顶的天使环 ≈ 0.26，头后光轮 1） */
+  function halo(ctx, x, y, R, sq, lw, edge, rgb, core, a, t, seed) {
+    const H = harmOf(seed);
+    ctx.fillStyle = rgba(rgb, 0.22 * a); front(ctx, x, y, R, sq, lw * 3.2, null, t * 0.5, H, 0, 0.03);
+    ctx.fillStyle = rgba(edge, 0.62 * a); front(ctx, x, y, R, sq, lw * 1.6, null, t * 0.5, H, 0, 0.03);
+    ctx.fillStyle = rgba(rgb, 0.95 * a); front(ctx, x, y, R, sq, lw * 1.05, null, t * 0.5, H, 0, 0.03);
+    ctx.fillStyle = rgba(core, 0.95 * a); front(ctx, x, y, R, sq, lw * 0.5, -0.05, t * 0.8, H, 1.7, 0.03);
+    for (let k = 0; k < 2; k++) {
+      const th = t * (0.7 + 0.25 * k) + k * Math.PI + H.rot, px = x + Math.cos(th) * R, py = y + Math.sin(th) * R * sq;
+      const tw = 0.55 + 0.45 * Math.sin(t * 5.3 + k * 2), L = lw * (2.2 + 1.2 * tw);
+      ctx.fillStyle = rgba(core, a * tw);
+      for (let q = 0; q < 4; q++) {
+        const aa = q * Math.PI / 2 + 0.4, ll = L * (q % 2 ? 0.6 : 1);
+        streak(ctx, px + Math.cos(aa) * ll, py + Math.sin(aa) * ll, px, py, lw * 0.7);
+      }
+    }
+  }
+  /* 一道裂光 / 电弧（替换"等宽折线"）：从 (x0, y0) 沿 ang 往外 len，折点按 seed 抖、每 1/8 秒重新抖一次（劈啪地闪），
+     宽 w 从根到尖收细；返回路径由调用方 fill（两遍：宽的暗托底、细的亮芯） */
+  function bolt(ctx, x0, y0, ang, len, w, seed, t) {
+    const r = rng(hash(seed, Math.floor(t * 8))), K = 6, L = [], Rr = [];
+    let px = x0, py = y0, a = ang;
+    for (let i = 0; i <= K; i++) {
+      const f = i / K, hw = w * 0.5 * (1 - f * 0.85), nx = -Math.sin(a), ny = Math.cos(a);
+      L.push([px + nx * hw, py + ny * hw]); Rr.push([px - nx * hw, py - ny * hw]);
+      a = ang + (r() - 0.5) * 1.1; const d = len / K * (0.7 + 0.6 * r());   // 每一折都相对总方向偏（不累积），整道不会弯出去
+      px += Math.cos(a) * d; py += Math.sin(a) * d;
+    }
+    ctx.beginPath(); ctx.moveTo(L[0][0], L[0][1]);
+    for (const q of L) ctx.lineTo(q[0], q[1]);
+    ctx.lineTo(px, py);
+    for (let i = Rr.length - 1; i >= 0; i--) ctx.lineTo(Rr[i][0], Rr[i][1]);
+    ctx.closePath();
+  }
+  /* 喷口焰 / 爆光（替换"规整的 16 角星"）：长短不一的尖芒（每帧长短都跳）+ 不规则的亮芯斑块 */
+  function burst(ctx, x, y, r, t, seed, spikes = 7) {
+    const H = harmOf(seed);
+    for (let i = 0; i < spikes; i++) {
+      const a = (i + 0.35 * n(H, i * 2.3, 0)) / spikes * TAU + t * 0.8, L = r * (0.55 + 0.45 * (0.5 + 0.5 * n(H, i * 1.9, t * 9)));
+      streak(ctx, x + Math.cos(a) * L, y + Math.sin(a) * L, x, y, r * 0.32);
+    }
+    blob(ctx, x, y, r * 0.42, hash(seed, Math.floor(t * 18))); ctx.fill();
+  }
+  /* 一团雾（替换雾锥里每颗粒子的正圆，精特4）：16 种预先算好的不规则轮廓（10 个顶点按谐波推拉、二次曲线连），按 k 取、转 rot —— 每帧不分配。
+     雾锥几百团叠在一起，正圆的话边上是一圈圈规整的弧，读成"一堆圆"；换成团状轮廓、随寿命慢慢翻转，读成一股往外翻滚的雾 */
+  const PUFF = Array.from({ length: 16 }, (_, k) => {
+    const H = harm(9000 + k, [2, 3, 4, 7]), P = [];
+    for (let i = 0; i < 10; i++) { const a = i / 10 * TAU, rr = 1 + 0.2 * n(H, a, 0); P.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+    return P;
+  });
+  function puff(ctx, x, y, r, k, rot) {
+    const P = PUFF[k & 15], c = Math.cos(rot) * r, sn = Math.sin(rot) * r;
+    const X = (p) => x + p[0] * c - p[1] * sn, Y = (p) => y + p[0] * sn + p[1] * c;
+    ctx.beginPath();
+    for (let i = 0; i <= 10; i++) {
+      const p = P[i % 10], q = P[(i + 1) % 10], mx = (X(p) + X(q)) / 2, my = (Y(p) + Y(q)) / 2;
+      i ? ctx.quadraticCurveTo(X(p), Y(p), mx, my) : ctx.moveTo(mx, my);
+    }
+    ctx.closePath();
+  }
+  return { rng, hash, harm, n, ring, front, streak, blob, slash, wavyBand, glow, rays, halo, bolt, burst, puff };
 })();
 
 /* 聊天气泡图标（真相喷雾：雾里飘的、命中时从男生脸上蹦出来的"被翻出来的聊天记录"）。

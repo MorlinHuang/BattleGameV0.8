@@ -37,6 +37,11 @@ const Bubble = (function () {
 
   const act = [];
   let phoneAt = null, W = 960, gap = 1.2;
+  /* 档 4 在场时让位（2026-10-04 用户："聊天气泡有点遮挡后面的特效，最贵的特效应该给比较重要的位置，同时聊天气泡也应该看得到只是不明显"）：
+     main.js 每帧 quiet(档 4 有人在场)，hush 0 → 1 平滑过去（约 0.3 秒），淡到 HUSH_A、缩到 HUSH_S；层级上 main.js 把气泡画在档 4 的人和特效底下 */
+  const HUSH_A = 0.42, HUSH_S = 0.85;
+  let hush = 0, hushOn = false;
+  const quiet = (on) => { hushOn = !!on; };
 
   /* 文字宽度得测，不能估。中文和数字宽度差很多，估出来的气泡不是撑爆就是
      留一大块空白。离屏 ctx 测一次就够，结果缓存在消息上。 */
@@ -113,6 +118,7 @@ const Bubble = (function () {
   function update(dt, struggle) {
     /* 越僵持发得越急。五五开的时候两个人谁也拽不动，画面上信息量最少 ——
        正好让手机替他们说话；而一边倒的时候胜负本身已经够看了。 */
+    hush += ((hushOn ? 1 : 0) - hush) * (1 - Math.exp(-dt * 8));
     gap -= dt;
     if (gap <= 0) { push(); gap = (1.5 + Math.random() * 1.3) * (1.35 - (struggle || 0) * 0.5); }
 
@@ -132,8 +138,8 @@ const Bubble = (function () {
       /* 弹入：0.6 → 冲过 1 一点点 → 收回 1。消息是"跳"出来的，线性放大读起来
          像是慢慢显影，那是另一种情绪。 */
       const e = Math.min(1, b.age / 0.16);
-      const sc = e < 1 ? 0.62 + 0.52 * e - 0.14 * e * e : 1;
-      const alpha = Math.min(1, b.life / FADE) * Math.min(1, b.age / 0.07);
+      const sc = (e < 1 ? 0.62 + 0.52 * e - 0.14 * e * e : 1) * (1 - (1 - HUSH_S) * hush);
+      const alpha = Math.min(1, b.life / FADE) * Math.min(1, b.age / 0.07) * (1 - (1 - HUSH_A) * hush);
       if (alpha <= 0.01) continue;
 
       const y = b.y - b.rise - b.st * STACK;
@@ -185,5 +191,5 @@ const Bubble = (function () {
 
   function clear() { act.length = 0; gap = 1.2; }
 
-  return { init, push, update, draw, clear, count: () => act.length };
+  return { init, push, update, draw, clear, quiet, count: () => act.length };
 })();

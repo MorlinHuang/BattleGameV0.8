@@ -2938,6 +2938,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const dim = introDim();
     for (const it of crew) if (!it.behind && !near(it)) it.draw(cctx);
     if (dim > 0) drawIntroDim(cctx, dim);
+    /* 聊天气泡贴在后面那堵墙上（bubble.js）：画在档 4 的人和她们的特效底下 —— 最贵的特效占最显眼的位置，气泡从后面透出来；
+       档 4 在场时再淡、再小一点（Bubble.quiet）。它飘在两人头顶那片墙上，不碰主角，所以压在主角之下也不缺一块 */
+    Bubble.quiet(G4L.active() || G4R.active());
+    Bubble.draw(cctx);
     for (const it of crew) if (it.behind) it.draw(cctx);
     let ac = cctx;
     if (dim > 0) {
@@ -2966,8 +2970,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const ox = Particles.off.x, oy = Particles.off.y;
     fctx.clearRect(0, 0, W, H);
     fctx.save(); fctx.translate(ox, oy);
-    // 气泡在弹幕之下：它贴在后面那堵墙上，弹幕是前景，飞过时该压过去
-    Bubble.draw(fctx);
     /* 弹幕在角色之上、粒子之下：它飞向两个人中间，画在角色底下的话命中前
        最后那段就被身体挡掉了；而粒子是命中的爆炸，该盖在弹幕上面。 */
     Ammo.draw(fctx);
