@@ -26,6 +26,55 @@
  */
 'use strict';
 
+/* 在场循环视频（cfg.loop，真相女神 2026-10-04，即梦首尾帧模式生成）：她在场时用一段原地循环的透明视频顶替立绘 ——
+   头发、裙摆被风掀、罐子往后猛震、中段转头冲镜头眨眼，都在视频里。视频每一帧都摆在立绘的坐标系里
+   （video/truth_loop/make_loop.py：同一个框放大 1.5 倍、金色外发光逐帧烘好），所以 drawOne 原样塞进立绘那个框，
+   foot / muzzle / head 这些量点一个不改；第 0 帧就是立绘的姿势，出场视频的尾帧对的也是它，接上不跳。
+   json（make_loop.py 一起出）：cap 每帧罐口相对第 0 帧挪了多少（立绘像素，喷雾出口和罐尾跟着挪），
+   beats 罐子往后猛震的时刻（喷口焰在这一下炸开、重开一段"呲——"，见 Crew update）。
+   只有 Chromium 放得出 VP9 透明（同 intro.js ALPHA_OK）；视频还没缓冲好、或 ?loopvideo=0，照旧画立绘、走立绘的晃法。
+   <video> 挂在页面上、1 像素、不透明度 0：不挂 / display:none 的视频在桌面 Chrome 里不出新帧（intro.js release）。 */
+function LoopVideo(L) {
+  if (!/Chrom(e|ium)\/|Edg\//.test(navigator.userAgent) || new URLSearchParams(location.search).get('loopvideo') === '0') return null;
+  const v = document.createElement('video');
+  v.src = L.src; v.preload = 'none'; v.muted = true; v.loop = true; v.playsInline = true;
+  Object.assign(v.style, { position: 'fixed', left: '0', top: '0', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' });
+  document.body.appendChild(v);
+  let J = null, on = null, last = 0;
+  return {
+    /* 预取队列最后（main.js，跟出场视频一起）：先拿 json，再缓冲视频 */
+    load: () => fetch(L.src.replace('_alpha.webm', '.json')).then(r => r.json()).then((j) => { J = j; }).catch(() => {})
+      .then(() => new Promise((ok) => {
+        if (v.readyState >= 4) { ok(); return; }
+        v.addEventListener('canplaythrough', ok, { once: true });
+        v.addEventListener('error', ok, { once: true });
+        v.preload = 'auto'; v.load();
+      })),
+    /* 这个人开始在场（出场视频放完 / 从画外冲进来那一刻）：从第 0 帧放。没缓冲好返回 false，她就照旧是立绘 */
+    start(b) {
+      if (!J || v.readyState < 2) return false;
+      on = b; last = 0; v.currentTime = 0;
+      v.play().catch(() => { if (on === b) on = null; });
+      return true;
+    },
+    stop(b) { if (b && on !== b) return; on = null; v.pause(); },
+    frame: (b) => (on === b && v.readyState >= 2 ? v : null),
+    /* 罐口这一帧挪了多少 [dx, dy]（立绘像素） */
+    cap(b) {
+      if (on !== b) return null;
+      return J.cap[Math.min(J.frames - 1, Math.floor(v.currentTime * J.fps))];
+    },
+    /* 上次调用以来视频走过了几个 beat（循环绕回来的也算） */
+    beats(b) {
+      if (on !== b) return 0;
+      const t = v.currentTime, hit = (a, z) => J.beats.filter(x => x > a && x <= z).length;
+      const n = t >= last ? hit(last, t) : hit(last, Infinity) + hit(-1, t);
+      last = t;
+      return n;
+    },
+  };
+}
+
 function Crew(cfg) {
   const { face, spr, aim: AIM, T } = cfg;       // face：-1 朝左（站右边），+1 朝右（站左边）
   const F = cfg.fluid;
@@ -34,6 +83,7 @@ function Crew(cfg) {
   const PATH = cfg.path || {};                    // 悬停的人怎么来、怎么走（见 hoverPose）
   const WK = cfg.whole && cfg.whole.k != null ? cfg.whole.k : 1;
   const BM = cfg.beam || null;                    // 光束（嫦娥）：不喷东西，头顶几个光点轮流蓄力、轰一束直光（beamStep）
+  const LV = cfg.loop ? LoopVideo(cfg.loop) : null;   // 在场循环视频（真相女神），顶替立绘；b.lv 为真 = 这个人正在用它
   const BW = cfg.bow || null;                     // 弓（后羿）：每 BW.cycle 秒放一箭（一颗粒子），弦、搭着的箭、拉弦的手臂跟着 b.bw 动（BW.pose）   // whole：整个人跟瞄准角转几成（白娘子 0.12：身子只轻轻倾，水流照样按完整角度出）
   let img = null, o = {};                       // img[形象]：{ arm, body, lo }（arm 可无）
   const bs = [], ps = [];                        // 在场的人、喷出去的东西（水滴 / 雾团）
@@ -105,7 +155,7 @@ function Crew(cfg) {
     }
     const b = { t: 0, spray: T.spray, emit: 0, hitCd: 0, first: true, ph: Math.random() * 6, aim: 0,
                 r: pickR(R[2], R[3]), s: R[0] + Math.random() * (R[1] - R[0]), seq: 0, tg: null, m: null, zone: null, zoneT: 0,
-                pt: 0, kick: 0, lean: 0, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0,
+                pt: 0, kick: 0, lean: 0, burst: 0, lv: null, skin: sk, landed: false, ex: 0, exP: null, av: 0, back: 0, backV: 0, backT: 0,
                 hold: false, from: null, wait };
     if (PATH.pop && o.origin) { b.pop = o.origin(); if (o.onPop) o.onPop(b.pop[0], b.pop[1]); }   // 从手机里蹦出来（绿茶妹妹）
     bs.push(b);
@@ -135,7 +185,7 @@ function Crew(cfg) {
     const [hx, hy, s] = o.perch(b), t = b.t, se = sprayEnd(b);
     const top = -(spr.foot[1] - spr.muzzle[1] + 120) * s;             // 脚底在这，整个人（含翘起的罐子）都在画外
     const sx = Math.sin(t * 0.9 + b.ph) * 8 * s, sy = Math.sin(t * 1.8 + b.ph) * 4 * s;
-    const bob = A ? Math.sin(t * A.bob[1] + b.ph) * A.bob[0] * s : 0;
+    const bob = A && !b.lv ? Math.sin(t * A.bob[1] + b.ph) * A.bob[0] * s : 0;   // 循环视频里她自己在浮
     if (t < T.enter) {
       const e = easeOut(t / T.enter);
       if (b.from) { const [fx, fy, fs] = b.from; return [fx + (hx - fx) * e, fy + (hy - fy) * e, fs + (s - fs) * e]; }   // 从出场视频里走出来
@@ -208,7 +258,7 @@ function Crew(cfg) {
      喷的时候上身往前探 lean。没 arm 的（哥们）上身就是全部，= th。 */
   function angles(b, th) {
     if (cfg.whole) {                             // 悬空（真相喷雾）：整个人转 th，上身只额外吃后坐 / 前探；[上身额外, 喷口总指向]
-      const bt = A ? A.kick[1] * b.kick - A.lean * b.lean : 0;
+      const bt = A ? (b.lv ? 0 : A.kick[1]) * b.kick - A.lean * b.lean : 0;   // 循环视频里后坐是她自己震的，不再整个人甩
       return [bt, th + bt];
     }
     if (!spr.arm) {                              // 整个上身端着东西转（哥们）：后坐、前探都加在上身上
@@ -223,8 +273,13 @@ function Crew(cfg) {
     const bt = angles(b, th)[0], m1 = turn(at(p, q), at(p, spr.body.pivot), bt);
     return turn(m1, at(p, cfg.whole.pivot), th * WK);
   }
+  /* 贴图点 q 这一帧在循环视频里跟着罐子挪到哪（喷口、罐尾）；没在放视频就是 q */
+  function onCan(q, b) {
+    const d = b.lv && LV.cap(b);
+    return d ? [q[0] + d[0], q[1] + d[1]] : q;
+  }
   function muzzle(p, th, b) {
-    if (cfg.whole) return carried(p, spr.muzzle, th, b);
+    if (cfg.whole) return carried(p, onCan(spr.muzzle, b), th, b);
     const [bt, at_] = angles(b, th), c = at(p, spr.body.pivot), m = at(p, spr.muzzle);
     if (!spr.arm) return turn(m, c, bt);
     const sh = at(p, spr.arm.pivot), sh1 = turn(sh, c, bt);
@@ -345,7 +400,8 @@ function Crew(cfg) {
           o.onArrive(c[0], c[1], p[2]);
         }
       }
-      if (b.t >= se + T.exit) { bs.splice(i, 1); continue; }
+      if (b.t >= se + T.exit) { bs.splice(i, 1); if (b.lv) LV.stop(b); continue; }
+      if (LV && b.lv == null) b.lv = LV.start(b);    // 一现身就从第 0 帧放（= 立绘姿势）
       /* 瞄：该打的落点 → 要的仰角 → 转轴按转速上限转过去。滑进来时就开始瞄，溜走时放平。
          对方倒地（o.down）不再整条扫，每 zone.every 秒随机挑一个部位、在它前后小幅扫。 */
       const tt = b.t + b.ph, sw = cfg.sweep;
@@ -401,13 +457,15 @@ function Crew(cfg) {
           const cyc = A.pulse[0] + A.pulse[1];
           if (b.pt === 0 || Math.floor((b.pt + dt) / cyc) > Math.floor(b.pt / cyc)) b.kick = 1;
           b.pt += dt;
+          /* 循环视频里罐子往后猛震那一下：喷口焰炸开、重开一段"呲——"（b.pt 归零），这一下 0.25 秒里雾量加倍 */
+          if (b.lv && LV.beats(b)) { b.kick = 1; b.pt = 0; b.burst = 0.25; }
         }
       }
       /* 尾焰（cfg.exhaust，真相喷雾）：罐子尾巴朝喷口反方向喷，读成"是后坐力把她顶在半空"。
          人在场就一直喷（进场刹车、悬着、离场都靠它），按住喷的时候加倍。尾焰不算命中（hitTest 跳过 ex）。 */
       if (cfg.exhaust && b.t <= se + T.exit) {
         const X = cfg.exhaust;
-        const th = b.aim, r = carried(p, X.at, th, b), r0 = b.exP || r;
+        const th = b.aim, r = carried(p, onCan(X.at, b), th, b), r0 = b.exP || r;
         /* 人一动（进场 3000~8000 px/s），按时间匀速出的尾焰两团之间差出几十上百像素，断成一串珠子：
            按罐尾这一帧挪了多远补发（每 X.gap 像素至少一团），出生点沿上一帧→这一帧的罐尾摆开、按出生时刻补飞。 */
         const n0 = b.ex + dt * X.rate * (spraying ? 2 : 1) + Math.hypot(r[0] - r0[0], r[1] - r0[1]) / X.gap;
@@ -436,7 +494,8 @@ function Crew(cfg) {
       if (!BW && A && (b.pt % (A.pulse[0] + A.pulse[1])) > A.pulse[0]) { b.emit = 0; continue; }   // 松开那一下
       /* 喷：从转过之后的喷口，沿喷口方向，速度 V（雾再加一点散角和快慢）。一帧攒够几个就出几个，
          每个按它**实际该出口的时刻**补飞一段（age）—— 不补的话帧一卡几个叠成一坨，水柱起疙瘩。 */
-      if (!BW) b.emit += dt * F.rate;
+      if (!BW) b.emit += dt * F.rate * (b.burst > 0 ? 2 : 1);
+      b.burst -= dt;
       const m = b.m = muzzle(p, b.aim, b), dir = angles(b, b.aim)[spr.arm || cfg.whole ? 1 : 0] + REST;   // 沿喷口此刻真的指向（含后坐）
       while (b.emit >= 1) {
         b.emit -= 1;
@@ -493,7 +552,9 @@ function Crew(cfg) {
     ctx.save();
     spin(spr.body.pivot, bt);
     if (I.arm && !BW) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
-    put(I.body);
+    const lvf = b.lv && LV.frame(b);
+    if (lvf) ctx.drawImage(lvf, X, Y, I.body.width * s, I.body.height * s);   // 视频帧是立绘框的 1.5 倍，塞进同一个框
+    else put(I.body);
     /* 弓（后羿）：拉弦的前臂在身子之上，沿 spr.arm.axis 前后挪（BW.pose 的 hand，贴图像素）；弦和搭着的箭画在最上 */
     if (I.arm && BW) {
       const q = BW.pose(b, T, sprayEnd(b));
@@ -506,7 +567,8 @@ function Crew(cfg) {
   }
 
   const active = () => bs.length > 0;
-  function reset() { bs.length = 0; ps.length = 0; }
+  function reset() { bs.length = 0; ps.length = 0; if (LV) LV.stop(); }
+  const loadLoop = () => (LV ? LV.load() : Promise.resolve());
 
   /* 诊断用：在场的人（只读），?crewlog=1 时 main.js 打印瞄准角 */
   const peek = () => bs;
@@ -531,7 +593,7 @@ function Crew(cfg) {
     };
     return { solid: box(MEASURE.solid), glow: box(MEASURE.glow) };
   }
-  return { init, load, summon, extend, update, items, active, reset, peek, measure, cfg };
+  return { init, load, loadLoop, summon, extend, update, items, active, reset, peek, measure, cfg };
 }
 /* measure 的两个阈值（alpha 0~255）。glow 32 = 外发光 1/8 不透明：再淡的那圈在明亮客厅底图上已经看不出来
    （贴图里 alpha 16 那圈比 32 那圈只往外多 ~12 贴图像素，肉眼分不出边）。 */
@@ -852,6 +914,8 @@ const TRUTH = {
   spr: { src: 'assets/world/truth%n_%k.webp', body: { src: 'up', pivot: [168, 281], k: 1 },
          foot: [160, 608], muzzle: [370, 334], rest: -0.505, head: [211, 78], chest: [194, 185] },
   skins: [2],
+  /* 在场循环视频（见 LoopVideo）：10 秒一圈，原片 video/truth_loop/（提示词、首尾帧、make_loop.py）。灭迹恶魔、白娘子等照抄 TRUTH 的，各自 loop: null */
+  loop: { src: 'assets/video/truth_loop_alpha.webm' },
   aura: (ctx, b, s, at, probe) => drawAura(ctx, b, s, at, probe),
   anim: { pulse: [0.7, 0.16], kick: [0, 0.06, 9], lean: 0.03, bob: [5, 2.2] },
   /* 在场 15 秒（2026-09-29，原来喷 2.8 秒）：跟白娘子、法海一样，底下铺一片自己的法术潮（sea.js TruthTide / DemonTide），
@@ -919,6 +983,7 @@ function drawDemonAura(ctx, b, s, at, probe) {
 }
 const DEMON = {
   ...TRUTH,
+  loop: null,
   face: -1,
   whole: { pivot: [216, 258] },
   exhaust: { ...TRUTH.exhaust, at: [287, 179] },
@@ -1019,6 +1084,7 @@ function drawBaisuAura(ctx, b, s, at, probe) {
 }
 const BAISU = {
   ...TRUTH,
+  loop: null,
   whole: { pivot: [534, 324], k: 0.12 },        // 身子只跟瞄准角的 12%（见上）
   over: true,                                   // 水柱画在所有帮手之上（crew.js items）
   exhaust: null,                                // 仙人本来就会飞，没有尾焰
