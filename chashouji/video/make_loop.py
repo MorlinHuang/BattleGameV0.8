@@ -6,8 +6,9 @@
 foot / muzzle / head 这些量点一个都不用改。抠像、去溢色、外发光照各自立绘的出图脚本逐帧做（v14/truth/make2.py、v14/crewart.py）。
 
 原片 → 原图（立绘的 src）：参考图是原图按 ref 摆进画布的（名义值），即梦出片再缩放平移 —— 第一帧跟参考图按剪影拟合（fit）。
-cap：手上那件东西（真相女神的红罐盖、白娘子的水球、嫦娥的小月牙）在每帧的形心相对第 0 帧挪了多少（立绘像素），喷口跟着它。
-  只在立绘 muzzle 附近一个窗里找（track.win，原片像素），颜色按 track.hit 判。
+cap：手上那件东西（真相女神的红罐盖、白娘子的水球、嫦娥的小月牙、绿茶妹妹的手机）在每帧相对第 0 帧挪了多少（立绘像素），喷口跟着它。
+  hit：只在立绘 muzzle 附近一个窗里找（track.win，原片像素），颜色按 track.hit 判，取形心；
+  tmpl：颜色跟周围分不开的（绿茶妹妹淡粉手机 vs 手），取第 0 帧 muzzle 周围 ±tmpl 像素做模板，每帧在 ±win 里按差的平方和找最像的位置。
 beats（只有真相女神）：罐子往后猛震的时刻（罐盖一帧往回跳 > 8 立绘像素），游戏在这些时刻让喷口焰炸一下。
 """
 import os, sys, json, subprocess, tempfile
@@ -58,10 +59,11 @@ ROLES = {
                    glow=[(25, 30, (150, 180, 255)), (11, 12, (215, 228, 255)), (3, 3, (255, 255, 255))],
                    track=dict(win=60, hit=lambda a: a.min(-1) > 225), beats=False),
     # 参考图 = v14/sister/pose/P3a.png 抠出剪影（左上 (306, 13)）缩 0.9 放到 1200×1600 纯绿 (372, 151)；抠像 / 光同 v14/sister/make.py
-    'sister': dict(ref='sister_loop/绿茶妹妹_循环_首尾帧.png', screen='green', src='sister/pose/P3a.png', key=(40, 150), spill='edge',
+    # spill 'all'（立绘是 'edge'）：原片压缩后发丝边上一圈不透明的暗绿点，只去半透明带去不掉；她身上没有绿，整张压 G ≤ max(R, B) 不伤颜色
+    'sister': dict(ref='sister_loop/绿茶妹妹_循环_首尾帧.png', screen='green', src='sister/pose/P3a.png', key=(40, 150), spill='all',
                    ref_of=lambda x, y: ((x - 306) * 0.9 + 372, (y - 13) * 0.9 + 151), K=0.65, size=(425, 1032), up=1.0, muzzle=(73, 225),
                    glow=[(25, 30, (255, 150, 200)), (11, 12, (255, 215, 235)), (3, 3, (255, 255, 255))],
-                   track=dict(win=70, hit=lambda a: (a[..., 0] > 200) & (a[..., 1] > 110) & (a[..., 1] < 185) & (a[..., 2] > 150) & (a[..., 2] - a[..., 1] > 15)), beats=False),
+                   track=dict(tmpl=36, win=30), beats=False),   # 淡粉手机跟手的肤色分不开 → 按第 0 帧手机那块做模板匹配
 }
 
 
@@ -100,21 +102,51 @@ def fit_first(R, path0):
     return best
 
 
+def geom(R, fit):
+    """输出（立绘 × up）像素 (u, v) ↔ 原片像素：原片 = (x0 + u·sx, y0 + v·sy)"""
+    a, dx, dy = fit
+    K, up, PAD = R['K'], R['up'], crewart.PAD
+    vid = lambda x, y: tuple(v * a + d for v, d in zip(R['ref_of'](x, y), (dx, dy)))   # 原图 → 原片
+    s2 = 1 / (up * K)
+    ox, oy = R['crop'][0] - PAD / K, R['crop'][1] - PAD / K
+    x0, y0 = vid(ox, oy); x1, _ = vid(ox + s2, oy); _, y1 = vid(ox, oy + s2)
+    return x0, y0, x1 - x0, y1 - y0
+
+
+def track_tmpl(R, fit, paths):
+    """模板匹配跟踪：返回每帧手上那件东西的位置（立绘 1 倍像素）"""
+    x0, y0, sx, sy = geom(R, fit)
+    up, T, W = R['up'], R['track']['tmpl'], R['track']['win']
+    mx, my = R['muzzle']
+    cx, cy = int(round(x0 + mx * up * sx)), int(round(y0 + my * up * sy))
+    load = lambda p: np.array(Image.open(p).convert('L')).astype(np.float32)
+    t = load(paths[0])[cy - T:cy + T + 1, cx - T:cx + T + 1]
+    out = []
+    for p in paths:
+        g = load(p)
+        best = None
+        for dy in range(-W, W + 1):
+            for dx in range(-W, W + 1):
+                c = g[cy + dy - T:cy + dy + T + 1, cx + dx - T:cx + dx + T + 1]
+                e = ((c - t) ** 2).sum()
+                if best is None or e < best[0]:
+                    best = (e, dx, dy)
+        out.append(((cx + best[1] - x0) / sx / up, (cy + best[2] - y0) / sy / up))
+    return out
+
+
 def frame_job(args):
     name, i, path, fit, tmp = args
     R = setup(name)
     rgb, al = R['cut'](path)
     px = np.dstack([rgb, al * 255]).clip(0, 255).astype(np.uint8)
     src = Image.fromarray(px, 'RGBA')
-    a, dx, dy = fit
-    K, up, PAD = R['K'], R['up'], crewart.PAD
-    vid = lambda x, y: tuple(v * a + d for v, d in zip(R['ref_of'](x, y), (dx, dy)))   # 原图 → 原片
+    up = R['up']
     # 输出（立绘 × up）像素 → 原图 → 原片，PIL AFFINE 要的就是输出 → 输入
     W, H = round(R['size'][0] * up), round(R['size'][1] * up)
-    s2 = 1 / (up * K)
-    ox, oy = R['crop'][0] - PAD / K, R['crop'][1] - PAD / K
-    x0, y0 = vid(ox, oy); x1, _ = vid(ox + s2, oy); _, y1 = vid(ox, oy + s2)
-    body = src.transform((W, H), Image.AFFINE, (x1 - x0, 0, x0, 0, y1 - y0, y0), Image.BICUBIC)
+    x0, y0, sx, sy = geom(R, fit)
+    x1, y1 = x0 + sx, y0 + sy
+    body = src.transform((W, H), Image.AFFINE, (sx, 0, x0, 0, sy, y0), Image.BICUBIC)
     out = Image.new('RGBA', (W, H))
     sil = body.split()[3]
     odd = lambda v: round(v) | 1
@@ -124,6 +156,8 @@ def frame_job(args):
         out.alpha_composite(L)
     out.alpha_composite(body)
     out.save(os.path.join(tmp, '%04d.png' % i))
+    if 'hit' not in R['track']:
+        return i, None
     # 手上那件东西：立绘 muzzle 换到原片，周围 win 像素里按颜色找形心，换回立绘 1 倍像素
     raw = np.array(Image.open(path).convert('RGB')).astype(np.int16)
     mx, my = R['muzzle']
@@ -149,6 +183,8 @@ def main(name, src):
     print('fit first frame: IoU %.4f  scale %.4f  shift (%d, %d)' % (iou, a, dx, dy))
     with ProcessPoolExecutor() as ex:
         res = dict(ex.map(frame_job, [(name, i, os.path.join(raw, f), (a, dx, dy), tmp) for i, f in enumerate(frames)]))
+    if 'tmpl' in R['track']:
+        res = dict(enumerate(track_tmpl(R, (a, dx, dy), [os.path.join(raw, f) for f in frames])))
     miss = [i for i in range(len(frames)) if res[i] is None]
     for i in range(len(frames)):           # 偶尔一帧没找到（被袖子挡住 / 光太淡）：沿用前一帧
         if res[i] is None:
