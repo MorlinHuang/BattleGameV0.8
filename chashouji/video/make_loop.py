@@ -16,6 +16,7 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from PIL import Image, ImageFilter
 import imageio_ffmpeg
+from scipy import ndimage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '../v14'))
@@ -135,10 +136,29 @@ def track_tmpl(R, fit, paths):
     return out
 
 
+def defringe(rgb, al, path, screen):
+    """轮廓外沿去毛边（2026-10-04 用户："绿茶妹妹特效周围一圈好像有明显的毛边"，四条都有）。
+    原片是 h264 4:2:0，压缩把幕布色往人里面晕进三四像素；按键抠出来这些混色像素几乎不透明，去溢色只削掉多出来的那份绿 / 品红，
+    剩下缺蓝（绿幕 → 发黄）或缺绿（品红幕 → 发灰紫）—— 一圈 1~2 像素的暗黄 / 灰紫点线。
+    染没染按**原片**颜色判：离透明区 5 像素以内、原片里有一丁点偏幕布色（绿幕 G − max(R, B) > 0，品红幕 min(R, B) − G > 0；奶白被绿晕进去 4 个色阶就已经发黄）的算染了，
+    再加贴着透明区的最外 2 像素；它们（连同外面全透明的那片）颜色换成从里面干净像素扩出来的颜色，最外一像素 alpha 再软一半。
+    不按"半透明"挑：白娘子 / 嫦娥的薄纱整片都半透明，那是真颜色。"""
+    a = np.array(Image.open(path).convert('RGB')).astype(np.int16)
+    k = a[..., 1] - np.maximum(a[..., 0], a[..., 2]) if screen == 'green' else np.minimum(a[..., 0], a[..., 2]) - a[..., 1]
+    body = al > 0.05
+    near = body & ~ndimage.binary_erosion(body, iterations=5)
+    bad = (near & (k > 0)) | (body & ~ndimage.binary_erosion(body, iterations=2))
+    clean = body & ~bad
+    rgb2 = crewart.edge_extend(rgb.copy(), clean.astype(np.float32), it=30)   # 30：飘出去的细发丝整根都是混色，要从头发里一路扩过去
+    rgb[~clean] = rgb2[~clean]          # 外面全透明的那片也换：摆进立绘坐标时双三次插值会把它们的颜色混回边上
+    outer = body & ~ndimage.binary_erosion(body, iterations=1)
+    return rgb, np.where(outer, al * 0.5, al)
+
+
 def frame_job(args):
     name, i, path, fit, tmp = args
     R = setup(name)
-    rgb, al = R['cut'](path)
+    rgb, al = defringe(*R['cut'](path), path, R['screen'])
     px = np.dstack([rgb, al * 255]).clip(0, 255).astype(np.uint8)
     src = Image.fromarray(px, 'RGBA')
     up = R['up']
