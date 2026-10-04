@@ -16,11 +16,11 @@
  * 一建就丢（isContextLost 恒为真），直播伴侣 / OBS 的环境同样没法保证；带 alpha 的 webm 用普通 <video> 就能放，
  * Chromium 内核（Chrome / Edge / OBS 浏览器源 / 直播伴侣）都支持。Safari 不支持 VP9 透明，会显示成黑底 ——
  * 所以非 Chromium 不放视频（不注册），她照原来从画外冲进来。
- * 视频区下沿压着调试按钮区，所以插在 .panel 之前（按钮仍可点）。
+ * 视频区下沿压着调试按钮区，所以插在 #hud 之前（按钮仍可点；#hud 是连送「×N」徽章那层，要盖在视频上）。
  *
  * 数值不等视频：送礼那一刻战力就加上了（main.js giveGift），视频只推迟她本人的出场 ——
  * 视频期间她在 Crew 里是"候场"（b.hold：占着名额、不走时钟、不画），CrewGroup 不会趁这 8 秒轮到下一个人；
- * 候场时又有人送，照常走续时间（crew.js renew），她出来时名字条带「×N」。
+ * 候场时又有人送，照常走续时间（crew.js renew），连送徽章「名字 ×N」当场就弹（main.js comboHit，画在视频之上的 #hud）。
  */
 'use strict';
 
@@ -79,7 +79,7 @@ const IntroVideo = (() => {
         objectFit: 'fill', visibility: 'hidden', pointerEvents: 'none',
       });
       place(v, c, 0);
-      stage.insertBefore(v, stage.querySelector('.panel'));
+      stage.insertBefore(v, stage.querySelector('#hud'));
       vids[k] = v;
     }
   }

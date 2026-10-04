@@ -124,8 +124,8 @@ function Crew(cfg) {
     return best;
   }
 
-  /* 续上的这一份也是一次完整送礼：下一发按礼物力度打（first），并记下第几份、在她的第几秒续上（名字条据此重播「×N」） */
-  function renew(b) { b.first = true; b.renew = (b.renew || 0) + 1; b.renewT = b.t; }
+  /* 续上的这一份也是一次完整送礼：下一发按礼物力度打（first）。「×N」是 main.js 的连送徽章（comboHit），不在这里数 */
+  function renew(b) { b.first = true; }
 
   /* 候场（b.hold，intro.js）：出场视频放着的时候她已经占了名额（再送走续时间、组里不轮到下一个），但不走时钟、不画、不喷。
      视频放完 intro.js 清掉 hold、把 t 归零、给 b.from = 视频尾帧里她的 [脚底 x, 脚底 y, 缩放]，hoverPose 从那里滑进悬停位。

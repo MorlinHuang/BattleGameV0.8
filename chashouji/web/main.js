@@ -312,14 +312,18 @@ function giveGift(side, key, pick) {
   }
   if (it.tier >= 1) {
     const key = ITEM_OF[side > 0 ? 'L' : 'R'][it.tier], g = GIFT[key];
-    /* 连送计数：要在召人 / 发射之前判"这一件还在演"（召完人就一定在场了）。档 4 的「×N」在名字条上，不进这里 */
-    if (!(g.style === 'crew' && CREW[g.crew].members))
+    /* 连送计数：要在召人 / 发射之前判"这一件还在演"（召完人就一定在场了）。
+       档 4 在 go() 里判：徽章写的是上场那个人的名字（法海 / 灭迹恶魔……），召完才知道是谁；组还没加载完时 go 晚一两秒才跑，照样在那时判 */
+    const group = g.style === 'crew' && CREW[g.crew].members;
+    if (!group)
       comboHit(side, key, g.style === 'crew' ? CREW[g.crew].all.some(a => a.active()) : g.style === 'rain' && RAIN[g.rain].active());
     if (g.style === 'crew') {
       /* 新来的人有出场视频（intro.js）：先放视频、她候场，放完从视频里走出来；续时间不放。
          视频没缓冲够（预取队列最后才轮到它）begin 返回 false，人直接从画外冲进来 */
       const go = () => {
+        const alive = group && CREW[g.crew].active();     // 候场（视频放着）也算在场：这时再送就是 ×2
         const [m, b] = summonCrew(g.crew, undefined, pick);
+        if (group) comboHit(side, key, alive, m);
         if (b && INTRO_OF.has(m)) IntroVideo.begin(INTRO_OF.get(m), m, b);
       };
       /* 档 4 这一组（几个人的贴图 + 各自的法术潮）还没加载完（首帧刚出来就送）：插到队首，到了再上场。
@@ -1478,7 +1482,7 @@ const SHOP = {
    见过的，就是吵到最后砸过来的是一束花。 */
 // 档 3 的两个帮手角色 + 档 4 两边各一组三人（crew.js），GIFT[..].crew 指到这里
 /* 档 4 每边一组三人、**同一时间只一个在场**（2026-09-28 用户："三个女神太多了，每个都显得特别小，还是改一个，放大一些"）：
-   场上没人时送 = 按下面的顺序轮到下一个（第一次是白娘子 / 法海）；有人在场再送 = 给他 / 她续一段、名字条重播「×N」，不换人
+   场上没人时送 = 按下面的顺序轮到下一个（第一次是白娘子 / 法海）；有人在场再送 = 给他 / 她续一段、连送徽章「名字 ×N」，不换人
    （crew.js CrewGroup）。成员顺序也是 ?g4L= / ?g4R= 的下标。
    女生侧白娘子打头（2026-09-28 用户："女神第一个出白娘子"）。 */
 /* 三对一对一对立，按对排：白娘子 vs 法海 → 真相女神 vs 灭迹恶魔 → 嫦娥 vs 后羿（2026-09-29 用户定的顺序；
@@ -2370,16 +2374,29 @@ function drawPowerText(ctx) {
    每边每件礼物一串：这一件还在演（三人组：这边还有人在场或正在离场 —— 再送就是给他们续时间；档 1 / 2：上一件送出后 COMBO.window 秒内、
    或榴莲 / 袜子雨还在下）时再送 = 同一串 +1，否则从 1 重数。徽章在自己那一侧、拉力牌下面：第一件只写名字，之后「名字 ×N」，
    每 +1 弹一下（放大回落）；最后一下之后停 stay 秒再淡掉。同一边几件礼物各一枚，最新的在最上。
-   档 4 不进这里：她 / 他的名字条本来就带「×N」（crew.js renew，drawIntroName1），两处同时弹是重复 */
-const COMBO = { window: 3, stay: 2.2, out: 0.3, pop: 0.25, slide: 0.18, y: 236, h: 64, gap: 74, max: 3 };
-const combos = [];                                   // { side, key, n, t0（最后一下的 HUD.t）, t1（这一串第一下的 HUD.t） }
-function comboHit(side, key, alive) {
-  let c = combos.find(q => q.side === side && q.key === key);
+   档 4 也走这里（2026-10-04 用户："最高级的礼物，也需要同样的逻辑，播放视频时如果送第二个，会弹窗×n"）：原来档 4 的 ×N 在名字条上，
+   名字条要等出场视频放完、她现身才画，视频那几秒再送什么都看不到。徽章写上场那个人的名字（who），名字条只在出场时演一次、不再带 ×N。
+   画在 #hud 那张画布上 —— 出场视频是盖在游戏画布之上的 <video>（intro.js），画在 #fx 上会被视频挡住。
+   尺寸（2026-10-04 用户："重复送出礼物的弹窗太小了 根本看不到"）：原来名字 34px、×N 50px、条高 64，手机上只有指甲盖大；
+   现在名字 46px、×N 100px，条高 116。两边同时各一枚时最宽的「臭袜子足球 ×12」约 470 宽，左右两枚中间还空 20 像素，不叠 */
+const COMBO = {
+  window: 3,                 // 档 1 / 2：上一件送出后几秒内再送算同一串
+  stay: 2.2, out: 0.3,       // 最后一下之后停几秒、几秒淡掉
+  pop: 0.3, popK: 0.7,       // 每 +1 弹一下：×N 先放大到 1 + popK 倍，pop 秒落回原大
+  slide: 0.18,               // 第一下从自己那一侧滑进来几秒
+  y: 300, h: 116, gap: 128,  // 第一枚中线 y（拉力牌下沿 200 往下）、条高、每多一枚往下挪多少
+  max: 2,                    // 每边最多同时几枚
+  name: 46, xn: 100,         // 名字、×N 的字号
+};
+const combos = [];                                   // { side, key, who（档 4 上场的那个人）, n, t0（最后一下的 HUD.t）, t1（这一串第一下的 HUD.t） }
+function comboHit(side, key, alive, who) {
+  let c = combos.find(q => q.side === side && q.key === key && q.who === who);
   if (c && (alive || HUD.t - c.t0 < COMBO.window)) c.n++;
-  else { if (c) combos.splice(combos.indexOf(c), 1); c = { side, key, n: 1, t1: HUD.t }; combos.push(c); }
+  else { if (c) combos.splice(combos.indexOf(c), 1); c = { side, key, who, n: 1, t1: HUD.t }; combos.push(c); }
   c.t0 = HUD.t;
 }
-function drawCombos(ctx) {
+/* nameOf(who)：档 4 那个人的名字（main 里的 STARS） */
+function drawCombos(ctx, nameOf) {
   for (let i = combos.length - 1; i >= 0; i--) if (HUD.t - combos[i].t0 >= COMBO.stay + COMBO.out) combos.splice(i, 1);
   for (const side of [+1, -1]) {
     const mine = combos.filter(c => c.side === side).sort((a, b) => b.t0 - a.t0).slice(0, COMBO.max);
@@ -2387,24 +2404,26 @@ function drawCombos(ctx) {
       const age = HUD.t - c.t0, A = side > 0;
       const a = age < COMBO.stay ? 1 : 1 - (age - COMBO.stay) / COMBO.out;
       const u = Math.min(1, (HUD.t - c.t1) / COMBO.slide), e = 1 - Math.pow(1 - u, 3);
-      const p = Math.min(1, age / COMBO.pop), k = 1 + 0.45 * (1 - p) * (1 - p);   // 每 +1 弹一下：放大 1.45 倍回落
-      const name = GIFT[c.key].name, cy = COMBO.y + i * COMBO.gap;
+      const p = Math.min(1, age / COMBO.pop), k = 1 + COMBO.popK * (1 - p) * (1 - p);
+      const name = c.who ? nameOf(c.who) : GIFT[c.key].name, cy = COMBO.y + i * COMBO.gap;
+      const fName = `bold ${COMBO.name}px system-ui,"PingFang SC","Microsoft YaHei",sans-serif`;
+      const fXn = `italic 900 ${COMBO.xn}px system-ui,"PingFang SC","Microsoft YaHei",sans-serif`;
       ctx.save();
       ctx.globalAlpha = a;
-      ctx.font = 'bold 34px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.font = fName;
       const nw = ctx.measureText(name).width;
-      ctx.font = 'italic 900 50px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-      const xn = c.n > 1 ? '×' + c.n : '', xw = xn ? ctx.measureText(xn).width + 14 : 0;
-      const w = nw + xw + 44, x = A ? 14 - (1 - e) * (w + 20) : W - 14 - w + (1 - e) * (w + 20), y = cy - COMBO.h / 2;
-      plateFill(ctx, x, y, w, COMBO.h, 10, .78);
-      ctx.fillStyle = rgba(A ? GREEN : RED, 1); ctx.fillRect(A ? x : x + w - 6, y + 6, 6, COMBO.h - 12);   // 队色一道边，同拉力牌
+      ctx.font = fXn;
+      const xn = c.n > 1 ? '×' + c.n : '', xw = xn ? ctx.measureText(xn).width + 18 : 0;
+      const w = nw + xw + 56, x = A ? 14 - (1 - e) * (w + 20) : W - 14 - w + (1 - e) * (w + 20), y = cy - COMBO.h / 2;
+      plateFill(ctx, x, y, w, COMBO.h, 14, .82);
+      ctx.fillStyle = rgba(A ? GREEN : RED, 1); ctx.fillRect(A ? x : x + w - 9, y + 8, 9, COMBO.h - 16);   // 队色一道边，同拉力牌
       ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.lineJoin = 'round';
-      ctx.font = 'bold 34px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-      txt(ctx, name, x + 22, cy, '#fff', 6);
+      ctx.font = fName;
+      txt(ctx, name, x + 28, cy, '#fff', 8);
       if (xn) {
-        ctx.translate(x + 22 + nw + 14, cy); ctx.scale(k, k);
-        ctx.font = 'italic 900 50px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-        txt(ctx, xn, 0, 2, '#ffd45a', 8);
+        ctx.translate(x + 28 + nw + 18 + xw / 2 - 9, cy); ctx.scale(k, k);   // 绕 ×N 自己的中心放大，不往右顶出牌子
+        ctx.font = fXn; ctx.textAlign = 'center';
+        txt(ctx, xn, 0, 4, '#ffd45a', 12);
       }
       ctx.restore();
     });
@@ -2478,10 +2497,10 @@ function drawHUD(ctx) {
 const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
 
 (async function boot() {
-  const cvBg = document.getElementById('bg'), cvCh = document.getElementById('ch'), cvFx = document.getElementById('fx');
+  const cvBg = document.getElementById('bg'), cvCh = document.getElementById('ch'), cvFx = document.getElementById('fx'), cvHud = document.getElementById('hud');
   /* 出场视频放完、视频里带着底部法术潮（白娘子的海）：她那片潮直接铺满，从视频里海面的高度（画布 y）落回自己的位置 */
   IntroVideo.init({ stage: document.getElementById('stage'), W, H, onRelease: (crew, y) => { const t = TIDE_OF.get(crew); if (t) t.handoff(y); } });
-  const bctx = cvBg.getContext('2d'), cctx = cvCh.getContext('2d'), fctx = cvFx.getContext('2d');
+  const bctx = cvBg.getContext('2d'), cctx = cvCh.getContext('2d'), fctx = cvFx.getContext('2d'), hctx = cvHud.getContext('2d');
 
   /* ?sim=1 纯数值快进：不渲染、不发弹幕，只跑 battle，用来核对局长和手感。
      数值调参不该靠看画面 —— 一局十二分钟，肉眼比对两组参数根本比不出来，
@@ -2868,8 +2887,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     { crew: Sister, name: '绿茶妹妹',     from: -1, fill: 'rgba(60,10,34,0.64)', bar: 'rgb(255,150,200)', edge: 'rgb(120,20,70)',  text: 'rgb(255,236,246)' },
   ];
   const introT = (st) => { const b = st.crew.peek()[0]; return b && !b.hold ? b.t : 1e9; };   // 候场（出场视频放着）不算出场
-  /* 名字条的计时：出场从 delay 起算；在场时又有人送（crew.js renew），从续上那一刻起再播一遍、带「×N」 */
-  const nameT = (st) => { const b = st.crew.peek()[0]; return !b || b.hold ? 1e9 : b.renew ? b.t - b.renewT : b.t - INTRO.delay; };
+  /* 名字条的计时：出场从 delay 起算，只演这一次；在场时又有人送的「×N」在连送徽章上（comboHit），名字条不重播 */
+  const nameT = (st) => { const b = st.crew.peek()[0]; return !b || b.hold ? 1e9 : b.t - INTRO.delay; };
   /* 压暗的不透明度（没人在出场就是 0） */
   function introDim() {
     const I = INTRO;
@@ -2894,9 +2913,9 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     cur.forEach((st, i) => drawIntroName1(c, st, i * INTRO.stack));
   }
   function drawIntroName1(c, st, dy) {
-    const t = nameT(st), I = { ...INTRO, y: INTRO.y - dy }, b = st.crew.peek()[0];
+    const t = nameT(st), I = { ...INTRO, y: INTRO.y - dy };
     if (t < 0 || t >= I.stay + I.out) return;
-    const name = st.name + (b.renew ? ' ×' + (b.renew + 1) : '');
+    const name = st.name;
     const a = t < I.stay ? 1 : 1 - (t - I.stay) / I.out;
     const u = Math.min(1, t / I.slide), e = 1 - Math.pow(1 - u, 3);
     const x = W / 2 - st.from * (1 - e) * W;                            // 从自己那一侧滑进来（女神从左上、恶魔从右上冲进来）
@@ -2990,11 +3009,17 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     /* 结算全屏接管：演出图铺满整幅，距离条不再画。结果已经写在画面里
        （谁在抡枕头、谁跪着哭），再摆一遍是重复。 */
     if (S.phase === 'over') Result.draw(fctx);
-    else { drawIntroName(fctx); drawHUD(fctx); drawCombos(fctx); }
+    else { drawIntroName(fctx); drawHUD(fctx); }
     Particles.drawFlash(fctx, W, H);
   }
 
-  function render() { renderBg(); renderActors(); renderFx(); }
+  /* 盖在出场视频之上的那层（index.html #hud）：只有连送徽章 */
+  function renderHud() {
+    hctx.clearRect(0, 0, W, H);
+    if (S.phase !== 'over') drawCombos(hctx, (who) => STARS.find(st => st.crew === who).name);
+  }
+
+  function render() { renderBg(); renderActors(); renderFx(); renderHud(); }
 
   /* 并排出胶片的公共部分：n 格，每格先跑 setup(i) 再渲染，左上角写 label(i)。 */
   function filmstrip(n, setup, label) {
@@ -3006,7 +3031,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       setup(i);
       render();
       const dx = i * W * sc;
-      for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
+      for (const c of [cvBg, cvCh, cvFx, cvHud]) o.drawImage(c, dx, 0, W * sc, H * sc);
       const t = label(i);
       o.font = '600 15px system-ui';
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, o.measureText(t).width + 16, 26);
@@ -3070,7 +3095,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       for (let k = 0; k < 4; k++) { S.pos += v / 60; derive(1 / 60); }
       render();
       const dx = (i % cols) * W * sc, dy = Math.floor(i / cols) * ch * sc;
-      for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, 0, y0, W, ch, dx, dy, W * sc, ch * sc);
+      for (const c of [cvBg, cvCh, cvFx, cvHud]) o.drawImage(c, 0, y0, W, ch, dx, dy, W * sc, ch * sc);
     }
     const stage = document.getElementById('stage');
     stage.style.width = out.width + 'px';
@@ -3143,7 +3168,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     // ?ammoy=aim：不钉高度，让瞄部位的礼物（香蕉瞄脸、口红瞄腰腿）按实际逻辑瞄
     /* ?buddyn=3 一次叫几个；?skin=0|1|2 强制出哪个形象（cfg.skins 下标），不给就挑空着的 */
     /* ?ammogift2=<礼物名>：同一条胶片里再叫另一边的帮手（档 4 两边各一人：ammogift=truth&ammogift2=demon）。
-       ?buddygap=<秒>：buddyn 次不一起送，第 k 次在 k×gap 秒时送（档 4：看在场时续时间、名字条 ×N）；
+       ?buddygap=<秒>：buddyn 次不一起送，第 k 次在 k×gap 秒时送（档 4：看在场时续时间）；
        ?ammoskip=<秒>：第一格之前先快进这么久（看离场、离场途中被叫回，不用拍一长条）。 */
     const g2 = GIFT[Q.get('ammogift2')], gap = Math.max(0, +(Q.get('buddygap') || 0));
     const due = [];                                  // [第几秒, 叫谁]
@@ -3199,7 +3224,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       const path = ACTS.flatMap(a => a.paths().map(q => [a.cfg.id, q]));
       (window.trioFaces = window.trioFaces || []).push({ a: faceOf('a'), b: faceOf('b'), hit: trioProbe && trioProbe.last, ph, jet, fly, path });   // 两个主角这一格的脸框 [x, y, r]，和出手压在自己主角脸框里的像素数（?trioprobe=1）
       const dx = i * W * sc;
-      for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
+      for (const c of [cvBg, cvCh, cvFx, cvHud]) o.drawImage(c, dx, 0, W * sc, H * sc);
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 168, 26);
       o.fillStyle = '#fff'; o.font = '600 15px system-ui';
       o.fillText(`+${Math.round(el * 1000)}ms 弹${Ammo.count()} 粒${Particles.count()}`, dx + 8, 18);
@@ -3248,7 +3273,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       }
       render();
       const dx = i * W * sc;
-      for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
+      for (const c of [cvBg, cvCh, cvFx, cvHud]) o.drawImage(c, dx, 0, W * sc, H * sc);
       o.fillStyle = 'rgba(0,0,0,.70)'; o.fillRect(dx, 0, 150, 26);
       o.fillStyle = '#ffd36b'; o.font = '600 15px system-ui';
       o.fillText(`+${Math.round(i * MS * 1000)}ms 气泡${Bubble.count()}`, dx + 8, 18);
@@ -3294,7 +3319,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       if (Q.get('crewlog') === '1') crewLog();
       render();
       const dx = i * W * sc;
-      for (const c of [cvBg, cvCh, cvFx]) o.drawImage(c, dx, 0, W * sc, H * sc);
+      for (const c of [cvBg, cvCh, cvFx, cvHud]) o.drawImage(c, dx, 0, W * sc, H * sc);
       o.fillStyle = 'rgba(0,0,0,.66)'; o.fillRect(dx, 0, 132, 26);
       o.fillStyle = '#fff'; o.font = '600 15px system-ui';
       o.fillText(`+${Math.round(el * 1000)}ms 粒子${Particles.count()}`, dx + 8, 18);
