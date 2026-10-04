@@ -36,7 +36,7 @@ const IntroVideo = (() => {
        宽高 = 834×1112 × k。右沿正好贴屏幕右边，左边 166 像素在屏幕外（#stage overflow:hidden），只裁掉开场正面镜头左侧一点衣袖。
        tide：视频最后一帧里海面的高度（视频像素，vframes --fx sea 量的）—— 游戏里的海从这个高度接上（sea.js handoff）。
        视频由 video/vframes 出：vframes.py 原片 -s baisu1_up.webp --fx sea（底部的海 + 虾兵蟹将整条保留、不随环境退掉）。 */
-    baisu: { src: 'assets/video/baisu_intro_alpha.webm', box: [-165.9, 101.6, 1125.1, 1500.1], vw: 834, end: { s: 0.745, x: -51, y: 22 }, tide: 900,
+    baisu: { src: 'assets/video/baisu_intro_alpha.webm', box: [-165.9, 101.6, 1125.1, 1500.1], vw: 834, end: { s: 0.745, x: -51, y: 22 }, tide: 900, seaAt: 4.8,
              open: [-86.9, 101.6], move: [4.6, 6.2] },
     /* open / move：开场时视频区左上角在 open，move 这段（秒）平滑移到 box。box 是按尾帧反推的，比居中往左 79 像素 ——
        前 4.5 秒她正面居中（视频里人物重心在宽度的 50.4%），不挪回来就整段偏左（用户 2026-09-29："出场后位置偏左，不在正中心"）。
@@ -46,15 +46,18 @@ const IntroVideo = (() => {
        尾帧对齐色差 7.3）；近景时她重心在视频宽 54.5%，open 往左 58 像素让她居中，4.4~5.6 秒她飘回左上时移回 box。
        视频由 vframes.py 原片 -s change1_up.webp --fx cloud 出（云海按"不像夜空"认，整条保留；法术潮进画面的帧盖掉再抠一次人物）。 */
     /* 2026-09-29 嫦娥站位下移 70（G4STAND.change 908 → 978，给头顶的月光束光点让出拉力条下的位置）：box / open 的 y 跟着 +70，尾帧照样对齐 */
-    change: { src: 'assets/video/change_intro_alpha.webm', box: [7.6, 203.5, 973.4, 1297.8], vw: 834, end: { s: 0.754, x: -12, y: -15 }, tide: 953,
+    change: { src: 'assets/video/change_intro_alpha.webm', box: [7.6, 203.5, 973.4, 1297.8], vw: 834, end: { s: 0.754, x: -12, y: -15 }, tide: 953, seaAt: 5.4,
               open: [-50.5, 203.5], move: [4.4, 5.6] },
     /* 绿茶妹妹（2026-09-29）：男女主抢的那部手机亮了，兔耳先探出来、她从屏幕里钻出来 → 贴到镜头前撒娇、瞟姐姐装怕、躲手机后偷笑眨眼
        → 往后一蹦退到右边定成立绘姿势；底下奶盖泡泡海从右涌进来。制作包 video/sister。
        box 按尾帧反推（G4STAND.sister [848, 1136, 1.0]，尾帧对齐色差 13.2）。不加 open：开场那部手机在视频宽 45.8%、高 58.8%，
        按 box 落在画布 (451, 898) —— 正压在游戏里那部手机 (454, 898) 上；近景她重心在 51%（画布 501，只偏中线 21），挪了反而把手机挪开。
        视频由 vframes.py 原片 -s sister1_up.webp --fx tea 出（浪按"不像夜色"认、只要从右边缘连过来的那片）。 */
-    sister: { src: 'assets/video/sister_intro_alpha.webm', box: [5.4, 134.5, 973.2, 1297.6], vw: 834, end: { s: 0.857, x: 483, y: 15 }, tide: 980 },
+    sister: { src: 'assets/video/sister_intro_alpha.webm', box: [5.4, 134.5, 973.2, 1297.6], vw: 834, end: { s: 0.857, x: 483, y: 15 }, tide: 980, seaAt: 5.2 },
   };
+  /* seaAt（秒）：视频里的海从这一刻起涌进来（底边一条的 alpha 由 ~0.3 升到 1：白娘子 5.75、嫦娥 6.5、绿茶妹妹 6.25 秒满，ffmpeg 逐 0.25 秒量），
+     提前游戏海推满要的 1.4 秒左右。视频框下沿（1602 / 1501 / 1432）到画布底 1707 之间视频里什么都没有 —— 从 seaAt 起游戏自己那片海
+     从同一侧推进来、垫在视频底下（seaUnder → main.js tideUpdate），海面停在视频尾帧的海面高度（tide），放完 handoff 原地接上。 */
   const POP = 0.35, FADE = 0.45;         // 浮现几秒、结尾淡掉几秒
   /* VP9 透明只有 Chromium 内核认。按 UA 判（Safari 的 canPlayType 也说能放 webm，但透明通道丢掉，变黑底） */
   const ALPHA_OK = /Chrom(e|ium)\/|Edg\//.test(navigator.userAgent);
@@ -165,6 +168,9 @@ const IntroVideo = (() => {
   }
 
   const playing = () => !!cur && !cur.done;
+  /* 此刻要不要给 crew 那片海垫底：正在放它的视频、过了 seaAt → 视频里海面的画布 y；否则 null */
+  const seaUnder = (crew) => cur && !cur.done && cur.crew === crew && cur.c.seaAt != null && cur.v.currentTime >= cur.c.seaAt
+    ? cur.c.box[1] + cur.c.tide * cur.c.box[2] / cur.c.vw : null;
   const owner = () => cur && cur.crew;         // 正在放谁的（调试台换人时要连视频一起收掉）
-  return { init, load, begin, stop, playing, owner, CLIPS };
+  return { init, load, begin, stop, playing, owner, seaUnder, CLIPS };
 })();

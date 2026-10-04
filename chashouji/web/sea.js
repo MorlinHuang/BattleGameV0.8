@@ -173,6 +173,9 @@ function Tide(C) {
   /* 从出场视频接过来（handoff）：整片先抬 / 压到视频里海面的高度，SETTLE 秒里落回自己的位置 */
   const SETTLE = 1.2, EMERGE = [0.25, 0.22];     // 回位几秒；小兵第一只几秒后蹦出来、之后每隔几秒一只
   let lift = 0, liftT = -1;
+  /* 垫在出场视频底下（under，main.js 每帧给）：视频的海涌进来那几秒，游戏这片海已经从同一侧推进来、整片停在视频里海面的高度 y，
+     把视频框下沿以下的空地铺满（视频底边以下本来什么都没有，要等视频放完 handoff 才接上）。null = 不垫 */
+  let under = null;
 
   function init(w, h) { W = w; H = h; reset(); }
 
@@ -208,14 +211,14 @@ function Tide(C) {
   }
 
   function reset() {
-    lv = 0; t = 0; hopT = 3; sprays = []; sprayT = 0; frontT = 0; lift = 0; liftT = -1;
+    lv = 0; t = 0; hopT = 3; sprays = []; sprayT = 0; frontT = 0; lift = 0; liftT = -1; under = null;
     mobs = C.mobs.map(m => ({ ...m, x: m.x * W, ph: Math.random() * 6, hop: -1, wait: 0, em: false }));
   }
 
   const ease = (u) => u * u * (3 - 2 * u);
   const mod = (a, n) => ((a % n) + n) % n;
   /* 第 k 层贴图上沿在屏幕 x 处的 y（不含浪形，只含整层位置 + 起伏） */
-  const liftNow = () => liftT < 0 ? 0 : lift * (1 - ease(Math.min(1, liftT / SETTLE)));
+  const liftNow = () => under != null ? under - natTop() : liftT < 0 ? 0 : lift * (1 - ease(Math.min(1, liftT / SETTLE)));
   function baseY(k, x) {
     const L = C.layers[k];
     return C.top + liftNow() + L.y + L.bob[0] * Math.sin(t * L.bob[1] + k * 1.7)
@@ -225,6 +228,14 @@ function Tide(C) {
   function surfY(k, x) {
     const L = C.layers[k];
     return baseY(k, x) + L.top[Math.floor(mod(x - L.v * t, L.w))];
+  }
+
+  /* 第 0 层上沿每列的中位数（不含整片抬压）：handoff / under 都按它把整片对到视频里的海面（同 vframes layer.sea_line 的量法） */
+  function natTop() {
+    const L = C.layers[0], tops = [];
+    for (let x = 0; x < W; x += SL) tops.push(C.top + L.y + L.bob[0] * Math.sin(t * L.bob[1]) + L.swell[0] * Math.sin(6.2832 * (x - L.swell[2] * t) / L.swell[1]) + L.top[Math.floor(mod(x - L.v * t, L.w))]);
+    tops.sort((a, b) => a - b);
+    return tops[tops.length >> 1];
   }
 
   function spray(k, x, y, n, up) {
@@ -239,7 +250,8 @@ function Tide(C) {
 
   /* front：前沿此刻在屏幕哪个 x（main.js tideSpan；贴着屏幕边 / 跟另一片顶在一起时给 null）。推进、退回的路上前沿一路甩东西，
      读成一道浪头 / 一道金光卷过来，而不是一块图淡进来 */
-  function update(dt, on, front) {
+  function update(dt, on, front, y = null) {
+    under = LAST.top ? y : null;
     const lv0 = lv;
     lv = Math.max(0, Math.min(1, lv + (on ? dt / C.rise : -dt / C.fall)));
     if (front != null && lv !== lv0) for (frontT += dt; frontT >= C.front.every; frontT -= C.front.every) {
@@ -356,11 +368,8 @@ function Tide(C) {
      "海面高度"两边按同一个量法：每列最上沿取中位数（vframes layer.sea_line / 这里第 0 层上沿）。 */
   function handoff(y) {
     if (!LAST.top) return;
-    lv = 1; liftT = -1;
-    const tops = [];
-    for (let x = 0; x < W; x += SL) tops.push(surfY(0, x));
-    tops.sort((a, b) => a - b);
-    lift = y - tops[tops.length >> 1]; liftT = 0;
+    lv = 1; under = null;
+    lift = y - natTop(); liftT = 0;
     const order = mobs.map((_, i) => i).sort(() => Math.random() - 0.5);
     order.forEach((i, n) => { mobs[i].wait = EMERGE[0] + n * EMERGE[1]; mobs[i].hop = -1; });
   }

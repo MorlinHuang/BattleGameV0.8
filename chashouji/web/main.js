@@ -1536,8 +1536,8 @@ function tideUpdate(dt) {
   /* 前沿（甩浪头飞沫的地方）：还没推满、也没顶到对面的那一头 */
   const sp = tideSpan();
   for (const [c, t] of TIDE_OF) {
-    const [x0, x1] = sp.span(t), x = t.side < 0 ? x1 : x0;
-    t.update(dt, casting(c), x > 0 && x < W && x !== sp.meet ? x : null);
+    const [x0, x1] = sp.span(t), x = t.side < 0 ? x1 : x0, y = IntroVideo.seaUnder(c);   // 出场视频的海涌进来时先垫在视频底下（intro.js seaAt）
+    t.update(dt, casting(c) || y != null, x > 0 && x < W && x !== sp.meet ? x : null, y);
   }
   Foam.update(dt);
   const x = sp.meet ?? W / 2;
