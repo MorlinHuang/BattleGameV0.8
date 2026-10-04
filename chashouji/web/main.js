@@ -2744,7 +2744,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
                                        ...(grp.members.includes(Baisu) ? [WaterArt.load(V, noSpr)] : [])]));
   // 结算演出图。失败不阻塞：缺素材时结算退到纯色板，照样把结果交代清楚
   Preload.add('result', () => Result.load(V));
-  Preload.add('video', () => IntroVideo.load().then(() => Truth.loadLoop()), { wait: false });   // 出场视频、真相女神在场循环视频：最后，不算进"全部加载完"
+  Preload.add('video', () => IntroVideo.load().then(() => Truth.loadLoop()).then(() => Baisu.loadLoop()).then(() => Change.loadLoop()), { wait: false });   // 出场视频、在场循环视频：最后，不算进"全部加载完"
   const loadedMsg = () => Promise.all([Preload.need('items'), Preload.need('result'), Preload.need('bgmotion')]).then(([[sprOK, shpOK], resN, motionN]) => {
     document.getElementById('msg').textContent =
       `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` + (motionN ? ` · 背景动效 ${motionN}` : '') +

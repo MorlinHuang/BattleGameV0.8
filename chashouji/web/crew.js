@@ -26,12 +26,12 @@
  */
 'use strict';
 
-/* 在场循环视频（cfg.loop，真相女神 2026-10-04，即梦首尾帧模式生成）：她在场时用一段原地循环的透明视频顶替立绘 ——
+/* 在场循环视频（cfg.loop，真相女神 / 白娘子 / 嫦娥 2026-10-04，即梦首尾帧模式生成）：她在场时用一段原地循环的透明视频顶替立绘 ——
    头发、裙摆被风掀、罐子往后猛震、中段转头冲镜头眨眼，都在视频里。视频每一帧都摆在立绘的坐标系里
-   （video/truth_loop/make_loop.py：同一个框放大 1.5 倍、金色外发光逐帧烘好），所以 drawOne 原样塞进立绘那个框，
+   （video/make_loop.py：同一个框（真相女神放大 1.5 倍）、外发光照各自立绘逐帧烘好），所以 drawOne 原样塞进立绘那个框，
    foot / muzzle / head 这些量点一个不改；第 0 帧就是立绘的姿势，出场视频的尾帧对的也是它，接上不跳。
-   json（make_loop.py 一起出）：cap 每帧罐口相对第 0 帧挪了多少（立绘像素，喷雾出口和罐尾跟着挪），
-   beats 罐子往后猛震的时刻（喷口焰在这一下炸开、重开一段"呲——"，见 Crew update）。
+   json（make_loop.py 一起出）：cap 每帧手上那件东西（罐口 / 水球 / 月牙）相对第 0 帧挪了多少（立绘像素，喷口、罐尾、掌心光团跟着挪），
+   beats 罐子往后猛震的时刻（只有真相女神；喷口焰在这一下炸开、重开一段"呲——"，见 Crew update）。白娘子、嫦娥同一套。
    只有 Chromium 放得出 VP9 透明（同 intro.js ALPHA_OK）；视频还没缓冲好、或 ?loopvideo=0，照旧画立绘、走立绘的晃法。
    <video> 挂在页面上、1 像素、不透明度 0：不挂 / display:none 的视频在桌面 Chrome 里不出新帧（intro.js release）。 */
 function LoopVideo(L) {
@@ -548,7 +548,7 @@ function Crew(cfg) {
     ctx.save();
     if (rl) { const [cx, cy] = at(p, PATH.pivot || cfg.whole.pivot); ctx.translate(cx, cy); ctx.rotate(rl); ctx.translate(-cx, -cy); }
     if (cfg.whole) spin(cfg.whole.pivot, b.aim * WK);  // 悬空：整个人先绕重心转（WK 成），上身再在这个基础上吃后坐
-    if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q), probe);
+    if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q === spr.muzzle ? onCan(q, b) : q), probe);   // 掌心的光团跟着视频里的水球 / 月牙
     ctx.save();
     spin(spr.body.pivot, bt);
     if (I.arm && !BW) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
@@ -914,7 +914,7 @@ const TRUTH = {
   spr: { src: 'assets/world/truth%n_%k.webp', body: { src: 'up', pivot: [168, 281], k: 1 },
          foot: [160, 608], muzzle: [370, 334], rest: -0.505, head: [211, 78], chest: [194, 185] },
   skins: [2],
-  /* 在场循环视频（见 LoopVideo）：10 秒一圈，原片 video/truth_loop/（提示词、首尾帧、make_loop.py）。灭迹恶魔、白娘子等照抄 TRUTH 的，各自 loop: null */
+  /* 在场循环视频（见 LoopVideo）：10 秒一圈，提示词、首尾帧在 video/truth_loop/，出片 video/make_loop.py truth。白娘子、嫦娥各有一条（BAISU / CHANGE），灭迹恶魔（及照抄它的法海等）loop: null */
   loop: { src: 'assets/video/truth_loop_alpha.webm' },
   aura: (ctx, b, s, at, probe) => drawAura(ctx, b, s, at, probe),
   anim: { pulse: [0.7, 0.16], kick: [0, 0.06, 9], lean: 0.03, bob: [5, 2.2] },
@@ -983,7 +983,7 @@ function drawDemonAura(ctx, b, s, at, probe) {
 }
 const DEMON = {
   ...TRUTH,
-  loop: null,
+  loop: null,                                   // 还没有循环视频
   face: -1,
   whole: { pivot: [216, 258] },
   exhaust: { ...TRUTH.exhaust, at: [287, 179] },
@@ -1084,7 +1084,8 @@ function drawBaisuAura(ctx, b, s, at, probe) {
 }
 const BAISU = {
   ...TRUTH,
-  loop: null,
+  /* 在场循环视频（2026-10-04）：8 秒一圈，衣袖披帛像在水里起伏、掌心水球转，眼神由冷转柔；提示词、首尾帧 video/baisu_loop/，出片 video/make_loop.py baisu */
+  loop: { src: 'assets/video/baisu_loop_alpha.webm' },
   whole: { pivot: [534, 324], k: 0.12 },        // 身子只跟瞄准角的 12%（见上）
   over: true,                                   // 水柱画在所有帮手之上（crew.js items）
   exhaust: null,                                // 仙人本来就会飞，没有尾焰
@@ -1295,6 +1296,8 @@ function drawMoonBeams(ctx, b, g, T, what) {
 }
 const CHANGE = {
   ...BAISU,
+  /* 在场循环视频（2026-10-04）：8 秒一圈，披帛裙摆像月下的云慢慢荡、掌心月牙浮着明暗呼吸；提示词、首尾帧 video/change_loop/，出片 video/make_loop.py change */
+  loop: { src: 'assets/video/change_loop_alpha.webm' },
   whole: { pivot: [370, 409], k: 0.12 },
   spr: { src: 'assets/world/change%n_%k.webp', body: { src: 'up', pivot: [370, 409], k: 1 },
          foot: [280, 900], muzzle: [581, 355], head: [397, 88], chest: [451, 310], halo: [430, 175],   // v14/change/make.py 打印；foot 是裙摆最低点
