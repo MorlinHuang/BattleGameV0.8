@@ -6,6 +6,7 @@
 foot / muzzle / head 这些量点一个都不用改。抠像、去溢色、外发光照各自立绘的出图脚本逐帧做（v14/truth/make2.py、v14/crewart.py）。
 
 原片 → 原图（立绘的 src）：参考图是原图按 ref 摆进画布的（名义值），即梦出片再缩放平移 —— 第一帧跟参考图按剪影拟合（fit）。
+head（有 face 的）：脸心那一块每帧相对第 0 帧挪了多少（立绘像素，模板匹配 ±30），头顶的天使环、头后的光轮跟着它。
 cap：手上那件东西（真相女神的红罐盖、白娘子的水球、嫦娥的小月牙、绿茶妹妹的手机）在每帧相对第 0 帧挪了多少（立绘像素），喷口跟着它。
   hit：只在立绘 muzzle 附近一个窗里找（track.win，原片像素），颜色按 track.hit 判，取形心；
   tmpl：颜色跟周围分不开的（绿茶妹妹淡粉手机 vs 手），取第 0 帧 muzzle 周围 ±tmpl 像素做模板，每帧在 ±win 里按差的平方和找最像的位置。
@@ -44,7 +45,8 @@ def crop_of(src, screen, key, spill, margin=6):
 
 ROLES = {
     # 参考图 = src2 往右下挪 (88, 32) 补成 1200×1600，再裁 (202, 42) 起、缩 0.86、放到 (243, 207)
-    'truth': dict(ref='truth_loop/真相女神_循环_首尾帧.png', screen='magenta',
+    # face：脸心（立绘像素）—— 光环跟着它挪（视频里会转头、歪头）；只给头上顶着 / 头后挂着光环的人
+    'truth': dict(ref='truth_loop/真相女神_循环_首尾帧.png', screen='magenta', face=(207, 122),
                   ref_of=lambda x, y: ((x + 88 - 202) * 0.86 + 243, (y + 32 - 42) * 0.86 + 207),
                   crop=(130, 28), K=0.4, size=(426, 654), up=1.5, cut=cut_truth, muzzle=(370, 334),
                   glow=[(21, 26, (255, 170, 40)), (9, 10, (255, 225, 120)), (3, 3, (255, 252, 220))],
@@ -55,7 +57,7 @@ ROLES = {
                   glow=[(25, 30, (40, 130, 255)), (11, 12, (140, 210, 255)), (3, 3, (240, 250, 255))],
                   track=dict(win=90, hit=lambda a: (a[..., 2] > 180) & (a[..., 0] < 140) & (a[..., 2] - a[..., 0] > 80)), beats=False),
     # 参考图 = v14/change/src1_rgba.png 按 getbbox (0, 33) 裁、缩 0.9、放到 1200×1600 绿底 (143, 123)；抠像 / 光同 v14/change/make.py
-    'change': dict(ref='change_loop/嫦娥_循环_首尾帧.png', screen='green', src='change/src1.png', key=(20, 150), spill='decyan',
+    'change': dict(ref='change_loop/嫦娥_循环_首尾帧.png', screen='green', face=(451, 216), src='change/src1.png', key=(20, 150), spill='decyan',
                    ref_of=lambda x, y: (x * 0.9 + 143, (y - 33) * 0.9 + 123), K=0.6, size=(654, 948), up=1.0, muzzle=(581, 355),
                    glow=[(25, 30, (150, 180, 255)), (11, 12, (215, 228, 255)), (3, 3, (255, 255, 255))],
                    track=dict(win=60, hit=lambda a: a.min(-1) > 225), beats=False),
@@ -114,11 +116,12 @@ def geom(R, fit):
     return x0, y0, x1 - x0, y1 - y0
 
 
-def track_tmpl(R, fit, paths):
-    """模板匹配跟踪：返回每帧手上那件东西的位置（立绘 1 倍像素）"""
+def track_tmpl(R, fit, paths, pt=None, T=None, W=None):
+    """模板匹配跟踪：返回每帧 pt（默认 muzzle，立绘像素）那一块的位置（立绘 1 倍像素）"""
     x0, y0, sx, sy = geom(R, fit)
-    up, T, W = R['up'], R['track']['tmpl'], R['track']['win']
-    mx, my = R['muzzle']
+    up = R['up']
+    T, W = T or R['track']['tmpl'], W or R['track']['win']
+    mx, my = pt or R['muzzle']
     cx, cy = int(round(x0 + mx * up * sx)), int(round(y0 + my * up * sy))
     load = lambda p: np.array(Image.open(p).convert('L')).astype(np.float32)
     t = load(paths[0])[cy - T:cy + T + 1, cx - T:cx + T + 1]
@@ -211,6 +214,14 @@ def main(name, src):
             res[i] = res[i - 1] if i else next(v for v in res.values() if v)
     cap = np.array([res[i] for i in range(len(frames))])
     off = cap - cap[0]
+    head = None
+    if 'face' in R:
+        h = np.array(track_tmpl(R, (a, dx, dy), [os.path.join(raw, f) for f in frames], R['face'], 40, 30))
+        # 模板匹配按原片整像素跳（立绘里一步 ~1 像素），逐帧直接用光环会抖：5 帧滑动平均，首尾按循环接（视频本来就首尾相接）
+        n = len(h); ker = np.ones(5) / 5
+        h = np.stack([np.convolve(np.concatenate([h[-2:, c], h[:, c], h[:2, c]]), ker, 'valid') for c in range(2)], -1)[:n]
+        head = h - h[0]
+        print('head max off', np.abs(head).max(0).round(1))
     beats = []
     if R['beats']:
         jump = -(off[1:, 0] - off[:-1, 0])
@@ -225,7 +236,8 @@ def main(name, src):
                     '-row-mt', '1', '-deadline', 'good', '-cpu-used', '2', '-auto-alt-ref', '0', out], check=True)
     W, H = round(R['size'][0] * R['up']), round(R['size'][1] * R['up'])
     json.dump({'fps': FPS, 'frames': len(frames), 'size': [W, H], 'fit': [round(iou, 4), a, dx, dy],
-               'beats': beats, 'cap': [[round(float(x), 1), round(float(y), 1)] for x, y in off]},
+               'beats': beats, 'cap': [[round(float(x), 1), round(float(y), 1)] for x, y in off],
+               **({'head': [[round(float(x), 1), round(float(y), 1)] for x, y in head]} if head is not None else {})},
               open(out.replace('_alpha.webm', '.json'), 'w'), separators=(',', ':'))
     print('tmp', tmp, 'out', out, os.path.getsize(out))
 

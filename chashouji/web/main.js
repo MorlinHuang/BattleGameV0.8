@@ -2903,10 +2903,19 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const x0 = st.from > 0 ? 0 : W * (1 - e);                           // 横幅跟着字一起从那一侧拉出来
     c.save();
     c.globalAlpha = a;
-    c.fillStyle = st.fill;
-    c.fillRect(x0, I.y - I.h / 2, W * e, I.h);
+    /* 横幅是一笔刷出来的（精特4，原来是直角长方形 + 上下两条 4 像素等宽直线）：中段满高、两头在 tip 长度里收成尖；
+       上下沿各一道两头收细、中间 5 像素的亮线（透镜形），比底色两头各短一截 */
+    const L = x0, Rr = x0 + W * e, hh = I.h / 2, cy = I.y, tip = Math.min(W * 0.16, (Rr - L) / 2);
+    c.fillStyle = st.fill; c.beginPath(); c.moveTo(L, cy);
+    c.quadraticCurveTo(L + tip * 0.3, cy - hh, L + tip, cy - hh); c.lineTo(Rr - tip, cy - hh); c.quadraticCurveTo(Rr - tip * 0.3, cy - hh, Rr, cy);
+    c.quadraticCurveTo(Rr - tip * 0.3, cy + hh, Rr - tip, cy + hh); c.lineTo(L + tip, cy + hh); c.quadraticCurveTo(L + tip * 0.3, cy + hh, L, cy);
+    c.fill();
     c.fillStyle = st.bar;
-    c.fillRect(x0, I.y - I.h / 2, W * e, 4); c.fillRect(x0, I.y + I.h / 2 - 4, W * e, 4);
+    for (const [y, k] of [[cy - hh + 2, -1], [cy + hh - 2, 1]]) {
+      const a0 = L + tip * 0.55, a1 = Rr - tip * 0.55, m = (a0 + a1) / 2;
+      if (a1 - a0 < 20) continue;
+      c.beginPath(); c.moveTo(a0, y); c.quadraticCurveTo(m, y - 5 * k, a1, y); c.quadraticCurveTo(m, y + 1.5 * k, a0, y); c.fill();
+    }
     c.font = '900 76px system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
     c.lineWidth = 12; c.strokeStyle = st.edge; c.strokeText(name, x, I.y);

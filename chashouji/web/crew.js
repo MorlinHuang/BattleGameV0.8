@@ -64,6 +64,11 @@ function LoopVideo(L) {
       if (on !== b) return null;
       return J.cap[Math.min(J.frames - 1, Math.floor(v.currentTime * J.fps))];
     },
+    /* 脸这一帧挪了多少（json 有 head 的才有：真相女神、嫦娥 —— 头顶的天使环 / 头后的光轮跟着转头、歪头走） */
+    head(b) {
+      if (on !== b || !J.head) return null;
+      return J.head[Math.min(J.frames - 1, Math.floor(v.currentTime * J.fps))];
+    },
     /* 上次调用以来视频走过了几个 beat（循环绕回来的也算） */
     beats(b) {
       if (on !== b) return 0;
@@ -276,6 +281,10 @@ function Crew(cfg) {
   /* 贴图点 q 这一帧在循环视频里跟着罐子挪到哪（喷口、罐尾）；没在放视频就是 q */
   function onCan(q, b) {
     const d = b.lv && LV.cap(b);
+    return d ? [q[0] + d[0], q[1] + d[1]] : q;
+  }
+  function onHead(q, b) {
+    const d = b.lv && LV.head(b);
     return d ? [q[0] + d[0], q[1] + d[1]] : q;
   }
   function muzzle(p, th, b) {
@@ -548,7 +557,8 @@ function Crew(cfg) {
     ctx.save();
     if (rl) { const [cx, cy] = at(p, PATH.pivot || cfg.whole.pivot); ctx.translate(cx, cy); ctx.rotate(rl); ctx.translate(-cx, -cy); }
     if (cfg.whole) spin(cfg.whole.pivot, b.aim * WK);  // 悬空：整个人先绕重心转（WK 成），上身再在这个基础上吃后坐
-    if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q === spr.muzzle ? onCan(q, b) : q), probe);   // 掌心的光团跟着视频里的水球 / 月牙
+    /* 掌心的光团跟着视频里的水球 / 月牙 / 手机，头顶 / 头后的光环跟着视频里的脸 */
+    if (cfg.aura) cfg.aura(ctx, b, s, (q) => at(p, q === spr.muzzle ? onCan(q, b) : q === spr.head || q === spr.halo ? onHead(q, b) : q), probe);
     ctx.save();
     spin(spr.body.pivot, bt);
     if (I.arm && !BW) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
