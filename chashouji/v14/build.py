@@ -450,17 +450,17 @@ def edges(solid, phone):
 
 
 # 被拖的人挣扎（2026-09-30 用户：「当前帧数还是太少 动作很僵硬」）：步态 8 格原来只重画了赢方的腿，被拖的那个人
-# 8 格一模一样，被拖着走一路纹丝不动。struggle/<档>/ 下 s1~s3.png 是拿本档原图蒙版局部重绘、**只重画输方腰线以下**
-# （小腿、膝盖、拖鞋在地上蹭、乱蹬；头、手臂、上身一个像素不动，免得循环起来一跳一跳）得来的。
+# 8 格一模一样，被拖着走一路纹丝不动。struggle/<档>/ 下 s1~s3.png **只重画输方腰线以下**
+# （小腿、膝盖、拖鞋在地上蹭、乱蹬；头、手臂、上身一个像素不动，免得循环起来一跳一跳）。
+# 10-05 起重画：原图抹掉腿、贴上旧帧的拖鞋落点，[引导图, 原图] 两图生图（struggle/guide.py、prompt.py），挑好的由 struggle/comp.py 贴回原图。
 # 构建时第 f 格步态取 s[f % 4]（0 = 原图的腿）：被拖一步，腿跟着蹬一下，停下不拖就不动（步态只随位移走）。
 # 取用区域 = 输方蒙版（tween/<档>/mask.png）∩ 不在赢方步态蒙版里（外扩 STRUGGLE_KEEP，
-# 赢方迈步的那只脚会伸进这一侧，挨着的地方贴生图会叠出两只拖鞋）∩ 不碰原图腿区 STRUGGLE_HIP 以外的身体，边缘羽化 STRUGGLE_FEATHER。
+# 赢方迈步的那只脚会伸进这一侧，挨着的地方贴生图会叠出两只拖鞋）∩ 不碰原图腿区 STRUGGLE_HIP 以外的身体（struggle_region）；接缝在 struggle/comp.py 里按 seam.py 对齐。
 # 腿在哪：(这一行以下, 这一列起, 到这一列)，原图坐标。跪 / 扑倒按短裤下沿横切；趴着的两档腿在身后水平伸出，按短裤后沿竖切
 STRUGGLE_HIP = {'aK': (745, 0, 1536), 'aF': (640, 0, 1536), 'aL': (0, 1190, 1536),
                 'bK': (700, 0, 1536), 'bF': (700, 0, 1536), 'bL': (0, 0, 390)}
 STRUGGLE_KEEP = 25
 STRUGGLE_GUARD = 6
-STRUGGLE_FEATHER = 8
 
 
 # 后退步态（2026-10-01 用户：「男女主后退的动作还是不对，帧数不够、距离与动作不匹配导致滑步。而且没有左右腿交替向后，看着特别假」）。
@@ -515,12 +515,8 @@ def walk_load(name):
     return paths[1:], [round(v / C, 4) for v in at], C
 
 
-def struggle_load(name, gait_mask):
-    """返回 ([s1, s2, s3 的 RGB int16 数组], 取用权重 H×W×1)；这一档没做挣扎帧返回 ([], None)"""
-    d = os.path.join(HERE, 'struggle', name)
-    fs = sorted([f for f in os.listdir(d) if f[0] == 's' and f[1:-4].isdigit()], key=lambda f: int(f[1:-4])) if os.path.isdir(d) else []
-    if not fs:
-        return [], None
+def struggle_region(name, gait_mask):
+    """挣扎帧的取用区域（布尔 H×W）：输方蒙版 ∩ 不在赢方步态蒙版里 ∩ 不碰原图腿区以外的身体。struggle/comp.py 也用它贴接缝"""
     lose = np.array(Image.open(LOSE(name)).getchannel('A')) < 128
     keep = ndimage.binary_dilation(np.array(Image.open(gait_mask).getchannel('A')) < 128, iterations=STRUGGLE_KEEP)
     y0, x0, x1 = STRUGGLE_HIP[name]
@@ -528,12 +524,21 @@ def struggle_load(name, gait_mask):
     legs[y0:, x0:x1] = True
     # 腿区以外只护住原图里有人的像素（上身、头发，外扩 STRUGGLE_GUARD）：踢起来的小腿会高过腰线伸进空白处，
     # 按腰线一刀切的话那截腿被切在羽化带里、跟原图的品红底一混，边上一道粉边（2026-09-30 男跪档截图）
-    base = np.array(Image.open(os.path.join(d, 'base.png')).convert('RGB')).astype(np.int16)
+    base = np.array(Image.open(os.path.join(HERE, 'struggle', name, 'base.png')).convert('RGB')).astype(np.int16)
     guard = ndimage.binary_dilation((keyed(base) < 60) & ~legs, iterations=STRUGGLE_GUARD)
-    r = lose & ~keep & ~guard
-    w = ndimage.gaussian_filter(r.astype(np.float32), STRUGGLE_FEATHER) * r      # 只往里羽化，区域外一个像素不动
-    size = Image.open(os.path.join(d, fs[0])).size
-    return [np.array(Image.open(os.path.join(d, f)).convert('RGB').resize(size)).astype(np.int16) for f in fs], w[..., None]
+    return lose & ~keep & ~guard
+
+
+def struggle_load(name, gait_mask):
+    """返回 ([s1, s2, s3 的 RGB int16 数组], 取用权重 H×W×1)；这一档没做挣扎帧返回 ([], None)。
+    s<k>.png 是 struggle/comp.py 已经按 seam.py 贴回原图的整张（区域外 = 原图，接缝处已对齐、渐变），
+    所以这里按区域硬取就行，不再羽化（10-05 之前在这里往里羽化 8 像素，生图的短裤边和原图错开一截照样看得见）"""
+    d = os.path.join(HERE, 'struggle', name)
+    fs = sorted([f for f in os.listdir(d) if f[0] == 's' and f[1:-4].isdigit()], key=lambda f: int(f[1:-4])) if os.path.isdir(d) else []
+    if not fs:
+        return [], None
+    r = struggle_region(name, gait_mask)
+    return [np.array(Image.open(os.path.join(d, f)).convert('RGB')).astype(np.int16) for f in fs], r[..., None].astype(np.float32)
 
 
 LOSE = lambda name: os.path.join(HERE, 'tween', name, 'mask.png')     # 各档输方蒙版（贴地段用，见 ground_segs）
