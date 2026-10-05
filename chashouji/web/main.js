@@ -70,10 +70,19 @@ const P = {
      人拽重物本来就是"蹬住、拽、退一步"：画面上两人的位置（FX.walkPos）不再逐帧贴着 S.pos，
      落后够 stepAt 步就用 stepT 秒迈完整一步，背景和脚一起走（脚照样钉在地上），迈完站住接着拽。
      胜负、距离条仍按 S.pos，画面和它最多差半步。
-     gaitMode：'step' 一步一拽；'nail' 旧版按位移连续走（?gait=nail 对照）。 */
-  gaitMode: 'step',
-  stepT: 0.5,       // 迈一步用几秒（人正常走一步约 0.5 秒）
-  stepAt: 0.5,      // 画面落后真实位置多少步就迈下一步：半步 = 画面在真实位置前后半步之内来回
+     gaitMode：'step' 一步一拽；'nail' 旧版按位移连续走（?gait=nail 对照）；'sway' 见下。
+     改 'sway'（10-05 用户「不是几秒钟拉很远，而是后腿的速度比较慢，腿是逐步抬起放下的，而不是一秒钟后腿好几步」
+     「势均力敌时两个人完全静止不动也不对……在当前进度下，左右有 ±1% 的动作量振荡区间，保证每一帧男女主都是动态的」）：
+     一步一拽每步 0.5 秒、背景一下卷过 150~245 像素，读成"一下被拽出去好远"、拖得快时一秒两步；拉力差在死区里时又一步不迈、整个人定住。
+     现在画面位置 = 真实位置 + 一个慢慢来回的晃动（±swayM 米，约 swayT 秒一个来回），脚钉在地板上按画面位置的变化走（同 nail）：
+     拖得慢时腿就慢慢抬、慢慢放（封顶 3 米/秒也不到一秒一步），拉不动时人在原地前后晃、腿跟着抬一点放一点，没有一帧是死的。 */
+  gaitMode: 'sway',
+  stepT: 0.5,       // 'step'：迈一步用几秒
+  stepAt: 0.5,      // 'step'：画面落后真实位置多少步就迈下一步
+  /* ±0.6 米 = 两头终点之间 60 米的 1%（距离条上的 1%），屏幕上 ±33 像素，约一格步态（一个循环 16 格、cycle 310~491 像素）：
+     后脚抬起一点再放下。晃动最快约 2π × 0.6 / 3.2 ≈ 1.2 米/秒：拖速比这慢时看得出往回让一点再拽回来，比这快就只是忽快忽慢 */
+  swayM: 0.6,
+  swayT: 3.2,       // 晃一个来回约几秒（两段不同周期叠起来，不是死板的正弦，见 derive）
   walkFollow: 6,    // 没有步态的档（僵持、过渡帧）画面位置追 S.pos 的快慢（指数趋近系数，1/秒）
   /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
      来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
@@ -175,6 +184,9 @@ const FX = {
   gaitPh: 0,                         // 步态相位（循环数，带小数），只随位移变
   walkPos: 0,                        // 画面上两个人在哪（米）：一步一拽时按步走，追着 S.pos（见 P.gaitMode）
   step: null,                        // 正在迈的这一步 { t 进度 0~1, from 起点米数, d 方向 ±1, ph0 起步相位 }
+  swayT: 0,                          // 'sway'：晃动的时钟（秒）
+  walkD: 0,                          // 'sway'：这一帧画面位置挪了多少米
+  sway: 0,                           // 'sway'：晃动的权重 0~1（步态档里 1，僵持 / 过渡帧里 0，中间平滑过渡）
   tween: null,                       // 正在播的过渡帧（按播放顺序），换档那一刻由 startTween 定，播完照常进循环/步态
 
   hitX: 0, hitV: 0,                  // 角色被推开的位移与速度
@@ -450,6 +462,17 @@ function derive(dt) {
      走步态循环；还没画步态的先靠颠步（bob）假装在走。 */
   const gait = WORLD && WORLD.gaits && WORLD.gaits[FX.pose];
   const tweenT = FX.tween ? FX.tween.length / P.tweenFps : 0;
+  if (P.gaitMode === 'sway') {
+    /* 晃动：两段不同周期（1 : 1.63，不成整数比，来回的幅度和快慢每次都不太一样）叠起来，振幅合计 swayM。
+       只在步态档晃 —— 僵持循环（n）和过渡帧的脚没跟地板对齐，背景一晃就是脚底打滑；权重 sway 0.5 秒渐变，换档时不跳 */
+    FX.swayT += dt;
+    FX.sway += ((gait && FX.poseT >= tweenT ? 1 : 0) - FX.sway) * approach(dt, 2);
+    const w = 2 * Math.PI * FX.swayT / P.swayT;
+    const off = P.swayM * FX.sway * (0.7 * Math.sin(w) + 0.3 * Math.sin(w * 1.63 + 1.1));
+    const prev = FX.walkPos;
+    FX.walkPos += (S.pos + off - FX.walkPos) * approach(dt, P.walkFollow);
+    FX.walkD = FX.walkPos - prev;   // 这一帧画面位置挪了多少：下面步态相位按它推
+  }
   if (FX.poseT < tweenT) {
     FX.frame = FX.tween[Math.floor(FX.poseT * P.tweenFps)];
     FX.bob = 0;
@@ -473,6 +496,9 @@ function derive(dt) {
         FX.gaitPh = st.ph0 + st.d * toward * 0.5 * e;
         if (st.t >= 1) FX.step = null;
       }
+    } else if (P.gaitMode === 'sway') {
+      /* 画面位置追"真实位置 + 晃动"（上面算好了这一帧挪了多少 walkD），相位按画面位置**实际**挪了多少推：站地的脚跟地板一起走，不打滑 */
+      FX.gaitPh += FX.walkD * toward * P.pxPerM / gait.cycle;
     } else {
       FX.gaitPh += S.vel * toward * dt * P.pxPerM * P.gaitSlip / gait.cycle;
       FX.walkPos = S.pos;
@@ -499,7 +525,7 @@ function derive(dt) {
   /* 镜头：两个人在世界里的位置 = 客厅正中 − 米数 × 每米像素（往左拖是正）。
      镜头跟着他们走，但不出世界的边 —— 走到头时镜头停住、人往画面边上走，
      这正是"拖到墙根了"的样子。 */
-  if (!gait || FX.poseT < tweenT) FX.walkPos += (S.pos - FX.walkPos) * approach(dt, P.walkFollow);   // 没在走步态：画面位置追上真实位置
+  if (P.gaitMode !== 'sway' && (!gait || FX.poseT < tweenT)) FX.walkPos += (S.pos - FX.walkPos) * approach(dt, P.walkFollow);   // 没在走步态：画面位置追上真实位置
   if (WORLD) {
     const wx = WORLD.center - FX.walkPos * P.pxPerM;
     FX.camX = clamp(wx, MID, WORLD.total - MID);
