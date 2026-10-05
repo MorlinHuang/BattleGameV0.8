@@ -18,7 +18,7 @@ def slippers(a):
         s = np.max(a, 2) < 70
     s &= M
     s = ndimage.binary_opening(s, np.ones((5, 5)))
-    lab, n = ndimage.label(ndimage.binary_closing(s, np.ones((9, 9))))
+    lab, n = ndimage.label(ndimage.binary_fill_holes(s))      # 填鞋面上的眼睛胡须；不用闭运算——贴着的两只拖鞋会被粘成一只
     out = []
     for k in range(1, n + 1):
         ys, xs = np.nonzero(lab == k)

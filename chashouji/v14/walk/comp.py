@@ -1,4 +1,4 @@
-"""选定的候选 → 合成帧：腿区（蒙版放开区，边缘羽化 6）取候选，其余取 base。写 <档>/w<i>.png，再拼一条腿部胶片 + gif"""
+"""选定的候选 → 合成帧（候选名写 = 表示这一格沿用现有 w<i>）：腿区（蒙版放开区，边缘羽化 6）取候选，其余取 base。写 <档>/w<i>.png，再拼一条腿部胶片 + gif"""
 import sys, os, numpy as np
 W = os.path.dirname(os.path.abspath(__file__))       # v14/walk
 from PIL import Image, ImageDraw
@@ -11,6 +11,8 @@ w = ndimage.gaussian_filter(M.astype(np.float32), 3) * M      # 只在放开区�
 w = w[..., None]
 frames = [base]
 for i, pk in enumerate(picks, 1):
+    if pk == '=':      # 这一格不换，沿用现有 w<i>
+        frames.append(np.array(Image.open(f'{W}/{name}/w{i:02d}.png').convert('RGB')).astype(np.float32)); continue
     c = np.array(Image.open(f'{W}/{name}/cand/{pk}.png').convert('RGB').resize((1536, 1024))).astype(np.float32)
     out = base * (1 - w) + c * w
     Image.fromarray(np.round(out).astype(np.uint8)).save(f'{W}/{name}/w{i:02d}.png')

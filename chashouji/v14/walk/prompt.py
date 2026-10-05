@@ -26,7 +26,8 @@ for f in p['frames']:
         legs = (f"both slippers are flat on the floor and both legs bear weight: the {BACK.lower()} slipper is behind her, the {TO.lower()} slipper is in front; wide stable backward-walking stance")
     else:
         legs = (f"the slipper that sits flat on the floor: that is the planted, weight-bearing foot, its leg firm; "
-                f"the other slipper is raised about {int(sw['lift'])} pixels off the floor{REL}: that is the swinging foot, its knee bent, the lower leg angled so the heel leads toward the {BACK} — she is mid-step, stepping backward")
+                f"the other slipper hovers just above the floor (only about {int(sw['lift'])} pixels up){REL}: that is the swinging foot, shuffling backward low along the floor, its knee only slightly bent, heel leading toward the {BACK} — she is mid-step, stepping backward. "
+                f"Both legs are anatomically correct and simple: each thigh goes down from the shorts to one knee and one shin into its own slipper, no twisted, crossed-over or backward-bent knees, no foot sticking out of a slipper")
     pr = (f"Keep the ENTIRE image exactly as the reference, including the flat solid MAGENTA #FF00FF background, the upper body, the arms, the phone, the other person, "
           f"and BOTH {SL} exactly where they are (do not move, resize, redraw, duplicate or add slippers). "
           f"Inpaint ONLY the transparent masked area: draw the two legs of {WHO}, from the bottom of the shorts down into the two slippers, each leg connecting the hip to one slipper. "

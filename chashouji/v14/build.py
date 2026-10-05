@@ -481,7 +481,7 @@ def slipper_blobs(a, mask, girl, band):
     s &= mask
     s[:band[0]] = False
     s[band[1]:] = False
-    lab, n = ndimage.label(ndimage.binary_closing(ndimage.binary_opening(s, np.ones((5, 5))), np.ones((9, 9))))
+    lab, n = ndimage.label(ndimage.binary_fill_holes(ndimage.binary_opening(s, np.ones((5, 5)))))
     out = []
     for k in range(1, n + 1):
         yy, xx = np.nonzero(lab == k)

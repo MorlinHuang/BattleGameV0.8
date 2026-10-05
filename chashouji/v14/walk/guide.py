@@ -61,8 +61,10 @@ def pos(foot, i):
         x = Bk['cx'] - back_dir * S * u
         return x, lines[foot], 0.0, 0.0
     x = Fr['cx'] + back_dir * S * u
-    lift = LIFT * np.sin(np.pi * u)
-    ang = 22 * np.sin(np.pi * u) + 6 * (1 - u) * (u > 0)        # 抬脚时脚跟先起、脚尖往下垂
+    # 拖着后退是贴地蹭：第一格就抬到 LIFT，之后一直这么低地往后滑，落地前一格再放下。
+    # 抬成正弦（中点最高）时摆动拖鞋正好悬在站地脚上方小腿高处，模型只能画出交叉、反折、拖鞋脱脚的腿。
+    lift = LIFT * min(1.0, np.sin(np.pi * u) / np.sin(np.pi * 2 / N))
+    ang = min(14.0, 22 * np.sin(np.pi * u) + 6 * (1 - u) * (u > 0))        # 抬脚时脚跟先起、脚尖往下垂
     return x, lines[foot], lift, ang
 for i in range(1, N):
     can = base.copy(); can[M] = (255, 0, 255)
