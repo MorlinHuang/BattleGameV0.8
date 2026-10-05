@@ -73,7 +73,7 @@ const IntroVideo = (() => {
     for (const [k, c] of Object.entries(CLIPS)) {
       const v = document.createElement('video');
       /* preload none：首屏不碰视频（docs/首屏加载诊断.md R3：4 个视频 15 MB，preload auto 时在首屏那十几秒占掉 6 条连接里的 4 条）。
-         首帧之后预取队列最后一项（load）才开始缓冲；缓冲够之前送礼，begin 按 readyState 跳过视频 */
+         首帧之后预取队列排到 'vid:<名>'（档 4 两组后面）或送档 4 插队时才开始缓冲（load）；送礼时最多等它一会儿，还没好 begin 就跳过视频 */
       v.src = c.src; v.preload = 'none'; v.playsInline = true;
       const [, , w, h] = c.box;
       Object.assign(v.style, {
@@ -115,7 +115,9 @@ const IntroVideo = (() => {
      没有视频、视频还没加载好、或正在放别人的视频（两边同时刷档 4）→ 返回 false，照原来从画外冲进来。 */
   function begin(rcp, crew, b) {
     const c = CLIPS[rcp], v = vids[rcp];
-    if (!c || !v || cur || v.readyState < 3) return false;
+    /* 要 HAVE_ENOUGH_DATA（浏览器估计能一口气放完）：只要 HAVE_FUTURE_DATA 就开放的话，慢网（4 Mbps）下边下边放，
+       她在视频里候场卡二十多秒 */
+    if (!c || !v || cur || v.readyState < 4) return false;
     b.hold = true;
     cur = { v, crew, b, c, done: false };
     v.currentTime = 0;
@@ -162,21 +164,27 @@ const IntroVideo = (() => {
     hide(v);
   }
 
-  /* 首帧之后预取队列的最后一项（main.js / preload.js）：一个一个开始缓冲（一次一个，不跟送礼时的按需加载抢连接），
-     每个到 canplaythrough（或出错）算这一个完。读够多少由浏览器定（服务器 serve.py 支持 Range，可以边下边放） */
-  function load() {
-    return Object.values(vids).reduce((p, v) => p.then(() => new Promise((ok) => {
+  /* 缓冲一个人的出场视频：预取队列（main.js 'vid:<名>'，排在档 4 两组后面）或送档 4 时插队。到 canplaythrough（或出错）算完，
+     读够多少由浏览器定（服务器 serve.py 支持 Range，可以边下边放）。同一段只 v.load() 一次（再调会把缓冲清掉重来）；
+     这个环境不放视频（非 Chromium / ?introvideo=0）直接算完 */
+  const lps = {};
+  function load(rcp) {
+    const v = vids[rcp];
+    if (!v) return Promise.resolve();
+    return lps[rcp] || (lps[rcp] = new Promise((ok) => {
       if (v.readyState >= 4) { ok(); return; }
       v.addEventListener('canplaythrough', ok, { once: true });
       v.addEventListener('error', ok, { once: true });
       v.preload = 'auto'; v.load();
-    })), Promise.resolve());
+    }));
   }
+  /* 放得出来了没有（begin 的条件）：送档 4 时等它等到这个为真或超时 */
+  const ready = (rcp) => !!vids[rcp] && vids[rcp].readyState >= 4;
 
   const playing = () => !!cur && !cur.done;
   /* 此刻要不要给 crew 那片海垫底：正在放它的视频、过了 seaAt → 视频里海面的画布 y；否则 null */
   const seaUnder = (crew) => cur && !cur.done && cur.crew === crew && cur.c.seaAt != null && cur.v.currentTime >= cur.c.seaAt
     ? cur.c.box[1] + cur.c.tide * cur.c.box[2] / cur.c.vw : null;
   const owner = () => cur && cur.crew;         // 正在放谁的（调试台换人时要连视频一起收掉）
-  return { init, load, begin, stop, playing, owner, seaUnder, CLIPS };
+  return { init, load, ready, begin, stop, playing, owner, seaUnder, CLIPS };
 })();

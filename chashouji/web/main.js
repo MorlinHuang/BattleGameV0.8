@@ -336,7 +336,7 @@ function giveGift(side, key, pick) {
       comboHit(side, key, g.style === 'crew' ? CREW[g.crew].all.some(a => a.active()) : g.style === 'rain' && RAIN[g.rain].active());
     if (g.style === 'crew') {
       /* 新来的人有出场视频（intro.js）：先放视频、她候场，放完从视频里走出来；续时间不放。
-         视频没缓冲够（预取队列最后才轮到它）begin 返回 false，人直接从画外冲进来 */
+         视频没缓冲够（下面最多等 VID_WAIT 秒还没好）begin 返回 false，人直接从画外冲进来，在场循环视频缓冲好了再切进去（crew.js） */
       const go = () => {
         const alive = group && CREW[g.crew].active();     // 候场（视频放着）也算在场：这时再送就是 ×2
         const [m, b] = summonCrew(g.crew, undefined, pick);
@@ -346,9 +346,24 @@ function giveGift(side, key, pick) {
       /* 档 4 这一组（几个人的贴图 + 各自的法术潮）还没加载完（首帧刚出来就送）：插到队首，到了再上场。
          数值上面已经算进去了，只是人晚到一两秒；这一局已经结束 / 重开了就不再上场。
          档 3 三人组不在这里等：trio.js 只抽加载好的人，没有才等那一个人（Act.summon） */
-      if (CREW[g.crew].members && !Preload.ready(g.crew)) {
+      /* 这次上场的是新来的、有出场视频的人，视频还放不了（刚打开页面就送：视频原来排在预取队列最后，这一次出场只剩立绘）：
+         插队缓冲她的出场 + 在场循环视频，最多等 VID_WAIT 秒（数值已经算进去了，只是人晚到一会儿；网慢等不到就不放出场视频） */
+      const up = group && CREW[g.crew].peek(pick), rcp = up && !up.active() && INTRO_OF.get(up);
+      const waits = [];
+      if (group && !Preload.ready(g.crew)) waits.push(Preload.need(g.crew));
+      if (rcp && !IntroVideo.ready(rcp)) {
+        Preload.need('vid:' + rcp);
+        /* 能放了（canplay）就上；缓冲完 / 出错 / 这个环境不放视频（IntroVideo.load 马上结束）也不再等 */
+        waits.push(new Promise((ok) => {
+          let done = false;
+          const fin = () => { done = true; ok(); };
+          IntroVideo.load(rcp).then(fin); setTimeout(fin, VID_WAIT * 1000);
+          (function poll() { if (done) return; if (IntroVideo.ready(rcp)) fin(); else setTimeout(poll, 100); })();
+        }));
+      }
+      if (waits.length) {
         const gen = matchGen;
-        Preload.need(g.crew).then(() => { if (gen === matchGen && S.phase !== 'over') go(); });
+        Promise.all(waits).then(() => { if (gen === matchGen && S.phase !== 'over') go(); });
       } else go();
     }
     else {
@@ -368,6 +383,7 @@ function hexDebuff(side, k, sec) {
 }
 
 let matchGen = 0;                                   // 第几局（档 4 等素材上场时，局已经换了就不再上）
+const VID_WAIT = 2.5;                               // 送档 4 时最多等这个人的出场视频几秒（20 Mbps 下最大一段 5 MB 约 2 秒能放）
 function startMatch() {
   matchGen++;
   S.p = 50; S.fA = S.fB = 0;
@@ -2792,9 +2808,12 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   for (const [key, grp] of [['g4L', G4L], ['g4R', G4R]])
     Preload.add(key, () => Promise.all([...grp.members.map(c => c.load(V, noSpr)), ...grp.members.map(c => TIDE_OF.get(c).load(V, noSpr)),
                                        ...(grp.members.includes(Baisu) ? [WaterArt.load(V, noSpr)] : [])]));
+  /* 档 4 出场视频 + 在场循环视频：有视频的每个人一个 job（'vid:<出场配方名>'），紧跟档 4 两组、按上场顺序；送档 4 时按它插队（giveGift）。
+     原来 8 段 21 MB 排在整个队列最后，刚打开页面就送档 4 时视频还没开始下，那一次出场就只剩立绘。不算进"全部加载完"（wait: false） */
+  for (const m of [...G4L.members, ...G4R.members].filter(m => INTRO_OF.has(m)))
+    Preload.add('vid:' + INTRO_OF.get(m), () => IntroVideo.load(INTRO_OF.get(m)).then(() => m.loadLoop()), { wait: false });
   // 结算演出图。失败不阻塞：缺素材时结算退到纯色板，照样把结果交代清楚
   Preload.add('result', () => Result.load(V));
-  Preload.add('video', () => IntroVideo.load().then(() => Truth.loadLoop()).then(() => Baisu.loadLoop()).then(() => Change.loadLoop()).then(() => Sister.loadLoop()), { wait: false });   // 出场视频、在场循环视频：最后，不算进"全部加载完"
   const loadedMsg = () => Promise.all([Preload.need('items'), Preload.need('result'), Preload.need('bgmotion')]).then(([[sprOK, shpOK], resN, motionN]) => {
     document.getElementById('msg').textContent =
       `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` + (motionN ? ` · 背景动效 ${motionN}` : '') +

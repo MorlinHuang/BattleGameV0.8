@@ -47,6 +47,7 @@ function LoopVideo(L) {
   document.body.appendChild(v);
   const cv = document.createElement('canvas'), cx = cv.getContext('2d');
   let J = null, on = null, last = 0, mt = -1, gen = 0;   // mt：cv 上那一帧的媒体时间（−1 = 这一轮还没拷到帧）；gen：第几轮（停了马上又开，旧一轮的回调链就此断掉）
+  let lp = null;                                          // load 的 promise：预取队列、送礼插队都会要，v.load() 只能调一次（再调会把缓冲清掉重来）
   const idx = () => Math.min(J.frames - 1, Math.floor(mt * J.fps + 1e-3));
   const watch = (g) => v.requestVideoFrameCallback((now, md) => grab(g, md));
   function grab(g, md) {
@@ -57,14 +58,14 @@ function LoopVideo(L) {
     watch(g);
   }
   return {
-    /* 预取队列最后（main.js，跟出场视频一起）：先拿 json，再缓冲视频 */
-    load: () => fetch(L.src.replace('_alpha.webm', '.json')).then(r => r.json()).then((j) => { J = j; }).catch(() => {})
+    /* 预取队列（main.js 'vid:<名>'，排在档 4 两组后面）或送档 4 时插队：先拿 json，再缓冲视频 */
+    load: () => lp || (lp = fetch(L.src.replace('_alpha.webm', '.json')).then(r => r.json()).then((j) => { J = j; }).catch(() => {})
       .then(() => new Promise((ok) => {
         if (v.readyState >= 4) { ok(); return; }
         v.addEventListener('canplaythrough', ok, { once: true });
         v.addEventListener('error', ok, { once: true });
         v.preload = 'auto'; v.load();
-      })),
+      }))),
     /* 这个人开始在场（出场视频放完 / 从画外冲进来那一刻）：从第 0 帧放。没缓冲好返回 false，她就照旧是立绘。
        拷到第一帧之前 frame 给 null（画立绘 = 第 0 帧的姿势） */
     start(b) {
@@ -421,7 +422,10 @@ function Crew(cfg) {
         }
       }
       if (b.t >= se + T.exit) { bs.splice(i, 1); if (b.lv) LV.stop(b); continue; }
-      if (LV && b.lv == null) b.lv = LV.start(b);    // 一现身就从第 0 帧放（= 立绘姿势）
+      /* 一现身就从第 0 帧放（= 立绘姿势）。视频还没缓冲好（刚打开页面就送档 4）先画立绘、照立绘的晃法，之后每帧再试：
+         缓冲好了，等立绘的上下浮和后坐都回到 0 的那一刻再切进去 —— 视频第 0 帧就是立绘姿势，切过去位置不跳 */
+      if (LV && !b.lv && b.t < se && (b.lv == null || ((!A || (Math.abs(Math.sin(b.t * A.bob[1] + b.ph)) < 0.08 && b.kick < 0.03)))))
+        b.lv = LV.start(b);
       /* 瞄：该打的落点 → 要的仰角 → 转轴按转速上限转过去。滑进来时就开始瞄，溜走时放平。
          对方倒地（o.down）不再整条扫，每 zone.every 秒随机挑一个部位、在它前后小幅扫。 */
       const tt = b.t + b.ph, sw = cfg.sweep;
@@ -638,6 +642,13 @@ function CrewGroup(members) {
       const m = members[next];
       next = (next + 1) % members.length;
       return [m, m.summon()];
+    },
+    /* 这会儿送一个 summon(pick) 会召到谁（不动轮换）：送档 4 时先插队缓冲这个人的出场视频 */
+    peek(pick) {
+      const on = members.find(m => m.active());
+      if (on) return on;
+      if (pick != null && !Number.isNaN(pick)) return members[Math.max(0, Math.min(members.length - 1, pick | 0))];
+      return members[next];
     },
     active: () => members.some(m => m.active()),
     reset() { members.forEach(m => m.reset()); next = 0; },
