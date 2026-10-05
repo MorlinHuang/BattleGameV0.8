@@ -65,6 +65,8 @@ const Preload = (() => {
     all() { order.forEach(start); return Promise.all(order.filter(q => q.wait).map(q => q.p)); },
     /* 队列跑完（wait 的都完了）时回调一次 */
     onIdle(f) { listeners.push(f); pump(); },
+    /* 每一项：[key, 开没开跑, 用时 ms（没跑完是 null）] —— 真机诊断（diag.js）看哪一项没到 */
+    list: () => order.map(q => [q.key, !!q.p, q.ms == null ? null : Math.round(q.ms)]),
     stats: () => ({ n: order.length, done: order.filter(q => q.done).length, ms: on ? performance.now() - t0 : 0 }),
   };
 })();
