@@ -465,11 +465,10 @@ STRUGGLE_FEATHER = 8
 
 # 后退步态（2026-10-01 用户：「男女主后退的动作还是不对，帧数不够、距离与动作不匹配导致滑步。而且没有左右腿交替向后，看着特别假」）。
 # 旧八格 gait/<档>/f1~f7 是让模型自己摆腿：前后两半是同一组姿势（f1 = f5 逐字节相同），同一条腿一直在往后踢；
-# 站地那只脚每格的位置也是随机的，和背景卷过的距离对不上。新版 walk/<档>/（walk/guide.py）先算好一个循环 WALK_N 格里
-# 两只拖鞋该在哪 —— 站地的脚从身后匀速挪到身前、抬起的脚从身前摆到身后，后半步两只脚对调，各自一直在自己那条地面线上
-# （近脚低、远脚高，交替就看在这里）—— 把拖鞋贴在这些位置上再让模型只画腿，挑拖鞋落位最准的候选（walk/score.py）。
+# 站地那只脚每格的位置也是随机的，和背景卷过的距离对不上。新版 walk/<档>/（walk/guide.py）先算好一个循环 N 格（plan.json）里
+# 两只拖鞋该在哪，各自一直在自己那条地面线上（近脚低、远脚高）—— 把拖鞋贴在这些位置上再让模型只画腿，挑拖鞋落位最准的候选（walk/score.py）。
+# 10-05 起是拖步：两脚从不交叉，前半步后脚站地、前脚贴地往后拖，后半步前脚站地、后脚往后退（交叉走那几格腿必畸形，见 walk/guide.py）。
 # 播哪一格按**量出来的**站地脚位置定（walk_load 的 at），不按格号平分：某一格站地脚比计划偏了几像素，就晚几像素再换到它。
-WALK_N = 16
 WALK_SLIPPER_H = 80     # 拖鞋高度上限（原图像素）：地面带从抬脚最高处再往上留这么多
 
 
@@ -491,24 +490,29 @@ def slipper_blobs(a, mask, girl, band):
 
 
 def walk_load(name):
-    """walk/<档>/ → (帧路径 w01..w15, at, 一步长 S 原图像素)。at[i] = 第 i 格（0 = base）在一个循环里的位置（0~1）：
-    = 站地那只脚离它起步处的距离 / 两步长。前半步 0 号脚（开局的后脚）站地，从第 0 格量；后半步 1 号脚站地，从第 WALK_N/2 格量。"""
+    """walk/<档>/ → (帧路径 w01..w15, at, 一个循环人退多远 原图像素)。拖步（walk/guide.py）：前半步 0 号脚（后脚）站地、
+    后半步 1 号脚（前脚）站地，站地脚相对身子往前挪多少，人就往后退多少。at[i] = 第 i 格（0 = base）在一个循环里的位置（0~1）
+    = 到这一格为止站地脚累计挪了多少 / 一整圈挪了多少。全按**量出来的**拖鞋位置算：模型把拖鞋画得比计划近或远，
+    这一圈就短一点或长一点，脚照样钉在地上；第 N/2 格换脚时两边量的是同一张图，接得上。"""
     d = os.path.join(HERE, 'walk', name)
     plan = json.load(open(os.path.join(d, 'plan.json')))
+    N = plan['N']           # 一个循环几格（拖步 8 格：步子小，每格脚挪的距离和以前交叉走 16 格差不多）
     mask = np.array(Image.open(os.path.join(HERE, 'gait', name, 'mask.png')))[..., 3] == 0
-    paths = [os.path.join(HERE, 'gait', name, 'base.png')] + [os.path.join(d, f'w{i:02d}.png') for i in range(1, WALK_N)]
+    paths = [os.path.join(HERE, 'gait', name, 'base.png')] + [os.path.join(d, f'w{i:02d}.png') for i in range(1, N)]
     tgt = {0: {'0': dict(x=plan['back'], line=plan['lines'][0], lift=0), '1': dict(x=plan['front'], line=plan['lines'][1], lift=0)}}
     tgt.update({f['i']: f['feet'] for f in plan['frames']})
-    h = WALK_N // 2
+    h = N // 2
     band = (int(min(plan['lines']) - plan['lift'] - WALK_SLIPPER_H), int(max(plan['lines']) + 20))   # 抬到最高的拖鞋顶 ~ 最低鞋底
-    def stance_x(i, foot):
+    def foot_x(i, foot):
         t = tgt[i][foot]
-        blobs = slipper_blobs(np.array(Image.open(paths[i]).convert('RGB')), mask, name[0] == 'a', band)
+        blobs = slipper_blobs(np.array(Image.open(paths[i % N]).convert('RGB')), mask, name[0] == 'a', band)
         return min(blobs, key=lambda q: abs(q[0] - t['x']) + abs(q[1] - t['line']))[0]
-    xs = [stance_x(i, '0' if i < h else '1') for i in range(WALK_N)]
-    S = abs(stance_x(0, '1') - xs[0])         # 一步长 = base 里两只拖鞋的间距
-    at = [abs(xs[i] - xs[0 if i < h else h]) / (2 * S) + (0.5 if i >= h else 0) for i in range(WALK_N)]
-    return paths[1:], [round(v, 4) for v in at], S
+    # 前半步量 0 号脚（第 0~h 格），后半步量 1 号脚（第 h~N 格，第 N 格 = 第 0 格）
+    first = [abs(foot_x(i, '0') - foot_x(0, '0')) for i in range(h + 1)]
+    second = [abs(foot_x(i % N, '1') - foot_x(h, '1')) for i in range(h, N + 1)]
+    C = first[-1] + second[-1]
+    at = first[:h] + [first[-1] + v for v in second[:-1]]
+    return paths[1:], [round(v / C, 4) for v in at], C
 
 
 def struggle_load(name, gait_mask):
@@ -715,11 +719,13 @@ def main():
         k = scales.get(name, SCALE)
         struggle, sw = struggle_load(name, os.path.join(d, 'mask.png'))
         frames = [name]
-        walk = all(os.path.isfile(os.path.join(HERE, 'walk', name, f'w{i:02d}.png')) for i in range(1, WALK_N))   # 一整圈都挑好了才换新版
+        wp = os.path.join(HERE, 'walk', name, 'plan.json')
+        walk = os.path.isfile(wp) and all(os.path.isfile(os.path.join(HERE, 'walk', name, f'w{i:02d}.png'))
+                                          for i in range(1, json.load(open(wp))['N']))   # 一整圈都挑好了才换新版
         if walk:
             # 新版后退步态：拖鞋是按计划贴好的、鞋底就在原地面线上，不用 plant_feet 拉腿（后半步站地的是远脚，
             # 最低点本来就该比近脚高，拉到同一条线反而错）
-            srcs, at, S = walk_load(name)
+            srcs, at, C = walk_load(name)
             srcs = [np.array(Image.open(q).convert('RGB')).astype(np.int16) for q in srcs]
         else:
             srcs = [plant_feet(os.path.join(d, f'f{f}.png'), os.path.join(d, 'base.png'), os.path.join(d, 'mask.png')) for f in range(1, 8)]
@@ -736,7 +742,7 @@ def main():
             sheet.append((g, meta, im))
             frames.append(g)
         if walk:
-            gaits[name] = {'frames': frames, 'cycle': round(2 * S * k), 'at': at}
+            gaits[name] = {'frames': frames, 'cycle': round(C * k), 'at': at}
         else:
             gaits[name] = {'frames': frames, 'cycle': round(2 * stride(os.path.join(d, 'base.png'), os.path.join(d, 'mask.png')) * k)}
         cycle = gaits[name]['cycle']
