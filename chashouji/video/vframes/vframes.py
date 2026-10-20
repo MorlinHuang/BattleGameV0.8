@@ -337,10 +337,12 @@ def is_previous_output(d):
 
 # ---------------------------------------------------------------- 主流程
 
-def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=None, tmp_root=None, standee=None, fx=None):
+def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=None, tmp_root=None, standee=None, fx=None, fx_drop=False):
     """src → out_dir 全部产物。progress(步骤名, 0~1) 给网页版报进度。返回 manifest。
     standee：立绘文件（透明底），给了就量尾帧对齐。
     fx：视频底部带的法术潮（'sea' = 白娘子的海 + 虾兵蟹将），AI 抠人物时整条保留、不随环境在结尾退掉（layer.SEA）。
+    fx_drop：反过来，把法术潮整条抠掉（连环境那 22% 也不留）—— 游戏自己的那片潮在视频底下推进来，画面上只有一片
+      （2026-10-06 用户："视频特效的海和你自己做的海之间因为尺寸差的问题还是很明显有打架"：视频里的浪比游戏的海细碎一大截，两片叠着换手一眼看得出）。
     失败时 out_dir 整个删掉，不留半套产物。中间帧放在 tmp_root（默认系统临时目录）下，结束就删。"""
     t_start = time.time()
     say = progress or (lambda step, pct: print(f'[{pct * 100:5.1f}%] {time.time() - t_start:6.1f}s  {step}', flush=True))
@@ -441,7 +443,7 @@ def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=No
                     list(ex.map(layer.matte_frame, [(os.path.join(covered, f), os.path.join(mattes, f)) for f in redo]))
             say('图层合成（人物清晰、环境淡淡透出、光效保留）', 0.4)
             jobs = [(os.path.join(raw, f), os.path.join(mattes, f), os.path.join(full, f),
-                     layer.env_weight(i, len(raws), work_fps), fx) for i, f in enumerate(raws)]
+                     layer.env_weight(i, len(raws), work_fps), fx, fx_drop) for i, f in enumerate(raws)]
             with ProcessPoolExecutor(workers) as ex:
                 stats = list(ex.map(layer.bake_frame, jobs, chunksize=4))
             if not sum(s[0] for s in stats):
@@ -486,7 +488,7 @@ def process(src, out_dir, preset='均衡', key='auto', progress=None, workers=No
 
         # 底部法术潮在最后一帧里的海面高度：游戏里的海从这个高度接上、再落回自己的位置（sea.js handoff）
         tide = None
-        if fx:
+        if fx and not fx_drop:
             if key_used != 'ai':
                 warnings.append('底部法术潮只在 AI 抠人物时保留，这次没用上。')
             else:
@@ -636,11 +638,12 @@ def main():
     ap.add_argument('-k', '--key', default='auto', choices=list(KEY_CHOICES),
                     help='抠像：auto 自动判断（默认；纯色幕布按颜色抠，场景背景用 AI） / none 不抠 / ai / green / magenta / blue')
     ap.add_argument('--fx', choices=list(FX_NAMES), help='视频底部带的法术潮（整条保留）：sea = 白娘子的海 + 虾兵蟹将，cloud = 嫦娥的月夜云海 + 玉兔金蟾，tea = 绿茶妹妹的奶盖泡泡海')
+    ap.add_argument('--fx-drop', action='store_true', help='跟 --fx 一起用：把那片法术潮从视频里抠掉（游戏自己画那片潮）')
     ap.add_argument('-s', '--standee', help='立绘（透明底 PNG/WebP）：给了就量它在视频最后一帧里的位置')
     a = ap.parse_args()
     out = a.out or os.path.splitext(a.video)[0] + '_vframes'
     try:
-        m = process(a.video, out, a.preset, a.key, standee=a.standee, fx=a.fx)
+        m = process(a.video, out, a.preset, a.key, standee=a.standee, fx=a.fx, fx_drop=a.fx_drop)
     except VFError as e:
         print('失败：' + str(e), file=sys.stderr)
         sys.exit(1)

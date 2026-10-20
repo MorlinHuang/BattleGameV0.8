@@ -31,6 +31,10 @@ FF = imageio_ffmpeg.get_ffmpeg_exe()
 FPS = 24                                  # 即梦原片 24.06 fps（容器标 60，按 60 解码每帧重复 2~3 次）
 V14 = os.path.join(HERE, '../v14')
 SEAM = 6                                  # 首尾接缝融几帧（见 main）
+# 画框四周比立绘多留几像素（立绘像素，出片时再乘 up）：原来画框 = 立绘框，外发光（伸出去 25 + 3×30 像素）和视频里甩出去的
+# 头发、踢起来的腿都被画框切成直边（2026-10-06 用户截图：绿茶妹妹左边一道竖线；四条循环视频画框边上 alpha 20~160）。
+# 留边以外的光在留边里收干净（crewart.fade_border）。json 记 pad，crew.js 画的时候框往外扩这么多。
+MARGIN = 70
 
 
 def cut_truth(path):
@@ -225,10 +229,11 @@ def frame_job(args):
     src = Image.fromarray(px, 'RGBA')
     up = R['up']
     # 输出（立绘 × up）像素 → 原图 → 原片，PIL AFFINE 要的就是输出 → 输入
-    W, H = round(R['size'][0] * up), round(R['size'][1] * up)
+    M = round(MARGIN * up)
+    W, H = round(R['size'][0] * up) + 2 * M, round(R['size'][1] * up) + 2 * M
     x0, y0, sx, sy = geom(R, fit)
     x1, y1 = x0 + sx, y0 + sy
-    body = src.transform((W, H), Image.AFFINE, (sx, 0, x0, 0, sy, y0), Image.BICUBIC)
+    body = src.transform((W, H), Image.AFFINE, (sx, 0, x0 - M * sx, 0, sy, y0 - M * sy), Image.BICUBIC)
     out = Image.new('RGBA', (W, H))
     sil = body.split()[3]
     odd = lambda v: round(v) | 1
@@ -237,6 +242,7 @@ def frame_job(args):
         L.putalpha(sil.filter(ImageFilter.MaxFilter(odd(grow * up))).filter(ImageFilter.GaussianBlur(blur * up)))
         out.alpha_composite(L)
     out.alpha_composite(body)
+    out = crewart.fade_border(out, M)
     out.save(os.path.join(tmp, '%04d.png' % i))
     if 'hit' not in R['track']:
         return i, None
@@ -310,8 +316,9 @@ def main(name, src):
     subprocess.run([FF, '-v', 'error', '-y', '-framerate', str(FPS), '-i', os.path.join(tmp, '%04d.png'),
                     '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '26',
                     '-row-mt', '1', '-deadline', 'good', '-cpu-used', '2', '-auto-alt-ref', '0', out], check=True)
-    W, H = round(R['size'][0] * R['up']), round(R['size'][1] * R['up'])
-    json.dump({'fps': FPS, 'frames': len(frames), 'size': [W, H], 'fit': [round(iou, 4), a, dx, dy],
+    M = round(MARGIN * R['up'])
+    W, H = round(R['size'][0] * R['up']) + 2 * M, round(R['size'][1] * R['up']) + 2 * M
+    json.dump({'fps': FPS, 'frames': len(frames), 'size': [W, H], 'pad': MARGIN, 'fit': [round(iou, 4), a, dx, dy],
                'beats': beats, 'cap': [[round(float(x), 1), round(float(y), 1)] for x, y in off],
                **({'head': [[round(float(x), 1), round(float(y), 1)] for x, y in head]} if head is not None else {})},
               open(out.replace('_alpha.webm', '.json'), 'w'), separators=(',', ':'))

@@ -22,6 +22,8 @@ BG = 0.22                # 环境留多少不透明度
 GLOW = 0.9               # 亮部留多少
 FEATHER = 0.16           # 环境从画框边往里多宽淡进来（占画面宽的比例）
 EDGE = 0.03              # 人物在画框边软掉多宽
+DROP_GROW = 30           # --fx-drop：法术潮那片往外扩几像素一起抠掉
+DROP_FADE = 0.12         # --fx-drop：海涌上来时，环境在浪最高点以上这么高（占画面高）里淡完
 ENV_OFF = (1.25, 0.45)   # 环境 + 光从离结尾几秒开始退、退到离结尾几秒退完
 
 ALIGN_WARN = 40          # 尾帧对齐残差（0~255 平均色差）超过它就警告：真相女神对上时是 18
@@ -112,6 +114,8 @@ SEA = {
     'col': 12,           # 海面高度按左右 2·col+1 列取中位数（去掉尖刺、补上整列都是白沫找不到海水的缝）
     'soft': 3,           # 边缘羽化半径
     'bottom': 0.02,      # 画框底边软掉多宽（占宽的比例）
+    'low': (0.5, 0.78),  # --fx-drop：环境从画面高的这一成起往下淡、到这一成淡完（游戏的潮推进来的那一带）
+    'body_cy': 0.7,      # --fx-drop：人物遮罩里形心低过画面高这一成的块不算人（_main_body）
 }
 
 
@@ -179,12 +183,14 @@ CLOUD = {
     'spike': 8,                     # 浪身轮廓开运算：比 2·spike 列窄的竖刺削掉
     'feather': 24,                  # 浪身左右两侧横向羽化多少列
     'soft': 3, 'bottom': 0.02,
+    'low': (0.5, 0.78), 'body_cy': 0.7,   # 同 SEA
     'side': -1,                     # 从哪边涌进来（−1 左 / +1 右）：只要从这一边的边缘连过来的那一片
 }
 # 奶盖泡泡海（2026-09-29 绿茶妹妹）：同云海的认法 —— 背景是很匀的暗粉紫夜色（饱和度 ~0.6、亮度 0.16~0.25），
 # 奶白浅粉的泡沫浪亮（~0.95）、饱和度低（~0.15），"不像夜色"的就是浪；白莲花、奶茶杯、小白兔、爱心骑在浪上，亮，按 bright 往上长。
 # 浪从右边涌进来。
-TEA = {**CLOUD, 'sky_sat': 0.45, 'sky_v': (0.0, 0.34), 'side': +1}
+TEA = {**CLOUD, 'sky_sat': 0.45, 'sky_v': (0.0, 0.34), 'side': +1,
+       'low': (0.78, 0.92), 'body_cy': 0.75}         # 泡泡海只铺在最底下一条；她往后蹦时腿在暗处、isnet 认不出，靠环境那 22% 透出来，环境不能从半截就退
 
 
 def _vsmooth_edge(a, r):
@@ -276,10 +282,30 @@ def sea_line(frame_png, matte_png, fx='sea'):
     return int(np.median(s.argmax(0)[has])) if has.mean() > 0.5 else None
 
 
+def _main_body(m, cy_max):
+    """人物遮罩里保留哪些（0~1，羽化过）：形心在画面高 cy_max 以上的块。
+    isnet 会把法术潮里的东西也当成人 —— 白娘子 6.2 秒整个大浪带虾兵是遮罩里最大的一块（形心在 0.84，她在 0.28），
+    绿茶妹妹 6.2 秒底下的泡沫和奶茶兔也是（0.91，她在 0.40）；按面积分不出来，按高度分得开"""
+    from scipy import ndimage
+    lab, n = ndimage.label(m > 0.5)
+    if n == 0:
+        return np.ones_like(m)
+    idx = np.arange(1, n + 1)
+    cy = np.array([p[0] for p in ndimage.center_of_mass(np.ones_like(m), lab, idx)]) / m.shape[0]
+    # 近景（她被画框底边截断：形心够高的块里有碰到底边的）不删 —— 近景时手、袖子单独成块又在画面下部是常事
+    hi = idx[cy < cy_max]
+    if np.isin(lab[-3:], hi).any():
+        return np.ones_like(m)
+    gone = np.isin(lab, idx[cy >= cy_max])
+    gone = _blur(gone.astype(np.float32), 14) > 0.01  # 往外扩 ~14 像素：块外那圈半透明（m ≤ 0.5，不属于任何一块）的光边一起去掉
+    return 1 - _blur(gone.astype(np.float32), 4)
+
+
 def bake_frame(job):
     """原帧 + 人物遮罩 → RGBA。颜色不动，只算 alpha：
-    a = max(人物 × 画框边软化, 环境画框边淡入 × 环境权重 × max(BG, GLOW × 亮部), 底部法术潮 × 底边软化)"""
-    src, msk, dst, env, fx = job
+    a = max(人物 × 画框边软化, 环境画框边淡入 × 环境权重 × max(BG, GLOW × 亮部), 底部法术潮 × 底边软化)
+    drop（--fx-drop）：法术潮那片不保留、反过来从环境里抠掉 —— a = max(人物 × 画框边软化, 环境 × (1 − 法术潮))"""
+    src, msk, dst, env, fx, drop = job
     c = np.asarray(Image.open(src).convert('RGB')).astype(np.float32) / 255
     m = np.asarray(Image.open(msk).convert('L')).astype(np.float32) / 255
     h, w = m.shape
@@ -288,10 +314,27 @@ def bake_frame(job):
     e = np.minimum(np.minimum(u, 1 - u), np.minimum(v, 1 - v) * asp)              # 到画框四边的距离（按宽量）
     ec = np.minimum(np.minimum(u, 1 - u), np.minimum(v, (1 - v) * 0.25) * asp)     # 人物：底边软得宽 4 倍
     hl = ss(0.62, 0.95, c.max(2))                                                  # 亮部：光柱、亮片、金光
-    a = np.maximum(m * ss(0, EDGE, ec), ss(0, FEATHER, e) * env * np.maximum(BG, GLOW * hl))
-    if fx:
+    person, around = m * ss(0, EDGE, ec), ss(0, FEATHER, e) * env * np.maximum(BG, GLOW * hl)
+    if fx and drop:
+        # 游戏的潮从画面底下推进来，视频在那一带只留人物：
+        # ① 画面下半截的环境整片退掉（FX 参数 low：浪尖白沫、飞溅按颜色认不全，亮部又按 90% 留着，会剩几块白斑）；
+        # ② 海涌上来时，环境在浪最高点以上 DROP_FADE 里水平淡完 —— 只沿着海的形状挖的话，上面那层亮雾里留下一个浪头 / 虾兵形状的缺口；
+        # ③ 人物遮罩里形心在画面下部（FX 参数 body_cy 以下）的块去掉：isnet 会把大浪、虾兵、奶茶兔、玉兔也当成人
+        body = _main_body(m, FX[fx][1]['body_cy'])
+        person, m = person * body, m * body           # 先去掉被当成人的浪 / 小兵，再认海（认海时人物那片不算，不去掉的话大浪整块认不出来）
+        sea = FX[fx][0](c, m) > 0.05
+        cut = np.ones_like(v)
+        if sea.any():                                 # 海本身（扩 DROP_GROW）抠掉，海上方按浪最高点水平淡完
+            cols = sea.any(0)
+            ytop = np.percentile(sea.argmax(0)[cols], 10) / h - DROP_GROW / h
+            cut = ss(ytop, ytop - DROP_FADE, v) * (1 - _blur((_blur(sea.astype(np.float32), DROP_GROW) > 0.01).astype(np.float32), 6))
+        lo = FX[fx][1]['low']
+        a = np.maximum(person, around * cut * ss(lo[1], lo[0], v))
+    elif fx:
         f, P = FX[fx]
-        a = np.maximum(a, f(c, m) * ss(0, P['bottom'], (1 - v) * asp))
+        a = np.maximum(np.maximum(person, around), f(c, m) * ss(0, P['bottom'], (1 - v) * asp))
+    else:
+        a = np.maximum(person, around)
     Image.fromarray(np.dstack([(c * 255).round(), (a * 255).round()]).astype(np.uint8), 'RGBA').save(dst, compress_level=1)
     return int((m > 0.5).sum()), 0
 
