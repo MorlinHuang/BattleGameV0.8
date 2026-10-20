@@ -34,9 +34,8 @@ const IntroVideo = (() => {
        同样大，视频放完立绘原地接上，不滑、不放大（真相女神尾帧是 0.94 倍，现身后要边滑边放大）。
        k = 1.005 / end.s（画布像素 / 视频像素）；box.x = 110 − (end.x + foot.x·end.s)·k，box.y = 886 − (end.y + foot.y·end.s)·k，
        宽高 = 834×1112 × k。右沿正好贴屏幕右边，左边 166 像素在屏幕外（#stage overflow:hidden），只裁掉开场正面镜头左侧一点衣袖。
-       tide：视频最后一帧里海面的高度（视频像素，vframes --fx sea 量的）—— 游戏里的海从这个高度接上（sea.js handoff）。
-       视频由 video/vframes 出：vframes.py 原片 -s baisu1_up.webp --fx sea（底部的海 + 虾兵蟹将整条保留、不随环境退掉）。 */
-    baisu: { src: 'assets/video/baisu_intro_alpha.webm', box: [-165.9, 101.6, 1125.1, 1500.1], vw: 834, end: { s: 0.745, x: -51, y: 22 }, tide: 900, seaAt: 4.8,
+       视频由 video/vframes 出：vframes.py 原片 -s baisu1_up.webp --fx sea --fx-drop（底部的海 + 虾兵蟹将整条抠掉，见下面 seaAt）。 */
+    baisu: { src: 'assets/video/baisu_intro_alpha.webm', box: [-165.9, 101.6, 1125.1, 1500.1], vw: 834, end: { s: 0.745, x: -51, y: 22 }, seaAt: 4.8,
              open: [-86.9, 101.6], move: [4.6, 6.2] },
     /* open / move：开场时视频区左上角在 open，move 这段（秒）平滑移到 box。box 是按尾帧反推的，比居中往左 79 像素 ——
        前 4.5 秒她正面居中（视频里人物重心在宽度的 50.4%），不挪回来就整段偏左（用户 2026-09-29："出场后位置偏左，不在正中心"）。
@@ -44,31 +43,31 @@ const IntroVideo = (() => {
     /* 嫦娥（2026-09-29）：全程固定机位 —— 从左上一轮满月里飞出来、到镜头前近景、再飘回左上，满月缩成头后光环；
        底下月夜云海从左涌进来，肩上的玉兔化作流光跳进云里。box 同白娘子按尾帧反推（G4STAND.change [240, 908, 0.88]，
        尾帧对齐色差 7.3）；近景时她重心在视频宽 54.5%，open 往左 58 像素让她居中，4.4~5.6 秒她飘回左上时移回 box。
-       视频由 vframes.py 原片 -s change1_up.webp --fx cloud 出（云海按"不像夜空"认，整条保留；法术潮进画面的帧盖掉再抠一次人物）。 */
+       视频由 vframes.py 原片 -s change1_up.webp --fx cloud --fx-drop 出（云海按"不像夜空"认、整条抠掉；法术潮进画面的帧盖掉再抠一次人物）。 */
     /* 2026-09-29 嫦娥站位下移 70（G4STAND.change 908 → 978，给头顶的月光束光点让出拉力条下的位置）：box / open 的 y 跟着 +70，尾帧照样对齐 */
-    change: { src: 'assets/video/change_intro_alpha.webm', box: [7.6, 203.5, 973.4, 1297.8], vw: 834, end: { s: 0.754, x: -12, y: -15 }, tide: 953, seaAt: 5.4, feather: 0.06,
+    change: { src: 'assets/video/change_intro_alpha.webm', box: [7.6, 203.5, 973.4, 1297.8], vw: 834, end: { s: 0.754, x: -12, y: -15 }, seaAt: 5.4,
               open: [-50.5, 203.5], move: [4.4, 5.6] },
     /* 绿茶妹妹（2026-09-29）：男女主抢的那部手机亮了，兔耳先探出来、她从屏幕里钻出来 → 贴到镜头前撒娇、瞟姐姐装怕、躲手机后偷笑眨眼
        → 往后一蹦退到右边定成立绘姿势；底下奶盖泡泡海从右涌进来。制作包 video/sister。
        box 按尾帧反推（G4STAND.sister [848, 1136, 1.0]，尾帧对齐色差 13.2）。不加 open：开场那部手机在视频宽 45.8%、高 58.8%，
        按 box 落在画布 (451, 898) —— 正压在游戏里那部手机 (454, 898) 上；近景她重心在 51%（画布 501，只偏中线 21），挪了反而把手机挪开。
-       视频由 vframes.py 原片 -s sister1_up.webp --fx tea 出（浪按"不像夜色"认、只要从右边缘连过来的那片）。 */
-    sister: { src: 'assets/video/sister_intro_alpha.webm', box: [5.4, 134.5, 973.2, 1297.6], vw: 834, end: { s: 0.857, x: 483, y: 15 }, tide: 980, seaAt: 5.2 },
+       视频由 vframes.py 原片 -s sister1_up.webp --fx tea --fx-drop 出（浪按"不像夜色"认、只要从右边缘连过来的那片，整条抠掉）。 */
+    sister: { src: 'assets/video/sister_intro_alpha.webm', box: [5.4, 134.5, 973.2, 1297.6], vw: 834, end: { s: 0.857, x: 483, y: 15 }, seaAt: 5.2 },
   };
-  /* seaAt（秒）：视频里的海从这一刻起涌进来（底边一条的 alpha 由 ~0.3 升到 1：白娘子 5.75、嫦娥 6.5、绿茶妹妹 6.25 秒满，ffmpeg 逐 0.25 秒量），
-     提前游戏海推满要的 1.4 秒左右。视频框下沿（1602 / 1501 / 1432）到画布底 1707 之间视频里什么都没有 —— 从 seaAt 起游戏自己那片海
-     从同一侧推进来、垫在视频底下（seaUnder → main.js tideUpdate），海面停在视频尾帧的海面高度（tide），放完 handoff 原地接上。
-     feather（视频高的几成）：底边那一截渐隐（嫦娥云海面 tide 953 到底边 1112 只有 159 视频像素，羽化 0.06 ≈ 67，留上面一大半实的云）。嫦娥视频里是云海、游戏里是月夜银河，硬接一道水平分界线（2026-10-04 待办）；
-     白娘子、绿茶妹妹视频里的海和游戏的海同一种东西，不羽化。 */
+  /* seaAt（秒）：视频里的海从这一刻起涌进来（白娘子 5.75、嫦娥 6.5、绿茶妹妹 6.25 秒涌满）。
+     视频里那片海出片时已经整条抠掉（vframes --fx-drop）—— 2026-10-06 用户："视频特效的海和你自己做的海之间因为尺寸差的问题
+     还是很明显有打架；嫦娥的两种海是不太一样的"：视频里的浪比游戏的海细碎一大截、嫦娥视频里还是旧的月夜云海，
+     原来两片叠着（游戏的海垫在视频底下）、放完再换手，一眼看得出是两样东西。
+     现在只有游戏这一片：从 seaAt 起它就从自己那一侧推进来（seaOn → main.js tideUpdate），视频放完时已经推满，接着演，不用换手。 */
   const POP = 0.35, FADE = 0.45;         // 浮现几秒、结尾淡掉几秒
   /* VP9 透明只有 Chromium 内核认。按 UA 判（Safari 的 canPlayType 也说能放 webm，但透明通道丢掉，变黑底） */
   const ALPHA_OK = /Chrom(e|ium)\/|Edg\//.test(navigator.userAgent);
 
-  let stage = null, W = 960, H = 1707, cur = null, onRelease = null;
+  let stage = null, W = 960, H = 1707, cur = null;
   const vids = {};                         // 配方名 → 预加载好的 <video>
 
   function init(opt) {
-    stage = opt.stage; W = opt.W; H = opt.H; onRelease = opt.onRelease || null;
+    stage = opt.stage; W = opt.W; H = opt.H;
     if (new URLSearchParams(location.search).get('introvideo') === '0' || !ALPHA_OK) return;   // ?introvideo=0：关掉（胶片 / 压测用）
     for (const [k, c] of Object.entries(CLIPS)) {
       const v = document.createElement('video');
@@ -80,10 +79,6 @@ const IntroVideo = (() => {
         position: 'absolute', width: w / W * 100 + '%', height: h / H * 100 + '%',
         objectFit: 'fill', visibility: 'hidden', pointerEvents: 'none',
       });
-      if (c.feather) {                    // 底边羽化（嫦娥）：视频的云海渐隐进游戏垫在底下的月夜银河，不留一道水平硬边
-        const m = `linear-gradient(to bottom, #000 ${((1 - c.feather) * 100).toFixed(1)}%, transparent)`;
-        v.style.maskImage = m; v.style.webkitMaskImage = m;
-      }
       place(v, c, 0);
       stage.insertBefore(v, stage.querySelector('#hud'));
       vids[k] = v;
@@ -144,11 +139,7 @@ const IntroVideo = (() => {
     const me = cur, { v, crew, b, c } = me;
     me.done = true;
     place(v, c, Infinity);                  // 放完一定落在 box（尾帧对准的位置），不管最后一帧 rAF 赶没赶上
-    if (crew.peek().includes(b)) {
-      b.hold = false; b.t = 0; b.from = endPose(c, crew.cfg.spr);
-      /* 视频里带着的特效（白娘子的海）：游戏里那一份在视频底下原位铺好，视频淡掉时两层交叠换手（main.js 接） */
-      if (onRelease && c.tide != null) onRelease(crew, c.box[1] + c.tide * c.box[2] / c.vw);
-    }
+    if (crew.peek().includes(b)) { b.hold = false; b.t = 0; b.from = endPose(c, crew.cfg.spr); }
     v.style.transition = `opacity ${FADE}s ease-in`;
     v.style.opacity = '0';
     setTimeout(() => { if (cur === me) { hide(v); cur = null; } }, FADE * 1000);
@@ -182,9 +173,8 @@ const IntroVideo = (() => {
   const ready = (rcp) => !!vids[rcp] && vids[rcp].readyState >= 4;
 
   const playing = () => !!cur && !cur.done;
-  /* 此刻要不要给 crew 那片海垫底：正在放它的视频、过了 seaAt → 视频里海面的画布 y；否则 null */
-  const seaUnder = (crew) => cur && !cur.done && cur.crew === crew && cur.c.seaAt != null && cur.v.currentTime >= cur.c.seaAt
-    ? cur.c.box[1] + cur.c.tide * cur.c.box[2] / cur.c.vw : null;
+  /* 此刻 crew 那片潮该不该推进来：正在放它的视频、过了 seaAt */
+  const seaOn = (crew) => !!cur && !cur.done && cur.crew === crew && cur.c.seaAt != null && cur.v.currentTime >= cur.c.seaAt;
   const owner = () => cur && cur.crew;         // 正在放谁的（调试台换人时要连视频一起收掉）
-  return { init, load, ready, begin, stop, playing, owner, seaUnder, CLIPS };
+  return { init, load, ready, begin, stop, playing, owner, seaOn, CLIPS };
 })();

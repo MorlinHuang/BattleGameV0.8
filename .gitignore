@@ -16,3 +16,7 @@ node_modules/
 # 查手机 v13：抠像与合成的中间产物，可由 v13/cutout.py + compose.py 从 raw 重跑
 chashouji/v13/parts/
 chashouji/v13/frames/
+
+# 查手机 v14：生图候选（落选/待选的抽卡图），选定帧已拷到上一级 w0*/g0*/m0* 等，候选不入库
+chashouji/v14/**/cand*/
+chashouji/v14/**/shuffle_try/

@@ -57,6 +57,11 @@ const P = {
   /* 一次只走一档，每档至少停这么久。一件戒指盒能让拉力差 1 秒内从 0 冲到
      趴下那档，不拦的话跪和扑倒各一闪而过；人摔倒本来也是先跪、再扑、再趴。 */
   stageHold: 0.6,
+  /* 扑倒（F）停多久（过渡段播完之后再算）就走，见 pickPose。它是"猛拽一下"的那一下，不是一个状态 */
+  fallHold: 0.3,
+  /* 占优那方送档 3 / 档 4（猛拽一下）后这么多秒内，跪着的一方会被拽得扑倒一下（FX.jolt）。
+     要等跪下那段过渡播完才轮得到，所以留得比它长 */
+  joltT: 2.5,
   /* 步态：一个循环两步（v14/walk 拖步 8 格，旧版 gait 八格），按**位移**推进、不按时间 —— 背景不动脚就不动，被拽回来
      就倒着播。一个循环对应背景卷过多少像素，由 build.py 按每档原图里两脚的间距量出来
      （world.json 的 gaits[档].cycle，拖步 47~114；短于 gaitCycleMin 的按它算，见下）：这样站地的那只脚在画面上往前挪的速度
@@ -89,6 +94,13 @@ const P = {
   swayM: 0.6,
   swayT: 3.2,       // 晃一个来回约几秒（两段不同周期叠起来，不是死板的正弦，见 derive）
   walkFollow: 6,    // 没有步态的档（僵持、过渡帧）画面位置追 S.pos 的快慢（指数趋近系数，1/秒）
+  /* 旧姿势帧（没开 ?vid）画面位置最多比真实拖速快这么多（米/秒）：落后的几米按 walkFollow 指数追会一下快进
+     （10-06 用户「被拉后退得太猛、太快」）。视频版不走这里，见 derive 里 vidWalk 那段 */
+  walkCatch: 0.8,
+  lookFollow: 2.5,  // 镜头挪过去的快慢（1/秒）：慢一点看着是运镜不是跳；要让人的那一格前后半秒已经算进 VID_BOX，2.5 跟得上
+  camEdge: 14,          // 镜头挪到两人都不出画时，离屏幕边至少留多少像素
+  lineShift: 1 / 8,     // 两人中线最多推离屏幕中间多少屏宽（1/8 → 占 5/8），见 lineAt()
+  camLeadFollow: 0.7,   // 画面位置比真实位置领先多少（camLead）的平均快慢（1/秒）：慢到抹平走路循环的一顿一顿
   /* 僵持循环的播放速度（格/秒）。手绘动画"一拍二"是 12 格/秒，这里只有 5 张
      来回用，8 格/秒一个来回正好一秒 —— 再快就成了抖，不是拉锯。 */
   loopFps: 8,
@@ -96,6 +108,53 @@ const P = {
      动作很僵硬」从 3~4 格补上来），最长 6 格 × 1/14 秒 = 0.43 秒，比 stageHold 短，播完之前不会再换档。
      每段时长仍在 0.3~0.43 秒：格多了是每格之间的动作差变小，不是动作变慢。往回换（跪 → 站）同一组倒着播。 */
   tweenFps: 14,
+  /* 拉扯视频（2026-10-06，video/pull/build_vid.py；女赢 10 段 + 男赢 9 段：僵持循环 + 两边各三档循环 + 十二段过渡；默认开，?vid=0 关）。
+     过渡段是 2~3.6 秒的真动作（倒下、撑起、站起反拽；末尾不动的收势 build_vid.py 已剪掉），播完才换下一档，
+     中途局势反过来就从当前格倒着播回去（derive 里 pickPose 前那段）；vidRate 是过渡段的播放倍速。
+     视频按源片节奏出格（24 格/秒，同一张画停几格就重复几次名字，build_vid.py cadence），fps 读 vid.json。
+     循环段只有起帧是锚点姿势，拽到一半切进过渡段（过渡段第一帧 = 锚点）会跳一下：要离开循环时先等播到
+     离锚点近的那几格（剪影交并比距离 < vidNear，build_vid.py 量的 d0），最多等 vidWait 秒，等不到就硬切。
+     等的时候按 vidLeaveU 倍速往前播（地板跟着卷）：原来是照拖速播，慢拖 / 停下拉扯时一秒走不到下一个近锚点格，
+     几乎每次都硬切在拽到一半的那格上（10-06 整条流程连拍：跪 → 扑倒处剪影交并比 0.37、跳 78 像素，两边都有）。
+     近锚点格多数循环每 1/3 圈一个，女赢跪拖 aK、男赢扑倒 bF 只有首尾一个 —— vidWait 按最远那种留够。 */
+  /* 换档那一刻把上一格画面叠在新的上面、segFade 秒淡掉（10-06）：视频段之间身体对得上，但头发不一定 ——
+     男赢锚点 n0 的头发往左飘、僵持循环（女赢那条片子）垂着，从僵持切进第 11 段头发一下变形（剪影交并比 0.44）。
+     身体对齐的地方叠了看不出来，头发读成甩了一下 */
+  segFade: 0.2,
+  vidRate: 1.2,
+  vidRateBack: 1.6,  // 被对面拽起来的那几段（趴 → 扑倒 → 跪 → 站，拉力差已经在另一边）播放倍速，见 derive 换档处      // 10-06 审查第 2 条：原速倒下、撑起偏慢，画面跟不上胜负条；1.2 倍看不出快进
+  vidNear: 0.2,
+  vidWait: 3.0,
+  vidLeaveU: 1.5,
+  vidLeaveYank: 3,    // 被对面拽起来时赶去锚点格的倍速（趴档循环 120 格只有 12 格近锚点，1.5 倍要等两三秒，这时拉力牌已经一边倒）
+  vidAccLeave: 6,     // 赶去锚点格时倍速的加速度上限（平时 vidAcc 1.2：从 0 加到 3 倍要 2.5 秒，等于没快进）
+  /* 视频走路循环（跪 / 扑倒 / 趴着被拖）按**步频**播（derive vidWalk，10-06 用户「移动的节奏还是有问题」）。
+     原来沿用 16 格步态的 sway：画面位置 = 真实位置 + ±0.6 米晃动，相位按画面位移推。晃动的瞬时速度最高 1.4 米/秒，
+     平时拖速只有 0.3~0.8 —— 视频一会儿快放、一会儿停、一会儿倒放（倒着走）；过渡段播完追位置又是一阵快进。
+     视频里人自己走的速度（一圈 cycle 像素 ÷ 一圈的时长）跪 1.43、扑倒 / 趴 1.12 米/秒，比游戏拖速快一倍多，
+     脚钉地按位移推就只能放慢到 0.3~0.5 倍（慢动作）。现在：
+       u = 播放倍速（1 = 原速，负 = 倒着播 = 被拽回来往前走），只在 [vidUMin, vidUMax] 里取，按"想要的画面速度 ÷ 视频自然速度"定；
+       想要的画面速度 = 真实拖速 S.vel + 落后的距离 × vidLagK（落后了就走快一点追上，追过了就慢下来）；
+       低于 vidUStop 就不走了：先走到下一个脚踩实的格（这一格到下一格剪影只变了 mv < vidStill）停住，在那里前后小幅拉扯
+       （相位 ±vidIdleA 圈、vidIdleT 秒一个来回 —— 10-05 用户要的"没有一帧是死的"）；高于 vidUGo 再起步。
+       u 变化有加速度上限 vidAcc（每秒），起步、停步、反向都有个缓，不会一下倒放。
+     脚和地板：u 和画面位移同步（一圈 = cycle 像素），脚始终钉在地上；快慢差别靠走走停停吸收，不靠打滑。 */
+  vidLagK: 0.4,
+  vidLagMax: 1.5,
+  vidUMin: 0.55,
+  /* 上限 1.5：趴档原速 1.12 × 1.5 = 1.7 米/秒，拖得急时（拉力差大，1.3~1.7 米/秒）步子跟得上、看着是"脚下快"，还不到快进；
+     再快（封顶 V_MAX 3 米/秒）就跟不上了，落后的由 vidLagK 那一项在拖速降下来后追回 */
+  vidUMax: 1.5,
+  vidUGo: 0.45,
+  /* 被拖着时（S.vel 朝这一档的方向）不看 vidUGo、一直走，倍速下限放到 vidUDrag（10-07 用户「只要不是相持阶段……只要开始发生位移，
+     都要播放后移步」）。跪档拖速 0.375~0.75 米/秒、视频原速 1.43，u 只有 0.26~0.52：按 vidUGo 0.45 起步，跪档几乎一直原地拉扯、
+     只有地板在滑，看着像只有扑倒、趴下才走。下限比最慢拖速略高一点，画面最多领先真实位置零点几米（vidLagK 那一项把它拉住） */
+  vidUDrag: 0.3,
+  vidUStop: 0.2,
+  vidAcc: 1.2,
+  vidStill: 0.2,
+  vidIdleA: 0.035,
+  vidIdleT: 3.6,
   /* 被拉倒的三档各只有一张图（循环帧还没画），靠上下颠一下假装领先方在走。
      这是占位：等循环帧画出来就删掉。bobHz 是每秒几步，bobPx 是颠多高
      （落后方贴着地，只有领先方在迈步，所以颠得比站着走小）。 */
@@ -126,30 +185,46 @@ const NUM = {
      消掉了。所以被拖的快慢只取决于"两边刷礼物的速度差"，与刷了多少总量
      无关：都在猛刷就差值小、画面激烈而谁也拖不动谁；一方停手就立刻被拖走。 */
 
-  /* ── 拉力差 → 拖动速度（X / M / V_Z）──
-     公式：拉力差 > X 时，每 M 点拉力差，每秒把两个人往拉力大的一方拖 V_Z 米。
-     X 和 M 取自《螂人杀》文档（3000 兵 ÷100、兵数 ÷100 的刻度）。
-     V_Z 是从血量制原样换算过来的，局的节奏一点没变：原来差 1000 每秒扣 5%
-     的血，现在差 1000 每秒拖 END 的 5%（30 米 × 5% = 1.5 米）。 */
-  PULL_X: 30,      // 死区：拉力差没到这个数，谁也拖不动谁（≈1.5 个魔法镜②）
-  PULL_M: 1000,    // 每这么多拉力差……
-  V_Z: 1.5,        // ……每秒拖这么多米
-  /* 拖动速度的上限。拉力差是没有上限的 —— 大哥一秒注入 600 而对面只有 80 时，
-     差值能到四万，折合每秒拖 60 米，一眨眼就到头了。那不叫碾压，那叫没有
-     过程。3 米/秒 = END 的 10%：再怎么碾压，从中间拖到头也要 10 秒。 */
+  /* ── 刻度：拉力差"多大算大"跟着房间走（2026-10-17 评测报告 P0-1 死区）──
+     以前刻度是死的 1000 拉力：差 300 才把人拉跪、才开始拖。稳态差 = 注入差 / LOSS，
+     所以要两边**每秒注入差 > 12 拉力**（每分钟净差约 7200 抖币）画面才动 —— 一个房间
+     每分钟总共也刷不了这么多，2:1、10:1 都是僵持，整局 0 米。
+     现在刻度 = 本房间近期每秒总注入 ÷ LOSS（RULER_K = 1 时，就是"全场刷的全压在一边"
+     时的稳态拉力差）。于是持续对刷时 拉力差 / 刻度 = (A−B)/(A+B)：**比例**定局势，
+     大房间小房间同一个手感 —— 2:1 → 0.33 刚好拉跪，3:1 → 0.5，3:2 → 0.2 僵持。
+     而单件礼物的分量是"它相当于这个房间几秒的流水"：同一件空投，冷清的房间里一锤定音，
+     大哥扎堆的房间里只拽出十几米。
+     房间流水是 RULER_T 秒的滑动平均（比拉力的 25 秒慢得多，一阵爆刷不会把自己的刻度
+     立刻抬上去），**跨局保留**：开播第一局从 ROOM_SEED 起步，之后越打越准。 */
+  RULER_K: 1,      // 刻度 = RULER_K × 房间每秒流水 ÷ LOSS。调小 = 更小的比例差也能拉倒人（3:2 要 ≤0.6 才够跪；?sim 实测 0.7 时 2:1 1:16 到头、3:2 仍僵持）
+  RULER_T: 120,    // 房间流水的平均窗口（秒）
+  RULER_MIN: 10,   // 刻度下限（拉力）：再冷的房间，差 3 拉力（三根仙女棒）以下也不算把人拉倒
+  ROOM_SEED: 1,    // 开播时假定的房间流水（拉力/秒 = 每分钟 600 抖币），第一局的刻度从它起步
+
+  /* ── 拉力差 → 拖动速度 ──
+     拉力差 / 刻度 = 1（全压一边）时每秒拖 V_Z 米，封顶 V_MAX。
+     V_Z 是从血量制原样换算过来的：原来差满刻度每秒扣 5% 的血，现在每秒拖 END 的 5%（1.5 米）。
+     这两个是 12 分钟档的值，30 / 60 分钟档按 MODES[].v 一起缩（见下）。 */
+  V_Z: 1.5,        // 满刻度时每秒拖这么多米
+  /* 拖动速度的上限。拉力差相对刻度是没有上限的 —— 冷清房间里一件空投能到刻度的几十倍，
+     折合每秒拖几十米，一眨眼就到头了。那不叫碾压，那叫没有过程。3 米/秒 = END 的 10%：
+     再怎么碾压，从中间拖到头也要 10 秒。 */
   V_MAX: 3,
   /* 拖到哪算赢：离客厅正中 END 米。30 米正好在两头房间的深处（见 P.pxPerM）。
      改它不用动背景：镜头按米数算，房间只是铺在那儿的地皮。 */
   END: 30,
-  /* 姿态的满幅刻度：拉力差到这么多，姿态读数 p 就顶到 0 或 100。
-     取 1000 是让它和上面的 M 共用一把尺。试过 2000（= 拖动速度封顶时的差）：
-     标杆的一方猛刷 23:0 拉力差只有 516，整局停在僵持 —— 太钝。 */
-  LINE_FULL: 1000,
   LINE_RATE: 2.2,  // 姿态读数趋近拉力差的速率（时间常数 0.45 秒）
 
-  MATCH: 720,      // 单局 12 分钟
-  SUDDEN_LEAD: 0.35, // 被拖出去 END 的这么多（35% = 10.5 米），持续 SUDDEN_WAIT 秒就进绝杀
-  SUDDEN_WAIT: 60,
+  /* ── 局长三档（主播开局前在面板选，?mode=12|30|60）──
+     match = 时钟（秒）；v = 拖动速度 V_Z / V_MAX 的倍数，sudden = 绝杀前要被压着多久（秒）。
+     v 按局长反比缩：同样的刷法走完同样比例的一局 —— 12 分钟档 2:1 持续压制约 2 分钟拖到头，
+     30 分钟档约 3.5 分钟，60 分钟档约 6 分钟（node 数值副本实测，房间已暖）。 */
+  MODES: {
+    12: { match: 720,  v: 1,   sudden: 60,  name: '12 分钟快场' },
+    30: { match: 1800, v: 0.4, sudden: 150, name: '30 分钟' },
+    60: { match: 3600, v: 0.2, sudden: 300, name: '60 分钟' },
+  },
+  SUDDEN_LEAD: 0.35, // 被拖出去 END 的这么多（35% = 10.5 米），持续 MODES[].sudden 秒就进绝杀；绝杀中被拽回这条线以内就解除，可以再来
   SUDDEN: 30,      // 绝杀倒计时
   STAND_AT: 0.08,  // 离终点只剩 END 的这么多（8% = 2.4 米）时触发反击时刻
   STAND: 120,      // 反击时刻时长：劣势方注入翻倍，全局只触发一次
@@ -162,10 +237,12 @@ const S = {
      刷礼物推的、哪一下是演示程序推的。要看动作切换时用 ?auto=1 打开。 */
   p: 50, t: 0, auto: false,
   fA: 0, fB: 0,                       // 拉力（火力）：A=查岗党(左) B=灭迹党(右)
+  room: NUM.ROOM_SEED,                // 房间流水：近 RULER_T 秒两边合计每秒注入多少拉力。跨局保留，只在 battle 里衰减
   pos: 0,                             // 位置（米）：胜负只看它。正 = 被拖向左边（查岗党占优）
   vel: 0,                             // 此刻每秒被拖多少米（带符号，battle 算出来的读数，HUD 画它）
   debA: 0, debB: 0, debKA: 0, debKB: 0,  // 受到的注入减益：剩余秒数与折扣
-  clock: NUM.MATCH, phase: 'idle',    // idle 不跑数值（诊断与老演示模式）/ play / sudden / over
+  mode: NUM.MODES[12],                // 局长档（NUM.MODES 里的一项），开局时定，见 startMatch
+  clock: NUM.MODES[12].match, phase: 'idle',    // idle 不跑数值（诊断与老演示模式）/ play / sudden / over
   big: 0, sudden: 0,
   stand: 0, standUsed: false,
   winner: 0,
@@ -182,6 +259,10 @@ const FX = {
   poseT: 0,                          // 进入这个动作多久了（循环帧与颠步读它）
   frame: 'n0',                       // 这一帧用哪张贴图（world.json 里的名字）
   camX: 0,                           // 镜头中心在世界里的横坐标（像素）
+  camLead: 0,                        // 画面位置比真实位置领先多少（米），慢平均（见 P.camLeadFollow）
+  lookX: 0,                          // 镜头中心比两人锚点往右多少（像素）：中线 − 它该在屏幕上偏离中间多少（见 P.lookFollow）
+  camSnap: true,                     // 下一帧镜头直接对准、不缓动（开页面、开局重置后）
+  posePrev: 'n',                     // 换档前是哪一档（过渡段的取景从它过到新档；倒放时换回它）
   pairX: MID,                        // 两个人的锚点在屏幕上的横坐标
   bob: 0,                            // 颠步的上下位移
   phoneX: MID, phoneY: 750,          // 手机在屏幕上的位置 —— 弹幕打它、气泡从它冒
@@ -193,6 +274,14 @@ const FX = {
   walkD: 0,                          // 'sway'：这一帧画面位置挪了多少米
   sway: 0,                           // 'sway'：晃动的权重 0~1（步态档里 1，僵持 / 过渡帧里 0，中间平滑过渡）
   tween: null,                       // 正在播的过渡帧（按播放顺序），换档那一刻由 startTween 定，播完照常进循环/步态
+  tweenFps: 14,                      // 这段过渡帧的格速：旧过渡帧 P.tweenFps，视频过渡段按视频格速 × P.vidRate
+  tweenVid: false,                   // 正在播的是视频过渡段：画面位置不动（地板不卷），视频里人的脚是对着不动的地面画的
+  vidWaitT: 0,                       // 要离开视频循环、在等离锚点近的那一格，已经等了多久
+  jolt: null,                        // 猛拽一下 { side: 'a'|'b' 谁拽的, t 还剩几秒 }，见 P.joltT
+  fallDone: false,                   // 扑倒档已经停够 P.fallHold，可以走了
+  yank: false,                       // 正被对面拽起来（derive 换档那段算）
+  fade: null,                        // 换档时上一格画面 { frame, t }：叠在新画面上 P.segFade 秒淡掉
+  vw: { u: 0, go: false, home: null, t: 0 },   // 视频走路循环（P.vidUMin 上面那段）：播放倍速 u、在不在走、停在哪个相位、原地拉扯的时钟
 
   hitX: 0, hitV: 0,                  // 角色被推开的位移与速度
   tint: [255, 255, 255], tintA: 0,   // 命中染色
@@ -205,6 +294,31 @@ const approach = (dt, k) => 1 - Math.exp(-k * dt);
 
 /* ---------- 数值层：算出 S.pos 与 S.p ---------- */
 
+/* 数值就地试（在 boot 之前读，?sim 也认）：
+     ?mode=12|30|60      局长档（面板上也能选）
+     ?rulerk= ?rulermin= ?rulert= ?room=   刻度四个数，见 NUM.RULER_K 那段；?room= 是开播时假定的房间流水（拉力/秒）
+     ?vz= 满刻度拖速（12 分钟档的值）  ?end= 终点多远 */
+{
+  const Q = new URLSearchParams(location.search), num = (k, lo, hi) => clamp(+Q.get(k), lo, hi);
+  if (NUM.MODES[Q.get('mode')]) S.mode = NUM.MODES[Q.get('mode')];
+  if (Q.has('rulerk')) NUM.RULER_K = num('rulerk', 0.1, 10);
+  if (Q.has('rulermin')) NUM.RULER_MIN = num('rulermin', 1, 1e6);
+  if (Q.has('rulert')) NUM.RULER_T = num('rulert', 5, 3600);
+  if (Q.has('room')) S.room = num('room', 0, 1e6);
+  if (Q.has('vz')) NUM.V_Z = num('vz', 0, 100);
+  if (Q.has('end')) NUM.END = num('end', 5, 30);
+  S.clock = S.mode.match;
+}
+
+/* 所有拉力注入都走这里：送礼、自动演示、诊断参数的持续注入。顺带记进房间流水 —— 刻度（ruler）
+   要知道"这个房间平时刷多少"，漏记一处，那一处的注入就会显得比实际大。 */
+function feed(side, amt) {
+  if (side > 0) S.fA += amt; else S.fB += amt;
+  S.room += amt / NUM.RULER_T;
+}
+/* 拉力差的刻度：差这么多 = 全压一边（姿态读数到头、拖速 V_Z）。见 NUM.RULER_K 那段 */
+const ruler = () => Math.max(NUM.RULER_MIN, NUM.RULER_K * S.room / NUM.LOSS);
+
 /* battle 算"两个人该往哪走"，derive 算"算出来之后画面长什么样"。分成两个函数
    是因为它们回答的是两个问题，而把它们混在一起正是上一版最大的错误：礼物
    直接改了 S.p，等于把火力这一层整个删掉了。 */
@@ -215,6 +329,7 @@ function battle(dt) {
   if (S.debA > 0 && (S.debA -= dt) <= 0) S.debKA = 0;
   if (S.debB > 0 && (S.debB -= dt) <= 0) S.debKB = 0;
   if (S.stand > 0) S.stand -= dt;
+  S.room *= Math.exp(-dt / NUM.RULER_T);   // 房间流水的滑动平均（feed 每次加 amt / RULER_T）
 
   /* 对冲：双方等量消耗，速度由火力**少**的一方决定。
      这一条是整个模型的关键，它自带一根橡皮筋 —— 劣势方火力少，所以流失慢、
@@ -242,8 +357,7 @@ function battle(dt) {
 
      三个数的出处（X / M / V_Z，见 NUM 表）：
        M = 1000 拉力：本项目的 push = 螂人杀兵数 ÷ 100，1000 拉力就是 10 万兵。
-       X = 30 拉力：螂人杀"最后 100 滴血，兵力大于 3000 才优先掉兵"里的
-           3000 兵 ÷ 100，拿来当死区 —— 双方拉力咬在一起的时候谁也拖不动谁。
+       没有数值死区（以前 X = 30 拉力）：拖不拖看动作，见 dragSide()。
        V_Z = 1.5 米/秒：从血量制的 Z = 5%/秒 原样换算（END 的 5%）。
            ⚠️ 5% 取自需求里给过的例子，螂人杀公开文档里**没有**这个速率。
            按它算，一方猛刷而对面不还手约 70 秒分胜负；想拉长就调小 V_Z 和
@@ -252,17 +366,17 @@ function battle(dt) {
 
   /* 姿态读数：拉力差的当前值，**不积分**。趋近而不是直接取值 —— 礼物注入
      是瞬间跳变的，直接赋值会让动作一帧之内从僵持跳到拖地。 */
-  const want = 50 + 50 * clamp(diff / NUM.LINE_FULL, -1, 1);
+  const R = ruler();
+  const want = 50 + 50 * clamp(diff / R, -1, 1);
   S.p += (want - S.p) * approach(dt, NUM.LINE_RATE);
 
-  /* 拖动。差距过不了 X 就谁也拖不动 —— 这是僵持区：双方咬得紧的时候画面照样
-     激烈（弹幕全在中间对撞），但背景一动不动。
-     速度按**差的全量**算，不是"超出 X 的那部分"：X 是开关不是起征点。 */
+  /* 拖动：只有把对方拉倒了（动作离开僵持档）才拖得动，而且只往占上风的那边拖，见 dragSide()。
+     速度按**差的全量**算。 */
   const gap = Math.abs(diff);
+  const dir = diff > 0 ? +1 : -1;                        // 往哪边拖：+1 = 往左（查岗党那头）
   S.vel = 0;
-  if (gap > NUM.PULL_X) {
-    let v = Math.min(NUM.V_MAX, gap / NUM.PULL_M * NUM.V_Z);
-    const dir = diff > 0 ? +1 : -1;                      // 往哪边拖：+1 = 往左（查岗党那头）
+  if (dir === dragSide()) {
+    let v = Math.min(NUM.V_MAX, gap / R * NUM.V_Z) * S.mode.v;
 
     /* 抓门框：快被拖到头时，火力越足越顶得住。这是螂人杀"最后 100 滴血，
        兵力大于 3000 就优先掉兵"的原意 —— 刷礼物能直接保命，而且看得见。
@@ -291,19 +405,37 @@ function battle(dt) {
   const lead = Math.abs(S.pos) / NUM.END;
   if (S.phase === 'play') {
     S.big = lead >= NUM.SUDDEN_LEAD ? S.big + dt : 0;
-    if (S.big >= NUM.SUDDEN_WAIT) { S.phase = 'sudden'; S.sudden = NUM.SUDDEN; }
-  } else if ((S.sudden -= dt) <= 0) { finish(S.pos > 0 ? +1 : -1); return; }
+    if (S.big >= S.mode.sudden) { S.phase = 'sudden'; S.sudden = NUM.SUDDEN; }
+  }
+  /* 绝杀中被拽回 SUDDEN_LEAD 以内：解除，回到正常对局，之后还能再进（报告 P1-7：一局出多轮大场面）。
+     不解除的话绝杀就是"判死刑"，30 秒里劣势方再刷也只是拖延，没人会为它付钱。 */
+  else if (lead < NUM.SUDDEN_LEAD) { S.phase = 'play'; S.big = 0; S.sudden = 0; }
+  else if ((S.sudden -= dt) <= 0) { finish(S.pos > 0 ? +1 : -1); return; }
 
   // 时间到：被拖向谁那边谁赢，离正中不到 1 米判平
   if ((S.clock -= dt) <= 0) finish(S.pos > 1 ? +1 : S.pos < -1 ? -1 : 0);
 }
 
+/* 两人中线在屏幕上的横坐标：开局正中、各占一半；被拖得离谁的底线越近（女方底线在卧室 S.pos = +END），
+   中线越往对方那边推，到底线时占 5/8 屏（10-07 用户「越靠近自己的底线，交界线越推向对方，但也不能超过5/8」）。
+   跟位置走（线性），动作档、片子里的前冲后仰都不改它 */
+const lineAt = () => MID + P.lineShift * W * clamp(S.pos / NUM.END, -1, 1);
+
+/* 能往哪边拖：+1 往左（女方把男方拉倒了）/ −1 往右 / 0 谁也拖不动。
+   僵持档（n）不位移，两人原地拉扯（10-07 用户「僵持阶段……不会发生位移，就保持在原地不变。只有拉力差大于各种值，
+   对应男女生将对方拉倒，才会伴随位移」）。看的是**画面上的动作**不是拉力差：动作换档要停够 stageHold、视频还要等近锚点格，
+   按拉力差判会出现"人还站着、地板已经在卷"。从僵持一换到跪档（过渡段开始播，人往下跪）就开始拖。
+   以前拉力差过 30 就拖：僵持档里能一直 0~0.37 米/秒地走 */
+function dragSide() {
+  return FX.pose === 'n' ? 0 : FX.pose[0] === 'a' ? 1 : -1;
+}
+
 /* 调试台（idle）不跑数值：姿态由滑块或自动演示直接给 S.p。位置照同一把尺子
    从 S.p 积分出来 —— 不然拖滑块只换动作、背景不动，看不出卷轴对不对。 */
 function drift(dt) {
-  const bias = (S.p - 50) / 50, gap = Math.abs(bias) * NUM.LINE_FULL;
+  const bias = (S.p - 50) / 50;
   // 跟 battle() 同一个公式：差值 → 速度，封顶 V_MAX
-  S.vel = gap > NUM.PULL_X ? Math.sign(bias) * Math.min(NUM.V_MAX, gap / NUM.PULL_M * NUM.V_Z) : 0;
+  S.vel = Math.sign(bias) === dragSide() ? Math.sign(bias) * Math.min(NUM.V_MAX, Math.abs(bias) * NUM.V_Z) * S.mode.v : 0;
   S.pos = clamp(S.pos + S.vel * dt, -NUM.END, NUM.END);
 }
 
@@ -316,11 +448,12 @@ function giveGift(side, key, pick) {
   const loser = S.pos > 0 ? -1 : +1;                // 谁正落后（看位置，不看此刻的姿态）
   const boost = (S.stand > 0 && side === loser) ? 2 : 1;
   const amt = it.push * (1 - deb) * boost;
-  if (side > 0) { S.fA += amt; S.giftA++; } else { S.fB += amt; S.giftB++; }
+  feed(side, amt); if (side > 0) S.giftA++; else S.giftB++;
   BgMotion.chatPush();                              // 电竞房聊天屏冒一条（背景联动）
 
   /* 高档礼物的第二维度：压制。光靠 push 拉开差距会逼出很难看的数值，而
      "让对方刷的每一件都打折"才是贵真正买到的东西。 */
+  if (it.tier >= 3) FX.jolt = { side: side > 0 ? 'a' : 'b', t: P.joltT };   // 猛拽一下：跪着的那方被拽得扑倒一下（pickPose）
   if (it.tier === 3) hexDebuff(-side, 0.30, 5);
   if (it.tier === 4) {
     hexDebuff(-side, 0.50, 8);
@@ -384,18 +517,25 @@ function hexDebuff(side, k, sec) {
 
 let matchGen = 0;                                   // 第几局（档 4 等素材上场时，局已经换了就不再上）
 const VID_WAIT = 2.5;                               // 送档 4 时最多等这个人的出场视频几秒（20 Mbps 下最大一段 5 MB 约 2 秒能放）
+/* 开局（点开始、结算完自动开下一局、回调试台）把画面也放回僵持原位：上一局停在扑倒 / 趴的那一档、播到一半的过渡段、
+   走路循环的相位、镜头偏移都清掉。只清 S 的话，FX 还在上一局的档上，要按换档规则一档档走回僵持（等锚点格、播过渡段），
+   开局头几秒人还趴着、镜头还偏着 */
+function resetPose() {
+  Object.assign(FX, { pose: 'n', posePrev: 'n', poseT: 0, tween: null, tweenVid: false, fade: null, vidWaitT: 0, jolt: null, fallDone: false,
+    vw: { u: 0, go: false, home: null, t: 0 }, walkPos: 0, walkD: 0, step: null, gaitPh: 0, sway: 0,
+    camLead: 0, camSnap: true, hitX: 0, hitV: 0, tintA: 0 });
+}
 function startMatch() {
   matchGen++;
   S.p = 50; S.fA = S.fB = 0;
-  S.pos = 0; S.vel = 0; FX.walkPos = 0; FX.step = null;
+  S.pos = 0; S.vel = 0; resetPose();
   S.debA = S.debB = S.debKA = S.debKB = 0;
-  S.clock = NUM.MATCH; S.phase = 'play';
+  S.clock = S.mode.match; S.phase = 'play';
   S.big = S.sudden = S.stand = 0; S.standUsed = false; S.winner = 0;
   S.overT = 0; S.giftA = S.giftB = 0; S.board = []; combos.length = 0;
   stains.length = 0; Scuff.reset();
   for (const c of Object.values(CREW)) c.reset(); DurianRain.reset(); SockRain.reset(); for (const t of TIDE_OF.values()) t.reset(); Clash.reset(); Foam.reset();
   IntroVideo.stop();
-  S.auto = false;
   Ammo.clear(); Particles.clear(); TrioFX.clear();
 }
 
@@ -405,6 +545,67 @@ function startMatch() {
    rooms 三间房各多宽、center 客厅正中（= 0 米）在世界里的横坐标、
    poses 每张贴图的尺寸、锚点（外框中点或脚的质心 × 脚底线）、手机位置。 */
 let WORLD = null;
+/* 拉扯视频段（assets/world/vid/vid.json 的 segs；默认加载，?vid=0 不用）。键是档名（循环段：n aK aF aL）或 '从>到'（过渡段）。
+   没有的档（男赢一侧还没出片）照旧用旧的关键帧 / 步态 / 过渡帧 */
+let VID = null;
+let VID_BOX = null;     // 视频帧名 → 这一格前后半秒两人最左 / 最右（相对锚点），镜头少切人用，boot 时算
+/* ?vidplay=1（=b 两边对调演男方赢）：自动演示**一整局真对局**（10-06 起；第一版是调试台里按剧本拨拉力读数、end=1000 关掉距离那把尺 ——
+   距离条不动、永远分不出胜负、人走出世界的边，用户看到的"女方赢了画面还在中场""拉出镜头还不结束"都是那个假剧本）。
+   现在开局后按剧本往两边持续注火力（同 ?live 的 liveA/liveB，每秒多少拉力），隔几秒按占优的一方真送一件礼物（演出照放）；
+   打到 ±END 米正常结算，结算完自动开下一局、剧本从头。
+   剧本 [到第几秒, 女方每秒注入, 男方每秒注入]：稳态拉力差 = 注入差 / NUM.LOSS（0.04），差 10 ≈ 拉力差 250 = 跪下那档的门槛 */
+let VIDPLAY = null;
+const VIDPLAY_SCRIPT = [[8, 10, 10], [30, 21, 10], [44, 30, 10], [56, 12, 21], [1e9, 32, 8]];
+const VIDPLAY_GIFTS = { L: ['wand', 'chest', 'mirror', 'boom'], R: ['wand', 'chest', 'mirror', 'boom'] };
+/* 自动演示（调试台「自动演示」勾上 / ?auto=1；10-07 用户：「点自动演示，应该是所有两边的礼物，你自己都尝试，不要轻易让哪边赢，
+   就来来回回拉扯，既然是演示，所有礼物都要轮流演示到，男女主的各个体位也要演示到，从中间拉到女生房间快赢但没赢，
+   又被男生拉回男生房间快赢但没赢」）。以前是调试台里来回拨姿态读数 S.p：没有礼物、拉力牌两边都是 0、距离条和动作对不上。
+   现在跑一整局**真对局**，数值全走正常那条路（giveGift / battle），演示程序只做观众：
+     · 两边每秒一点底火（base，观众零碎的小礼物），再按"想要的拉力差"补火（kp 跟过去）—— 稳态拉力差 = 注入差 / LOSS；
+     · 开局僵持 hold 秒 → 一边拉（先跪着拖 pull[0]，过了半程加到 pull[1] 趴着拖）→ 拖到 END 的 near（24.6 米，反击时刻 27.6 米之前）就掉头：另一边送一件空投
+       （档 4 直接砍对面一半火力，翻盘就靠它）、换他拉 → 拉到对面房间快赢再掉头……；剩 home 秒时拉回中间收成平局，结算完下一局接着演；
+     · 隔 every 秒送一件：占优的一方按 SEQ 轮着送（九件平台礼物全轮到，档 3 / 档 4 正好在跪着时送到 = 猛拽一下扑倒），
+       落后的一方插着送 LO 里的小件（大的留到掉头那一下）；
+     · 绝杀计时（离中间超过 35% 连续 60 秒）快到了也掉头 —— 演示不进绝杀。
+   演示时 S.auto 一直开着：结算完自动开下一局照样接着演；点「开始对局」/ 去掉勾就停 */
+const DEMO = {
+  hold: 8, base: 5, kp: 0.15,
+  pull: [0.45, 0.95],   // 想要的拉力差，按刻度 ruler() 的比例：0.45 跪着拖、0.95 趴着拖（跪 0.30 / 趴 0.75 起）
+  near: 0.82,
+  every: [2.4, 3.8],
+  home: 75, homeStop: 2.5, homePull: 0.34,   // homePull 同样是刻度的比例
+  SEQ: ['wand', 'mirror', 'like', 'chest', 'boom', 'six', 'battery', 'mic', 'drop'],
+  LO: ['like', 'wand', 'six', 'chest', 'mirror'],
+};
+let demo = null;
+function demoTick(dt) {
+  if (S.phase === 'idle') startMatch();
+  if (S.phase === 'over') return;
+  if (!demo || demo.gen !== matchGen)
+    demo = { gen: matchGen, phase: 'hold', t: 0, side: Math.random() < 0.5 ? 1 : -1, gift: 1.5, i: { 1: 0, '-1': 0 }, lo: 0 };
+  const d = demo, prog = S.pos / NUM.END * d.side;
+  d.t += dt;
+  if (d.phase === 'hold' && d.t > DEMO.hold) { d.phase = 'push'; d.t = 0; }
+  if (d.phase === 'push' && S.clock < DEMO.home) d.phase = 'home';
+  if (d.phase === 'push' && prog > 0 && (prog >= DEMO.near || S.big > S.mode.sudden - 15)) {
+    d.side = -d.side; d.t = 0; d.gift = 2;
+    giveGift(d.side, 'drop');                         // 掉头：这一边一件空投翻盘
+  }
+  let want = 0;
+  // 离中间远（不论是往外拖还是正往回拽）就用力拉：往外是拖到趴下，往回是赶在绝杀计时之前拽回中间
+  if (d.phase === 'push') want = d.side * DEMO.pull[Math.abs(S.pos) / NUM.END > 0.45 ? 1 : 0] * ruler();
+  /* 收尾：轻轻拉回中间（homePull，刚够跪下）。拉倒的那一档要先站起来才停得下、松手后还会被拖两三米，所以拖着时离中间
+     homeStop 米就松手；站定了（僵持）还差 1 米以上（时间到按 1 米判平）就再拉一次 */
+  if (d.phase === 'home' && Math.abs(S.pos) > (FX.pose === 'n' ? 1 : DEMO.homeStop)) want = -Math.sign(S.pos) * DEMO.homePull * ruler();
+  const u = NUM.LOSS * want + DEMO.kp * (want - (S.fA - S.fB));
+  feed(+1, (DEMO.base + Math.max(0, u)) * dt); feed(-1, (DEMO.base + Math.max(0, -u)) * dt);
+  if ((d.gift -= dt) <= 0) {
+    d.gift = DEMO.every[0] + Math.random() * (DEMO.every[1] - DEMO.every[0]);
+    const lead = want > 0 ? 1 : want < 0 ? -1 : 0;
+    if (lead && Math.random() < 0.75) { giveGift(lead, DEMO.SEQ[d.i[lead]++ % DEMO.SEQ.length]); }
+    else { const sd = lead ? -lead : (d.lo % 2 ? 1 : -1); giveGift(sd, DEMO.LO[d.lo++ % DEMO.LO.length]); }
+  }
+}
 /* 胶片诊断 ?trioprobe=1：每格把三人组的出手（drawOver）单独再画一遍到探针画布上，数落在**自己这边主角脸框**里的像素
    （哥们 → 男生 faceOf('b')，闺蜜 → 女生 faceOf('a')）。后排出手不许横穿自己主角的脸，这个数应当是 0。胶片分支记进 window.trioFaces 的 hit */
 let trioProbe = null;
@@ -444,6 +645,13 @@ function pickPose(prev, bias, held) {
   if (same) for (let l = 3; l >= 1; l--) {
     if (k > (lvl >= l ? at[l - 1] - P.hys : at[l - 1] + P.hys)) { want = l; break; }
   }
+  /* 扑倒（F）不是停留档（10-07 用户：「这一幕应该是女生猛用力扯一下后出现的情况，不会长时间保持这个状态」）：
+     拉力差落在扑倒那一段时停在跪档被拖；扑倒只在两种时候出现 —— 跪 ↔ 趴之间路过，或者跪着时占优那方猛拽一下
+     （送了档 3 / 档 4，FX.jolt，见 giveGift）。到了扑倒停够 P.fallHold（FX.fallDone）就走：还够趴就趴下，不够就撑回跪。
+     没停够之前除非局势整个没了（want 0），一律算"还在扑倒"，倒下那段过渡不会被拉回去 */
+  if (want === 2) want = 1;
+  if (lvl === 1 && want === 1 && FX.jolt && FX.jolt.side === side && same) want = 2;
+  if (lvl === 2 && !FX.fallDone && want >= 1) want = 2;
   if (want === lvl || !held) return prev;
   const next = lvl + Math.sign(want - lvl);
   return next === 0 ? 'n' : (lvl === 0 ? side : prev[0]) + STAGES[next - 1];
@@ -459,6 +667,53 @@ function tweenOf(prev, next) {
   return null;
 }
 
+/* 视频走路循环按步频播（见 P.vidUMin 上面的注释）：推 FX.gaitPh、FX.walkPos，记下这一帧画面挪了多少 FX.walkD */
+function vidWalk(dt, vg) {
+  const W = FX.vw, toward = FX.pose[0] === 'a' ? 1 : -1;
+  const n = vg.frames.length, natPh = vg.fps / n;                  // 原速每秒走几圈
+  const vnat = vg.cycle * natPh / P.pxPerM;                        // 原速每秒走几米
+  const ut = (S.vel + (S.pos - FX.walkPos) * P.vidLagK) * toward / vnat;
+  const dragged = S.vel * toward > 0;                              // 正在被拖（dragSide 那边有速度）：一直走，不停步
+  if (W.go && !dragged && Math.abs(ut) < P.vidUStop) { W.go = false; W.home = null; }
+  else if (!W.go && (dragged || Math.abs(ut) > P.vidUGo)) W.go = true;
+  let uT;
+  // 要离开循环：快进到近锚点格。方向在开始等的那一刻定下：往前、往后哪边的近锚点格近走哪边
+  // （往回爬时循环在倒放，照倒放方向得倒着走将近一圈，往前两三格就有一个）；之后不跟 ut 走 ——
+  // 快进时画面跑到真实位置前面，ut 里追赶那一项会变负，跟着它就会减速、倒放，最后还是硬切
+  if (FX.vidWaitT <= 0) W.leave = null;
+  if (FX.vidWaitT > 0) {
+    if (W.leave == null) {
+      const k = Math.floor((FX.gaitPh - Math.floor(FX.gaitPh)) * n);
+      let fw = 0, bw = 0;
+      while (fw < n && vg.d0[(k + fw) % n] >= P.vidNear) fw++;
+      while (bw < n && vg.d0[(k - bw + n) % n] >= P.vidNear) bw++;
+      W.leave = fw <= bw ? 1 : -1;
+    }
+    uT = W.leave * (FX.yank ? P.vidLeaveYank : P.vidLeaveU); W.go = true; W.home = null;
+  } else if (W.go) uT = dragged ? clamp(ut, P.vidUDrag, P.vidUMax) : Math.sign(ut) * clamp(Math.abs(ut), P.vidUMin, P.vidUMax);
+  else if (W.home == null) {
+    // 停步：顺着原来的方向走到下一个脚踩实的格（这一格到下一格动得少，build_vid.py 量的 mv）
+    const k = Math.floor((FX.gaitPh - Math.floor(FX.gaitPh)) * n);
+    if (vg.mv[k] < P.vidStill && Math.abs(W.u) <= P.vidUMin + 1e-6) { W.home = FX.gaitPh; W.t = 0; uT = 0; }
+    else uT = (W.u < 0 ? -1 : 1) * P.vidUMin;
+  } else {
+    // 停住了：在 home 前后小幅拉扯
+    W.t += dt;
+    const w = 2 * Math.PI / P.vidIdleT;
+    uT = (P.vidIdleA * w * Math.cos(w * W.t) + (W.home - FX.gaitPh) * 0.5) / natPh;
+  }
+  const acc = FX.vidWaitT > 0 ? P.vidAccLeave : P.vidAcc;   // 赶去锚点格时不用缓起步：本来就是在追
+  W.u += clamp(uT - W.u, -acc * dt, acc * dt);
+  const dPh = W.u * natPh * dt;
+  FX.gaitPh += dPh;
+  FX.walkD = dPh * vg.cycle * toward / P.pxPerM;
+  FX.walkPos += FX.walkD;
+  // 步子跟不上（拖速超过原速 × vidUMax）或剧烈反转时，画面离真实位置最多 vidLagMax 米：超出的部分整体贴地滑过去，
+  // 画面位置是胜负的读数，不能为了脚不打滑离开它
+  const lag = S.pos - FX.walkPos;
+  if (Math.abs(lag) > P.vidLagMax) FX.walkPos += lag - Math.sign(lag) * P.vidLagMax;
+}
+
 function derive(dt) {
   if (S.phase === 'over') {
     S.overT += dt;
@@ -472,33 +727,91 @@ function derive(dt) {
   const dist = S.pos / NUM.END;
   const back = Math.sign(bias) !== Math.sign(dist) && Math.abs(bias) >= P.kneelAt;
   const sev = back || Math.abs(bias) >= Math.abs(dist) ? bias : dist;
-  const pose = pickPose(FX.pose, sev, FX.poseT >= P.stageHold);
+  /* 视频过渡段播到一半局势反过来了（从目标档看要回上一档，带回差）：不等播完，从当前这格倒着播回去 ——
+     倒放的跪下就是爬起来，播到头正好是上一档的锚点。过渡段 2~4 秒，以前必须播完才能换，再加上等近锚点格，
+     画面最多落后胜负条 6~7 秒（10-06 审查第 2 条）。倒的时候把整段反过来、播放位置换到对称的那一格，
+     再反一次也还是完整的一段（不会越倒越短） */
+  if (FX.tweenVid && FX.tween && FX.poseT < FX.tween.length / FX.tweenFps && pickPose(FX.pose, sev, true) === FX.posePrev) {
+    const len = FX.tween.length / FX.tweenFps;
+    FX.tween = [...FX.tween].reverse();
+    FX.poseT = Math.max(0, len - FX.poseT);
+    [FX.pose, FX.posePrev] = [FX.posePrev, FX.pose];
+  }
+  if (FX.jolt && (FX.jolt.t -= dt) <= 0) FX.jolt = null;
+  FX.fallDone = FX.pose[1] === 'F' && FX.poseT >= (FX.tween ? FX.tween.length / FX.tweenFps : 0) + P.fallHold;
+  /* 换档的条件：这一档停够 stageHold、过渡帧播完；视频循环还要播到离锚点近的那一格（见 P.vidNear） */
+  /* 路过的档（接着上一次换档的方向继续走：跪 → 扑倒 → 趴、趴 → 扑倒 → 跪）不用停够 stageHold：过渡段播完正好停在锚点格，
+     当场接下一段。停 0.6 秒的话循环已经播离了锚点，跪档循环只有第 0 格是近锚点格，要再等将近 3 秒（vidWait）——
+     10-07 自动演示实测：被对面拽回来时从趴到站起来要 10 秒，这 10 秒里拉力牌一边倒、人不动 */
+  const lv = (p) => (p === 'n' ? 0 : STAGES.indexOf(p[1]) + 1);
+  // 正被对面拽起来：倒着的是这边、拉力差已经在另一边且够跪档（站起来那几段快播、等锚点格快进，见 P.vidRateBack / vidLeaveYank）
+  FX.yank = FX.pose !== 'n' && Math.sign(bias) !== (FX.pose[0] === 'a' ? 1 : -1) && Math.abs(bias) >= P.kneelAt;
+  const wantNow = pickPose(FX.pose, sev, true);
+  const passing = FX.pose !== 'n' && wantNow !== FX.pose && Math.sign(lv(FX.pose) - lv(FX.posePrev)) === Math.sign(lv(wantNow) - lv(FX.pose));
+  let held = FX.poseT >= Math.max(passing ? 0 : P.stageHold, FX.tween ? FX.tween.length / FX.tweenFps : 0);
+  const vloop = VID && VID[FX.pose];
+  if (held && vloop) {
+    const want = pickPose(FX.pose, sev, true);
+    if (want !== FX.pose) {
+      const k = vloop.frames.indexOf(FX.frame);
+      FX.vidWaitT += dt;
+      held = (k >= 0 && vloop.d0[k] < P.vidNear) || FX.vidWaitT >= P.vidWait;
+    } else FX.vidWaitT = 0;
+  }
+  const pose = pickPose(FX.pose, sev, held);
   if (pose !== FX.pose) {
-    FX.tween = tweenOf(FX.pose, pose);
+    const vt = VID && VID[FX.pose + '>' + pose];
+    FX.tween = vt ? vt.frames : tweenOf(FX.pose, pose);
+    /* 被对面拽起来（往回站、而拉力差在另一边）：站起来那几段按 vidRateBack 播 —— 是被猛地拽起来的，不是自己慢慢爬起来 */
+    const yank = lv(pose) < lv(FX.pose) && FX.yank;
+    FX.tweenFps = vt ? vt.fps * (yank ? P.vidRateBack : P.vidRate) : P.tweenFps;
+    FX.tweenVid = !!vt;
+    FX.posePrev = FX.pose;
+    FX.fade = VID && FX.frame ? { frame: FX.frame, t: 0 } : null;
+    if (pose[1] === 'F') FX.jolt = null;            // 这一下拽已经用掉了：撑回跪档后不会再被同一下拽倒
     FX.pose = pose; FX.poseT = 0; FX.gaitPh = 0;     // 步态从这一档的原图（第 0 格）起步，接得上过渡帧的最后一格
     FX.step = null;                                  // 迈到一半换档：这一步作废，画面位置留在原处，新档从站姿起步
+    FX.vidWaitT = 0;
+    FX.vw = { u: 0, go: false, home: null, t: 0 };
   } else FX.poseT += dt;
+  if (FX.fade && (FX.fade.t += dt) >= P.segFade) FX.fade = null;
 
   /* 这一帧用哪张图。刚换档先播过渡帧；僵持走时间循环；被拉倒的各档有步态帧的（world.json 的 gaits）
-     走步态循环；还没画步态的先靠颠步（bob）假装在走。 */
-  const gait = WORLD && WORLD.gaits && WORLD.gaits[FX.pose];
-  const tweenT = FX.tween ? FX.tween.length / P.tweenFps : 0;
+     走步态循环；还没画步态的先靠颠步（bob）假装在走。
+     视频循环段（VID[档]，n 以外）当步态用：frames 一圈、cycle = 一圈视频里两个人往左走了多少（游戏像素），
+     build_vid.py 已把每格往回挪的量写进锚点，按位移推相位时脚和地板一起走 */
+  const gait = (FX.pose !== 'n' && VID && VID[FX.pose]) || (WORLD && WORLD.gaits && WORLD.gaits[FX.pose]);
+  const tweenT = FX.tween ? FX.tween.length / FX.tweenFps : 0;
   if (P.gaitMode === 'sway') {
     /* 晃动：两段不同周期（1 : 1.63，不成整数比，来回的幅度和快慢每次都不太一样）叠起来，振幅合计 swayM。
        只在步态档晃 —— 僵持循环（n）和过渡帧的脚没跟地板对齐，背景一晃就是脚底打滑；权重 sway 0.5 秒渐变，换档时不跳 */
     FX.swayT += dt;
     FX.sway += ((gait && FX.poseT >= tweenT ? 1 : 0) - FX.sway) * approach(dt, 2);
     const w = 2 * Math.PI * FX.swayT / P.swayT;
-    const off = P.swayM * FX.sway * (0.7 * Math.sin(w) + 0.3 * Math.sin(w * 1.63 + 1.1));
+    const off = VID ? 0 : P.swayM * FX.sway * (0.7 * Math.sin(w) + 0.3 * Math.sin(w * 1.63 + 1.1));
     const prev = FX.walkPos;
-    FX.walkPos += (S.pos + off - FX.walkPos) * approach(dt, P.walkFollow);
+    /* 视频版（?vid=1）：走路循环按步频走（vidWalk）；其余时候（僵持、过渡段、还没出片的档）画面位置跟着真实位置走，
+       速度 = 真实拖速 + 落后的距离 × vidLagK，不加晃动。
+       10-06 第二版曾让僵持和过渡段播着时画面不动、落下的距离进了走路循环再追：真实对局里僵持档可以一直拖着走
+       （拉力差 0~250，0~0.37 米/秒），实测女方已经领先 8.9 米画面还停在客厅正中；过渡段播完又落后 5~6 米，
+       镜头往回追、方向和局势对不上（10-06 用户「镜头滞后甚至相反」「女方获胜时场景还在中场」）。
+       画面位置就是胜负的读数，不能为了脚不打滑离开它：僵持和过渡段里赢方的脚会贴地蹭（≤ 拖速），被拖的人本来就在蹭 */
+    const vg = VID && FX.pose !== 'n' && FX.poseT >= tweenT && VID[FX.pose];
+    if (vg) vidWalk(dt, vg);
+    else if (VID) FX.walkPos += (S.vel + (S.pos - FX.walkPos) * P.vidLagK) * dt;
+    else {
+      const vmax = (Math.abs(S.vel) + P.walkCatch) * dt;
+      FX.walkPos += clamp((S.pos + off - FX.walkPos) * approach(dt, P.walkFollow), -vmax, vmax);
+    }
     FX.walkD = FX.walkPos - prev;   // 这一帧画面位置挪了多少：下面步态相位按它推
   }
   if (FX.poseT < tweenT) {
-    FX.frame = FX.tween[Math.floor(FX.poseT * P.tweenFps)];
+    FX.frame = FX.tween[Math.min(FX.tween.length - 1, Math.floor(FX.poseT * FX.tweenFps))];
     FX.bob = 0;
   } else if (FX.pose === 'n') {
-    FX.frame = LOOP_N[Math.floor((FX.poseT - tweenT) * P.loopFps) % LOOP_N.length];   // 过渡播完从 n0 起循环
+    const vn = VID && VID.n;
+    FX.frame = vn ? vn.frames[Math.floor((FX.poseT - tweenT) * vn.fps) % vn.frames.length]     // 视频僵持循环：按视频原速
+                  : LOOP_N[Math.floor((FX.poseT - tweenT) * P.loopFps) % LOOP_N.length];   // 过渡播完从 n0 起循环
     FX.bob = 0;
   } else if (gait) {
     // 往赢的那一方拖 = 正着走（倒退）；被拽回来 = 倒着播（往前走）
@@ -519,7 +832,7 @@ function derive(dt) {
       }
     } else if (P.gaitMode === 'sway') {
       /* 画面位置追"真实位置 + 晃动"（上面算好了这一帧挪了多少 walkD），相位按画面位置**实际**挪了多少推：站地的脚跟地板一起走，不打滑 */
-      FX.gaitPh += FX.walkD * toward * P.pxPerM / Math.max(gait.cycle, P.gaitCycleMin);
+      if (!(VID && VID[FX.pose])) FX.gaitPh += FX.walkD * toward * P.pxPerM / Math.max(gait.cycle, P.gaitCycleMin);   // 视频循环的相位 vidWalk 推
     } else {
       FX.gaitPh += S.vel * toward * dt * P.pxPerM * P.gaitSlip / Math.max(gait.cycle, P.gaitCycleMin);
       FX.walkPos = S.pos;
@@ -549,7 +862,38 @@ function derive(dt) {
   if (P.gaitMode !== 'sway' && (!gait || FX.poseT < tweenT)) FX.walkPos += (S.pos - FX.walkPos) * approach(dt, P.walkFollow);   // 没在走步态：画面位置追上真实位置
   if (WORLD) {
     const wx = WORLD.center - FX.walkPos * P.pxPerM;
-    FX.camX = clamp(wx, MID, WORLD.total - MID);
+    /* 镜头让对抗线落在 lineAt()（开局正中，越靠近一方底线越推向另一方，最多 5/8）。对抗线 = 站着那个人最前面的脚尖：
+       僵持两人脚尖相触那一点，有人倒下就是另一个（一定站着）的前脚尖（10-07 用户「对抗线是站着的人的最前方脚尖的位置」）。
+       每个循环段一个数（vid.json segs 的 line，build_vid.py seg_lines 量的整段平均），过渡段里从上一档的线性过到这一档的。
+       不逐帧跟：倒退走两只脚轮流在前，单格来回 ±60；片子里踢腿、前冲也留在画面里绕着线来回（逐帧盯手机时「镜头太晃」）。
+       10-06~07 先后试过：只对外框中心、逐帧盯手机、整段手机平均（男生扑倒、趴下往右伸 650 整个人出画）、两人贴地一条的正中
+       加"谁都不出画"的外框约束 —— 都被否了。10-07 晚用户看了脚尖版又要「尽可能的少切掉男主女主」，外框约束加回来，
+       但只在对抗线居中会切到人时才挪（见下面 box）。
+       镜头跟**真实位置**（S.pos，平滑）不跟画面位置（walkPos 随走路循环一顿一顿，跟着就晃）；但画面位置平均比真实位置领先
+       0.2~0.4 米（走路循环一步步往前赶），只跟 S.pos 线就偏 30~57（10-06 实测），所以再加上领先量的慢平均 camLead。
+       镜头本身不再追（以前 camFollow 3 拖着走又落后 20）：S.pos、lookX、camLead 三样都已经是平滑的。旧关键帧（?vid=0）没有 line，按单帧手机 */
+    const mf = WORLD.poses[FX.frame];
+    const sa = VID && VID[FX.posePrev], sb = VID && VID[FX.pose];
+    let line = mf && mf.phone ? mf.phone[0] - mf.ax : FX.lookX + lineAt() - MID;
+    if (sb && sb.line != null) {
+      const u = FX.tweenVid && FX.poseT < tweenT && sa && sa.line != null ? FX.poseT / tweenT : 1;
+      line = u < 1 ? sa.line + (sb.line - sa.line) * u : sb.line;
+    }
+    /* 少切人（10-07 用户「女生被切掉的太多了，而男生背后还有空间……尽可能的少切掉男主女主」）：对抗线落在 lineAt() 是首选，
+       但两人整体（seg.box，含头发）放得进一屏就挪到都不出画为止（挪得最少的位置）；放不进（扑倒档 960 宽）就整体居中，两边切得一样多。
+       box 同 line：循环段一个数，过渡段从上一档的线性过到这一档的 */
+    let A = lineAt() - line;                        // 锚点落在屏幕哪儿
+    const bx = VID_BOX && VID_BOX[FX.frame];
+    if (bx) {
+      /* 前后半秒合起来放得下：挪到都不出画；放不下（倒下 / 站起那一下伸得最开）就只看这一格自己，这一格也放不下才居中 */
+      const room = W - 2 * P.camEdge, fit = ([L, R]) => clamp(A, P.camEdge - L, W - P.camEdge - R);
+      const own = mf ? [-mf.ax, mf.w - mf.ax] : bx;
+      A = bx[1] - bx[0] <= room ? fit(bx) : own[1] - own[0] <= room ? fit(own) : (W - own[0] - own[1]) / 2;
+    }
+    const lookT = MID - A;
+    FX.lookX = FX.camSnap ? lookT : FX.lookX + (lookT - FX.lookX) * approach(dt, P.lookFollow); FX.camSnap = false;
+    FX.camLead += (FX.walkPos - S.pos - FX.camLead) * approach(dt, P.camLeadFollow);
+    FX.camX = clamp(WORLD.center - (S.pos + FX.camLead) * P.pxPerM + FX.lookX, MID, WORLD.total - MID);
     FX.pairX = MID + (wx - FX.camX);
     Scuff.tick(dt, wx, FX.frame, FX.pose);
   }
@@ -1587,11 +1931,13 @@ function tideUpdate(dt) {
   /* 前沿（甩浪头飞沫的地方）：还没推满、也没顶到对面的那一头 */
   const sp = tideSpan();
   for (const [c, t] of TIDE_OF) {
-    const [x0, x1] = sp.span(t), x = t.side < 0 ? x1 : x0, y = IntroVideo.seaUnder(c);   // 出场视频的海涌进来时先垫在视频底下（intro.js seaAt）
-    t.update(dt, casting(c) || y != null, x > 0 && x < W && x !== sp.meet ? x : null, y);
+    const [x0, x1] = sp.span(t), x = t.side < 0 ? x1 : x0;
+    /* 出场视频放到 seaAt 起潮就推进来（intro.js seaOn）：视频里自带的那片海已经抠掉了，画面上只有游戏这一片 */
+    t.update(dt, casting(c) || IntroVideo.seaOn(c), x > 0 && x < W && x !== sp.meet ? x : null);
   }
+  TideEdge.update(dt);
   Foam.update(dt);
-  const x = sp.meet ?? W / 2;
+  const x = (sp.meet ?? W / 2) + TideEdge.sway();       // 交界线在晃（TideEdge），对撞点跟着
   Clash.update(dt, x, Math.min(sp.L.edgeY(x), sp.R.edgeY(x)), sp.meet == null ? 0 : Math.min(sp.L.level(), sp.R.level()), sp.L, sp.R);
 }
 /* ?crewlog=1（胶片每格一行）：档 4 在场的人瞄准角 / 目标 / 喷口，和 crew.js measure 的两个外框
@@ -1760,8 +2106,13 @@ function faceOf(who) {
   return [poseX(m, fx + d * 0.2 * r), poseY(m, fy + 0.15 * r), r * 0.8];
 }
 
-/* 女生倒下了没有（男生赢的跌倒、趴地两档，含它们的步态格）。倒下以后哥们的水改浇她的背和腿。 */
-const girlDown = () => /^b[FL]/.test(FX.frame);
+/* 女生倒下了没有（男生赢的跌倒、趴地两档，含它们的步态格）。倒下以后哥们的水改浇她的背和腿。
+   视频帧（?vid=1，有 src、名字是 v<段>_<格>，看不出是哪一档）按她此刻身上有几行算：不到 SPREAD_ROWS 高就是横躺着（同 spreadAt）。 */
+const girlDown = () => {
+  const m = WORLD && WORLD.poses[FX.frame];
+  if (!(m && m.src)) return /^b[FL]/.test(FX.frame);
+  return m.edge.a.filter(v => v >= 0).length * m.edge.step < SPREAD_ROWS;
+};
 /* 某个人在屏幕横坐标 x 那一列的上沿（build.py 每 EDGE_STEP 列量的 edge.top / edge.topB），这一列没有他返回 null。
    who = 'top' 女生 / 'topB' 男生。哥们的水浇倒地的女生、天上掉的东西砸人，碰的都是上沿不是前沿。 */
 function topAt(who, x) {
@@ -2001,6 +2352,8 @@ class PoseView {
      这一张还没到 → 画同组的基础姿势（aK_g3、aK_t2 → aK），基础姿势也没到 → n0（首帧前一定有）；锚点按实际画的那一张取 */
   shownOf(name) {
     if (this.imgs[name]) return name;
+    // 视频帧（?vid=1）还没到：停在上一张画出来的帧上（退回旧关键帧会换一套画风闪一下）
+    if (WORLD.poses[name] && WORLD.poses[name].src && this.shown && this.imgs[this.shown]) return this.shown;
     const base = name.split('_')[0];
     return this.imgs[base] ? base : 'n0';
   }
@@ -2546,7 +2899,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 (async function boot() {
   const cvBg = document.getElementById('bg'), cvCh = document.getElementById('ch'), cvFx = document.getElementById('fx'), cvHud = document.getElementById('hud');
   /* 出场视频放完、视频里带着底部法术潮（白娘子的海）：她那片潮直接铺满，从视频里海面的高度（画布 y）落回自己的位置 */
-  IntroVideo.init({ stage: document.getElementById('stage'), W, H, onRelease: (crew, y) => { const t = TIDE_OF.get(crew); if (t) t.handoff(y); } });
+  IntroVideo.init({ stage: document.getElementById('stage'), W, H });
   const bctx = cvBg.getContext('2d'), cctx = cvCh.getContext('2d'), fctx = cvFx.getContext('2d'), hctx = cvHud.getContext('2d');
 
   /* ?sim=1 纯数值快进：不渲染、不发弹幕，只跑 battle，用来核对局长和手感。
@@ -2564,8 +2917,8 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const H = 1 / 30;
     let el = 0, mark50 = -1, mark80 = -1;
     while (S.phase !== 'over' && el < cap) {
-      S.fA += injA * H; S.fB += injB * H;
-      battle(H); el += H;
+      feed(+1, injA * H); feed(-1, injB * H);
+      battle(H); derive(H); el += H;     // derive：拖不拖看动作档（dragSide），动作要跟着走
       // 被拖出去一半 / 八成的时刻 —— 局长看的是位置，不是此刻的姿态
       const far = Math.abs(S.pos) / NUM.END;
       if (mark50 < 0 && far >= 0.5) mark50 = el;
@@ -2752,7 +3105,15 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   /* 首帧要的姿势（待机循环那几张）和 HUD 头像不依赖 world.json，跟它同时开始下（首帧路径上少两段串行往返）。
      头像离线从 girl.png / boy.png 裁好的 160 方图，两张共 21KB —— 立绘原图是 760×1145，只为取两个脸去加载它们不值当 */
   const poseImgs = {};
-  const loadPose = (n) => load(`assets/world/pose_${n}.webp`).then(im => { poseImgs[n] = im; Light.profile(im, 0, 0, im.width, im.height); });   // 脚下接触影的剪影底边：加载时量（light.js）
+  // 脚下接触影的剪影底边：加载时量（light.js）。视频帧（?vid=1）的贴图路径写在 meta.src（assets/world/vid/）
+  const loadPose = (n) => load(`assets/world/${(WORLD && WORLD.poses[n] && WORLD.poses[n].src) || `pose_${n}.webp`}`)
+    .then(im => { poseImgs[n] = im; Light.profile(im, 0, 0, im.width, im.height); });
+  /* 拉扯视频：vid.json（video/pull/build_vid.py）跟 world.json 同时下，视频帧并进 WORLD.poses。
+     首帧等视频僵持循环那 59 张（约 3 MB），其余段按档的先后排进预取队列（倒下一路在前，爬起一路在后） */
+  // 默认加载 assets/world/vid/（10-06 男赢女赢 19 段齐了，转正）；?vid=0 退回旧关键帧；?vid=<目录> 加载另一套（build_vid.py 的 VID_DIR，比如预览 vid_m）
+  const vidQ = Q0.get('vid');
+  const vidDir = !vidQ || vidQ === '1' ? 'vid' : vidQ;
+  const vidJ = vidQ !== '0' ? fetch(`assets/world/${vidDir}/vid.json` + vq).then(r => r.json()) : null;
   const firstPoses = [...new Set(LOOP_N)];
   const firstP = Promise.all([Promise.all(firstPoses.map(loadPose)),
     Promise.all(['av_a', 'av_b'].map(n => load(`assets/ui/${n}.webp`).catch(() => null))).then(([a, b]) => { HUD.avA = a; HUD.avB = b; })]);
@@ -2764,6 +3125,30 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      默认 v15 雷雨夜（2026-09-29 用户定稿）；?bg=v14 看旧的白天长卷（world.json 自带的 rooms / center，图在 assets/world/ 根下，不会动）。
      姿势贴图两套共用。 */
   if (roomsJ) Object.assign(WORLD, await roomsJ);
+  if (vidJ) {
+    const vj = await vidJ;
+    Object.assign(WORLD.poses, vj.poses);
+    VID = vj.segs;
+    /* 每一格两人整体占多宽（镜头少切人用，见 derive 镜头那段）：这一格前后各 BOX_WIN 格（约半秒）里贴图外框（含头发）
+       相对锚点最靠左 / 最靠右的那一格 —— 人往外伸之前镜头已经让开，脚步来回又不会带着镜头一格格晃。循环段首尾相接着取。
+       同一张画在一段里出现几次取并集。10-07 第一版按整段 15% / 85% 分位、过渡段在前后两档之间插值：倒下、站起那几秒
+       实际伸出去的没算进去，女生还是被切掉近百像素（用户第二次报「女生被切的太多了，男生后面空间还有很大」） */
+    const BOX_WIN = 12;
+    VID_BOX = {};
+    for (const sg of Object.values(VID)) {
+      const fr = sg.frames, n = fr.length, ms = fr.map(f => vj.poses[f]);
+      fr.forEach((f, i) => {
+        let l = 0, r = 0;
+        for (let k = -BOX_WIN; k <= BOX_WIN; k++) {
+          const j = sg.loop ? (i + k + n) % n : clamp(i + k, 0, n - 1), m = ms[j];
+          if (m) { l = Math.min(l, -m.ax); r = Math.max(r, m.w - m.ax); }
+        }
+        const b = VID_BOX[f];
+        VID_BOX[f] = b ? [Math.min(b[0], l), Math.max(b[1], r)] : [l, r];
+      });
+    }
+    await Promise.all([...new Set(VID.n.frames)].map(loadPose));
+  }
   WORLD.total = WORLD.rooms.reduce((a, b) => a + b, 0);
   /* 人物吃场景光（light.js）：按这一套背景的灯和房间底色；?light=0 关掉（改前改后对比、诊断） */
   /* ?light=0 全关；?light=shadow,grade,rim 只开其中几样（逐项对比） */
@@ -2779,7 +3164,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   Light.use(bgName, WORLD.rooms);
   /* 首帧只等首帧画得到的东西（docs/首屏加载诊断.md P1、P2：改之前把 38.8 MB 全部 await 完才起主循环、绑按钮，5 Mbps 首帧 66 秒）：
      长卷背景、待机循环那几张姿势、HUD 头像（三样一起下）。其余登记进预取队列（preload.js），首帧之后按下面的顺序在后台加载：
-     其余姿势 → 档 1 / 2 物品和命中粒子 → 背景动效（光效贴图 + 动区视频）→ 档 3 六十人 → 档 4 两组 → 结算图 → 档 4 出场视频。
+     结算图 → 其余姿势 → 档 1 / 2 物品和命中粒子 → 背景动效（光效贴图 + 动区视频）→ 档 3 六十人 → 档 4 两组 → 档 4 出场视频。
      送礼时还没轮到的：档 1 / 2 矢量画法（ammo.js、fx.js、rain.js），档 3 只抽加载好的人（trio.js），档 4 插队等这一组、跳过视频，
      结算纯色板（result.js），姿势退回基础姿势（PoseView.shownOf） */
   const noSpr = Q0.get('nosprite') === '1', V = Q0.get('v');
@@ -2787,9 +3172,16 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   const [rooms] = await Promise.all([Promise.all(WORLD.rooms.map((_, i) => load(`${bgDir}room${i}.webp`))), firstP]);
   const actors = new PoseView(poseImgs);
 
+  /* 结算演出图排第一（四张 0.74 MB）：以前排在队列最后（第 892 项，前面是视频帧几十 MB），网速慢时一局打完它还没下，
+     结算只剩纯色板（10-07 用户「结算界面有 bug 图片显示不出来」）。失败不阻塞：缺素材时照样退到纯色板把结果交代清楚 */
+  Preload.add('result', () => Result.load(V));
   /* 预取队列。姿势：基础姿势（aK、bF……）→ 过渡帧（_t）→ 步态帧（_g），缺的那几帧按 shownOf 退回基础姿势，基础姿势先到 */
   const poseRank = (n) => (n.includes('_t') ? 1 : n.includes('_g') ? 2 : 0);
-  for (const n of Object.keys(WORLD.poses).filter(n => !firstPoses.includes(n)).sort((a, b) => poseRank(a) - poseRank(b)))
+  // 男赢一侧（第 11~19 段）是一段一段交片的：还没出片的段 vid.json 里没有，跳过（游戏里那一档退回旧关键帧）
+  const vidOrder = ['n>aK', 'aK', 'aK>aF', 'aF', 'aF>aL', 'aL', 'aL>aF', 'aF>aK', 'aK>n',
+    'n>bK', 'bK', 'bK>bF', 'bF', 'bF>bL', 'bL', 'bL>bF', 'bF>bK', 'bK>n'];
+  if (VID) for (const k of vidOrder) if (VID[k]) for (const n of new Set(VID[k].frames)) Preload.add('pose:' + n, () => loadPose(n));   // 同一张画停几格（build_vid.py cadence）只加载一次
+  for (const n of Object.keys(WORLD.poses).filter(n => !firstPoses.includes(n) && !WORLD.poses[n].src).sort((a, b) => poseRank(a) - poseRank(b)))
     Preload.add('pose:' + n, () => loadPose(n));
   /* 3D 转盘贴图，两套：飞行物品的（ammo.js）和命中粒子的（fx.js）；加上档 2 两场天上掉东西的图集。
      失败不阻塞 —— 加载不到就退回各自的矢量画法，?nosprite=1 同时关掉 */
@@ -2812,8 +3204,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      原来 8 段 21 MB 排在整个队列最后，刚打开页面就送档 4 时视频还没开始下，那一次出场就只剩立绘。不算进"全部加载完"（wait: false） */
   for (const m of [...G4L.members, ...G4R.members].filter(m => INTRO_OF.has(m)))
     Preload.add('vid:' + INTRO_OF.get(m), () => IntroVideo.load(INTRO_OF.get(m)).then(() => m.loadLoop()), { wait: false });
-  // 结算演出图。失败不阻塞：缺素材时结算退到纯色板，照样把结果交代清楚
-  Preload.add('result', () => Result.load(V));
   const loadedMsg = () => Promise.all([Preload.need('items'), Preload.need('result'), Preload.need('bgmotion')]).then(([[sprOK, shpOK], resN, motionN]) => {
     document.getElementById('msg').textContent =
       `长卷 ${WORLD.total}px · 姿势 ${Object.keys(poseImgs).length} 张` + (motionN ? ` · 背景动效 ${motionN}` : '') +
@@ -2822,7 +3212,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
       (resN ? ` · 结算 ${resN}` : '') + ` · 预取 ${Preload.stats().n} 项 ${(Preload.stats().ms / 1000).toFixed(1)}s`;
   });
   /* 胶片 / 压测 / ?live 截图这些诊断模式要可复现：照旧等全部加载完再开始（不走首帧后的后台队列） */
-  const FULL = ['live', 'strip', 'loopstrip', 'gaitstrip', 'walkfilm', 'tweenstrip', 'ammostrip', 'bubblestrip', 'fxstrip', 'bench', 'preload'].some(k => Q0.has(k));
+  const FULL = ['live', 'strip', 'loopstrip', 'gaitstrip', 'walkfilm', 'chainfilm', 'tweenstrip', 'ammostrip', 'bubblestrip', 'fxstrip', 'bench', 'preload'].some(k => Q0.has(k));
   if (FULL) { await Preload.all(); await loadedMsg(); }
   else Preload.onIdle(loadedMsg);
 
@@ -2852,7 +3242,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
          和"礼物"会一路涨下去，跟旁边那格"本局时长"对不上 —— 截出来的图自相
          矛盾（实测：26 秒结束的一局显示送了 12 件礼物）。 */
       if (S.phase !== 'over') {
-        S.fA += liveA / 30; S.fB += liveB / 30;
+        feed(+1, liveA / 30); feed(-1, liveB / 30);
         if (every > 0 && k % Math.round(every * 30) === 0 && k / Math.round(every * 30) < liveN) {
           if (gA) giveGift(+1, gA);
           if (gB) giveGift(-1, gB);
@@ -2874,6 +3264,12 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     if (Q.get('liveStop') === '1') { stopAll = true; live = false; }
   }
   if (Q.has('p')) { S.p = clamp(+Q.get('p'), 0, 100); S.auto = false; }
+  if (Q.has('vidplay')) {
+    VIDPLAY = { t: 0, gift: 3, flip: Q.get('vidplay') === 'b' }; S.auto = false;     // ?vidplay=b：剧本两边对调，演男方赢的一局
+    /* 等视频帧全到了再开演：没到的帧 PoseView 停在上一张，剧本照走的话倒下、爬起那几段会定格着播过去 */
+    const all = VID ? Object.entries(VID).filter(([k]) => k !== 'n').flatMap(([, s]) => s.frames) : [];   // 僵持循环首帧前已经等过
+    Promise.all(all.map(n => Preload.need('pose:' + n))).then(() => { VIDPLAY.ready = true; });
+  }
   // ?pos=<米> 直接把两个人摆到某个位置（正 = 往左、进女生卧室），截各房间的样子用
   if (Q.has('pos')) FX.walkPos = S.pos = clamp(+Q.get('pos'), -NUM.END, NUM.END);
   if (Q.has('gait')) P.gaitMode = Q.get('gait');   // ?gait=nail 旧版连续步态，对照一步一拽
@@ -2882,13 +3278,6 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      默认值是什么。 */
   if (Q.get('auto') === '0') S.auto = false;
   if (Q.get('auto') === '1') S.auto = true;
-  /* X / M / V_Z 三个数就地试：?x=30&m=1000&vz=1.5。V_Z 决定局长 —— 1.5 是从
-     需求例子"差 1000 每秒扣 5%"换算来的（约 70 秒一局）；?end= 改终点多远。 */
-  if (Q.has('x')) NUM.PULL_X = Math.max(0, +Q.get('x'));
-  if (Q.has('m')) NUM.PULL_M = Math.max(1, +Q.get('m'));
-  if (Q.has('vz')) NUM.V_Z = Math.max(0, +Q.get('vz'));
-  if (Q.has('end')) NUM.END = clamp(+Q.get('end'), 5, 30);
-  if (Q.has('linefull')) NUM.LINE_FULL = Math.max(1, +Q.get('linefull'));
   /* 钉住闪光。两个都在这里**当场写一次值**，不能只设 pin 等 hudTick 去写 ——
      ?liveStop 把主循环停在 `render(); return`，hudTick 一次都不会跑，
      只设 pin 的话截出来的永远是没闪光的那一帧（踩过）。 */
@@ -2922,7 +3311,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
      不另开计时器：续时间、离场召回都不会重播，只有新冲进来的那一次演。 */
   const INTRO = { dim: 0.45, rise: 0.15, hold: 1.1, fade: 0.35,        // 压暗：多深、几秒压到底、压到几秒（首击在 1.03~1.27s，压到首击后）、几秒亮回来
                   delay: 0.25, slide: 0.25, stay: 1.1, out: 0.3,        // 名字条：她俯冲的 0.25s 先不出（免得盖住头和罐子）、滑进来几秒、停到几秒、几秒淡掉
-                  y: 800, h: 112,                                       // 名字条中线 y、条高：她脚下、两人头顶之上（330 时压在她身上）
+                  y: 655, h: 112,                                       // 名字条中线 y、条高：她脚下、两人头顶之上（330 时压在她身上；800 时压在主角头上，10-06 上移）
                   stack: 122 };                                         // 两边同时各一条时，后出来的往上挪多少（条高 + 10）
   /* 档 4 每边一组三人（同时只一个在场），**按成员**各演各的：名字、条色、字色都跟人走（左边的从左滑进、右边的从右滑进）。
      两边同时在场，压暗取最深的那个（仍是"全场暗下去、只有她 / 他亮着"）。
@@ -3016,31 +3405,37 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const dim = introDim();
     for (const it of crew) if (!it.behind && !near(it)) it.draw(cctx);
     if (dim > 0) drawIntroDim(cctx, dim);
-    /* 聊天气泡贴在后面那堵墙上（bubble.js）：画在档 4 的人和她们的特效底下 —— 最贵的特效占最显眼的位置，气泡从后面透出来；
-       档 4 在场时再淡、再小一点（Bubble.quiet）。它飘在两人头顶那片墙上，不碰主角，所以压在主角之下也不缺一块 */
-    Bubble.quiet(G4L.active() || G4R.active());
-    Bubble.draw(cctx);
     for (const it of crew) if (it.behind) it.draw(cctx);
-    let ac = cctx;
-    if (dim > 0) {
+    /* 出场压暗时，主角和前排各画进离屏画布、压暗了再贴上来（出场的她 / 他、法术潮不压） */
+    const lit = (draw) => {
+      if (!(dim > 0)) { draw(cctx); return; }
       if (!actorBuf) { actorBuf = document.createElement('canvas'); actorBuf.width = cvCh.width; actorBuf.height = cvCh.height; }
-      ac = actorBuf.getContext('2d');
+      const ac = actorBuf.getContext('2d');
       ac.setTransform(1, 0, 0, 1, 0, 0); ac.clearRect(0, 0, actorBuf.width, actorBuf.height);
       ac.setTransform(cctx.getTransform());
-    }
-    actors.draw(ac, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
-    drawStains(ac);
-    for (const it of crew) if (near(it)) it.draw(ac);
-    for (const a of ACTS) a.drawOver(ac);        // 三人组扔出去的东西、挂在人身上的记号、橡皮手臂、气功波：盖在主角之上
-    if (trioProbe) probeTrio(ac.getTransform());
-    if (dim > 0) {
+      draw(ac);
       drawIntroDim(ac, dim, 'source-atop');
       cctx.save(); cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.drawImage(actorBuf, 0, 0); cctx.restore();
-    }
-    /* 法术潮：盖在男女主之上（用户："水面和卷轴是在男女主的上层"），漫过两人的脚和小腿 */
+    };
+    lit((ac) => {
+      actors.draw(ac, FX.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
+      if (FX.fade) {                                // 换档：上一格画面叠在上面淡掉（P.segFade）
+        ac.save(); ac.globalAlpha = 1 - FX.fade.t / P.segFade;
+        actors.draw(ac, FX.fade.frame, FX.pairX + FX.hitX, GROUND + FX.bob, FX.tint, FX.tintA);
+        ac.restore();
+      }
+      drawStains(ac);
+    });
+    /* 法术潮：盖在男女主之上（用户："水面和卷轴是在男女主的上层"），漫过两人的脚和小腿；
+       但在前排帮手之下（10-06 画面布局方案）—— 前排闺蜜、哥们站在浪前面，手里的礼物、扔出去的东西不被海盖住 */
     const sp = tideSpan();
     for (const t of TIDE_OF.values()) t.draw(cctx, ...sp.span(t));
     Clash.draw(cctx);
+    lit((ac) => {
+      for (const it of crew) if (near(it)) it.draw(ac);
+      for (const a of ACTS) a.drawOver(ac);        // 三人组扔出去的东西、挂在人身上的记号、橡皮手臂、气功波：盖在主角之上
+      if (trioProbe) probeTrio(ac.getTransform());
+    });
     cctx.restore();
   }
 
@@ -3055,18 +3450,25 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     Foam.draw(fctx);                              // 白娘子水柱打在身上爆的水泡沫，同样盖在人物之上
     Particles.draw(fctx);
     TrioFX.draw(fctx);                            // 三人组的光束粒子 / 命中碎片 / 尘土（trio_fx.js，同一层）
+    /* 聊天气泡是要被读的文字，盖在人和特效之上（10-06 画面布局方案；原来贴在档 4 身体底下，档 4 在场时气泡抬到 362~514，
+       正落在她身上被挡住）。档 4 在场时再淡、再小一点（Bubble.quiet），让最贵的特效占最显眼的位置 */
+    Bubble.quiet(G4L.active() || G4R.active());
+    Bubble.draw(fctx);
     fctx.restore();
     /* 结算全屏接管：演出图铺满整幅，距离条不再画。结果已经写在画面里
        （谁在抡枕头、谁跪着哭），再摆一遍是重复。 */
     if (S.phase === 'over') Result.draw(fctx);
-    else { drawIntroName(fctx); drawHUD(fctx); }
     Particles.drawFlash(fctx, W, H);
   }
 
-  /* 盖在出场视频之上的那层（index.html #hud）：只有连送徽章 */
+  /* 盖在出场视频之上的那层（index.html #hud）：名字条、距离条 / 拉力牌、连送徽章 —— 出场视频的框上沿高过拉力牌下沿
+     （白娘子 102、绿茶妹妹 135 < 196），原来画在视频底下就被盖住（10-06 画面布局方案）。框本身不往下挪：box 是按尾帧对准
+     游戏站位反推的，挪了尾帧接不上 */
   function renderHud() {
     hctx.clearRect(0, 0, W, H);
-    if (S.phase !== 'over') drawCombos(hctx, (who) => STARS.find(st => st.crew === who).name);
+    if (S.phase === 'over') return;
+    drawIntroName(hctx); drawHUD(hctx);
+    drawCombos(hctx, (who) => STARS.find(st => st.crew === who).name);
   }
 
   function render() { renderBg(); renderActors(); renderFx(); renderHud(); }
@@ -3133,14 +3535,15 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
   }
 
   /* ?walkfilm=bL 实拍一段被拖的过程（给一步一拽 / 旧版连续步态拍对照片）：直接进这一档，按 ?walkv=<米/秒>
-     匀速拖 ?walkt=<秒>，每 1/15 秒一格，裁到地面一带排成网格（每行 10 格），外面切成动图看。 */
+     匀速拖 ?walkt=<秒>，每 1/15 秒一格，裁到地面一带排成网格（每行 10 格），外面切成动图看。
+     &walkfrom=n 从上一档（僵持）起拍：连同进这一档的过渡段（视频版的 'n>bK' 之类）一起拍下来 */
   if (Q.has('walkfilm')) {
     const name = Q.get('walkfilm') || 'bL', v = +(Q.get('walkv') || 1) * (name[0] === 'a' ? 1 : -1);
     const n = Math.round(+(Q.get('walkt') || 6) * 15), cols = 10, sc = 0.5, y0 = 560, ch = 760;
     const out = document.createElement('canvas'), o = out.getContext('2d');
     out.width = cols * W * sc; out.height = Math.ceil(n / cols) * ch * sc;
     S.p = { K: 68, F: 81, L: 95 }[name[1]]; if (name[0] === 'b') S.p = 100 - S.p;
-    S.pos = FX.walkPos = 0; S.vel = v; FX.pose = name; FX.poseT = 99; FX.tween = null; FX.gaitPh = 0; FX.step = null;
+    S.pos = FX.walkPos = 0; S.vel = v; FX.pose = Q.get('walkfrom') || name; FX.poseT = 99; FX.tween = null; FX.gaitPh = 0; FX.step = null;
     for (let i = 0; i < n; i++) {
       for (let k = 0; k < 4; k++) { S.pos += v / 60; derive(1 / 60); }
       render();
@@ -3153,6 +3556,75 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     stage.innerHTML = '';
     out.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
     stage.appendChild(out);
+    return;
+  }
+
+  /* ?chainfilm=b 整条拉扯流程连拍（看各段视频之间的衔接）：p 按时间表从僵持一路拉到趴下、停一会儿、再一档档爬回僵持；
+     b = 男赢（p 往小走）、a = 女赢。拖行速度跟着 p：往下拉时赢方拖着走，往回爬时输方往回拽，pos 大致回到 0。
+     &cft=总秒数（默认 40，时间表到 40 秒），&cfstep=每几帧（1/60 秒）拍一格（默认 12 = 0.2 秒），格上标 档/帧名；
+     &cfa=&cfb= 只拍这段时间（秒，看某一处换段放大用），&cfsc= 格子缩放（默认 0.25）、&cfcols= 每行几格（默认 8） */
+  if (Q.has('chainfilm')) {
+    const side = Q.get('chainfilm') || 'b', sg = side === 'a' ? 1 : -1;
+    const T = +(Q.get('cft') || 40), step = +(Q.get('cfstep') || 12);
+    // &cfkeys=0:50,2:50,3:68,4:50 自定义时间表（秒:p）：测过渡段播到一半局势反转（倒着播回去）这类
+    const KEYS = Q.get('cfkeys') ? Q.get('cfkeys').split(',').map(q => q.split(':').map(Number))
+      : [[0, 50], [2, 50], [3, 68], [8, 68], [9, 81], [14, 81], [15, 95], [21, 95], [22, 81], [27, 81], [28, 68], [33, 68], [34, 50], [40, 50]];
+    const pAt = (t) => { const i = KEYS.findIndex(([k]) => k > t); if (i < 0) return KEYS[KEYS.length - 1][1];
+      const [t0, p0] = KEYS[i - 1], [t1, p1] = KEYS[i]; return p0 + (p1 - p0) * (t - t0) / (t1 - t0); };
+    const ta = +(Q.get('cfa') || 0), tb = +(Q.get('cfb') || T);
+    const n = Math.floor((tb - ta) * 60 / step), cols = +(Q.get('cfcols') || 8), sc = +(Q.get('cfsc') || 0.25), y0 = 520, ch = 820;
+    const out = document.createElement('canvas'), o = out.getContext('2d');
+    out.width = cols * W * sc; out.height = Math.ceil(n / cols) * ch * sc;
+    o.font = '22px sans-serif'; o.fillStyle = '#ff0';
+    S.p = 50; S.pos = FX.walkPos = 0; S.vel = 0; FX.pose = 'n'; FX.poseT = 99; FX.tween = null; FX.gaitPh = 0; FX.step = null;
+    let t = 0;
+    const tick = () => { const p = pAt(t), pn = pAt(t + 1 / 60);
+      S.p = 50 + sg * (p - 50);
+      const dp = pn - p, sev = (p - 50) / 50;      // 往下拉：赢方拖着走 0.5 米/秒；停着：照拖；往回爬（趴够了之后）：输方往回拽，拖出去的距离拉回 0
+      S.vel = t >= 21 ? clamp(-S.pos * 0.5, -1.5, 1.5) : sg * 0.5 * Math.min(1, sev * 2.5);
+      S.pos += S.vel / 60; derive(1 / 60); t += 1 / 60;
+      LOG.push([+t.toFixed(3), FX.pose, FX.tween && FX.poseT < FX.tween.length / FX.tweenFps ? 1 : 0, FX.frame, +FX.phoneX.toFixed(1), +FX.phoneY.toFixed(1), +S.p.toFixed(1), +FX.vidWaitT.toFixed(2), +FX.gaitPh.toFixed(3), +FX.vw.u.toFixed(2)]); };
+    const LOG = window.__chain = [];          // 每 1/60 秒：t、档、是否在过渡、帧名、手机屏幕 x / y、p（外面用脚本取走，查衔接处手机有没有跳）
+    while (t < ta) tick();
+    /* &cfjunc=1：不拍胶片，改拍每个换段处前 4 帧、后 4 帧（每帧 1/60 秒）的角色层，一行一个换段 —— 外面比剪影看衔接有没有跳 */
+    if (Q.get('cfjunc') === '1') {
+      const K = 4, cw = W * 0.5, chh = ch * 0.5, ring = [], rows = [];
+      const snap = () => { const c = document.createElement('canvas'); c.width = cw; c.height = chh;
+        c.getContext('2d').drawImage(cvCh, 0, y0, W, ch, 0, 0, cw, chh); return c; };
+      let key = null, pending = null;
+      while (t < tb) {
+        tick(); render();
+        const r = LOG[LOG.length - 1], k = r[1] + r[2], sn = snap();
+        ring.push(sn); if (ring.length > K + 1) ring.shift();           // 最近 K+1 帧：换段前 K 帧 + 当前帧
+        if (pending) {
+          pending.cells.push(sn);
+          if (pending.cells.length === 2 * K) { rows.push(pending); pending = null; }
+        } else if (key !== null && k !== key) {
+          pending = { t: r[0], label: LOG[LOG.length - 2][3] + ' → ' + r[3], cells: ring.slice() };
+        }
+        key = k;
+      }
+      const g = document.createElement('canvas'); g.width = 2 * K * cw; g.height = rows.length * chh; const gc = g.getContext('2d');
+      gc.fillStyle = '#ff00ff'; gc.fillRect(0, 0, g.width, g.height);
+      rows.forEach((rw, j) => rw.cells.forEach((c, i) => gc.drawImage(c, i * cw, j * chh)));
+      window.__chainRows = rows.map(r => [r.t, r.label]);
+      window.__chainImg = g;
+      return;
+    }
+    for (let i = 0; i < n; i++) {
+      for (let k = 0; k < step; k++) tick();
+      render();
+      const dx = (i % cols) * W * sc, dy = Math.floor(i / cols) * ch * sc;
+      for (const c of [cvBg, cvCh, cvFx, cvHud]) o.drawImage(c, 0, y0, W, ch, dx, dy, W * sc, ch * sc);
+      o.fillText(`${t.toFixed(1)}s ${FX.pose} ${FX.tween && FX.poseT < FX.tween.length / FX.tweenFps ? '过渡' : ''} ${FX.frame}`, dx + 6, dy + 24);
+    }
+    const stage = document.getElementById('stage');
+    stage.style.width = out.width + 'px';
+    stage.style.aspectRatio = `${out.width}/${out.height}`;
+    stage.innerHTML = '';
+    out.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+    stage.appendChild(out);
+    window.__chainImg = out;
     return;
   }
 
@@ -3499,7 +3971,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     return;
   }
 
-  let last = performance.now(), fps = 0, fr = 0, acc = 0, dir = 1;
+  let last = performance.now(), fps = 0, fr = 0, acc = 0;
   function frame(now) {
     if (stopAll) { render(); requestAnimationFrame(frame); return; }
     /* 夹到 ≥ 0：rAF 给的第一帧时间戳可能早于上面启动时记的 performance.now()，差出来是负的 ——
@@ -3526,7 +3998,7 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
        自动演示给；play 下滑块失效，进度只能由火力差推出来。混在一起的话
        "礼物到底推了多少"永远说不清。 */
     // 同理：结算画面上的数是这一局的战果，不该在结算期间还往上跳
-    if (live && S.phase !== 'over') { S.fA += liveA * raw; S.fB += liveB * raw; }
+    if (live && S.phase !== 'over') { feed(+1, liveA * raw); feed(-1, liveB * raw); }
     /* liveFreeze 冻的是**战况**：对抗线、血量、比赛阶段与三个计时器都定在预热
        那一刻，而拉力、弹幕、粒子照跑 —— 截图要的是"打到这个比分时画面是活的
        什么样"，不是死图。
@@ -3536,9 +4008,20 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
                 big: S.big, sudden: S.sudden, stand: S.stand, winner: S.winner };
     battle(dt);
     if (freeze) Object.assign(S, k);
-    if (S.auto && S.phase === 'idle') {
-      S.p += dir * dt * 9 * (0.35 + Math.abs(Math.sin(S.t * .27)) * 1.5);
-      if (S.p > 97) { S.p = 97; dir = -1; } if (S.p < 3) { S.p = 3; dir = 1; }
+    if (S.auto && !freeze) demoTick(dt);
+    if (VIDPLAY && VIDPLAY.ready) {
+      if (S.phase === 'idle') { startMatch(); VIDPLAY.t = 0; VIDPLAY.gift = 3; }
+      else if (S.phase !== 'over') {
+        let [, a, b] = VIDPLAY_SCRIPT.find(([e]) => VIDPLAY.t < e);
+        if (VIDPLAY.flip) [a, b] = [b, a];
+        feed(+1, a * dt); feed(-1, b * dt);
+        if ((VIDPLAY.gift -= dt) <= 0) {          // 占优（注入多）的一方送，偶尔另一方也送一件
+          VIDPLAY.gift = 2.5 + Math.random() * 3;
+          const side = (Math.random() < 0.75) === (a >= b) ? +1 : -1, L = VIDPLAY_GIFTS[side > 0 ? 'L' : 'R'];
+          giveGift(side, L[Math.floor(Math.random() * L.length)]);
+        }
+        VIDPLAY.t += dt;
+      } else if (S.overT < dt * 1.5) VIDPLAY.t = 0;
     }
     if (S.phase === 'idle') drift(dt);
     if (S.phase !== 'idle') document.getElementById('pv').value = S.p;
@@ -3569,7 +4052,10 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
 
   const pv = document.getElementById('pv');
   pv.oninput = () => { if (S.phase !== 'idle') return; S.p = +pv.value; S.auto = false; document.getElementById('auto').checked = false; };
-  document.getElementById('auto').onchange = e => S.auto = e.target.checked;
+  document.getElementById('auto').onchange = e => {
+    S.auto = e.target.checked;
+    if (S.auto) { startMatch(); document.getElementById('start').textContent = '回到调试台'; }   // 每次勾上都从头演一局
+  };
   const nudge = d => { if (S.phase !== 'idle') return;
                        S.auto = false; document.getElementById('auto').checked = false;
                        S.p = clamp(S.p + d, 0, 100); pv.value = S.p; };
@@ -3638,8 +4124,13 @@ const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload 
     const [shop, side, sec] = Q.get('autogift').split(':');
     setTimeout(() => { if (S.phase === 'idle') startMatch(); giveGift(+side || 1, shop); }, (+sec || 1) * 1000);
   }
+  /* 局长档：开局前选，对局中改要等下一局（startMatch 时读 S.mode） */
+  const modeSel = document.getElementById('mode');
+  modeSel.value = Object.keys(NUM.MODES).find(k => NUM.MODES[k] === S.mode);
+  modeSel.onchange = () => { S.mode = NUM.MODES[modeSel.value]; if (S.phase === 'idle') S.clock = S.mode.match; };
   document.getElementById('start').onclick = () => {
+    S.auto = false; document.getElementById('auto').checked = false;
     if (S.phase === 'idle') { startMatch(); document.getElementById('start').textContent = '回到调试台'; }
-    else { S.phase = 'idle'; S.fA = S.fB = 0; S.p = 50; S.pos = 0; S.clock = NUM.MATCH; Ammo.clear(); document.getElementById('start').textContent = '开始对局'; }
+    else { S.phase = 'idle'; S.fA = S.fB = 0; S.p = 50; S.pos = S.vel = 0; S.clock = S.mode.match; resetPose(); Ammo.clear(); document.getElementById('start').textContent = '开始对局'; }
   };
 })();

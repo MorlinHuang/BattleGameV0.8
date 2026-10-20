@@ -280,6 +280,7 @@ const TrioFX = (function () {
     p.mx = o.mx || 1; p.my = o.my || 1;                   // 镜像（冲击波每次随机翻一翻，不用转 —— 转会走慢路径）
     p.lim = o.lim || 0;                                   // lim：离出生点最远多少 px（P11 范围上限）：最后四分之一淡出，出界即收
     p.path = o.path || null; p.T = o.T || 0;             // 'fly'：沿二次贝塞尔 path [x0, y0, cx, cy, x1, y1] 走 T 秒（剑气）
+    p.fn = o.fn || null; p.d = o.d || null; p.end = o.end || null;   // 'fn'：现画（赛璐璐水 cel*），p.d 形状参数；end 寿命到时回调（水舌尖甩出水珠）
     act.push(p);
     return p;
   }
@@ -292,7 +293,7 @@ const TrioFX = (function () {
       const p = act[i];
       p.age += dt;
       if (p.age < 0) continue;
-      if (p.age >= p.life) { act.splice(i, 1); pool.push(p); continue; }
+      if (p.age >= p.life) { act.splice(i, 1); pool.push(p); if (p.end) p.end(p); continue; }
       p.vy += p.g * dt;
       if (p.drag !== 1) { const d = Math.pow(p.drag, dt * 60); p.vx *= d; p.vy *= d; }   // pow(k, dt*60)：不随帧率漂移
       p.x += (p.vx + (p.sway ? Math.cos(p.fph + p.age * 3.1) * p.sway : 0)) * dt;
@@ -329,6 +330,7 @@ const TrioFX = (function () {
       ctx.setTransform(T);
       ctx.translate(x, y);
       if (p.m === 'fly') { drawFly(ctx, p, T, al); continue; }
+      if (p.m === 'fn') { p.fn(ctx, p, u); continue; }
       if (p.m === 'fxs') { FxShape.slash(ctx, { t: p.age, p: [0, 0], ang: p.rot, flip: 1 }, { len: p.w, w: p.h, color: p.rgb, life: p.life }); continue; }
       if (p.m === 'ring') {
         const r = p.s0 + (p.s1 - p.s0) * easeOut(u);
@@ -479,6 +481,168 @@ const TrioFX = (function () {
     }
   }
 
+  /* ---------- 赛璐璐水（2026-10-17 精水1）----------
+     用户："优化特效，让水流等命中特效表现力更好，更符合我们既定的画风"。上一版的水是"发光的能量"：命中是一团蓝白光球 + 冲击波贴图，
+     水珠是带渐变的贴图，水柱是一根半透明贴图管 —— 和角色的赛璐璐（平涂 + 墨线）是两套语言，胶片上读成能量球。
+     这里换成动画里画水的办法：**平涂三色（本色 / 亮面 / 白高光）+ 深蓝墨线，不用渐变、不发光、不用贴图**，全部现画多边形：
+       celSplat   命中那一下的水花爆点：不规则的星形水团，亮面 + 白芯，0.06 s 后中心破开成一圈碎环
+       celTongue  水舌：从命中点甩出去的一片水，先长出去（尖上带圆头）、再从根部往尖断开，尖受重力往下坠，寿命到了尖上甩出一两颗水珠
+       celDrop    水珠：顺速度拉成泪滴，墨线描边，前上方一点白高光
+       celBubble  水沫：小气泡，越活越小
+     可调的入口集中在 CW（颜色）和 waterCel() 的参数表 WC。?cel=0 退回上一版（对拍用）。 */
+  const CEL = typeof location === 'undefined' || new URLSearchParams(location.search).get('cel') !== '0';
+  /* 颜色：墨线取深蓝而不是角色线稿那个暖黑 —— 暖黑描水读成"脏水 / 墨汁"；本色要饱和（浅蓝在米色地板上化掉，chashouji-fx 第一节） */
+  const CW = { line: '#173c7c', dark: '#2c74c6', base: '#56a8f0', light: '#bfe6ff', hi: '#ffffff' };
+  /* 别的液体同一套画法换颜色（墨线都取本色压到最暗，不用暖黑）：奶茶焦糖、西瓜汁 */
+  const CEL_PAL = {
+    caramel: { line: '#4a2810', dark: '#8a5426', base: '#c08850', light: '#ecc898', hi: '#fff4e2' },
+    melon: { line: '#6e0a16', dark: '#b81c30', base: '#e83a4c', light: '#ff9aa0', hi: '#ffecec' },
+  };
+  const TAU = 6.283185307179586;
+
+  /* 一条中线 C[i] + 每点半宽 w[i] → 两侧外沿，尖上补一个半圆头（水舌的尖是圆的，不是针尖）。只建路径不画 */
+  function tubePath(ctx, C, w, cap) {
+    const n = C.length, L = [], Rt = [];
+    for (let i = 0; i < n; i++) {
+      const a = C[Math.max(0, i - 1)], b = C[Math.min(n - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+      const nx = -dy / l * w[i], ny = dx / l * w[i];
+      L.push([C[i][0] + nx, C[i][1] + ny]); Rt.push([C[i][0] - nx, C[i][1] - ny]);
+    }
+    ctx.moveTo(L[0][0], L[0][1]);
+    for (let i = 1; i < n; i++) ctx.lineTo(L[i][0], L[i][1]);
+    if (cap) {
+      const e = C[n - 1], f = C[n - 2], ang = Math.atan2(e[1] - f[1], e[0] - f[0]);
+      ctx.arc(e[0], e[1], w[n - 1], ang + Math.PI / 2, ang - Math.PI / 2, true);
+    }
+    for (let i = n - 1; i >= 0; i--) ctx.lineTo(Rt[i][0], Rt[i][1]);
+    ctx.closePath();
+  }
+
+  /* 水花爆点。p.d = { R 半径, K 尖数, out[], inn[] 每个尖的长短（按种子定）, rot }。寿命 0.16 s：前三成胀出去，之后中心破开 */
+  function celSplat(ctx, p, u) {
+    const d = p.d, C = d.pal || CW, g = u < 0.3 ? easeOut(u / 0.3) : 1 + 0.18 * (u - 0.3) / 0.7, R = d.R * (0.4 + 0.65 * g);
+    const hole = u < 0.3 ? 0 : Math.pow((u - 0.3) / 0.7, 0.8);
+    const star = (k) => {
+      for (let i = 0; i < d.K * 2; i++) {
+        const a = d.rot + i * Math.PI / d.K, r = R * k * (i & 1 ? d.inn[i >> 1] : d.out[i >> 1]);
+        i ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r * 0.86) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r * 0.86);
+      }
+      ctx.closePath();
+    };
+    ctx.lineJoin = 'round';
+    ctx.beginPath(); star(1); if (hole) star(hole * 0.9);
+    ctx.fillStyle = C.light; ctx.fill('evenodd');
+    ctx.lineWidth = 3.2; ctx.strokeStyle = C.line; ctx.stroke();
+    if (hole < 0.5) { ctx.beginPath(); star(0.52); if (hole) star(hole * 0.9); ctx.fillStyle = C.hi; ctx.fill('evenodd'); }
+  }
+
+  /* 水舌。p.d = { a 方向, L 长, W 最宽半宽, r0 根部离命中点, curl 侧弯（正 = 顺时针）, sag 重力下坠 px }。
+     u 0 → 0.42 长出去（easeOut），之后根部往尖"被吃掉"（cut），同时变细；尖一路往下坠（sag × u²）。
+     画三层：本色 + 墨线 → 朝上那一侧一条亮面 → 一点白高光 */
+  function celTongue(ctx, p, u) {
+    const d = p.d, Q = d.pal || CW, gro = easeOut(Math.min(1, u / 0.42)), cut = u < 0.42 ? 0 : Math.pow((u - 0.42) / 0.58, 0.7);   // 断开后根部吃得快（指数 < 1）：第一版 1.3，断下来的水舌拖成一根根细棍飘着
+    const ca = Math.cos(d.a), sa = Math.sin(d.a), Lc = d.L * gro, M = 9, C = [], w = [], wl = [];
+    for (let i = 0; i <= M; i++) {
+      const t = cut + (1 - cut) * i / M, s = t * Lc, bend = d.curl * s * t;
+      C.push([ca * (d.r0 + s) - sa * bend, sa * (d.r0 + s) + ca * bend + d.sag * u * u * t * t]);
+      /* 根细（0.18 W）、往尖越来越鼓、尖上是一颗圆头（0.75 W）—— 动画水舌的形：一片水甩出去，水都聚到尖上那一滴；断开以后整体变细。
+         第一版是两头细中间鼓的"香肠"，七片一起画读成一朵蓝色刺球 */
+      const ww = d.W * (0.18 + 0.82 * Math.pow(t, 0.8)) * (1 - 0.25 * t * t * t * t) * (1 - 0.5 * cut) * (0.7 + 0.3 * gro);
+      w.push(ww); wl.push(ww * 0.36 * Math.sin(Math.PI * t));
+    }
+    ctx.lineJoin = 'round';
+    ctx.beginPath(); tubePath(ctx, C, w, true);
+    ctx.fillStyle = Q.base; ctx.fill();
+    ctx.lineWidth = d.lw; ctx.strokeStyle = Q.line; ctx.stroke();
+    /* 亮面：中线往"上"（法线朝 −y 的那一侧）挪 0.38 宽，只取中段 */
+    const sg = ca > 0 ? -1 : 1;                          // 左法线 (−sa, ca) 的 y 分量是 ca：ca > 0 时它朝下，亮面放另一侧
+    const H = C.map((c, i) => [c[0] - sa * w[i] * 0.38 * sg, c[1] + ca * w[i] * 0.38 * sg]);
+    ctx.beginPath(); tubePath(ctx, H.slice(1, M), wl.slice(1, M), false);
+    ctx.fillStyle = Q.light; ctx.fill();
+    if (cut < 0.5 && d.W > 7) {                          // 白高光：尖头圆里一颗
+      const e = H[M - 1];
+      ctx.beginPath(); ctx.ellipse(e[0], e[1], w[M] * 0.28, w[M] * 0.18, d.a, 0, TAU); ctx.fillStyle = Q.hi; ctx.fill();
+    }
+  }
+  /* 水舌寿命到：尖上甩出一两颗水珠（沿尖的切向 + 继承一点下坠） */
+  function tongueEnd(p) {
+    const d = p.d, tipD = d.r0 + d.L, x = p.x + Math.cos(d.a) * tipD - Math.sin(d.a) * d.curl * d.L, y = p.y + Math.sin(d.a) * tipD + Math.cos(d.a) * d.curl * d.L + d.sag;
+    for (let i = 0; i < d.drops; i++) {
+      const b = d.a + rr(-0.35, 0.35), sp = rr(90, 220) * d.k;
+      celDropAt(x, y, Math.cos(b) * sp, Math.sin(b) * sp + 60, d.W * rr(0.55, 0.85), rr(0.3, 0.5), { pal: d.pal });
+    }
+  }
+
+  /* 水珠：泪滴，头在前、尾巴按速度拉长；p.w = 头的直径。dropPath 水柱断开的水珠也用（调用方已平移到水珠位置） */
+  function celDrop(ctx, p, u) {
+    dropShape(ctx, Math.atan2(p.vy, p.vx), p.w * 0.5 * (p.s0 + (p.s1 - p.s0) * u), Math.hypot(p.vx, p.vy), p.d && p.d.pal);
+  }
+  function dropShape(ctx, ang, r, sp, C = CW) {
+    C = C || CW;
+    const Lt = r * (1.2 + Math.min(2.2, sp * 0.0035));
+    if (r < 0.6) return;
+    ctx.rotate(ang);
+    ctx.beginPath();
+    ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+    ctx.quadraticCurveTo(-Lt * 0.4, r, -Lt, 0);
+    ctx.quadraticCurveTo(-Lt * 0.4, -r, 0, -r);
+    ctx.fillStyle = C.base; ctx.fill();
+    ctx.lineWidth = Math.max(1.1, Math.min(2.4, r * 0.32)); ctx.strokeStyle = C.line; ctx.stroke();
+    if (r > 2.5) { ctx.beginPath(); ctx.ellipse(r * 0.15, -r * 0.38, r * 0.34, r * 0.22, 0, 0, TAU); ctx.fillStyle = C.hi; ctx.fill(); }
+  }
+  function celDropAt(x, y, vx, vy, w, life, o = {}) {
+    return spawn({ m: 'fn', fn: celDrop, x, y, vx, vy, g: o.g != null ? o.g : 1250, drag: 0.99, w, s0: 1, s1: o.s1 != null ? o.s1 : 0.7, life, fo: 0.25, delay: o.delay || 0, d: o.pal ? { pal: o.pal } : null });
+  }
+  /* 水沫：白气泡 + 蓝描边，越活越小、往上浮一点 */
+  function celBubble(ctx, p, u) {
+    const C = (p.d && p.d.pal) || CW;
+    const r = p.w * 0.5 * (p.s0 + (p.s1 - p.s0) * u);
+    if (r < 0.6) return;
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU);
+    ctx.fillStyle = C.hi; ctx.fill();
+    ctx.lineWidth = Math.max(1, r * 0.22); ctx.strokeStyle = C.dark; ctx.stroke();
+    if (r > 4) { ctx.beginPath(); ctx.arc(-r * 0.3, -r * 0.3, r * 0.22, 0, TAU); ctx.fillStyle = C.light; ctx.fill(); }
+  }
+
+  /* 一下水花。side 同配方（+1 打向左边的人 → 水是往左打的，水舌主要往回、往上翻：朝 +x）；s 分量（0.55 / 1 / 1.7 / 2.8）。
+     WC 是全部可调的数：tongues 水舌片数（按 s 线性）、L / W 水舌长和宽（尺寸按 min(s, 1.8) 封顶：密度靠数量不靠单颗更大）、
+     drops 直接崩出去的水珠颗数、bub 水沫颗数、splat 爆点半径（0 = 不画爆点，drip 用）、pal 换液体颜色（CEL_PAL，不给 = 水） */
+  const WC = { tongues: 4, L: [30, 92], W: [5, 10], drops: 14, bub: 5, splat: 34 };
+  function waterCel(x, y, side, s, o = {}) {
+    const c = { ...WC, ...o }, k = Math.min(s, 1.8), back = side > 0 ? 0 : Math.PI;
+    if (c.splat) {
+      const K = 7 + ((R() * 3) | 0), out = [], inn = [];
+      for (let i = 0; i < K; i++) { out.push(rr(0.78, 1.18)); inn.push(rr(0.42, 0.6)); }
+      spawn({ m: 'fn', fn: celSplat, x, y, life: 0.13, fi: 0, fo: 0.3, z: 1, d: { R: c.splat * k, K, out, inn, rot: R() * TAU, pal: c.pal } });
+    }
+    /* 水舌：扇形朝"回去"的方向张开（±1.7 rad），整体往上偏 0.35 rad；再给一两片往前、贴着身子翻过去的小的 */
+    const nT = c.tongues ? Math.max(2, Math.round(c.tongues * s)) : 0;
+    for (let i = 0; i < nT; i++) {
+      const fwd = i < Math.round(nT * 0.2);
+      const up = side > 0 ? 1 : -1;                      // 往上偏的转向：back 是 0 时减角度朝上，back 是 π 时加角度朝上
+      const off = ((i + R() * 0.8) / nT - 0.5) * 3.2;     // 在扇形里偏离中心多少（rad）
+      const a = fwd ? (side > 0 ? Math.PI + rr(0.4, 0.9) : -rr(0.4, 0.9)) : back + off - 0.35 * up;
+      /* 侧弯朝扇形外侧（off 的同号）：一圈水舌像王冠一样往外翻开，而不是一把直的刺 */
+      const curl = (fwd ? rr(-0.3, 0.3) : Math.sign(off || 1) * rr(0.15, 0.5));
+      const L = rr(c.L[0], c.L[1]) * k * (fwd ? 0.55 : 1), W = rr(c.W[0], c.W[1]) * Math.sqrt(k) * (fwd ? 0.7 : 1);
+      spawn({ m: 'fn', fn: celTongue, x, y, life: rr(0.3, 0.42), fi: 0, fo: 0.12, delay: rr(0, 0.03),
+              d: { a, L, W, r0: rr(4, 12) * k, curl, sag: rr(20, 50) * k, lw: W > 9 ? 2.6 : 2, drops: R() < 0.7 ? 1 + (R() < 0.4 ? 1 : 0) : 0, k, pal: c.pal },
+              end: tongueEnd });
+    }
+    for (let i = 0; i < Math.round(c.drops * s); i++) {
+      const a = back + rr(-1.8, 1.8), sp = rr(220, 560) * k;
+      celDropAt(x + rr(-6, 6), y + rr(-6, 6), Math.cos(a) * sp, Math.sin(a) * sp - rr(80, 240), (R() < 0.6 ? rr(4, 8) : rr(9, 14)) * Math.sqrt(k), rr(0.4, 0.75), { delay: rr(0, 0.05), pal: c.pal });
+    }
+    for (let i = 0; i < Math.round(c.bub * s); i++)
+      spawn({ m: 'fn', fn: celBubble, x: x + rr(-24, 24) * k, y: y + rr(-20, 16) * k, vx: Math.cos(back) * rr(20, 90), vy: rr(-70, -20), drag: 0.93,
+              w: rr(7, 15) * Math.sqrt(k), s0: 1, s1: 0.2, life: rr(0.5, 0.9), fo: 0.4, delay: rr(0.03, 0.12), d: { pal: c.pal } });
+  }
+  /* 往下淌的水：命中后从身上滴下来的几颗（余烬层） */
+  function waterCelDrip(x, y, s, n, pal) {
+    for (let i = 0; i < n; i++)
+      celDropAt(x + rr(-30, 30), y + rr(-10, 26), rr(-20, 20), rr(10, 60), rr(5, 8), rr(0.5, 0.9), { g: 700, s1: 0.85, delay: rr(0.12, 0.4), pal });
+  }
+
   /* ---------- 12 个命中配方（瞬闪 → 主体 → 余烬）。tint 与 main.js 同名配方逐字一致（impact 拿它给挨打的人染色）---------- */
   function layered(def) {
     const L = { flash: def.flash, body: def.body, ember: def.ember };
@@ -517,7 +681,17 @@ const TrioFX = (function () {
       ember: (x, y, side, s) => embers(x, y, s, n(6, s), PAL.gold, { flare: true, big: 1.6, g: 60 }),
     }),
     /* 奶茶：焦糖闪；焦糖液滴（顺速度拉长）+ 深褐珍珠弹开 + 几团浆糊住（drag 大，停在身上）；余烬是往下滴的小滴 */
-    splash: layered({
+    /* 奶茶（CEL 默认）：赛璐璐焦糖水花 + 深褐珍珠弹开（可见度交给珍珠扛，chashouji-fx）；余烬是往下淌的焦糖滴 */
+    splash: CEL ? layered({
+      tint: [246, 226, 198],
+      flash: (x, y, side, s) => waterCel(x, y, side, s, { tongues: 0, drops: 0, bub: 0, pal: CEL_PAL.caramel }),
+      body(x, y, side, s) {
+        const k = kk(s);
+        waterCel(x, y, side, s, { splat: 0, bub: 0, tongues: 3, drops: 9, pal: CEL_PAL.caramel });
+        chips(x, y, side, n(12, s), ['pearl'], PAL.pearl, { sp0: 220 * k, sp1: 520 * k, up: 300, g: 1180, w0: 18, w1: 26, l0: 1.0, l1: 1.6, vrot: 12 });
+      },
+      ember: (x, y, side, s) => waterCelDrip(x, y, s, n(6, s), CEL_PAL.caramel),
+    }) : layered({
       tint: [246, 226, 198],
       flash: (x, y, side, s) => flash(x, y, s, PAL.caramel, { side, R: 58 }),
       body(x, y, side, s) {
@@ -546,7 +720,18 @@ const TrioFX = (function () {
       },
     }),
     /* 西瓜：红闪；红瓤液滴 + 黑籽（水滴形，顺速度）+ 几片弯的绿皮 + 两团瓤糊住；余烬是往下滴的红汁和两三颗籽 */
-    melon: layered({
+    /* 西瓜（CEL 默认）：赛璐璐红瓤汁水花 + 黑籽（对比最强的一组）+ 几片弯的绿皮；余烬是往下淌的红汁 */
+    melon: CEL ? layered({
+      tint: [255, 214, 206],
+      flash: (x, y, side, s) => waterCel(x, y, side, s, { tongues: 0, drops: 0, bub: 0, pal: CEL_PAL.melon }),
+      body(x, y, side, s) {
+        const k = kk(s);
+        waterCel(x, y, side, s, { splat: 0, bub: 0, tongues: 3, drops: 9, pal: CEL_PAL.melon });
+        chips(x, y, side, n(16, s), ['seed0', 'seed1'], PAL.seed, { sp0: 260 * k, sp1: 560 * k, up: 300, g: 1180, w0: 14, w1: 20, l0: 0.9, l1: 1.5, vel: true, stretch: 0.0005 });
+        chips(x, y, side, n(4, s), ['rind0', 'rind1'], PAL.rind, { sp0: 200 * k, sp1: 420 * k, up: 260, g: 1250, w0: 34, w1: 46, l0: 0.8, l1: 1.2, vrot: 10, flip: 6 });
+      },
+      ember: (x, y, side, s) => waterCelDrip(x, y, s, n(5, s), CEL_PAL.melon),
+    }) : layered({
       tint: [255, 214, 206],
       flash: (x, y, side, s) => flash(x, y, s, PAL.melon, { side }),
       body(x, y, side, s) {
@@ -610,7 +795,20 @@ const TrioFX = (function () {
       },
     }),
     /* 水：水蓝闪 + 冲击波；带高光的透明水滴（顺速度拉长）+ 一层水雾；余烬是往下滴的小水珠。drip：每滴打上去溅两三颗 + 偶尔一圈小水环 */
-    water: layered({
+    /* 水（CEL 默认）：赛璐璐水花 —— 瞬闪层只有爆点、主体层是水舌 + 崩出去的水珠、余烬层是水沫 + 从身上往下淌的几颗。
+       drip（水柱每滴打上去）：两片小水舌 + 一颗水珠，三成带一个小爆点；限流同下面的旧版 */
+    water: CEL ? layered({
+      tint: [196, 228, 255],
+      flash: (x, y, side, s) => waterCel(x, y, side, s, { tongues: 0, drops: 0, bub: 0 }),
+      body: (x, y, side, s) => waterCel(x, y, side, s, { splat: 0, bub: 0 }),
+      ember(x, y, side, s) { waterCel(x, y, side, s, { splat: 0, tongues: 0, drops: 0 }); waterCelDrip(x, y, s, n(5, s)); },
+      drip(x, y, side) {
+        const k = Math.min(1, (clock - dripAt) / DRIP_GAP);
+        dripAt = clock;
+        if (R() > 0.75 * k) return;
+        waterCel(x, y, side, 1, { tongues: 2, L: [14, 30], W: [3, 5], drops: 1, bub: 0, splat: R() < 0.3 ? 16 : 0 });
+      },
+    }) : layered({
       tint: [196, 228, 255],
       flash: (x, y, side, s) => flash(x, y, s, PAL.water, { side }),
       body(x, y, side, s) {
@@ -1354,6 +1552,37 @@ const TrioFX = (function () {
      宽度 / 断开 / 水沫三条规则与 crew.js WATER 逐字相同（只换画法，命中手感不变）。落点溅射走 onDrip（RECIPE.water.drip，第一批已换）。
      h = TrioFX.stream()；drawJets 里 J.draw === 'stream' 分支：h.draw(ctx, jets, b && b.jm, dir)
        dir：出口方向（弧度，= 枪口此刻的仰角换成屏幕角 F > 0 ? −b.ja : π + b.ja）。给了就让喷口 → 第一滴那一段先沿 dir 出去（P1） */
+  /* 赛璐璐水柱（CEL）：每一段连着的水画三层平涂 —— 本色水身 + 深蓝墨线、下沿一条暗面、上沿一串亮面短划。
+     亮面按 u（水滴序号 × 45，跟着水往前走）切成一截截：读得出"水在往前冲"，而不是一根静止的管子。lines 同贴图版 [pts, hw, u] */
+  function celStream(ctx, lines) {
+    ctx.save(); ctx.lineJoin = 'round';
+    const off = (P, hw, k) => P.map((c, i) => {
+      const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+      const sg = dx > 0 ? 1 : -1;                         // 法线取 (dy, −dx)/l × sg：不管水往左还是往右冲，k > 0 都是朝上那一侧
+      return [c[0] + dy / l * hw[i] * k * sg, c[1] - dx / l * hw[i] * k * sg];
+    });
+    /* 墨线先画（4 px 描边、一半露在外面）、水身后填：几段水相互叠着的地方墨线被水身盖掉，外轮廓连成一条 ——
+       第一版每段各自"填 + 描"，叠处一道道内线，读成一节节香肠 */
+    ctx.lineWidth = 4; ctx.strokeStyle = CW.line;
+    for (const [P, hw] of lines) if (P.length >= 2) { ctx.beginPath(); tubePath(ctx, P, hw, true); ctx.stroke(); }
+    ctx.fillStyle = CW.base;
+    for (const [P, hw] of lines) if (P.length >= 2) { ctx.beginPath(); tubePath(ctx, P, hw, true); ctx.fill(); }
+    for (const [P, hw, u] of lines) {
+      if (P.length < 2) continue;
+      /* 暗面：下沿（k −0.5）一条 0.28 宽 */
+      const D = off(P, hw, -0.5), wd = hw.map(h => h * 0.26);
+      ctx.beginPath(); tubePath(ctx, D, wd, false); ctx.fillStyle = CW.dark; ctx.fill();
+      /* 亮面：上沿（k 0.36）一串短划，按 u 每 70 px 一截、亮 60% 暗 40% */
+      const Hp = off(P, hw, 0.36), wl = hw.map(h => h * 0.24);
+      ctx.fillStyle = CW.light;
+      for (let i = 0, st = -1; i <= P.length; i++) {
+        const on = i < P.length && ((-u[i] / 70) % 1 + 1) % 1 < 0.6;
+        if (on && st < 0) st = i;
+        if (!on && st >= 0) { if (i - st >= 2) { ctx.beginPath(); tubePath(ctx, Hp.slice(st, i), wl.slice(st, i), false); ctx.fill(); } st = -1; }
+      }
+    }
+    ctx.restore();
+  }
   const MIST = 0.2;
   const WATER = { w0: 7, w1: 20, grow: 0.3, a1: 0.55, breakT: 0.14, brk: 0.16, mist: 0.35 };
   function stream(o = {}) {
@@ -1392,7 +1621,8 @@ const TrioFX = (function () {
           for (const d of r) linked.add(d);
           lines.push(smooth(pts, [hw, u], 70));            // 三滴一个点 + 横摆：直接连在横摆处折角，过样条
         }
-        if (lines.length) {
+        if (lines.length && CEL) celStream(ctx, lines);
+        else if (lines.length) {
           /* 水身 + 一条断续的白高光（sheen 条的亮丝沿 u 走 = 跟着水流）合成一张条，每段铺一次 + 折射暗边（实体靠轮廓：第一版没边，
              亮地板上是一根淡管子）。水身贴图本身半透明，直接画在 ctx 上（原来先画离屏层再 0.95 贴回：层只多一次整块搬运，接缝一样） */
           const edge = `rgba(${pal[0].join(',')},.6)`, wt = comp([[tex, 1], [hl, 0.7]]);
@@ -1404,12 +1634,19 @@ const TrioFX = (function () {
         const T = ctx.getTransform();
         for (const d of ps) {
           const sp = Math.atan2(d.vy, d.vx);
-          if (!linked.has(d) || d.j < WATER.brk) {
+          if (CEL && !linked.has(d)) {     // 赛璐璐水珠：现画泪滴（和命中的水珠同一个画法）；只画真断开的 —— 连着的也画会叠在水身上，一颗颗描边的疙瘩
+            ctx.setTransform(T); ctx.translate(d.x, d.y); ctx.globalAlpha = aOf(d);
+            dropShape(ctx, sp, wOf(d) * (0.55 + 0.25 * ((d.j * 7) % 1)), Math.hypot(d.vx, d.vy));
+          } else if (!CEL && (!linked.has(d) || d.j < WATER.brk)) {
             const w = wOf(d) * (1.5 + 0.6 * ((d.j * 7) % 1)) * CELL;
             ctx.setTransform(T); ctx.translate(d.x, d.y); ctx.rotate(sp); ctx.globalAlpha = aOf(d);
             ctx.drawImage(dropA, -w * 0.6, -w / 2, w, w);
           }
-          if (d.t >= WATER.breakT && d.j <= MIST) {          // 水沫只画 j ≤ 0.2 的（crew.js 是 0.35：每颗一次 drawImage，水柱的水滴 sprite 一帧 0.4 ms）
+          if (CEL && d.t >= WATER.breakT && d.j <= MIST) {   // 水沫：白色小气泡
+            const k = d.j / MIST, off = (k - 0.5) * 2 * wOf(d) * 1.3, r = 1.6 + 2.4 * k, vl = Math.hypot(d.vx, d.vy) || 1;
+            ctx.setTransform(T); ctx.globalAlpha = 0.95; ctx.beginPath(); ctx.arc(d.x - d.vy / vl * off, d.y + d.vx / vl * off, r, 0, TAU);
+            ctx.fillStyle = CW.hi; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = CW.dark; ctx.stroke();
+          } else if (d.t >= WATER.breakT && d.j <= MIST) {          // 水沫只画 j ≤ 0.2 的（crew.js 是 0.35：每颗一次 drawImage，水柱的水滴 sprite 一帧 0.4 ms）
             const k = d.j / MIST, off = (k - 0.5) * 2 * wOf(d) * 1.3, w = (5 + 6 * k) * CELL, vl = Math.hypot(d.vx, d.vy) || 1;
             ctx.setTransform(T); ctx.translate(d.x - d.vy / vl * off, d.y + d.vx / vl * off); ctx.rotate(sp); ctx.globalAlpha = 0.9;
             ctx.drawImage(dropB, -w * 0.6, -w / 2, w, w);
@@ -1428,7 +1665,7 @@ const TrioFX = (function () {
             if (d.j > 0.86) { const b = a + rr(-0.35, 0.35), sp = rr(300, 520);
               spawn({ m: 'vel', img: dropB, x: m[0], y: m[1], vx: Math.cos(b) * sp, vy: Math.sin(b) * sp, g: 1100, drag: 0.99, w: rr(9, 13) * CELL, h: rr(9, 13) * CELL * 0.62,
                       stretch: 0.0012, life: rr(0.25, 0.4), fo: 0.3 }); }
-            if (d.seq % 7 === 0) spawn({ m: 'spr', img: glow('flare', pal), x: m[0], y: m[1], w: 34, s0: 1, s1: 0.5, life: 0.06, fi: 0, a: 0.9, fo: 0.6 });
+            if (d.seq % 7 === 0 && !CEL) spawn({ m: 'spr', img: glow('flare', pal), x: m[0], y: m[1], w: 34, s0: 1, s1: 0.5, life: 0.06, fi: 0, a: 0.9, fo: 0.6 });
           }
           seen = nw.seq;
         }

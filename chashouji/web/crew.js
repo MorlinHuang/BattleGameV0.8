@@ -77,6 +77,8 @@ function LoopVideo(L) {
     },
     stop(b) { if (b && on !== b) return; on = null; v.pause(); },
     frame: (b) => (on === b && mt >= 0 ? cv : null),
+    /* 视频画框比立绘框四周多出几像素（立绘像素，json pad；video/make_loop.py MARGIN —— 外发光、甩出去的头发不被画框切直） */
+    pad: () => (J && J.pad) || 0,
     /* 罐口这一帧挪了多少 [dx, dy]（立绘像素） */
     cap: (b) => (on === b && mt >= 0 ? J.cap[idx()] : null),
     /* 脸这一帧挪了多少（json 有 head 的才有：真相女神、嫦娥 —— 头顶的天使环 / 头后的光轮跟着转头、歪头走） */
@@ -578,7 +580,7 @@ function Crew(cfg) {
     spin(spr.body.pivot, bt);
     if (I.arm && !BW) { ctx.save(); spin(spr.arm.pivot, at_ - bt); put(I.arm); ctx.restore(); }
     const lvf = b.lv && LV.frame(b);
-    if (lvf) ctx.drawImage(lvf, X, Y, I.body.width * s, I.body.height * s);   // 视频帧是立绘框的 1.5 倍，塞进同一个框
+    if (lvf) { const pd = LV.pad() * s; ctx.drawImage(lvf, X - pd, Y - pd, I.body.width * s + 2 * pd, I.body.height * s + 2 * pd); }   // 视频帧是立绘框（四周各多 pad）的 up 倍，塞进同一个框
     else put(I.body);
     /* 弓（后羿）：拉弦的前臂在身子之上，沿 spr.arm.axis 前后挪（BW.pose 的 hand，贴图像素）；弦和搭着的箭画在最上 */
     if (I.arm && BW) {
@@ -1035,35 +1037,66 @@ const rgbaOf = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
    水滴（ps）照旧按物理飞、管命中（crew.js update / hitTest），但**不画**，只用来定水柱的两头：
      · 按住喷（b.m 有）：水柱从掌心接到最老那颗水滴，整张贴图按这段长度缩放（喷出去的那 0.3 秒里水柱一路伸长）；
      · 松开（b.m 没了）：掌心那头从最新那颗水滴起算 —— 尾巴离开掌心往前飞，贴图只截后面那一段。
-   方向：掌心 → 瞄的落点（b.tg）。水滴走的是带重力的弧线，水柱画直线：打到脸上这段只有 0.3~0.4 秒，弧度看不出来。 */
+   中线就是水滴飞的路（jetPath），不是"掌心 → 瞄的落点 b.tg"的直线：外面那层水雾（drawFog）是跟着水滴画的，瞄准又有转速上限
+   （aim.rate、aim 夹在 lo~hi），水柱扫过男生身上时落点先到、水滴后到 —— 原来贴图直指落点、水雾跟着水滴，叉成两股
+   （2026-10-06 用户截图："特效有分岔"）。现在两层走同一条路，扫的时候整束水一起弯过去。 */
 const JET_BODY = 0.88;                                         // 贴图的这一成长度对准落点（柱身到 0.84，再带一点碎水）
 /* 粗细再乘几倍：贴图里柱身从掌心 30 像素胀到末端 90；原样画时比真相女神的雾锥（直径 60 → 220）细一大圈，
    用户："水流太细太小，参考真相女神的喷雾"。2.2 倍 ≈ 66 → 200，外面再套一层水雾（BAISU_FX.mist） */
 const JET_W = 2.2;
+const JET_SEG = 9;                                             // 水滴按出手先后分几组取平均当中线的点（单颗有 spread / vJit 抖动，逐颗连会扭）
+const JET_SLICE = 24;                                          // 贴图沿中线切成几片贴（每片按自己那段的方向转）
+/* 掌心 M → 水滴（新 → 老，每组取平均、再抹一遍）→ 最老那组顺着最后一段再伸 hitR（命中半径：水滴一进半径就判中、被拿掉，
+   最老的那颗永远差落点一截，只画到它的话水柱停在男生头顶上方六十像素）。返回折线 pts 和到每个点的累计长度 cum */
+function jetPath(ps, M, hitR) {
+  const n = ps.length, g = Math.max(1, Math.ceil(n / JET_SEG)), raw = [M];
+  for (let i = n; i > 0; i -= g) {
+    let x = 0, y = 0;
+    const k0 = Math.max(0, i - g);
+    for (let k = k0; k < i; k++) { x += ps[k].x; y += ps[k].y; }
+    raw.push([x / (i - k0), y / (i - k0)]);
+  }
+  const pts = raw.map((p, i) => (i === 0 || i === raw.length - 1 ? p
+    : [(raw[i - 1][0] + 2 * p[0] + raw[i + 1][0]) / 4, (raw[i - 1][1] + 2 * p[1] + raw[i + 1][1]) / 4]));
+  const [p0, p1] = pts.slice(-2), l = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+  pts.push([p1[0] + (p1[0] - p0[0]) / l * hitR, p1[1] + (p1[1] - p0[1]) / l * hitR]);
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  return { pts, cum };
+}
 function drawJet(ctx, ps, b, hitR) {
   const J = WaterArt.jet;
   if (!J.img || !ps.length) return;
-  const old = ps[0], neu = ps[ps.length - 1];
+  const neu = ps[ps.length - 1];
   if (b && b.m) b.jm = b.m;                                     // 记住掌心（松开之后还要按它截尾巴）
   const M = b && b.jm ? b.jm : [neu.x, neu.y];
-  const T = b && b.tg ? b.tg : [old.x, old.y];
-  /* 伸到哪：最老那颗水滴再往前 hitR（命中半径）—— 水滴一进半径就判中、被拿掉，最老的那颗永远差落点一截，
-     只画到它的话水柱停在男生头顶上方六十像素（真页面上男生趴地时看得最清楚） */
-  const D = Math.hypot(T[0] - M[0], T[1] - M[1]), reach = Math.min(D, Math.hypot(old.x - M[0], old.y - M[1]) + hitR);
-  const tail = b && b.m ? 0 : Math.min(reach, Math.hypot(neu.x - M[0], neu.y - M[1]));
-  if (reach - tail < 12) return;
+  const { pts, cum } = jetPath(ps, M, hitR), reach = cum[cum.length - 1];
   /* L：贴图里柱身 + 碎开那一段的长度。柱身在 jet.py 里只到全长的 84%，后面是散开的水珠 —— 按 JET_BODY 对准落点，
-     柱身正好砸到脸上，水珠冲过去一点盖进水花里 */
-  const L = (J.w - J.x0) * JET_BODY, ang = Math.atan2(T[1] - M[1], T[0] - M[0]);
-  const k = (b && b.m ? reach : D) / L;                        // 长度方向的缩放：按住时整张缩到当前长度，松开后按全长截
-  const ws = JET_W * Math.max(0.8, Math.min(1.05, D / L));     // 粗细：离得近细一点，不跟长度一起压扁
+     柱身正好砸到脸上，水珠冲过去一点盖进水花里。
+     长度方向的缩放 k：按住时整张缩到当前长度（喷出去的那 0.3 秒里水柱一路伸长）；松开后定在松开那一刻的 k，尾巴离开掌心往前飞，只截后面那一段 */
+  const L = (J.w - J.x0) * JET_BODY, held = !!(b && b.m);
+  const k = held || !b || !b.jk ? reach / L : b.jk;
+  if (held) b.jk = k;
+  const tail = held ? 0 : Math.min(reach, Math.hypot(neu.x - M[0], neu.y - M[1]));
+  if (reach - tail < 12) return;
+  const ws = JET_W * Math.max(0.8, Math.min(1.05, k));         // 粗细：离得近细一点，不跟长度一起压扁
   const i = Math.floor(((b ? b.t : neu.t) / J.loop % 1) * J.n) % J.n;
   const [sx, sy, , sh] = atlasCell(J, J, i);
-  const a = tail / k, e = (b && b.m ? J.w - J.x0 : reach / k);
-  ctx.save();
-  ctx.translate(M[0], M[1]); ctx.rotate(ang); ctx.scale(k, ws);
-  ctx.drawImage(J.img, sx + J.x0 + a, sy, e - a, sh, a, -J.cy, e - a, sh);
-  ctx.restore();
+  const a = tail / k, e = held ? J.w - J.x0 : reach / k;      // 贴图里画 [a, e) 这一段（贴图像素，从掌心那头量）
+  let seg = 0;
+  const at = (d) => {                                           // 沿中线走 d 像素：落在哪、那一段朝哪
+    while (seg < cum.length - 2 && cum[seg + 1] < d) seg++;
+    const [x0, y0] = pts[seg], [x1, y1] = pts[seg + 1], u = (d - cum[seg]) / ((cum[seg + 1] - cum[seg]) || 1);
+    return [x0 + (x1 - x0) * u, y0 + (y1 - y0) * u, Math.atan2(y1 - y0, x1 - x0)];
+  };
+  const du = (e - a) / JET_SLICE;
+  for (let u = a; u < e - 0.01; u += du) {
+    const w = Math.min(du, e - u), [x, y] = at(u * k), ang = at((u + w / 2) * k)[2];
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(ang); ctx.scale(k, ws);
+    ctx.drawImage(J.img, sx + J.x0 + u, sy, w + 1, sh, 0, -J.cy, w + 1, sh);   // 多取 1 像素：片与片之间不漏缝
+    ctx.restore();
+  }
 }
 const BAISU_FX = {
   glow: { R: 380, a: 0.34, rgb: [150, 215, 255], core: [236, 248, 255], breath: [1.6, 0.18] },   // 身后冷光：半径、不透明度、颜色、亮芯、呼吸 [角频率, 幅度]

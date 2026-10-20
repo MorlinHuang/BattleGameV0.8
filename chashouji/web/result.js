@@ -218,7 +218,7 @@ const Result = (function () {
     const k3 = ease((t - 1.15) / 0.5);
     if (k3 > 0) {
       ctx.save(); ctx.globalAlpha = k3; ctx.translate(0, 30 * (1 - k3));
-      const el = Math.max(0, NUM.MATCH - S.clock);
+      const el = Math.max(0, S.mode.match - S.clock);
       const cells = [
         ['本局时长', `${el / 60 | 0}:${String(el % 60 | 0).padStart(2, '0')}`],
         ['礼物', `${S.giftA} : ${S.giftB}`],

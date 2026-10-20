@@ -188,44 +188,50 @@ const FxShape = (() => {
       ctx.restore();
     }
   }
-  /* 放射的光芒（替换"一圈等宽直三角"）：每道是一束从根往外张开、微微弯、长短粗细各自一闪一闪的光；角度不等分（出生时各抖一点）、
-     各自慢慢漂。三遍由宽到窄、由淡到亮叠出来 —— 边是软的，不是一刀切的三角；末端不收尖，靠渐变淡出去
-     （第一版两头收尖，一道道细针，用户要的"不硬"反而更像直线）。
-     n 几道、r0 → r1 从多远到多远、w 每道半张角（rad）、spin 整体转速 */
-  const RAYS = new Map();
-  function rays(ctx, x, y, nn, r0, r1, w, rgb, a, t, spin, seed) {
-    const H = harmOf(seed);
-    let P = RAYS.get(seed + ':' + nn);
-    if (!P) {
-      const r = rng(seed * 7 + 1); P = [];
-      for (let i = 0; i < nn; i++) P.push({ a: (i + (r() - 0.5) * 0.7) / nn * TAU, w: 0.55 + 0.9 * r(), L: 0.78 + 0.22 * r(), f: 1.2 + 2.2 * r(), ph: r() * TAU, c: (r() - 0.5) * 0.5 });
-      RAYS.set(seed + ':' + nn, P);
+  /* 放射的光芒（10-07 第三版，用户看女神：「周围的光射线还是有点死板，和粗糙」）。
+     第二版每帧用多边形扇片画（三遍由宽到窄叠）：扇片的直边在浅色墙上一道道看得见，几道光同宽同色、整圈匀速转，读成一把扇子。
+     现在预先烘两张光芒贴图（texOf：几十道粗细长短都不同的光，烘完整张缩小再放大糊一遍 —— 边是糊开的光，不是多边形的边），
+     运行时两层反向慢转、各自缓慢明暗：两层的光交错滑过时一会儿叠亮、一会儿错开，单道光自己就在闪，不用逐道算。
+     n 粗光几道（细光再多一倍半）、r0 → r1 从多远到多远（根部淡入）、w 粗光半张角（rad）、spin 转速 */
+  const RAYS = new Map(), RT = 512;
+  function texOf(seed, nn, r0, w, rgb) {
+    const key = [seed, nn, r0.toFixed(2), w, rgb].join(':');
+    let c = RAYS.get(key);
+    if (c) return c;
+    c = document.createElement('canvas'); c.width = c.height = RT;
+    const x = c.getContext('2d'), R = RT / 2, r = rng(seed * 7 + 1), hi = [255, 252, 236];
+    x.translate(R, R);
+    // 粗光（宽、短一些、淡）+ 细光（窄、长短悬殊、亮）：角度不等分
+    const list = [];
+    for (let i = 0; i < nn; i++) list.push({ a: (i + (r() - 0.5) * 0.8) / nn * TAU, hw: w * (0.5 + 1.1 * r()), L: 0.6 + 0.4 * r(), al: 0.35 + 0.3 * r() });
+    for (let i = 0; i < Math.round(nn * 2.5); i++) list.push({ a: r() * TAU, hw: w * (0.08 + 0.25 * r()), L: 0.35 + 0.65 * r(), al: 0.45 + 0.55 * r() });
+    for (const p of list) {
+      const L = R * p.L, g = x.createRadialGradient(0, 0, 0, 0, 0, L);
+      g.addColorStop(0, rgba(hi, 0)); g.addColorStop(Math.min(0.9, r0 * 0.8), rgba(hi, p.al));
+      g.addColorStop(Math.min(0.95, r0 * 0.8 + 0.25), rgba(rgb, p.al * 0.75)); g.addColorStop(1, rgba(rgb, 0));
+      x.fillStyle = g; x.beginPath(); x.moveTo(0, 0);
+      x.arc(0, 0, L, p.a - p.hw, p.a + p.hw); x.closePath(); x.fill();
     }
-    const M = 7;
-    /* 亮度：三层叠起来，伸出人身外那一段（半径 0.4~0.8）跟原来一整块三角差不多亮 —— 第一版每层 0.22 / 0.4 / 0.7、渐变 0.45 处就掉一半，
-       光柱又只伸到 0.6~1 倍，露在人外面的部分只剩一成多，整圈光芒等于没了 */
-    for (const [wk, ak] of [[1.7, 0.3], [1.0, 0.5], [0.45, 0.8]]) {
-      const g = ctx.createRadialGradient(x, y, r0 * 0.5, x, y, r1);
-      g.addColorStop(0, rgba(rgb, a * ak)); g.addColorStop(0.6, rgba(rgb, a * ak * 0.55)); g.addColorStop(1, rgba(rgb, 0));
-      ctx.fillStyle = g; ctx.beginPath();
-      P.forEach((p, i) => {
-        const fl = 0.5 + 0.5 * Math.sin(t * p.f + p.ph), a0 = p.a + t * spin + 0.06 * n(H, i * 1.7, t * 0.4);
-        const L = r0 + (r1 - r0) * p.L * (0.85 + 0.15 * fl), hw = w * p.w * wk * (0.65 + 0.35 * fl);
-        const side = (sg) => {
-          const pts = [];
-          for (let j = 0; j <= M; j++) {
-            const f = j / M, d = r0 + (L - r0) * f, env = 0.3 + 0.7 * Math.sqrt(f);       // 根窄、往外张开
-            const ang = a0 + p.c * f * f * w * 3 + sg * hw * env;
-            pts.push([x + Math.cos(ang) * d, y + Math.sin(ang) * d]);
-          }
-          return pts;
-        };
-        const A = side(1), B = side(-1);
-        ctx.moveTo(A[0][0], A[0][1]); for (const q of A) ctx.lineTo(q[0], q[1]);
-        for (let j = B.length - 1; j >= 0; j--) ctx.lineTo(B[j][0], B[j][1]);
-        ctx.closePath();
-      });
-      ctx.fill();
+    // 糊开：缩到 1/6 再放大叠回去（不靠 ctx.filter，老内核没有），原图叠一半当锐一点的芯
+    const sm = document.createElement('canvas'); sm.width = sm.height = RT / 6;
+    const sx = sm.getContext('2d'); sx.imageSmoothingQuality = 'high'; sx.drawImage(c, 0, 0, sm.width, sm.height);
+    const out = document.createElement('canvas'); out.width = out.height = RT;
+    const ox = out.getContext('2d'); ox.imageSmoothingQuality = 'high';
+    ox.drawImage(sm, 0, 0, RT, RT); ox.drawImage(sm, 0, 0, RT, RT); ox.globalAlpha = 0.55; ox.drawImage(c, 0, 0);   // 糊开的叠两遍补回被摊薄的浓度
+    RAYS.set(key, out);
+    return out;
+  }
+  function rays(ctx, x, y, nn, r0, r1, w, rgb, a, t, spin, seed) {
+    const H = harmOf(seed), f0 = r0 / r1;
+    for (let k = 0; k < 2; k++) {
+      const tex = texOf(seed + k * 101, k ? Math.round(nn * 1.4) : nn, f0, w * (k ? 0.7 : 1), rgb);
+      const ang = H.rot + k * 1.3 + t * spin * (k ? -0.55 : 1) + 0.05 * n(H, k * 3.1, t * 0.3);
+      const br = 0.75 + 0.25 * n(H, k * 5.7 + 2, t * 0.6), sc = r1 * 2 * (1 + 0.05 * n(H, k * 2.3 + 9, t * 0.4));
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, a * 2.2 * br * (k ? 0.8 : 1));
+      ctx.translate(x, y); ctx.rotate(ang);
+      ctx.drawImage(tex, -sc / 2, -sc / 2, sc, sc);
+      ctx.restore();
     }
   }
   /* 光环（替换"一条正圆 / 正椭圆描边"）：笔触式的一圈 —— 粗细沿圈起伏、轮廓轻轻颤（wob 3%）；外一层宽而淡的柔光、

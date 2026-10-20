@@ -28,6 +28,10 @@
  * 层级（main.js renderActors）：画在男女主之上（用户："水面和卷轴是在男女主的上层"）—— 潮漫过两人的脚和小腿。
  * 层数不定（C.layers 远 → 近，最后一层最近、最低）：经卷为了铺满到屏幕下沿比海多两条。
  */
+
+/* 七片潮的上沿（各层贴图的 y 以它为 0；夜空、火空的渐变跟着它）。原来 1190：直播时 y ≥ 1334 被评论区盖住，
+   只露 144 像素一条；10-06 画面布局方案提到 1150。下面注释里写的屏幕 y 都是 1190 时量的，整体减 40 */
+const SEA_TOP = 1150;
 'use strict';
 
 /* 掌心水柱的 3D 贴图（tools/3d/water/pack_water.py 打印的，重渲后重填）。
@@ -134,11 +138,83 @@ const Foam = (() => {
           shape（可无）：[形状, 占几成, 大小倍数, ...颜色] —— 'chat' 聊天气泡 [.., 填色, 描边]、'paper' 碎纸条 [.., 纸色]、'heart' 爱心 [.., 填色, 描边]，其余几成照样是软点 }；
    kinds：小兵贴图、走速；dir：小兵往哪走（+1 右 / −1 左，贴图朝向要跟它一致）；mobs：开场位置；sink：贴图下沿压到上沿以下几成；
    hop：蹦起来 { every, T, h, splash（落回去甩几颗）}。 */
-/* 一片潮只画 [x0, x1)，两头各羽化 FEATHER 像素（贴着屏幕边的那头不羽化）：第一版硬裁一刀，海和经卷之间一条笔直的竖线，
-   像两张图拼起来的。先画进自己的离屏画布（begin 给它），end 按横向渐变抠掉交界那一段再贴回去 ——
-   两边在交界处互相淡进淡出（小兵走过交界也是慢慢淡掉，不是被一刀切掉）。 */
+/* 潮的交界（推进时的前沿、两片顶在一起的分界）—— TideEdge。
+   第一版是横向线性渐变羽化 70 像素：推进时前沿是一道笔直的竖线往前平移，两片顶在一起时中间一根竖直分界线
+   （2026-10-06 用户："展开收缩太生硬，有明显的分界线"；"一边推着一边直到中间这种方式也比较生硬，中间明显一根分界线"）。
+   现在交界是一条 2F 宽的噪声带：带里每个像素按"离中线多远 + 一张竖向可循环的分形噪声"决定归哪边，
+   读成一条锯齿交错、一缕缕互相咬进去的浪沫边，不是直线；噪声带一直往上滚（ROLL），整条交界线还左右慢慢晃（SWAY）——
+   边是活的，像两股水在互相冲。
+   两片顶在一起时，左边那片用 S、右边那片用 1 − S（同一张噪声、同一个位置），两边各占的加起来正好是 1，不重叠、不漏底。
+   推进时的前沿用的是同一条带（左片的右边用 S、右片的左边用 1 − S）。
+   update(dt) 每帧 main.js tideUpdate 调一次：两片的交界要用同一个时刻的滚动 / 晃动，才咬得严丝合缝。 */
+const TideEdge = (() => {
+  const F = 120;                       // 噪声带半宽（像素）：中线左右各 F 里交错
+  const TH = 512;                      // 噪声竖着多高一循环（贴的时候竖着接）
+  const CELL = [64, 32, 16];           // 三层噪声的格子（像素，要整除 TH）：大的定一缕缕的走向，小的给碎沫边
+  const ROLL = 46, SWAY = [[18, 0.7], [9, 1.9]];   // 往上滚多快（像素 / 秒）；左右晃 [幅度, 角频率] 两个叠
+  let t = 0, S = null, C = null, mask = null;
+  /* 竖向循环的值噪声（格点在 y 方向按 TH 绕回）→ 0~1 */
+  function noise(cell, seed) {
+    const nx = Math.ceil(2 * F / cell) + 2, ny = TH / cell, g = new Float32Array(nx * ny);
+    let r = seed;
+    for (let i = 0; i < g.length; i++) { r = (r * 16807) % 2147483647; g[i] = r / 2147483647; }
+    const sm = (u) => u * u * (3 - 2 * u);
+    return (x, y) => {
+      const gx = x / cell, gy = y / cell, ix = Math.floor(gx), iy = Math.floor(gy), fx = sm(gx - ix), fy = sm(gy - iy);
+      const at = (i, j) => g[((j % ny + ny) % ny) * nx + i];
+      const a = at(ix, iy) + (at(ix + 1, iy) - at(ix, iy)) * fx, b = at(ix, iy + 1) + (at(ix + 1, iy + 1) - at(ix, iy + 1)) * fx;
+      return a + (b - a) * fy;
+    };
+  }
+  function build() {
+    const n = CELL.map((c, i) => noise(c, 1234 + i * 777)), wt = [0.55, 0.3, 0.15];
+    S = document.createElement('canvas'); C = document.createElement('canvas');
+    S.width = C.width = 2 * F; S.height = C.height = TH;
+    const gs = S.getContext('2d'), gc = C.getContext('2d'), ds = gs.createImageData(2 * F, TH), dc = gc.createImageData(2 * F, TH);
+    for (let y = 0; y < TH; y++) for (let x = 0; x < 2 * F; x++) {
+      const c = (x + 0.5) / F - 1;                                  // −1（左端）→ 1（右端）
+      let v = 0;
+      n.forEach((f, i) => { v += wt[i] * f(x, y); });
+      v = -c + 1.9 * (v - 0.5) * (1 - c * c);                       // 噪声在带中间最强、两端收到 0：带外接实心 / 全空不起台阶
+      const a = Math.round(255 * Math.min(1, Math.max(0, (v + 0.12) / 0.24)));   // 窄过渡：两片各自半透明叠起来会透底，边要利一些
+      const k = (y * 2 * F + x) * 4;
+      ds.data[k + 3] = a; dc.data[k + 3] = 255 - a;
+    }
+    gs.putImageData(ds, 0, 0); gc.putImageData(dc, 0, 0);
+  }
+  return {
+    F,
+    update(dt) { t += dt; },
+    /* 只画 [x0, x1) 的那片实际要画到哪：不贴屏幕边的那头往外多出噪声带半宽 + 最大晃幅 */
+    reach: (x0, x1, W) => {
+      const m = F + SWAY.reduce((s, [a]) => s + a, 0) + 2;
+      return [x0 > 0 ? Math.max(0, x0 - m) : 0, x1 < W ? Math.min(W, x1 + m) : W];
+    },
+    /* 交界线此刻左右晃到哪（像素）：两片共用 */
+    sway: () => SWAY.reduce((s, [a, w], i) => s + a * Math.sin(t * w + i * 1.3), 0),
+    /* buf 只留 [x0, x1)：贴着屏幕边的那头不动，另一头按噪声带抠（x1 < W：左片的右边，用 S；x0 > 0：右片的左边，用 1 − S） */
+    clip(buf, x0, x1) {
+      const W = buf.width, H = buf.height;
+      if (!S) build();
+      if (!mask) { mask = document.createElement('canvas'); mask.width = W; mask.height = H; }
+      const m = mask.getContext('2d'), dx = this.sway(), oy = ((-t * ROLL) % TH + TH) % TH;
+      m.clearRect(0, 0, W, H);
+      m.fillStyle = '#000';
+      const L = x0 > 0 ? x0 + dx + F : 0, R = x1 < W ? x1 + dx - F : W;
+      if (R > L) m.fillRect(L, 0, R - L, H);
+      for (const [x, img, on] of [[x1, S, x1 < W], [x0, C, x0 > 0]]) if (on)
+        for (let y = oy - TH; y < H; y += TH) m.drawImage(img, x + dx - F, y);
+      const c = buf.getContext('2d');
+      c.globalCompositeOperation = 'destination-in';
+      c.drawImage(mask, 0, 0);
+      c.globalCompositeOperation = 'source-over';
+    },
+  };
+})();
+
+/* 一片潮只画 [x0, x1)：先画进自己的离屏画布（begin 给它），end 按 TideEdge 抠掉交界外面那段再贴回去 ——
+   小兵走过交界也是跟着噪声带一缕缕淡掉，不是被一刀切掉。 */
 function SpanBuf() {
-  const FEATHER = 70;
   let buf = null;
   return {
     begin(W, H) {
@@ -148,19 +224,22 @@ function SpanBuf() {
       return c;
     },
     end(out, x0, x1) {
-      const c = buf.getContext('2d'), W = buf.width, H = buf.height;
-      if (x0 > 0 || x1 < W) {
-        const g = c.createLinearGradient(x0 - FEATHER, 0, x1 + FEATHER, 0), L = x1 - x0 + 2 * FEATHER;
-        const edge = (x, on) => [(x - (x0 - FEATHER)) / L, on];
-        for (const [u, on] of [edge(x0 - FEATHER, x0 <= 0 ? 1 : 0), edge(x0 + FEATHER, 1), edge(x1 - FEATHER, 1), edge(x1 + FEATHER, x1 >= W ? 1 : 0)])
-          g.addColorStop(Math.max(0, Math.min(1, u)), `rgba(0,0,0,${on})`);
-        c.globalCompositeOperation = 'destination-in';
-        c.fillStyle = g; c.fillRect(0, 0, W, H);
-        c.globalCompositeOperation = 'source-over';
-      }
+      if (x0 > 0 || x1 < buf.width) TideEdge.clip(buf, x0, x1);
       out.drawImage(buf, 0, 0);
     },
   };
+}
+
+/* 前沿塌下去（Tide 用；Sky 不用，见 Sky.draw）：推进、退回的路上，离前沿 RAMP 像素以内的那段潮整片往下沉（前沿处沉 DROP），
+   潮读成"一道浪漫过来、身后越涌越高"，不是整块高度的一面墙平推。沉多少再乘 √(1 − 进度)：推满时为 0
+   （前沿在屏幕边上，不能让贴着屏幕边那一截一直塌着）；两片在中间顶上的那一刻两边前沿都塌着 —— 两道浪头撞到一起，
+   接着往里推（前沿越过分界）分界处慢慢涨回原高。 */
+const FRONT = { DROP: 210, RAMP: 320 };
+function frontDrop(side, W, level, x) {
+  if (level >= 1) return 0;
+  const fx = side < 0 ? W * level : W * (1 - level), d = (side < 0 ? fx - x : x - fx) + TideEdge.F;
+  const u = Math.max(0, Math.min(1, d / (FRONT.RAMP + TideEdge.F)));
+  return FRONT.DROP * Math.sqrt(1 - level) * (1 - u * u * (3 - 2 * u));
 }
 
 function Tide(C) {
@@ -170,12 +249,6 @@ function Tide(C) {
   let W = 960, H = 1707;
   const N = C.layers.length, LAST = C.layers[N - 1];
   let lv = 0, t = 0, imgs = [], mobs = [], hopT = 3, sprays = [], sprayT = 0, frontT = 0, dot = null;
-  /* 从出场视频接过来（handoff）：整片先抬 / 压到视频里海面的高度，SETTLE 秒里落回自己的位置 */
-  const SETTLE = 1.2, EMERGE = [0.25, 0.22];     // 回位几秒；小兵第一只几秒后蹦出来、之后每隔几秒一只
-  let lift = 0, liftT = -1;
-  /* 垫在出场视频底下（under，main.js 每帧给）：视频的海涌进来那几秒，游戏这片海已经从同一侧推进来、整片停在视频里海面的高度 y，
-     把视频框下沿以下的空地铺满（视频底边以下本来什么都没有，要等视频放完 handoff 才接上）。null = 不垫 */
-  let under = null;
 
   function init(w, h) { W = w; H = h; reset(); }
 
@@ -211,31 +284,22 @@ function Tide(C) {
   }
 
   function reset() {
-    lv = 0; t = 0; hopT = 3; sprays = []; sprayT = 0; frontT = 0; lift = 0; liftT = -1; under = null;
-    mobs = C.mobs.map(m => ({ ...m, x: m.x * W, ph: Math.random() * 6, hop: -1, wait: 0, em: false }));
+    lv = 0; t = 0; hopT = 3; sprays = []; sprayT = 0; frontT = 0;
+    mobs = C.mobs.map(m => ({ ...m, x: m.x * W, ph: Math.random() * 6, hop: -1 }));
   }
 
   const ease = (u) => u * u * (3 - 2 * u);
   const mod = (a, n) => ((a % n) + n) % n;
-  /* 第 k 层贴图上沿在屏幕 x 处的 y（不含浪形，只含整层位置 + 起伏） */
-  const liftNow = () => under != null ? under - natTop() : liftT < 0 ? 0 : lift * (1 - ease(Math.min(1, liftT / SETTLE)));
+  /* 第 k 层贴图上沿在屏幕 x 处的 y（不含浪形，只含整层位置 + 起伏 + 前沿塌下去的那段） */
   function baseY(k, x) {
     const L = C.layers[k];
-    return C.top + liftNow() + L.y + L.bob[0] * Math.sin(t * L.bob[1] + k * 1.7)
-      + L.swell[0] * Math.sin(6.2832 * (x - L.swell[2] * t) / L.swell[1]);
+    return C.top + L.y + L.bob[0] * Math.sin(t * L.bob[1] + k * 1.7)
+      + L.swell[0] * Math.sin(6.2832 * (x - L.swell[2] * t) / L.swell[1]) + frontDrop(C.side, W, ease(lv), x);
   }
   /* 第 k 层在屏幕 x 处的上沿（屏幕 y） */
   function surfY(k, x) {
     const L = C.layers[k];
     return baseY(k, x) + L.top[Math.floor(mod(x - L.v * t, L.w))];
-  }
-
-  /* 第 0 层上沿每列的中位数（不含整片抬压）：handoff / under 都按它把整片对到视频里的海面（同 vframes layer.sea_line 的量法） */
-  function natTop() {
-    const L = C.layers[0], tops = [];
-    for (let x = 0; x < W; x += SL) tops.push(C.top + L.y + L.bob[0] * Math.sin(t * L.bob[1]) + L.swell[0] * Math.sin(6.2832 * (x - L.swell[2] * t) / L.swell[1]) + L.top[Math.floor(mod(x - L.v * t, L.w))]);
-    tops.sort((a, b) => a - b);
-    return tops[tops.length >> 1];
   }
 
   function spray(k, x, y, n, up) {
@@ -250,8 +314,7 @@ function Tide(C) {
 
   /* front：前沿此刻在屏幕哪个 x（main.js tideSpan；贴着屏幕边 / 跟另一片顶在一起时给 null）。推进、退回的路上前沿一路甩东西，
      读成一道浪头 / 一道金光卷过来，而不是一块图淡进来 */
-  function update(dt, on, front, y = null) {
-    under = LAST.top ? y : null;
+  function update(dt, on, front) {
     const lv0 = lv;
     lv = Math.max(0, Math.min(1, lv + (on ? dt / C.rise : -dt / C.fall)));
     if (front != null && lv !== lv0) for (frontT += dt; frontT >= C.front.every; frontT -= C.front.every) {
@@ -265,7 +328,6 @@ function Tide(C) {
     }
     if (lv <= 0) return;
     t += dt;
-    if (liftT >= 0 && (liftT += dt) >= SETTLE) liftT = -1;
     if (!LAST.top) return;
     /* 小兵往 dir 那边冲，出了画从另一边再进来；隔几秒挑一只蹦起来，落回去甩一圈 */
     for (const m of mobs) {
@@ -273,11 +335,10 @@ function Tide(C) {
       const w = imgs[m.k] ? imgs[m.k].width * m.s : 150;
       if (C.dir > 0 && m.x - w / 2 > W) m.x = -w / 2;
       if (C.dir < 0 && m.x + w / 2 < 0) m.x = W + w / 2;
-      if (m.wait > 0 && (m.wait -= dt) <= 0) { m.hop = 0; m.em = true; spray(m.row + 1, m.x, surfY(m.row + 1, m.x), C.hop.splash, true); }
-      if (m.hop >= 0 && (m.hop += dt) > C.hop.T) { m.hop = -1; m.em = false; spray(m.row + 1, m.x, surfY(m.row + 1, m.x), C.hop.splash, true); }
+      if (m.hop >= 0 && (m.hop += dt) > C.hop.T) { m.hop = -1; spray(m.row + 1, m.x, surfY(m.row + 1, m.x), C.hop.splash, true); }
     }
     if (on && (hopT -= dt) <= 0) {
-      const idle = mobs.filter(m => m.hop < 0 && !(m.wait > 0) && m.x > 40 && m.x < W - 40);
+      const idle = mobs.filter(m => m.hop < 0 && m.x > 40 && m.x < W - 40);
       if (idle.length) idle[Math.floor(Math.random() * idle.length)].hop = 0;
       hopT = C.hop.every[0] + Math.random() * (C.hop.every[1] - C.hop.every[0]);
     }
@@ -322,14 +383,13 @@ function Tide(C) {
 
   function drawMob(ctx, m) {
     const im = imgs[m.k];
-    if (!im || m.wait > 0) return;                    // 还潜在水里（handoff 后还没轮到它蹦出来）
+    if (!im) return;
     const w = im.width * m.s, h = im.height * m.s, k = m.row + 1;
     const wy = surfY(k, m.x), slope = (surfY(k, m.x + 18) - surfY(k, m.x - 18)) / 36;
     let y = wy + h * C.sink + Math.sin(t * 3 + m.ph) * 3, rot = Math.atan(slope) * 0.6;
     if (m.hop >= 0) {                                 // 蹦起来：抛物线，空中朝前打半个滚
       const u = m.hop / C.hop.T;
       y -= C.hop.h * 4 * u * (1 - u);
-      if (m.em) y += h * 0.8 * Math.max(0, 1 - u * 2.5);   // 第一次是从水底下蹦出来：起跳时整只还在水面以下
       rot += C.dir * Math.sin(u * Math.PI) * 0.5;
     }
     ctx.save(); ctx.translate(m.x, y); ctx.rotate(rot);
@@ -337,7 +397,7 @@ function Tide(C) {
     ctx.restore();
   }
 
-  /* 只画 [x0, x1) 这一段（推进到哪 / 两个人同时在场时各占一边，main.js tideSpan），两头羽化（featherSpan）。
+  /* 只画 [x0, x1) 这一段（推进到哪 / 两个人同时在场时各占一边，main.js tideSpan），交界按 TideEdge 的噪声带抠。
      飞沫 / 光点不裁：前沿甩出来的正好在羽化带上，裁了就只剩一半；它们飞到对面那片上头也是对撞的一部分。 */
   const span = SpanBuf();
   function draw(ctx, x0 = 0, x1 = W) {
@@ -345,14 +405,15 @@ function Tide(C) {
     const full = x0 <= 0 && x1 >= W, out = ctx;
     if (!full) ctx = span.begin(W, H);
     const on = lv > 0 && x1 > x0;                    // 退空了只剩飞在半空的飞沫 / 光点
+    const [d0, d1] = TideEdge.reach(x0, x1, W);      // 交界的噪声带伸到分界线外面去：画的范围要跟着放宽，不然带里没东西可留
     ctx.save();
     if (C.haze && on) {
       const [c, a0, a1, dy] = C.haze, y0 = C.top + dy, g = ctx.createLinearGradient(0, y0, 0, H);
       g.addColorStop(0, `rgba(${c},${a0})`); g.addColorStop(1, `rgba(${c},${a1})`);
-      ctx.fillStyle = g; ctx.fillRect(x0, y0, x1 - x0, H - y0);
+      ctx.fillStyle = g; ctx.fillRect(d0, y0, d1 - d0, H - y0);
     }
     for (let k = 0; k < N; k++) {
-      if (on) drawLayer(ctx, k, x0, x1);
+      if (on) drawLayer(ctx, k, d0, d1);
       if (full) drawSprays(ctx, k);
       if (k < 2 && on) for (const m of mobs) if (m.row === k) drawMob(ctx, m);
     }
@@ -362,24 +423,12 @@ function Tide(C) {
     for (let k = 0; k < N; k++) drawSprays(out, k);
   }
 
-  /* 出场视频放完（intro.js → main.js）：视频底部带着同一片海，视频淡掉时这片海要已经原位铺满 ——
-     不从画外推进来，直接满；整片从视频里海面的高度 y（画布）落回自己的位置；视频结尾虾兵蟹将潜回水里了，
-     这边的小兵先藏着，隔一会儿一只只从海里蹦出来（读成从视频的海里冲进游戏）。
-     "海面高度"两边按同一个量法：每列最上沿取中位数（vframes layer.sea_line / 这里第 0 层上沿）。 */
-  function handoff(y) {
-    if (!LAST.top) return;
-    lv = 1; under = null;
-    lift = y - natTop(); liftT = 0;
-    const order = mobs.map((_, i) => i).sort(() => Math.random() - 0.5);
-    order.forEach((i, n) => { mobs[i].wait = EMERGE[0] + n * EMERGE[1]; mobs[i].hop = -1; });
-  }
-
   const active = () => lv > 0;
   const level = () => ease(lv);
   const dotImg = () => dot;              // 交界对撞（Clash）用这片潮自己的飞沫颜色
   /* 上沿（给交界处的对撞找高度）：最远那层在 x 处的上沿 */
   const edgeY = (x) => C.layers[0].top ? surfY(0, x) : H;
-  return { init, load, update, draw, reset, handoff, active, level, edgeY, dotImg, side: C.side };
+  return { init, load, update, draw, reset, active, level, edgeY, dotImg, side: C.side };
 }
 
 /* ---- 白娘子的海 ----
@@ -388,7 +437,7 @@ function Tide(C) {
    虾兵蟹将（v14/sea/make.py，都朝右）往右冲（冲男生那边：她的兵）；row 0 泡在中层（缩放 0.75，远）、row 1 泡在近层（1.0）。
    2026-09-28 用户先说"往上挪挪，但不要盖住男女生"，后来又定"水面和卷轴是在男女主的上层"：整片潮连兵一起画在男女主之后（盖在脚上）。 */
 const Sea = Tide({
-  top: 1190, rise: 1.4, fall: 1.4, side: -1,
+  top: SEA_TOP, rise: 1.4, fall: 1.4, side: -1,
   front: { every: 0.012 },       // 推进 / 退回时前沿每隔几秒甩一颗（浪头的飞沫）
   layers: [
     { src: 'assets/world/sea2_far.webp',  w: 536, h: 276, y: 0,   v: -14, swell: [4, 520, 30],  bob: [2, 0.9] },
@@ -420,7 +469,7 @@ const Sea = Tide({
    比海起伏得大、涌浪短（swell）：卷轴是绸子，要读成"飘"；底下铺一片金色光雾（haze）当"海水"。
    神兽小佛（v14/scroll/beasts.py，都朝左）往左冲（冲女生那边），骑在卷轴上（sink 小：站在绢面上，不是泡在里面）。 */
 const Scroll = Tide({
-  top: 1190, rise: 1.4, fall: 1.4, side: +1,
+  top: SEA_TOP, rise: 1.4, fall: 1.4, side: +1,
   front: { every: 0.018 },
   layers: [
     { src: 'assets/world/scroll_far.webp',   w: 800,  h: 93,  y: 42,  v: 18,  swell: [8, 380, -40], bob: [3, 0.9] },
@@ -449,22 +498,31 @@ const Scroll = Tide({
 /* 两片潮同时在场：交界处（main.js tideSpan）一直往上迸两边各自的飞沫（水花和金光、月光和火星……），读成两股法力顶在一起。
    update 给交界 x、高度 y、强度 k（两边进度的较小者；没顶在一起时 0，不迸）、左右两片潮（取它们的飞沫贴图，Tide.dotImg）。 */
 const Clash = (() => {
-  const E = { rate: 90, V: [220, 560], G: 900, life: [0.45, 0.9], r: [4, 10] };   // 每秒几颗、初速、重力、寿命、大小
+  const E = { rate: 130, V: [220, 560], G: 900, life: [0.45, 0.9], r: [4, 10], seam: 0.4, deep: 230 };   // 每秒几颗、初速、重力、寿命、大小；seam 几成从交界带里冒、往下多深
   const list = [];
   let acc = 0;
   return {
     update(dt, x, y, k, L, R) {
       for (let i = list.length - 1; i >= 0; i--) {
         const p = list[i];
-        p.vy += E.G * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+        p.vy += (p.g ?? E.G) * dt; p.x += p.vx * dt; p.y += p.vy * dt;
         if ((p.t += dt) > p.life) list.splice(i, 1);
       }
       if (k <= 0) { acc = 0; return; }
       for (acc += dt * E.rate * k; acc >= 1; acc -= 1) {
-        const right = Math.random() < 0.5, a = -Math.PI / 2 + (right ? 0.5 : -0.5) * Math.random();   // 右边那片的往右偏、左边的往左偏
+        const right = Math.random() < 0.5, img = (right ? R : L).dotImg(), life = E.life[0] + Math.random() * (E.life[1] - E.life[0]);
+        if (Math.random() < E.seam) {
+          /* 交界整条往下（不只是上沿）：两片咬在一起的那条噪声带里冒光点，往对面那片里钻一点再往上浮 —— 交界读成两股法力在互相冲，
+             不是两块图拼在一起（2026-10-06 用户："中间明显一根分界线，不好看，缺乏设计感"） */
+          const yy = y + 30 + Math.random() * E.deep, dir = right ? -1 : 1;
+          list.push({ img, x: x + (Math.random() - 0.5) * 120, y: yy, vx: dir * (60 + Math.random() * 120), vy: -(40 + Math.random() * 90), g: -40, t: 0,
+                      life, r: E.r[0] + Math.random() * (E.r[1] - E.r[0]) * 0.7 });
+          continue;
+        }
+        const a = -Math.PI / 2 + (right ? 0.5 : -0.5) * Math.random();   // 右边那片的往右偏、左边的往左偏
         const v = E.V[0] + Math.random() * (E.V[1] - E.V[0]);
-        list.push({ img: (right ? R : L).dotImg(), x: x + (Math.random() - 0.5) * 16, y: y + Math.random() * 40, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0,
-                    life: E.life[0] + Math.random() * (E.life[1] - E.life[0]), r: E.r[0] + Math.random() * (E.r[1] - E.r[0]) });
+        list.push({ img, x: x + (Math.random() - 0.5) * 16, y: y + Math.random() * 40, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0,
+                    life, r: E.r[0] + Math.random() * (E.r[1] - E.r[0]) });
       }
     },
     draw(ctx) {
@@ -500,7 +558,7 @@ const TIDE_MOBS = [                    // 开场位置（同海）：row 0 骑�
 
 /* 真相云海：翠绿发光云浪，往上冒聊天气泡（被翻出来的聊天记录）和绿色光点；放大镜、带翅膀的手机、聊天气泡、相机小精灵往右冲 */
 const TruthTide = Tide({
-  top: 1190, rise: 1.4, fall: 1.4, side: -1, front: { every: 0.014 },
+  top: SEA_TOP, rise: 1.4, fall: 1.4, side: -1, front: { every: 0.014 },
   layers: tideLayers('truth', [['far', 535, 319, 13], ['mid', 693, 413, 65], ['near', 888, 529, 105]], +1),
   spray: { every: 0.04, crest: 0.4, V: [40, 120], spread: 1.2, G: -70, life: [0.9, 1.5], r: [3, 6], a: 0.95, layers: [0, 1, 2],
            dot: ['rgba(240,255,230,1)', 'rgba(150,255,150,0.85)', 'rgba(40,200,80,0)'],
@@ -513,7 +571,7 @@ const TruthTide = Tide({
 
 /* 灭迹黑烟：紫黑浓烟浪，碎纸条从浪尖翻飞出来再落回去（被撕掉的证据），夹着紫色火星；小恶魔、吃纸垃圾桶、碎纸机、橡皮擦往左冲 */
 const DemonTide = Tide({
-  top: 1190, rise: 1.4, fall: 1.4, side: +1, front: { every: 0.014 },
+  top: SEA_TOP, rise: 1.4, fall: 1.4, side: +1, front: { every: 0.014 },
   layers: tideLayers('demon', [['far', 535, 301, 30], ['mid', 693, 390, 87], ['near', 888, 499, 133]], -1),
   spray: { every: 0.03, crest: 0.35, V: [140, 300], spread: 1.1, G: 520, life: [0.7, 1.1], r: [3, 6], a: 0.95, layers: [1, 2, 2],
            dot: ['rgba(255,220,255,1)', 'rgba(200,90,240,0.85)', 'rgba(90,20,120,0)'],
@@ -527,7 +585,7 @@ const DemonTide = Tide({
 /* 奶盖爱心泡泡海（绿茶妹妹，男生档 4 第四人，2026-09-29）：奶白浅粉奶泡浪，浪尖往上飘粉色爱心和奶白泡泡（茶言茶语的"心"意）；
    白莲花精灵、兔耳奶茶杯、抱手机的小白兔、哭唧唧爱心往左冲女生。不用绿：女生那边的真相云海是翠绿，两片可能同时在场。 */
 const TeaTide = Tide({
-  top: 1190, rise: 1.4, fall: 1.4, side: +1, front: { every: 0.014 },
+  top: SEA_TOP, rise: 1.4, fall: 1.4, side: +1, front: { every: 0.014 },
   layers: tideLayers('tea', [['far', 535, 299, 20], ['mid', 693, 387, 73], ['near', 888, 496, 115]], -1),
   spray: { every: 0.04, crest: 0.4, V: [40, 120], spread: 1.2, G: -60, life: [1.0, 1.6], r: [3, 6], a: 0.95, layers: [0, 1, 2],
            dot: ['rgba(255,250,252,1)', 'rgba(255,190,220,0.85)', 'rgba(255,120,180,0)'],
@@ -694,9 +752,9 @@ function Sky(C) {
       const ctx = span.begin(W, H), S = C.sky;
       ctx.save();
       /* 天空 */
-      const g = ctx.createLinearGradient(0, S.y0, 0, H);
+      const g = ctx.createLinearGradient(0, S.y0, 0, H), [d0, d1] = TideEdge.reach(x0, x1, W);   // 同 Tide：画到噪声带外沿
       g.addColorStop(0, `rgba(${S.top},${S.a})`); g.addColorStop(1, `rgba(${S.bot},${S.a})`);
-      ctx.fillStyle = g; ctx.fillRect(x0, S.y0, x1 - x0, H - S.y0);
+      ctx.fillStyle = g; ctx.fillRect(d0, S.y0, d1 - d0, H - S.y0);
       /* 星带 / 火焰云带：斜着铺、横着流（贴图横向无缝，接着画） */
       const tw = band.width * G.k, th = band.height * G.k, off = mod(G.v * t, tw);
       ctx.save(); ctx.translate(W / 2, G.y); ctx.rotate(G.tilt); ctx.globalAlpha = G.a ?? 1;
@@ -713,7 +771,8 @@ function Sky(C) {
         ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 3 + d.ph);
         ctx.drawImage(dot, d.x - d.r * 1.6, bandY(d.x) + d.off - d.r * 1.6, d.r * 3.2, d.r * 3.2);
       }
-      /* 上沿渐隐：y0 全透 → y1 */
+      /* 上沿渐隐：y0 全透 → y1。前沿不往下沉（Tide 的 frontDrop）：夜空 / 火空是一整块幕，里面的明月、玉兔、金乌是悬着的，
+         幕往下沉的话它们先飘在客厅里、天后到 —— 只靠 TideEdge 的噪声边 */
       ctx.globalAlpha = 1;
       const m = ctx.createLinearGradient(0, S.y0, 0, S.y1);
       m.addColorStop(0, 'rgba(0,0,0,0)'); m.addColorStop(1, 'rgba(0,0,0,1)');
@@ -746,16 +805,14 @@ function Sky(C) {
     out.globalAlpha = 1;
   }
 
-  /* 出场视频放完（intro.js → main.js）：直接铺满、日月已升起（视频底部那片接过来） */
-  function handoff() { lv = 1; }
-  return { init, load, update, draw, reset, handoff, active: () => lv > 0, level: () => ease(lv), edgeY: () => C.sky.y1, dotImg: () => dot, side: C.side };
+  return { init, load, update, draw, reset, active: () => lv > 0, level: () => ease(lv), edgeY: () => C.sky.y1, dotImg: () => dot, side: C.side };
 }
 
 const MoonSky = Sky({
   side: -1, rise: 1.4, fall: 1.4,
   dot: ['rgba(255,255,255,1)', 'rgba(215,228,255,0.85)', 'rgba(150,170,255,0)'],
   /* 夜空：y0 全透 → y1 不透明，往下 top 色渐到 bot 色（竖向渐隐也管星带和星星） */
-  sky: { y0: 1175, y1: 1238, top: [14, 18, 58], bot: [38, 22, 78], a: 0.93 },
+  sky: { y0: SEA_TOP - 15, y1: SEA_TOP + 48, top: [14, 18, 58], bot: [38, 22, 78], a: 0.93 },
   /* 星带：贴图缩放 k，中线在屏幕正中过 y，斜 tilt（负 = 往右上抬），往右流 v px/s */
   band: { src: 'assets/world/moonsky_galaxy.webp', k: 0.8, y: 1300, tilt: -0.07, v: 22 },
   /* 明月：直径 D，圆心 (x, y)，没升起时往下沉 sink；月晕半径 R、颜色、不透明度 */
@@ -785,7 +842,7 @@ const MoonSky = Sky({
 const SunSky = Sky({
   side: +1, rise: 1.4, fall: 1.4,
   dot: ['rgba(255,255,225,1)', 'rgba(255,190,60,0.9)', 'rgba(255,80,10,0)'],
-  sky: { y0: 1175, y1: 1238, top: [70, 12, 8], bot: [120, 36, 6], a: 0.93 },
+  sky: { y0: SEA_TOP - 15, y1: SEA_TOP + 48, top: [70, 12, 8], bot: [120, 36, 6], a: 0.93 },
   /* 火焰云带：很满、很亮，压到 0.8 */
   band: { src: 'assets/world/sunsky_fire.webp', k: 0.72, y: 1305, tilt: 0.07, v: -26, a: 0.8 },
   /* 烈日：同明月的摆法（右下角）；corona 日冕 n 道、伸出 len、张角 w、转速；pulse 日面一胀一缩 */
