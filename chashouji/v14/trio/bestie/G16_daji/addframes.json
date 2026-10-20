@@ -2,7 +2,7 @@
  "pad": [
   0,
   0,
-  0,
+  40,
   0
  ],
  "head": [
@@ -16,16 +16,33 @@
    "name": "through",
    "base": "throw",
    "box": [
-    80,
-    30,
+    170,
+    65,
     288,
-    230
+    240
    ],
    "screen": "green",
    "paste": "inplace",
    "feather": 10,
    "K": 2.24439,
    "ox": 189,
+   "oy": 62,
+   "added": true
+  },
+  {
+   "name": "release",
+   "base": "throw",
+   "box": [
+    188,
+    0,
+    288,
+    258
+   ],
+   "screen": "green",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.24439,
+   "ox": 144,
    "oy": 62,
    "added": true
   }

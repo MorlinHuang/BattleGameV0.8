@@ -11,30 +11,6 @@
    "base": "throw",
    "paste": "cell",
    "added": true
-  },
-  {
-   "name": "idle2",
-   "base": "idle",
-   "box": [
-    [
-     280,
-     40,
-     520,
-     200
-    ]
-   ],
-   "screen": "magenta",
-   "K": 1.39752,
-   "ox": 62,
-   "oy": 168,
-   "fixed": [
-    330,
-    412,
-    410,
-    466
-   ],
-   "paste": "inplace",
-   "feather": 10
   }
  ],
  "head": [

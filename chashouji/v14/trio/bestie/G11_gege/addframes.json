@@ -1,0 +1,44 @@
+{
+ "pad": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "frames": [
+  {
+   "name": "release",
+   "base": "throw",
+   "box": [
+    176,
+    0,
+    315,
+    140
+   ],
+   "screen": "green",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.62391,
+   "ox": 99,
+   "oy": 62,
+   "added": true
+  },
+  {
+   "name": "through",
+   "base": "throw",
+   "box": [
+    176,
+    0,
+    315,
+    140
+   ],
+   "screen": "green",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.62391,
+   "ox": 99,
+   "oy": 62,
+   "added": true
+  }
+ ]
+}

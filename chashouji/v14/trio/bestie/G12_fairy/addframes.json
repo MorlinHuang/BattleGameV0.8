@@ -15,7 +15,41 @@
     280,
     230
    ],
-   "screen": "green",
+   "screen": "blue",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.14286,
+   "ox": 212,
+   "oy": 62,
+   "added": true
+  },
+  {
+   "name": "blow",
+   "base": "kiss",
+   "box": [
+    186,
+    92,
+    280,
+    200
+   ],
+   "screen": "blue",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.14286,
+   "ox": 212,
+   "oy": 62,
+   "added": true
+  },
+  {
+   "name": "idle2",
+   "base": "idle",
+   "box": [
+    186,
+    92,
+    280,
+    200
+   ],
+   "screen": "blue",
    "paste": "inplace",
    "feather": 10,
    "K": 2.14286,

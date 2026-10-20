@@ -59,6 +59,9 @@ for grow, blur, c in GLOW:
     L.putalpha(sil.filter(ImageFilter.MaxFilter(grow)).filter(ImageFilter.GaussianBlur(blur)))
     out.alpha_composite(L)
 out.alpha_composite(body)
+import sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from crewart import fade_border
+out = fade_border(out, PAD)                # 外发光在留边里收干净（crewart.fade_border）
 out.save(OUT % 'up', 'WEBP', quality=90, method=6)
 
 import math

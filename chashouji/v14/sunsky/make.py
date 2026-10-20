@@ -45,4 +45,5 @@ ys, xs = np.nonzero(s.max(-1) > 40)
 cx, cy, r = (xs.min() + xs.max()) / 2, (ys.min() + ys.max()) / 2, max(xs.max() - xs.min(), ys.max() - ys.min()) / 2 + 4
 box = tuple(int(v) for v in (cx - r, cy - r, cx + r, cy + r))
 im = Image.fromarray(unblack(s, SUN_A), 'RGBA').crop(box)
-save(im.resize((SD, SD), Image.LANCZOS), 'sunsky_sun.webp')
+from crewart import fade_border
+save(fade_border(im.resize((SD, SD), Image.LANCZOS), 20), 'sunsky_sun.webp')   # 火舌外的暗光按外框裁会剩一条直边：贴图边 20 像素里收干净

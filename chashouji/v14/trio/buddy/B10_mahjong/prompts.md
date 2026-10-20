@@ -14,3 +14,8 @@
 - P6/P7（2026-10-01）：swing / thru / idle2 三帧，raw/p6_*.png（单格、透明、已按腿+马扎配回底图像素）。原 walk 条末格改名 idle0。
   第一轮整块重画上半身 → 头被画大 20~40%；改成"木偶底图"：p6_<帧>_base2.png 只留腿+马扎+头（swing 把 wind 的头前移 −55,+18，thru 把 throw 的头前移 −22,+38），
   头不透明、躯干手臂透明重画（mask2），头尺寸就锁住了。idle2 的 mask2 只透明脸前半 + 后脑 + 挠头那只手臂。脚本在 p6work/。
+- P6 方向版（2026-10-01，所需 162° = 往左略上 18°）：swing / release / thru 三帧重画，raw/p6d_*.png（+ _base / _mask），旧 p6_swing / p6_thru 留着不用。
+  出手臂 = wind 举牌那只（画面左侧那条），反手侧甩：swing 手横过胸前收到身体右侧、低于肩（下胸高）、手腕后弯捏牌 → release 手臂往左上 ~18° 伸直、五指刚张开 → thru 手臂继续往左前下方扫。
+  做法：底 = wind 格（与 p6_swing_base 同一画布位置），清掉两条手臂、画粗略肤色引导臂（p6work/mkd.py），蒙版只留腰下 + 马扎 + 原 wind 头（头尺寸锁死）；
+  生成图按腿+马扎模板配回、只取透明区贴回、头的椭圆（y<372）只用原图（p6work/normd.py，否则生成图漂 9px 时出双发际线）。
+  frames.json：swing / thru 两条 src 改 p6d_*，scale_as 都改 wind（底图都是 wind 格），swing 后插 release 条。build 后照旧重跑 walkfix.py、cellshift.py。

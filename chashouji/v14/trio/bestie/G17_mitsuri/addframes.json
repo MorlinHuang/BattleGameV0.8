@@ -1,0 +1,60 @@
+{
+ "pad": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "frames": [
+  {
+   "name": "swing",
+   "base": "throw",
+   "box": [
+    [
+     200,
+     205,
+     245,
+     349
+    ],
+    [
+     180,
+     205,
+     200,
+     262
+    ]
+   ],
+   "screen": "blue",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.5788,
+   "ox": 196,
+   "oy": 62,
+   "added": true
+  },
+  {
+   "name": "through",
+   "base": "throw",
+   "box": [
+    [
+     200,
+     205,
+     245,
+     349
+    ],
+    [
+     180,
+     205,
+     200,
+     262
+    ]
+   ],
+   "screen": "blue",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.5788,
+   "ox": 196,
+   "oy": 62,
+   "added": true
+  }
+ ]
+}

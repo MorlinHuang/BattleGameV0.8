@@ -70,6 +70,8 @@ for grow, blur, c in GLOW:
     L.putalpha(sil.filter(ImageFilter.MaxFilter(grow)).filter(ImageFilter.GaussianBlur(blur)))
     lit.alpha_composite(L)
 lit.alpha_composite(body)
+from crewart import fade_border
+lit = fade_border(lit, PAD)                # 外发光在留边里收干净（crewart.fade_border）
 lit.save(os.path.join(OUT, 'houyi2_up.webp'), 'WEBP', quality=90, method=6)
 arm = layer(rgb0, al0 * arm_m)
 arm.save(os.path.join(OUT, 'houyi2_arm.webp'), 'WEBP', quality=90, method=6)

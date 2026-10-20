@@ -23,10 +23,16 @@
    "base": "hitB",
    "box": [
     [
-     295,
+     262,
      110,
      533,
      300
+    ],
+    [
+     300,
+     290,
+     430,
+     340
     ]
    ],
    "screen": "magenta",
@@ -42,7 +48,8 @@
    "check": null,
    "added": true,
    "scale_by": "fixed",
-   "paste": "box"
+   "paste": "box",
+   "feather": 12
   },
   {
    "name": "hitD",

@@ -36,12 +36,15 @@ from scipy.spatial import ConvexHull
 from scipy.signal import fftconvolve
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, '..', 'web', 'assets', 'world')
+OUT = os.environ.get('OUT') or os.path.join(HERE, '..', 'web', 'assets', 'world')
 H = 1707      # 画布高 = 960 宽下的 9:16（最终 1080×1920）。背景 *_ext.png 高 1818，缩放系数与原 1334/1421 一致
 # 1536×1024 的生图 → 引擎像素。站立的人约 400 高。
 # 原来是 0.66（约 600 高），用户嫌人占画面太大，要"镜头拉远、人变成现在的 2/3"：
 # 人和房间一起缩 2/3（房间见 main() 里的 *_ext.png），不能只缩人 —— 沙发会比人大一圈
-SCALE = 0.44
+# 主角放大倍数（2026-10-06 画面布局方案：主角 ×1.10，脚底线不动、人往上长）。房间不跟着放。
+# 视频帧那套（video/pull/build_vid.py）用同一个 HERO，两套贴图一样大
+HERO = float(os.environ.get('HERO', '1.1'))
+SCALE = 0.44 * HERO
 K = np.ones((3, 3), np.float32)
 
 # 门的切点（原图 1659×948 坐标）：卧室留到右边缘；客厅从它左门的右门框起、
@@ -395,6 +398,42 @@ def ground_segs(solid, ay, ax):
     return segs, int(ay - bottom)
 
 
+def two_people(cut, px):
+    """挖掉手机后的连通块标号。两个人除了手机还在别处碰着（拉扯视频女赢第 10 段：她的拖鞋踩上他的拖鞋、腿叠在一起），
+    最大那块就是两个人连在一起、第二块只是根发梢。这时一圈圈往里腐蚀，直到碰着的那一小截断开、出现两大块，
+    再从这两块沿着人身上一格格往外长回去（种子生长）。不能按手机竖线一刀切：她的腿伸过手机线，
+    切下来那截算成男生，打男生的礼物就碎在她小腿上（10-06 第一版这么切过）"""
+    lab, n = ndimage.label(cut)
+    sizes = np.sort(ndimage.sum(cut, lab, range(1, n + 1)))[::-1]
+    if n >= 2 and sizes[1] > 0.15 * sizes[0]:
+        return lab, n
+    for it in range(1, 25):
+        er = ndimage.binary_erosion(cut, iterations=it)
+        sl, sn = ndimage.label(er)
+        if sn < 2:
+            continue
+        sz = ndimage.sum(er, sl, range(1, sn + 1))
+        order = np.argsort(sz)[::-1]
+        if sz[order[1]] > 0.15 * sz[order[0]]:
+            seeds = np.zeros_like(sl)
+            for k in order[:2]:
+                seeds[sl == k + 1] = k + 1
+            # 沿着人身上往外长（每轮外扩一格、只长进还没归属的前景）：按直线距离归，她的拖鞋会被归给隔着一道缝、更近的他的小腿
+            grown = seeds.copy()
+            for _ in range(4 * it + 4):
+                g = ndimage.grey_dilation(grown, size=3)
+                new = cut & (grown == 0) & (g > 0)
+                if not new.any():
+                    break
+                grown[new] = g[new]
+            # 只归了两大块：其余零碎（发梢）保持各自独立的块，按离谁近归谁（edges 里）
+            rest, rn = ndimage.label(cut & (grown == 0))
+            out = np.where(grown > 0, grown, np.where(rest > 0, rest + sn, 0))
+            u, inv = np.unique(out, return_inverse=True)       # 重新编号成 0..k 连续：腐蚀掉的小块留下空号，算质心会除以 0
+            return inv.reshape(out.shape), len(u) - 1
+    return lab, n
+
+
 def edges(solid, phone):
     """礼物打到哪儿才算"碰到人"：每 EDGE_STEP 行量一次两个人**朝着对方那一侧**的轮廓。
     a = 女生（左）最靠右的那个像素，灭迹党（从右边飞来）的礼物打在这里；
@@ -417,7 +456,7 @@ def edges(solid, phone):
     bx0, bx1 = int(px - 90 * k), int(px + 90 * k)
     by0, by1 = int(py - 70 * k), int(py + 70 * k)
     cut[max(0, by0):by1, max(0, bx0):bx1] = False
-    lab, n = ndimage.label(cut)
+    lab, n = two_people(cut, px)
     sizes = ndimage.sum(cut, lab, range(1, n + 1))
     big = np.argsort(sizes)[::-1][:2] + 1
     cxs = ndimage.center_of_mass(cut, lab, big)

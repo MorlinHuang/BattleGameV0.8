@@ -43,7 +43,8 @@ ys, xs = np.nonzero(disc)
 x0, y0, x1, y1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
 al = ndimage.gaussian_filter(ndimage.binary_erosion(disc, iterations=MF).astype(np.float32), MF / 2)
 px = np.dstack([c, al[..., None] * 255])[y0:y1, x0:x1].clip(0, 255).astype(np.uint8)
-save(Image.fromarray(px, 'RGBA').resize((MD, MD), Image.LANCZOS), 'moonsky_moon.webp')
+from crewart import fade_border
+save(fade_border(Image.fromarray(px, 'RGBA').resize((MD, MD), Image.LANCZOS), 16), 'moonsky_moon.webp')   # 月晕贴到外框边：边上 16 像素里收干净
 
 # 玉兔：同 tides/make.py mobs —— 连通块最大的四块，按所在格子命名，高 HGT，外发光留边 PAD（18 时外发光在贴图边上被切成方框）
 HGT, PAD, GLOW = 130, 32, (205, 218, 255)
@@ -68,4 +69,5 @@ for i in np.argsort(sz)[::-1][:4]:
         L.putalpha(sil.filter(ImageFilter.MaxFilter(grow)).filter(ImageFilter.GaussianBlur(blur)).point(lambda v: int(v * k)))
         res.alpha_composite(L)
     res.alpha_composite(body)
-    save(res, f'moonsky_{NAMES[cell]}.webp', 90)
+    from crewart import fade_border
+    save(fade_border(res, PAD), f'moonsky_{NAMES[cell]}.webp', 90)   # 外发光在留边里收干净（crewart.fade_border）

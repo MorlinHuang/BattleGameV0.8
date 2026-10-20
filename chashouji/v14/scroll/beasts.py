@@ -40,5 +40,8 @@ for i in np.argsort(sz)[::-1][:4]:
         res.alpha_composite(L)
     res.alpha_composite(body)
     name = NAMES[cell]
+    import sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    from crewart import fade_border
+    res = fade_border(res, PAD)                # 外发光在留边里收干净（crewart.fade_border）
     res.save(os.path.join(OUT, f'scroll_{name}.webp'), 'WEBP', quality=90, method=6)
     print(name, res.size)

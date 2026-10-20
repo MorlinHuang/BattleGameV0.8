@@ -87,6 +87,8 @@ def mobs(name, screen, names, glow):
             L.putalpha(sil.filter(ImageFilter.MaxFilter(grow)).filter(ImageFilter.GaussianBlur(blur)).point(lambda v: int(v * k)))
             res.alpha_composite(L)
         res.alpha_composite(body)
+        from crewart import fade_border
+        res = fade_border(res, PAD)            # 外发光在留边里收干净（crewart.fade_border）
         res.save(os.path.join(OUT, f'tide_{name}_{names[cell]}.webp'), 'WEBP', quality=90, method=6)
         print(f'  tide_{name}_{names[cell]}.webp {res.size[0]}×{res.size[1]}')
 

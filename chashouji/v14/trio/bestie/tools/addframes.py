@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(TRIO, 'tools'))
 import frames as F
 
 SIDE, FIT = 1024, 900                                   # 幕布边长；底格长边放大到多少
-SCREEN = {'magenta': (255, 0, 255), 'green': (0, 255, 0)}
+SCREEN = {'magenta': (255, 0, 255), 'green': (0, 255, 0), 'blue': (0, 0, 255)}   # 蓝幕：一身粉 + 嫩绿的人（G17），品红 / 绿幕都会吃掉头发
 
 
 def load(d):
@@ -109,7 +109,10 @@ def cell(d, cells, e, meta, spec):
         from inpaint_paste import paste as ipaste
         tmp = tempfile.mkdtemp(); b = os.path.join(tmp, 'b.png'); o = os.path.join(tmp, 'o.png')
         cells[e['base']].save(b)
-        ipaste(b, os.path.join(TRIO, d, 'raw', f'add_{e["name"]}.png'), e['ox'], e['oy'], e['K'], e['screen'], [shb(spec, meta, x) for x in boxes(e)], o, e.get('feather', 6))
+        g = os.path.join(TRIO, d, 'raw', f'add_{e["name"]}.png')
+        if e['screen'] == 'blue':                          # crewart.cut 只认品红 / 绿：蓝幕先用 G17 的 bluekey.py 抠成透明底，inpaint_paste 认透明底直接用 alpha
+            k = os.path.join(tmp, 'k.png'); subprocess.run([sys.executable, os.path.join(TRIO, 'bestie/G17_mitsuri/bluekey.py'), g, k], check=True); g = k
+        ipaste(b, g, e['ox'], e['oy'], e['K'], e['screen'], [shb(spec, meta, x) for x in boxes(e)], o, e.get('feather', 6))
         out = Image.open(o).convert('RGBA'); _sh.rmtree(tmp)
         print(f'  {e["name"]:8s} 原位贴回 {len(boxes(e))} 个框')
         return out

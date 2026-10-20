@@ -73,6 +73,22 @@ def edge_extend(rgb, al, it=12):
     return rgb
 
 
+def fade_border(im, w):
+    """外发光收边：离画框 w 像素以内的半透明部分按 smoothstep 淡到 0（不透明的身子 alpha ≥ 0.8 不动）。
+    外发光是剪影膨胀 grow + 高斯 blur 出来的，伸出去 grow + 3·blur 像素（立绘 25 + 90），比留边 PAD 44 宽一大截 ——
+    贴图边上还剩 alpha 20~50 的光，游戏里压在暗墙上就是一条笔直的竖线 / 一个矩形框（2026-10-06 用户截图：绿茶妹妹左边那道线；
+    小兵、神兽、金乌、烈日也都一样）。留边加宽要改所有量点，所以让光在留边里收干净。"""
+    a = np.asarray(im.split()[3]).astype(np.float32) / 255
+    h, wd = a.shape
+    yy, xx = np.mgrid[0:h, 0:wd]
+    d = np.minimum(np.minimum(xx + 0.5, wd - 0.5 - xx), np.minimum(yy + 0.5, h - 0.5 - yy))
+    t = np.clip(d / w, 0, 1)
+    a2 = np.where(a >= 0.8, a, a * t * t * (3 - 2 * t))
+    out = im.copy()
+    out.putalpha(Image.fromarray((a2 * 255).round().astype(np.uint8)))
+    return out
+
+
 def make(src, out, screen, key, K, glow, pts, margin=6, erase=(), spill='edge'):
     """pts：{名: (x, y)} 原图像素；返回输出贴图像素的量点。裁边框按剪影外框 + margin 自动取（量点按原图像素，不受影响）。"""
     rgb, al = cut(src, screen, key, erase, spill)
@@ -91,6 +107,7 @@ def make(src, out, screen, key, K, glow, pts, margin=6, erase=(), spill='edge'):
         L.putalpha(sil.filter(ImageFilter.MaxFilter(grow)).filter(ImageFilter.GaussianBlur(blur)))
         res.alpha_composite(L)
     res.alpha_composite(body)
+    res = fade_border(res, PAD)
     res.save(out, 'WEBP', quality=90, method=6)
     tr = lambda p: [round((p[0] - x0) * K + PAD), round((p[1] - y0) * K + PAD)]
     q = {n: tr(p) for n, p in pts.items()}

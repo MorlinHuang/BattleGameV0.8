@@ -1,0 +1,77 @@
+{
+ "pad": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "frames": [
+  {
+   "name": "swing",
+   "base": "throw",
+   "box": [
+    [
+     150,
+     0,
+     421,
+     95
+    ],
+    [
+     200,
+     95,
+     421,
+     112
+    ]
+   ],
+   "screen": "magenta",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.13777,
+   "ox": 62,
+   "oy": 188,
+   "added": true
+  },
+  {
+   "name": "through",
+   "base": "throw",
+   "box": [
+    [
+     150,
+     0,
+     421,
+     95
+    ],
+    [
+     200,
+     95,
+     421,
+     112
+    ]
+   ],
+   "screen": "magenta",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.13777,
+   "ox": 62,
+   "oy": 188,
+   "added": true
+  },
+  {
+   "name": "idle2",
+   "base": "idle",
+   "box": [
+    150,
+    40,
+    330,
+    112
+   ],
+   "screen": "magenta",
+   "paste": "inplace",
+   "feather": 10,
+   "K": 2.13777,
+   "ox": 62,
+   "oy": 188,
+   "added": true
+  }
+ ]
+}

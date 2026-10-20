@@ -58,6 +58,8 @@ for grow, blur, rgb_ in GLOW:
     L.putalpha(a.point(lambda v: round(v * GLOW_A)))
     out.alpha_composite(L)
 out.alpha_composite(body)
+from crewart import fade_border
+out = fade_border(out, PAD)                # 外发光在留边里收干净（crewart.fade_border）
 out.save(OUT % 'up', 'WEBP', quality=90, method=6)
 
 tr = lambda p: [round((p[0] - x0) * K + PAD), round((p[1] - y0) * K + PAD)]
