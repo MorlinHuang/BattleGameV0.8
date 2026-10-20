@@ -1,0 +1,183 @@
+审查第六轮（哥们第四批 d1d099b）重拍漂移。桌面正式页 http://127.0.0.1:40235，trio.js 27e565f7 / trio_buddy.js fb8069ed（= HEAD d1d099b），2026-09-30。
+拍法：python3 /tmp/film.py "v=r6<组><skip>&ammostrip=12&ammoms=60&ammosc=1&ammoskip=<skip>&ammogift=buddy&buddy=<组>&noshake=1" /tmp/r6/g<组>_<skip>.png；所有胶片 console errors []。
+量法：v14/trio/tools/drift.py … 16 id=<人> names=<图集帧序> robust=0.08；框、at、anchor 同美术 漂移读数_B6B7B8B18B28B29.txt。胶片半尺寸存档 shots/trio_std/审6_g*.jpg。
+
+== B6 g2_3.2
+格 1  idle    dx  +0.20  dy  -0.30  残差 0.0129
+格 2  idle    dx  +0.03  dy  -0.34  残差 0.0134
+格 3  idle    dx  -0.13  dy  -0.22  残差 0.0116
+格 4  idle    dx  -0.22  dy  -0.23  残差 0.0100
+格 5  idle    dx  -0.24  dy  -0.24  残差 0.0094
+格 6  idle    dx  -0.23  dy  -0.24  残差 0.0096
+格 7  idle    dx  -0.20  dy  -0.23  残差 0.0103
+格 8  wind    dx  -0.03  dy  -0.16  残差 0.0125
+格 9  wind    dx  +0.16  dy  -0.31  残差 0.0123
+格10  wind    dx  +0.29  dy  -0.28  残差 0.0123
+格11  wind    dx  +0.40  dy  -0.22  残差 0.0141
+格12  wind    dx  +0.48  dy  -0.15  残差 0.0150
+最大漂移 0.48px
+
+== B6 g2_2.0
+格 1  throw   dx  -0.53  dy  -0.39  残差 0.0068
+格 2  throw   dx  -0.38  dy  -0.29  残差 0.0062
+格 3  follow  dx  -0.27  dy  -0.28  残差 0.0451
+格 4  follow  dx  -0.33  dy  -0.29  残差 0.0142
+格 5  follow  dx  -0.30  dy  -0.26  残差 0.0097
+格 6  follow  dx  -0.29  dy  -0.26  残差 0.0087
+格 7  follow  dx  -0.26  dy  -0.25  残差 0.0098
+格 8  follow  dx  -0.20  dy  -0.23  残差 0.0105
+格 9  follow  dx  -0.10  dy  -0.22  残差 0.0351
+格10  follow  dx  -0.16  dy  -0.22  残差 0.0152
+格11  follow  dx  -0.04  dy  -0.18  残差 0.0136
+格12  idle    dx  +0.10  dy  -0.33  残差 0.0131
+最大漂移 0.53px
+
+== B7 g7_2.0
+格 1  wind    dx  -0.04  dy  -0.03  残差 0.0182
+格 2  wind    dx  -0.38  dy  -0.71  残差 0.0192
+格 3  throw   dx  +0.19  dy  -0.41  残差 0.0123
+格 4  throw   dx  -0.08  dy  +0.06  残差 0.0101
+格 5  follow  dx  -0.08  dy  +0.22  残差 0.0108
+格 6  follow  dx  -0.05  dy  +0.29  残差 0.0131
+格 7  follow  dx  -0.06  dy  +0.30  残差 0.0319
+格 8  follow  dx  +0.02  dy  +0.33  残差 0.0325
+格 9  follow  dx  -0.04  dy  +0.34  残差 0.0113
+格10  follow  dx  +0.09  dy  +0.30  残差 0.0554
+格11  follow  dx  +0.50  dy  +0.34  残差 0.0441
+格12  follow  dx  -0.09  dy  +0.32  残差 0.0153
+最大漂移 0.71px
+
+== B7 g7_3.2
+格 1  wind    dx  -0.06  dy  -0.06  残差 0.0126
+格 2  wind    dx  -0.01  dy  -0.15  残差 0.0165
+格 3  wind    dx  +0.36  dy  -0.98  残差 0.0195
+格 4  throw   dx  -0.02  dy  -0.59  残差 0.0320
+格 5  throw   dx  -0.07  dy  -0.34  残差 0.0338
+格 6  follow  dx  -0.05  dy  -0.04  残差 0.0161
+格 7  follow  dx  -0.06  dy  +0.16  残差 0.0139
+格 8  follow  dx  -0.12  dy  +0.24  残差 0.0068
+格 9  follow  dx  -0.07  dy  +0.29  残差 0.0110
+格10  follow  dx  -0.01  dy  +0.32  残差 0.0206
+格11  follow  dx  +0.10  dy  +0.33  残差 0.0219
+格12  idle    dx  +0.20  dy  +0.32  残差 0.0231
+最大漂移 0.98px
+
+== B8 g8_2.0
+格 1  idle    dx  +0.23  dy  +0.12  残差 0.0120
+格 2  idle    dx  +0.14  dy  -0.08  残差 0.0104
+格 3  idle    dx  +0.03  dy  -0.20  残差 0.0086
+格 4  idle    dx  -0.09  dy  -0.25  残差 0.0079
+格 5  idle    dx  +0.93  dy  +0.62  残差 0.0496
+格 6  idle    dx  -0.13  dy  -0.17  残差 0.0164
+格 7  idle    dx  -0.17  dy  -0.25  残差 0.0090
+格 8  idle    dx  -0.18  dy  -0.28  残差 0.0079
+格 9  idle    dx  -0.10  dy  -0.24  残差 0.0085
+格10  idle    dx  +0.01  dy  -0.20  残差 0.0086
+格11  idle    dx  +0.12  dy  -0.10  残差 0.0101
+格12  wind    dx  +0.16  dy  +0.07  残差 0.0116
+最大漂移 0.93px
+
+== B8 g8_3.2
+格 1  idle    dx  -0.13  dy  -0.27  残差 0.0077
+格 2  wind    dx  -0.20  dy  -0.26  残差 0.0080
+格 3  wind    dx  -0.18  dy  -0.25  残差 0.0080
+格 4  wind    dx  -0.09  dy  -0.22  残差 0.0085
+格 5  wind    dx  +0.02  dy  -0.15  残差 0.0093
+格 6  wind    dx  +0.11  dy  -0.05  残差 0.0105
+格 7  wind    dx  -0.51  dy  -0.30  残差 0.0063
+格 8  throw   dx  +0.08  dy  -0.15  残差 0.0096
+格 9  throw   dx  +0.23  dy  +0.05  残差 0.0119
+格10  follow  dx  +0.27  dy  +0.16  残差 0.0116
+格11  follow  dx  +0.18  dy  +0.07  残差 0.0116
+格12  follow  dx  +0.11  dy  -0.05  残差 0.0105
+最大漂移 0.51px
+
+== B18 g2_2.0
+格 1  follow  dx  +0.11  dy  +0.17  残差 0.0087
+格 2  idle    dx  +0.13  dy  +0.13  残差 0.0074
+格 3  idle    dx  +0.13  dy  +0.12  残差 0.0128
+格 4  idle    dx  +0.14  dy  +0.11  残差 0.0078
+格 5  idle    dx  +0.16  dy  +0.08  残差 0.0067
+格 6  idle    dx  +0.17  dy  +0.06  残差 0.0065
+格 7  idle    dx  +0.17  dy  +0.05  残差 0.0066
+格 8  idle    dx  +0.17  dy  +0.04  残差 0.0066
+格 9  idle    dx  +0.17  dy  +0.05  残差 0.0104
+格10  idle    dx  +0.17  dy  +0.05  残差 0.0072
+格11  idle    dx  +0.18  dy  +0.06  残差 0.0059
+格12  idle    dx  +0.17  dy  +0.08  残差 0.0059
+最大漂移 0.18px
+
+== B18 g2_3.2
+格 1  wind    dx  +0.29  dy  -0.12  残差 0.0126
+格 2  wind    dx  +0.33  dy  -0.12  残差 0.0140
+格 3  throw   dx  +0.15  dy  -0.01  残差 0.0118
+格 4  follow  dx  +0.11  dy  +0.13  残差 0.0089
+格 5  follow  dx  +0.05  dy  +0.21  残差 0.0103
+格 6  follow  dx  +0.01  dy  +0.25  残差 0.0117
+格 7  follow  dx  -0.01  dy  +0.28  残差 0.0123
+格 8  follow  dx  +0.00  dy  +0.27  残差 0.0121
+格 9  follow  dx  +0.04  dy  +0.24  残差 0.0112
+格10  idle    dx  +0.09  dy  +0.20  残差 0.0097
+格11  idle    dx  +0.12  dy  +0.15  残差 0.0082
+格12  idle    dx  +0.15  dy  +0.11  残差 0.0070
+最大漂移 0.33px
+
+== B28 g4_2.0
+格 1  follow  dx  +0.25  dy  +0.56  残差 0.0073
+格 2  follow  dx  +0.12  dy  +0.42  残差 0.0070
+格 3  follow  dx  +0.16  dy  +0.20  残差 0.0059
+格 4  follow  dx  +0.21  dy  +0.05  残差 0.0045
+格 5  follow  dx  +0.23  dy  +0.17  残差 0.0288
+格 6  follow  dx  +0.22  dy  +0.05  残差 0.0080
+格 7  idle    dx  +0.23  dy  -0.06  残差 0.0045
+格 8  idle    dx  +0.24  dy  -0.18  残差 0.0048
+格 9  idle    dx  +0.25  dy  -0.30  残差 0.0053
+格10  idle    dx  +0.26  dy  -0.37  残差 0.0057
+格11  idle    dx  +0.26  dy  -0.34  残差 0.0055
+格12  idle    dx  +0.25  dy  -0.22  残差 0.0061
+最大漂移 0.56px
+
+== B28 g4_3.2
+格 1  idle    dx  +0.25  dy  -0.29  残差 0.0052
+格 2  idle    dx  +0.26  dy  -0.36  残差 0.0061
+格 3  idle    dx  +0.26  dy  -0.35  残差 0.0056
+格 4  idle    dx  +0.25  dy  -0.25  残差 0.0050
+格 5  idle    dx  +0.24  dy  -0.13  残差 0.0042
+格 6  idle    dx  +0.23  dy  -0.03  残差 0.0038
+格 7  idle    dx  +0.19  dy  +0.08  残差 0.0050
+格 8  idle    dx  +0.16  dy  +0.23  残差 0.0059
+格 9  idle    dx  +0.25  dy  +0.51  残差 0.0067
+格10  wind    dx  +0.23  dy  +0.67  残差 0.0064
+格11  wind    dx  +0.23  dy  +0.70  残差 0.0075
+格12  wind    dx  +0.24  dy  +0.62  残差 0.0068
+最大漂移 0.70px
+
+== B29 g9_2.0
+格 1  wind    dx  +0.22  dy  -0.12  残差 0.0025
+格 2  wind    dx  +0.23  dy  -0.09  残差 0.0031
+格 3  wind    dx  +0.22  dy  -0.05  残差 0.0037
+格 4  throw   dx  +0.17  dy  -0.16  残差 0.0023
+格 5  follow  dx  +0.21  dy  -0.08  残差 0.0040
+格 6  follow  dx  +0.22  dy  -0.05  残差 0.0044
+格 7  follow  dx  +0.22  dy  -0.05  残差 0.0044
+格 8  follow  dx  +0.21  dy  -0.08  残差 0.0041
+格 9  follow  dx  +0.21  dy  -0.11  残差 0.0034
+格10  follow  dx  +0.21  dy  -0.14  残差 0.0028
+格11  idle    dx  +0.18  dy  -0.15  残差 0.0017
+格12  idle    dx  +0.13  dy  -0.15  残差 0.0224
+最大漂移 0.23px
+
+== B29 g9_3.2
+格 1  idle    dx  +0.18  dy  +0.03  残差 0.0045
+格 2  idle    dx  +0.18  dy  +0.02  残差 0.0045
+格 3  idle    dx  +0.18  dy  -0.00  残差 0.0042
+格 4  wind    dx  +0.22  dy  -0.06  残差 0.0035
+格 5  wind    dx  +0.22  dy  -0.09  残差 0.0030
+格 6  wind    dx  +0.22  dy  -0.12  残差 0.0025
+格 7  wind    dx  +0.23  dy  -0.16  残差 0.0016
+格 8  wind    dx  +0.23  dy  -0.18  残差 0.0013
+格 9  wind    dx  +0.23  dy  -0.20  残差 0.0012
+格10  throw   dx  +0.13  dy  -0.24  残差 0.0034
+格11  follow  dx  +0.20  dy  -0.23  残差 0.0022
+格12  follow  dx  +0.21  dy  -0.21  残差 0.0018
+最大漂移 0.24px

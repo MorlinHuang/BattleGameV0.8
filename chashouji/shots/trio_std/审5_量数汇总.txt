@@ -1,0 +1,48 @@
+# 审查第五轮 量数汇总（2026-09-30）
+
+## 1. 图集可重建（frames.py build 在 /tmp 副本里重跑，和线上逐像素比）
+G25 / G26 / G28 / G29 / G30：alpha 最大差 0，RGB 差 > 64 的像素 0。
+G27：build 后再跑 fixleg.py → alpha 最大差 0，差 > 64 的像素 0（不跑 fixleg 时 3974 个像素不同 = 挪正那两块）。
+build 打印的头比例（相对 ref 帧）/ 在场帧配准残差：
+  G25 头 0.99~1.02，残差 ≤ 0.26
+  G26 头 0.99~1.02，残差 ≤ 0.31
+  G27 头 0.99~1.03，残差 ≤ 0.33；check 前脚 wind −4.4、follow −3.7（fixleg 之前）
+  G28 头 0.99~1.02（follow 1.02 按头缩放后脚踩到 1347.5，不上场），残差 ≤ 0.62
+  G29 在场帧头 0.98~1.01，残差 ≤ 0.27（follow 6.73、idle2 4.95 不上场）；vault / swing 头 0.91（loose，见 §4）
+  G30 以 follow（待机帧）为准，其余上场帧头 0.98~1.01（idle 格头大 6%，不上场），残差 ≤ 0.19
+
+## 2. 最低点（alpha > 16 最低行 yb，屏幕 y = at.y + (yb − anchor.y) × s，含进场帧）
+G21 idle 1330.6 wind0 1331.6 throw 1333.6 follow 1330.6 roll 1330.6 land 1330.6 wind 1328.6
+G22 idle 1327.4 wind 1332.4 throw 1333.4 follow 1330.4 crawl1 1326.4 crawl2 1327.4 land 1332.4（idle2 1342.4 不上场）
+G23 idle 1326.6 raise 1328.6 throw 1325.6 follow 1324.6 slide 1292.6 land 1298.6
+G24 idle 1329.2 wind 1330.2 throw 1330.2 follow 1331.2 slide 1331.2 land 1334.2 wind2 1334.2
+G25 idle 1329.5 wind 1330.5 throw 1329.5 follow 1330.5 ride 1329.5 hop 1329.5
+G26 idle 1330.9 wind 1326.9 throw 1330.9 follow 1325.9 leap 1330.9 land 1331.9 wind2 1331.9
+G27 idle 1330.9 wind 1329.9 throw 1330.9 follow 1330.9 tackle 1329.9 rise 1330.9
+G28 idle 1330.5 wind 1326.5 throw 1331.5 jump1 1329.5 jump2 1329.5 jump3 1330.5 jump4 1329.5（follow 1347.5 不上场）
+G29 idle 1330.3 wind 1329.3 throw 1332.3 vault 1330.3 swing 1330.3 land 1330.3
+G30 follow 1326.2 wind 1326.2 throw 1327.2 slither1 1326.2 slither2 1326.2 wind2 1327.2
+（G24 land / wind2 1334.2 超 0.2 px，是抗锯齿边那一行，不计。G23 slide 1292.6 比待机高 34 px，见待办）
+
+## 3. G28 开合跳（walk 进场）
+图集：jump1~4 全部出自 raw/act_b1.png 一张（frames.json 第二张 sheet）。
+胶片 F_g28_enter / 审5_r5_g28w3（都是桌面正式页）头带上沿（粉色 R>225 且行内 ≥ 12 像素）与鞋底（白色最低行）：
+  格   帧     头带上沿  鞋底
+  4~6  jump4  1001      1307   （腾空）
+  7~8  jump1  1005      1327   （接地）
+  9~11 jump2  1005      1307   （腾空）
+  12   idle   1009      1328
+→ 腾空时鞋底抬起 20 px（= bob 20），头带只高 0~4 px。图集里腾空帧头发最高点比接地帧低 15~20 px
+  （jump1 41 / jump2 61 / jump3 40 / jump4 56，格内像素），正好被 bob 抵掉。
+同帧钉脚：审5_进场同帧钉脚.txt，jump3 ×5 格、jump4 ×5 格位移 0.00 px；换一帧前进 55.2 px（= stride 110 / 2）。
+换帧都是 接地 ↔ 腾空，没有"同一只脚跨帧着地"，walk 的鞋跟 ≤ 6 px 这一条不适用；两次接地之间留在原处的那只脚落点差 4~15 px（腾空后重新落地，不是滑）。
+
+## 4. G29 撑棒跃进（g29_enter_crop 格 4~6 swing）
+竹棒挂件跟着手一起走，下端离地板线 70~100 px（格 4 约 100、格 5 约 69），格 6 落地前才碰到地。读成"握着棍子跳"，不是"棒点地荡"。
+头带宽 idle 26 px / land 27 / swing 22（swing 侧转低头，只作参考）。
+
+## 5. G23 / G22 复查（a103781，桌面 md5 与本机一致：trio_bestie.js f8d6da76，G22_explorer.webp cbab05cd，G22_legs.webp 9ac3147a）
+G23 raise 蓄力球：审5_r7_g23 格 3 / 4 橙色质心 (106.3, 1147.4) / (107.3, 1147.4)；hold.raise [145,125] 推算 (106.9, 1149.6)。
+G23 光束：审5_r8_g23（ammoms 33）格 8 throw 起，格 9 光头出手、10 半路、11 到脸、12 才出光环。errors []。
+G22 小腿切口：审5_r6_g22i 格 1 / 4 / 7 放大 4 倍无暗线；美术量色差 ≤ 3.6（G22_小修_v4.txt）。
+G22 进场：crawl 同帧位移 0.00 px（格 6 0.85 是人在画外、残差 0.23 的格），每换一帧前进 124 px；最低点 1326.4 / 1327.4。
