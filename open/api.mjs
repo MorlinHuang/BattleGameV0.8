@@ -1,7 +1,8 @@
 // 抖音开放平台「直播小玩法」服务端接口（开发者服务端调用；appid / AppSecret 只能放服务端）。
 // 接口、参数、返回字段照 docs/抖音官方小玩法接入规范.md 第 3～5、9、10 节。
 // 本玩法用到的四类推送（11-01 加粉丝团：加团 / 升级出「点亮灯牌」，要后台开通「直播间粉丝团互动数据」能力；没开通这一类任务起不来，别的三类照常）
-export const MSG_TYPES = ['live_comment', 'live_gift', 'live_like', 'live_fansclub'];
+// 11-10 加 live_follow（关注主播 +500，提审驳回要求关注有激励）：要在推送配置里勾「直播间关注事件」
+export const MSG_TYPES = ['live_comment', 'live_gift', 'live_like', 'live_fansclub', 'live_follow'];
 
 const TOKEN_URL = 'https://developer.toutiao.com/api/apps/v2/token';
 const WEBCAST = 'https://webcast.bytedance.com';

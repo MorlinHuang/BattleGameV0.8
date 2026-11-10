@@ -19,7 +19,7 @@ import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from
 import { OpenApi, MSG_TYPES } from './api.mjs';
 import { pushSignature, verifyPush, selfTest } from './sign.mjs';
 
-// live_follow：服务端推送文档里没有这一类（只有客户端插件 API 有「关注状态」），先认上，平台以后推过来就能用
+// live_follow：服务端推送文档没写这一类，但开放平台推送配置里有「直播间关注事件」，开任务时一起开（开不起来不影响其他四类）
 const TYPE = { live_comment: 'chat', live_gift: 'gift', live_like: 'like', live_fansclub: 'fansclub', live_follow: 'follow' };
 const SEEN_MAX = 20000, BUF_MAX = 600;
 export const DEV_PUSH_SECRET = 'foodpk-dev-push-secret'; // 只在模拟模式用；正式推送秘钥在配置文件里
@@ -139,6 +139,7 @@ export class OpenHub extends EventEmitter {
         count: Math.max(1, Math.floor(+(msgType === 'live_like' ? it.like_num : it.gift_num) || 1)),
         value: +it.gift_value || 0, test: it.test === true || source === 'selftest',
         reason: +it.fansclub_reason_type || 0, level: +it.fansclub_level || 0,
+        action: msgType === 'live_follow' ? +(it.follow_type ?? it.use_follow_action ?? it.action_type ?? 1) || 1 : 0, // 关注 1 / 取关 2（字段名官方服务端文档没写，几个可能的都认）
       };
       r.buf.push(ev); if (r.buf.length > BUF_MAX) r.buf.shift();
       out.accepted++;
