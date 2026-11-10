@@ -118,7 +118,7 @@ export class OpenHub extends EventEmitter {
     let items;
     try { items = JSON.parse(raw); } catch { return { code: 400, ok: false, why: 'body 不是 JSON' }; }
     if (!Array.isArray(items)) return { code: 400, ok: false, why: 'body 应该是数组' };
-    return { code: 200, ok: true, ...this.accept(roomId, msgType, items, source) };
+    return { code: 200, ok: true, roomId, subs: this.rooms.get(roomId)?.subs.size || 0, ...this.accept(roomId, msgType, items, source) };
   }
   selftestTarget() { const r = this.rooms.get(this.lastLaunch); return r?.anchor && r.subs.size ? r.id : ''; }
 
@@ -206,7 +206,10 @@ export class OpenHub extends EventEmitter {
       if (p === '/api/open/cloudpush' && req.method === 'POST' && this.cloud) {
         if (!req.headers['x-tt-source']) { this.log(`[内网推送] 拒收：没有 x-tt-source（${req.headers['x-msg-type'] || '-'} roomid=${req.headers['x-roomid'] || '-'}）`); return json(403, { err_no: 403, err_msg: '不是抖音云内网推送' }), true; }
         const r = this.ingest(req.headers, await readRaw(), { viaCloud: true });
-        if (r.code !== 200) this.log(`[内网推送] 拒收：${r.why}（${req.headers['x-msg-type'] || '-'} roomid=${req.headers['x-roomid'] || '-'} anchor=${req.headers['x-anchor-openid'] || '-'}）`);
+        const tag = `${req.headers['x-msg-type'] || '-'} roomid=${req.headers['x-roomid'] || '-'} anchor=${req.headers['x-anchor-openid'] || '-'}`;
+        // 收下的也记一行：推送到没到、落到哪个直播间、当时有几个 exe 在收，排查「评论不生效」全靠这一行
+        if (r.code !== 200) this.log(`[内网推送] 拒收：${r.why}（${tag}）`);
+        else this.log(`[内网推送] ${tag} → 直播间 ${r.roomId} 收下 ${r.accepted} 条（重复 ${r.dup}）· 在收的 exe ${r.subs} 个`);
         return json(r.code, r.code === 200 ? { err_no: 0, accepted: r.accepted, dup: r.dup } : { err_no: r.code, err_msg: r.why }), true;
       }
       if (p === '/api/open/launch' && req.method === 'POST') {
@@ -221,6 +224,7 @@ export class OpenHub extends EventEmitter {
         return json(200, { ok: true }), true;
       }
       if (p === '/api/open/events' && req.method === 'GET') return this.stream(req, res, url), true;
+      this.log(`[接口] 没有这个接口：${req.method} ${p}`);
       return json(404, { error: '没有这个接口' }), true;
     } catch (e) { return json(400, { error: e.message }), true; }
   }
@@ -237,6 +241,8 @@ export class OpenHub extends EventEmitter {
     if (since >= 0) for (const ev of r.buf) if (ev.seq > since) send(ev);
     const off = this.subscribe(roomId, (ev) => { send(ev); return { ok: true, relayed: true }; });
     const ka = setInterval(() => res.write(': ping\n\n'), 15e3);
+    // 网关每 60 秒切一次长连接、exe 马上重连：只在新连上（不是续上）时记，免得每分钟一行
+    if (since < 0 || boot !== this.boot) this.log(`[事件流] 直播间 ${roomId} exe 连上（${r.anchor ? r.anchor.name : '没有启动记录'}）· 在收的 exe ${r.subs.size} 个`);
     req.on('close', () => { off(); clearInterval(ka); });
   }
 }
