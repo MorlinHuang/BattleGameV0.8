@@ -29,15 +29,19 @@ export function loadOpenConfig(file) {
   let c = {};
   if (file) try { c = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw new Error(`读不了 ${file}：${e.message}`); }
   const env = process.env;
-  return { appid: env.DOUYIN_APPID || c.appid || '', appSecret: env.DOUYIN_APP_SECRET || c.appSecret || '', pushSecret: env.DOUYIN_PUSH_SECRET || c.pushSecret || '', cloud: env.DOUYIN_CLOUD === '1' || c.cloud === true };
+  return { appid: env.DOUYIN_APPID || c.appid || '', appSecret: env.DOUYIN_APP_SECRET || c.appSecret || '', pushSecret: env.DOUYIN_PUSH_SECRET || c.pushSecret || '', cloud: env.DOUYIN_CLOUD === '1' || c.cloud === true, selftest: env.DOUYIN_SELFTEST === '1' || c.selftest === true };
 }
 
 export class OpenHub extends EventEmitter {
-  constructor({ appid = '', appSecret = '', pushSecret = '', cloud = false, log = console.log, api = null } = {}) {
+  constructor({ appid = '', appSecret = '', pushSecret = '', cloud = false, selftest = false, log = console.log, api = null } = {}) {
     super();
     if (!selfTest()) throw new Error('推送签名算法自检没过（官方测试向量不符）');
     this.real = !!(appid && appSecret);
     this.cloud = !!cloud;
+    // 自测转发（只在 dev 环境开）：后台「openAPI自测工具」推来的模拟数据带的是自己编的 roomID，没有哪个 exe 在听；
+    // 开了之后转给最近一次从直播伴侣启动、exe 正连着的直播间，事件标成 test（出效果、不进榜）
+    this.selftest = !!selftest;
+    this.lastLaunch = '';
     if (this.real && !this.cloud && !pushSecret) throw new Error('正式模式要配置推送秘钥 pushSecret（后台「直播间互动数据配置」里填的那个）');
     this.appid = appid;
     this.pushSecret = pushSecret || (this.real ? '' : DEV_PUSH_SECRET); // 正式模式没配推送秘钥（抖音云内网推送用不到）= 外网签名推送一律不收
@@ -76,6 +80,7 @@ export class OpenHub extends EventEmitter {
     const r = this.room(info.roomId);
     r.anchor = info.anchor; r.active = Date.now();
     if (r.anchor.openId) this.anchorRooms.set(r.anchor.openId, r.id);
+    this.lastLaunch = r.id;
     await this.startTasks(r);
     this.log(`[直播间] ${r.id} ${r.anchor.name} 已启动推送：${JSON.stringify(r.tasks)}`);
     return this.summary(r);
@@ -104,14 +109,18 @@ export class OpenHub extends EventEmitter {
   // viaCloud：抖音云内网专线推来的（不签名；直播间按 x-roomid，没有就按 x-anchor-openid 找 launch 时记下的直播间）
   ingest(headers, raw, { viaCloud = false } = {}) {
     const msgType = String(headers['x-msg-type'] || '');
-    const roomId = String(headers['x-roomid'] || (viaCloud && this.anchorRooms.get(String(headers['x-anchor-openid'] || ''))) || '');
+    let roomId = String(headers['x-roomid'] || (viaCloud && this.anchorRooms.get(String(headers['x-anchor-openid'] || ''))) || '');
     if (!viaCloud && !verifyPush(headers, raw, this.pushSecret)) return { code: 401, ok: false, why: '签名不对' };
+    let source = 'push';
+    const target = viaCloud && this.selftest && !this.rooms.get(roomId)?.anchor ? this.selftestTarget() : '';
+    if (target) { this.log(`[自测转发] ${msgType} ${roomId || '-'} → 直播间 ${target}`); roomId = target; source = 'selftest'; }
     if (!TYPE[msgType] || !roomId) return { code: 400, ok: false, why: viaCloud ? '不认识的推送类型或找不到主播对应的直播间' : '不认识的推送类型或缺 x-roomid' };
     let items;
     try { items = JSON.parse(raw); } catch { return { code: 400, ok: false, why: 'body 不是 JSON' }; }
     if (!Array.isArray(items)) return { code: 400, ok: false, why: 'body 应该是数组' };
-    return { code: 200, ok: true, ...this.accept(roomId, msgType, items, 'push') };
+    return { code: 200, ok: true, ...this.accept(roomId, msgType, items, source) };
   }
+  selftestTarget() { const r = this.rooms.get(this.lastLaunch); return r?.anchor && r.subs.size ? r.id : ''; }
 
   accept(roomId, msgType, items, source) {
     const r = this.room(roomId), out = { accepted: 0, dup: 0, results: [] };
@@ -128,14 +137,15 @@ export class OpenHub extends EventEmitter {
         content: msgType === 'live_comment' ? String(it.content || '') : '',
         giftId: it.sec_gift_id || '', magicGiftId: it.sec_magic_gift_id || '',
         count: Math.max(1, Math.floor(+(msgType === 'live_like' ? it.like_num : it.gift_num) || 1)),
-        value: +it.gift_value || 0, test: it.test === true,
+        value: +it.gift_value || 0, test: it.test === true || source === 'selftest',
         reason: +it.fansclub_reason_type || 0, level: +it.fansclub_level || 0,
       };
       r.buf.push(ev); if (r.buf.length > BUF_MAX) r.buf.shift();
       out.accepted++;
-      if (msgType === 'live_gift' && r.real) this.queueAck(r.id, 1, { msgId, msgType, at: now });
+      const ack = msgType === 'live_gift' && r.real && source !== 'selftest'; // 模拟数据不是平台真实订单，不做履约上报
+      if (ack) this.queueAck(r.id, 1, { msgId, msgType, at: now });
       for (const fn of r.subs) { try { out.results.push(fn(ev)); } catch (e) { this.log('处理推送出错：' + e.message); } }
-      if (msgType === 'live_gift' && r.real && r.subs.size) this.queueAck(r.id, 2, { msgId, msgType, at: Date.now() });
+      if (ack && r.subs.size) this.queueAck(r.id, 2, { msgId, msgType, at: Date.now() });
     }
     if (out.accepted) r.active = now;
     return out;
@@ -194,9 +204,9 @@ export class OpenHub extends EventEmitter {
         return json(r.code, r.code === 200 ? { err_no: 0, accepted: r.accepted, dup: r.dup } : { err_no: r.code, err_msg: r.why }), true;
       }
       if (p === '/api/open/cloudpush' && req.method === 'POST' && this.cloud) {
-        if (!req.headers['x-tt-source']) return json(403, { err_no: 403, err_msg: '不是抖音云内网推送' }), true;
+        if (!req.headers['x-tt-source']) { this.log(`[内网推送] 拒收：没有 x-tt-source（${req.headers['x-msg-type'] || '-'} roomid=${req.headers['x-roomid'] || '-'}）`); return json(403, { err_no: 403, err_msg: '不是抖音云内网推送' }), true; }
         const r = this.ingest(req.headers, await readRaw(), { viaCloud: true });
-        if (r.code !== 200) this.log(`[内网推送] 拒收：${r.why}（${req.headers['x-msg-type'] || '-'} ${req.headers['x-roomid'] || req.headers['x-anchor-openid'] || '-'}）`);
+        if (r.code !== 200) this.log(`[内网推送] 拒收：${r.why}（${req.headers['x-msg-type'] || '-'} roomid=${req.headers['x-roomid'] || '-'} anchor=${req.headers['x-anchor-openid'] || '-'}）`);
         return json(r.code, r.code === 200 ? { err_no: 0, accepted: r.accepted, dup: r.dup } : { err_no: r.code, err_msg: r.why }), true;
       }
       if (p === '/api/open/launch' && req.method === 'POST') {

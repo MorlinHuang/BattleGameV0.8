@@ -4,6 +4,7 @@
 //     DOUYIN_APPID、DOUYIN_APP_SECRET：小玩法 appid / AppSecret
 //     DOUYIN_CLOUD=1：官方推送走内网专线到 /api/open/cloudpush（不签名）
 //     DOUYIN_PUSH_SECRET：可不填；填了 /api/open/push 也收外网签名推送
+//     DOUYIN_SELFTEST=1：只在 dev 环境填。后台「openAPI自测工具」的模拟数据转给正在调试的直播间（标 test：出效果、不进榜）；prod 环境不要填
 //   直播间状态在内存里：实例数必须固定 1 个（最小=最大=1），否则推送和 exe 的长连接会落到不同实例。
 //   排行榜、存档都在主播电脑上的 exe 里，这里不落盘，重启只会让 exe 自动重连。
 import http from 'node:http';
@@ -12,6 +13,7 @@ import { OpenHub, loadOpenConfig } from './open/hub.mjs';
 const port = +(process.env.PORT || 8000);
 const hub = new OpenHub({ ...loadOpenConfig(''), log: (s) => console.log(new Date().toISOString(), s) });
 if (!hub.real) console.log('警告：没配置 DOUYIN_APPID / DOUYIN_APP_SECRET，当前是模拟模式');
+if (hub.selftest) console.log('自测转发已开（DOUYIN_SELFTEST=1）：自测工具的模拟数据会转给最近启动的直播间；上线环境不要开');
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
