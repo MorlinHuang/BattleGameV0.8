@@ -5,13 +5,16 @@ export const MSG_TYPES = ['live_comment', 'live_gift', 'live_like', 'live_fanscl
 
 const TOKEN_URL = 'https://developer.toutiao.com/api/apps/v2/token';
 const WEBCAST = 'https://webcast.bytedance.com';
+// 部署在抖音云时，推送任务必须走抖音云内网专线开（官方抖音云示例的地址，http、不带 access_token）。
+// 走外网开的任务，平台把数据推到「开发者服务器」回调，不会推到抖音云内网回调——11-10 审核员评论全没生效就是这个
+export const WEBCAST_CLOUD = 'http://webcast-bytedance-com.openapi.dyc.ivolces.com';
 
 // room_id 是超过 2^53 的整数：解析前先改成字符串，不然丢精度
 const parse = (text) => JSON.parse(text.replace(/"(room_id|roomid)"\s*:\s*(\d+)/g, '"$1":"$2"'));
 
 export class OpenApi {
-  constructor({ appid, appSecret, fetchImpl = fetch, log = () => {} }) {
-    this.appid = appid; this.appSecret = appSecret; this.fetch = fetchImpl; this.log = log;
+  constructor({ appid, appSecret, cloud = false, fetchImpl = fetch, log = () => {} }) {
+    this.appid = appid; this.appSecret = appSecret; this.cloud = !!cloud; this.fetch = fetchImpl; this.log = log;
     this.token = ''; this.tokenAt = 0; this.tokenTask = null;
   }
 
@@ -48,11 +51,12 @@ export class OpenApi {
   }
 
   async task(action, roomId, msgType) {
-    const headers = { 'access-token': await this.accessToken() };
+    const base = this.cloud ? WEBCAST_CLOUD : WEBCAST;
+    const headers = this.cloud ? {} : { 'access-token': await this.accessToken() };
     const params = { roomid: roomId, appid: this.appid, msg_type: msgType };
     const j = action === 'get'
-      ? await this.req('GET', WEBCAST + '/api/live_data/task/get', { headers, query: params })
-      : await this.req('POST', WEBCAST + `/api/live_data/task/${action}`, { headers, body: params });
+      ? await this.req('GET', base + '/api/live_data/task/get', { headers, query: params })
+      : await this.req('POST', base + `/api/live_data/task/${action}`, { headers, body: params });
     if (j.err_no !== 0) throw new Error(`${msgType} 推送任务 ${action} 失败：${j.err_no} ${j.err_msg || ''}`);
     return j.data || {};
   }

@@ -47,7 +47,7 @@ export class OpenHub extends EventEmitter {
     this.pushSecret = pushSecret || (this.real ? '' : DEV_PUSH_SECRET); // 正式模式没配推送秘钥（抖音云内网推送用不到）= 外网签名推送一律不收
     this.ticketKey = createHash('sha256').update('foodpk-ticket\0' + (appSecret || this.pushSecret)).digest();
     this.log = log;
-    this.api = this.real ? api || new OpenApi({ appid, appSecret, log }) : null;
+    this.api = this.real ? api || new OpenApi({ appid, appSecret, cloud: this.cloud, log }) : null;
     this.rooms = new Map();
     this.anchorRooms = new Map(); // 主播 openId → 直播间号（内网推送只带主播 openId）
     this.boot = randomUUID().slice(0, 8); // 本进程的序号纪元
@@ -82,7 +82,7 @@ export class OpenHub extends EventEmitter {
     if (r.anchor.openId) this.anchorRooms.set(r.anchor.openId, r.id);
     this.lastLaunch = r.id;
     await this.startTasks(r);
-    this.log(`[直播间] ${r.id} ${r.anchor.name} 已启动推送：${JSON.stringify(r.tasks)}`);
+    this.log(`[直播间] ${r.id} ${r.anchor.name} 已启动推送（${this.cloud ? '抖音云内网' : '外网'}开任务）：${JSON.stringify(r.tasks)}`);
     return this.summary(r);
   }
   async startTasks(r) {
