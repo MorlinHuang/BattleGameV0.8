@@ -22,3 +22,12 @@ http.createServer(async (req, res) => {
   res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' }); res.end('{"error":"没有这个接口"}');
 }).listen(port, '0.0.0.0', () => console.log(`全国美食大赛 开发者服务端 :${port}  ${hub.real ? '正式（appid ' + hub.appid + '）' : '模拟模式'}  ${hub.cloud ? '抖音云内网推送' : '外网签名推送'}`));
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
+
+// 诊断（11-10 评论不生效）：官方抖音云示例开推送任务走内网专线 OpenAPI（http、不带 access_token），我们走的是公网 webcast.bytedance.com。
+// 启动时探一下内网专线通不通、回什么，结果进日志，决定要不要换
+if (hub.real && hub.cloud) {
+  const u = `http://webcast-bytedance-com.openapi.dyc.ivolces.com/api/live_data/task/get?roomid=1&appid=${hub.appid}&msg_type=live_comment`;
+  fetch(u, { signal: AbortSignal.timeout(8000) })
+    .then(async (r) => console.log(new Date().toISOString(), `[内网OpenAPI探测] HTTP ${r.status}：${(await r.text()).slice(0, 300)}`))
+    .catch((e) => console.log(new Date().toISOString(), `[内网OpenAPI探测] 不通：${e.cause?.code || e.message}`));
+}
