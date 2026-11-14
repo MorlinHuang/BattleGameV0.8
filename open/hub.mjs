@@ -5,11 +5,11 @@
 //     → 对评论 / 礼物 / 点赞各启动一个推送任务 → 回 {roomId, anchor, ticket}
 //   官方推送 → POST /api/open/push（校验签名 → 按 msg_id 去重 → 转成统一事件）
 //   部署在抖音云（cloud 模式）时，官方推送走内网专线 → POST /api/open/cloudpush：不带签名，带 x-anchor-openid / x-tt-source；
-//     这个路径不在抖音云「外网入流量」的授权路径里，外网打不进来（授权只给 launch / stop / events）
+//     这个路径不在抖音云「外网入流量」的授权路径里，外网打不进来（授权只给 launch / stop / events / ack / gifts / rank/board / rank/report）
 //     → 本进程里订阅了这个直播间的游戏（网页版/本地开发）直接收到；
 //     → exe 用 GET /api/open/events?room=&ticket=&since=&boot= 长连接收（Server-Sent Events，断线带 since 续上，不丢不重）
 //       seq 只在本进程内有效：服务端重启后从 1 重数，exe 带的 boot 和本进程不同就从头补发缓存（否则旧 since 会把新消息全挡掉）
-//   礼物另外每分钟查一次「推送失败数据」补回来；收到 / 处理完的礼物按官方建议做履约上报。
+//   礼物另外每分钟查一次「推送失败数据」补回来；礼物 / 评论 / 点赞按官方建议做履约上报：exe 收到、处理完各报一次（POST /api/open/ack），本服务批量转报平台。
 //
 // 没配置 appid/AppSecret = 模拟模式：只有本地「演练」和测试脚本发来的模拟推送（格式、签名和官方一模一样，走同一条校验路径）。
 // 统一事件：{ seq, roomId, msgType, msgId, type:'chat'|'gift'|'like', user:{id,name,avatar}, content, giftId, magicGiftId, count, value, test, at, source }
@@ -22,6 +22,9 @@ import { pushSignature, verifyPush, selfTest } from './sign.mjs';
 // live_follow：服务端推送文档没写这一类，但开放平台推送配置里有「直播间关注事件」，开任务时一起开（开不起来不影响其他四类）
 const TYPE = { live_comment: 'chat', live_gift: 'gift', live_like: 'like', live_fansclub: 'fansclub', live_follow: 'follow' };
 const SEEN_MAX = 20000, BUF_MAX = 600;
+/* 履约上报（官方「开发者数据履约情况上报」）：只收礼物 / 评论 / 点赞三类；两次都以客户端为准——
+   ack_type 1 = exe 收到这条推送、2 = exe 处理完并画出来（client_time 用 exe 报上来的毫秒时间）。exe 经 POST /api/open/ack 报给本服务，本服务每秒批量转报平台 */
+const ACK_TYPES = new Set(['live_gift', 'live_comment', 'live_like']), ACK_MAX = 5000;
 export const DEV_PUSH_SECRET = 'chashouji-dev-push-secret'; // 只在模拟模式用；正式推送秘钥在配置文件里
 
 // 配置：文件（JSON：{appid, appSecret, pushSecret}）+ 环境变量 DOUYIN_APPID / DOUYIN_APP_SECRET / DOUYIN_PUSH_SECRET 覆盖。仓库里不放真值
@@ -60,7 +63,7 @@ export class OpenHub extends EventEmitter {
   room(id) {
     id = String(id);
     let r = this.rooms.get(id);
-    if (!r) this.rooms.set(id, (r = { id, anchor: null, tasks: {}, seen: new Set(), seenQ: [], buf: [], seq: 0, subs: new Set(), real: this.real && !id.startsWith('mock-'), active: Date.now(), failChecked: 0 }));
+    if (!r) this.rooms.set(id, (r = { id, anchor: null, tasks: {}, seen: new Set(), seenQ: [], buf: [], seq: 0, subs: new Set(), real: this.real && !id.startsWith('mock-'), active: Date.now(), failChecked: 0, ackable: new Map() }));
     return r;
   }
   ticket(roomId) { return createHmac('sha256', this.ticketKey).update(String(roomId)).digest('base64url').slice(0, 32); }
@@ -143,10 +146,12 @@ export class OpenHub extends EventEmitter {
       };
       r.buf.push(ev); if (r.buf.length > BUF_MAX) r.buf.shift();
       out.accepted++;
-      const ack = msgType === 'live_gift' && r.real && source !== 'selftest'; // 模拟数据不是平台真实订单，不做履约上报
-      if (ack) this.queueAck(r.id, 1, { msgId, msgType, at: now });
+      // 能做履约上报的：正式直播间里平台真推来的（含补回的失败数据）礼物 / 评论 / 点赞；自测转发的模拟数据不是平台订单，不报。记下来等 exe 报收到 / 处理完
+      if (r.real && source !== 'selftest' && ACK_TYPES.has(msgType)) {
+        r.ackable.set(msgId, { msgType, sent: 0 });
+        if (r.ackable.size > ACK_MAX) r.ackable.delete(r.ackable.keys().next().value);
+      }
       for (const fn of r.subs) { try { out.results.push(fn(ev)); } catch (e) { this.log('处理推送出错：' + e.message); } }
-      if (ack && r.subs.size) this.queueAck(r.id, 2, { msgId, msgType, at: Date.now() });
     }
     if (out.accepted) r.active = now;
     return out;
@@ -160,6 +165,20 @@ export class OpenHub extends EventEmitter {
     return { headers, raw };
   }
 
+  /* exe 报上来的履约：items = [{msgId, at}]。只认本直播间收过、可上报的推送；同一条每种只报一次（多个 exe、断线续传都可能重复报），2 必须在 1 之后 */
+  clientAck(roomId, type, items) {
+    const r = this.rooms.get(String(roomId));
+    if (!r || !r.real || (type !== 1 && type !== 2) || !Array.isArray(items)) return 0;
+    let n = 0;
+    for (const it of items.slice(0, 500)) {
+      const a = r.ackable.get(String(it?.msgId || ''));
+      if (!a || a.sent >= type || (type === 2 && a.sent < 1)) continue;
+      a.sent = type; n++;
+      this.queueAck(r.id, type, { msgId: String(it.msgId), msgType: a.msgType, at: Math.floor(+it.at) || Date.now() });
+      if (type === 2) r.ackable.delete(String(it.msgId));
+    }
+    return n;
+  }
   queueAck(roomId, type, item) {
     const q = this.acks.get(roomId) || this.acks.set(roomId, { 1: [], 2: [] }).get(roomId);
     q[type].push(item);
@@ -225,6 +244,11 @@ export class OpenHub extends EventEmitter {
         return json(200, { ok: true }), true;
       }
       if (p === '/api/open/events' && req.method === 'GET') return this.stream(req, res, url), true;
+      if (p === '/api/open/ack' && req.method === 'POST') {   // exe 报履约：{room, ticket, type 1|2, items [{msgId, at}]}
+        const b = JSON.parse(await readRaw() || '{}');
+        if (!this.checkTicket(b.room, b.ticket)) return json(403, { error: '凭证不对' }), true;
+        return json(200, { ok: true, queued: this.clientAck(b.room, +b.type, b.items) }), true;
+      }
       this.log(`[接口] 没有这个接口：${req.method} ${p}`);
       return json(404, { error: '没有这个接口' }), true;
     } catch (e) { return json(400, { error: e.message }), true; }
