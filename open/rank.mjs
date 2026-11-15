@@ -4,8 +4,8 @@
 //   GET /api/open/rank/board 给直播画面：周榜 / 月榜 / 连胜榜前 100 名 + 大哥名单 vip（openId → [名次, 哪张榜]）。
 //   大哥名次（熊猫 BigBrotherEnterManager.GetMiniRank）：本月榜、本周榜、上月榜三个名次里最好的那个，前 100 名才算；
 //     另加一条：那张榜上的积分要满 VIP_MIN（积分约等于 1400 钻的礼物；开服头几周榜上不满 100 人，不加这条就是谁上过榜谁是大哥）。
-// 存一个 JSON 文件（改动后几秒落盘、先写临时文件再改名）。上抖音云多实例时把 load / flush 换成云数据库，别的不动。
-import fs from 'node:fs';
+// 存储（open/rankstore.mjs）：本地开发存一个 JSON 文件；部署在抖音云时存云数据库（容器重新部署 / 重启后榜还在）。
+//   内存里是整张榜（读榜不碰库），改动几秒后只把变了的那几个人写回去；同一局重发不重记（局号也记在库里）。
 
 const TOP = 100, KEEP = 20000, VIP_MIN = 100000, ROUND_MAX = 5000, V_MAX = 1e9;
 const pad = (n) => String(n).padStart(2, '0');
@@ -17,16 +17,17 @@ const bare = (o) => Object.assign(Object.create(null), o);
 const str = (s, n) => String(s ?? '').slice(0, n);
 
 export class GlobalRank {
-  constructor({ file = '', log = () => {}, now = () => Date.now() } = {}) {
-    this.file = file; this.log = log; this.now = now;
+  constructor({ store, log = () => {}, now = () => Date.now() }) {
+    this.store = store; this.log = log; this.now = now;
     this.db = { v: 1, week: { key: '', m: bare() }, month: { key: '', m: bare() }, last: { key: '', top: [] }, streak: { m: bare() } };
-    this.rounds = new Set(); this.roundQ = [];
-    this.cache = null; this.dirty = false; this.timer = null;
-    if (file) try {
-      const d = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (d.v === 1) { this.db = d; for (const b of [d.week, d.month, d.streak]) b.m = bare(b.m); }
-    } catch (e) { if (e.code !== 'ENOENT') log('[全服榜] 存档读不出，从空榜开始：' + e.message); }
+    this.cache = null; this.dirty = new Map(); this.timer = null; this.saving = null;
+  }
+  // 开服先读库（读完才开始收请求）
+  async init() {
+    const t = this.now(), d = await this.store.load({ week: weekKey(t), month: monthKey(t), lastMonth: monthKey(Date.UTC(bj(t).getUTCFullYear(), bj(t).getUTCMonth(), 1) - 8 * 3600e3 - 1), top: TOP, keep: KEEP });
+    if (d) { this.db = d; for (const b of [d.week, d.month, d.streak]) b.m = bare(b.m); }
     this.roll();
+    this.log(`[全服榜] 读入：本周 ${Object.keys(this.db.week.m).length} 人、本月 ${Object.keys(this.db.month.m).length} 人、连胜 ${Object.keys(this.db.streak.m).length} 人（${this.store.name}）`);
   }
   sorted(m, val) { return Object.entries(m).filter(([, o]) => val(o) > 0).sort((a, b) => val(b[1]) - val(a[1])); }
   roll() {
@@ -37,24 +38,28 @@ export class GlobalRank {
       d.month = { key: mk, m: bare() }; this.touch();
     }
   }
+  // 记下哪一条变了：键 = 库里的文档号（w|周|人、m|月|人、s|人），值 = 内存里那条（null = 删掉）
+  mark(b, k, id, o) { this.dirty.set(b === 's' ? `s|${id}` : `${b}|${k}|${id}`, { b, k, id, o }); }
   touch() {
-    this.cache = null; this.dirty = true;
-    if (this.file && !this.timer) { this.timer = setTimeout(() => { this.timer = null; this.flush(); }, 3000); this.timer.unref?.(); }
+    this.cache = null;
+    if (!this.timer) { this.timer = setTimeout(() => { this.timer = null; this.flush(); }, 3000); this.timer.unref?.(); }
   }
-  flush() {
-    if (!this.file || !this.dirty) return;
-    this.dirty = false;
-    try { fs.writeFileSync(this.file + '.tmp', JSON.stringify(this.db)); fs.renameSync(this.file + '.tmp', this.file); }
-    catch (e) { this.dirty = true; this.log('[全服榜] 存档写不进：' + e.message); }
+  // 写回改动；写失败的留着下次再写。上一次还没写完就等它（同一条不会并发写两次）
+  async flush() {
+    if (this.saving) await this.saving;
+    if (!this.dirty.size) return;
+    const batch = this.dirty; this.dirty = new Map();
+    this.saving = this.store.save(this.db, batch).then((failed) => {
+      for (const [key, v] of failed) if (!this.dirty.has(key)) this.dirty.set(key, v);
+      if (failed.size) { this.log(`[全服榜] ${failed.size} 条没写进去，稍后重写`); this.touch(); }
+    }).finally(() => { this.saving = null; });
+    await this.saving;
   }
   // 一局的结果：{ round 这一局的编号（重发不重记）, winner 1 / -1, list: [{ id, name, av, side, v }] }
-  report(roomId, b) {
+  async report(roomId, b) {
     const round = str(b?.round, 64), winner = +b?.winner > 0 ? 1 : -1, list = Array.isArray(b?.list) ? b.list.slice(0, ROUND_MAX) : null;
     if (!round || !list) return { ok: false, why: '缺 round 或 list' };
-    const rk = roomId + ':' + round;
-    if (this.rounds.has(rk)) return { ok: true, dup: true };
-    this.rounds.add(rk); this.roundQ.push(rk);
-    if (this.roundQ.length > 5000) this.rounds.delete(this.roundQ.shift());
+    if (await this.store.seen(roomId + ':' + round)) return { ok: true, dup: true };
     this.roll();
     const d = this.db;
     let n = 0, sum = 0;
@@ -62,12 +67,13 @@ export class GlobalRank {
       const id = str(e?.id, 128), v = Math.floor(+e?.v);
       if (!id || !(v > 0) || v > V_MAX) continue;
       const side = +e.side > 0 ? 1 : -1, name = str(e.name, 64) || '观众', av = str(e.av, 512);
-      for (const m of [d.week.m, d.month.m]) {
-        const o = m[id] || (m[id] = { v: 0, name, av, side });
+      for (const [b, B] of [['w', d.week], ['m', d.month]]) {
+        const o = B.m[id] || (B.m[id] = { v: 0, name, av, side });
         o.v += v; o.name = name; o.side = side; if (av) o.av = av;
+        this.mark(b, B.key, id, o);
       }
-      if (side !== winner) delete d.streak.m[id];
-      else { const o = d.streak.m[id] || (d.streak.m[id] = { n: 0, name, av, side }); o.n++; o.name = name; o.side = side; if (av) o.av = av; }
+      if (side !== winner) { if (d.streak.m[id]) { delete d.streak.m[id]; this.mark('s', '', id, null); } }
+      else { const o = d.streak.m[id] || (d.streak.m[id] = { n: 0, name, av, side }); o.n++; o.name = name; o.side = side; if (av) o.av = av; this.mark('s', '', id, o); }
       n++; sum += v;
     }
     for (const m of [d.week.m, d.month.m]) {

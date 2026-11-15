@@ -1,6 +1,6 @@
 // 查手机 · 直播小玩法开发者服务端（照美食大赛 / 墨娃快跑）：收官方推送（评论 / 礼物 / 点赞 / 粉丝团）、管直播间推送任务、把事件转给直播画面。
 // 接口在 open/hub.mjs：POST /api/open/launch {token} · POST /api/open/push（官方推送）· GET /api/open/events（SSE）· POST /api/open/stop
-// 全服榜：GET /api/open/rank/board?room=&ticket= · POST /api/open/rank/report {room, ticket, round, winner, list}（open/rank.mjs，存 data/rank-global.json）
+// 全服榜：GET /api/open/rank/board?room=&ticket= · POST /api/open/rank/report {room, ticket, round, winner, list}（open/rank.mjs；本地存 data/rank-global.json，抖音云上存云数据库 csj_rank / csj_round，见 open/rankstore.mjs）
 // 本文件另加：GET /api/open/gifts（礼物映射表，open/gifts.mjs）· POST /api/open/mock（只在模拟模式：演练一条推送，走和官方一样的验签路径）· GET /api/health
 //
 // 用法：node server/open-server.mjs [端口=41004] [--host=127.0.0.1] [--open-config=配置文件]
@@ -13,6 +13,7 @@ import path from 'node:path';
 import { OpenHub, loadOpenConfig } from './open/hub.mjs';
 import { table, findGift, FEN_PER_DIAMOND } from './open/gifts.mjs';
 import { GlobalRank } from './open/rank.mjs';
+import { FileStore, CloudStore } from './open/rankstore.mjs';
 
 const args = process.argv.slice(2);
 const flag = (k) => args.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
@@ -22,8 +23,11 @@ const here = path.dirname(new URL(import.meta.url).pathname);
 const hub = new OpenHub({ ...loadOpenConfig(flag('open-config') || path.join(here, 'data', 'open.json')), log: (s) => console.log(new Date().toISOString().slice(11, 19), s) });
 
 const log = (s) => console.log(new Date().toISOString().slice(11, 19), s);
-const rank = new GlobalRank({ file: flag('rank-file') || path.join(here, 'data', 'rank-global.json'), log });
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { rank.flush(); process.exit(0); });
+/* 部署在抖音云：榜存云数据库（容器重新部署 / 重启不丢）；本地开发：存文件。SDK 只在云上要，本地不装依赖也能跑 */
+const store = hub.cloud ? new CloudStore((await import('@open-dy/node-server-sdk')).dySDK.database()) : new FileStore(flag('rank-file') || path.join(here, 'data', 'rank-global.json'));
+const rank = new GlobalRank({ store, log });
+await rank.init();
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => rank.flush().finally(() => process.exit(0)));
 const json = (res, code, o) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
 const body = (req) => new Promise((ok) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString() || '{}')); } catch { ok({}); } }); });
 const viewer = (name) => ({ sec_openid: 'mock_' + Buffer.from(name).toString('hex').slice(0, 16), nickname: name, avatar_url: '' });
@@ -62,7 +66,7 @@ http.createServer(async (req, res) => {
     if (url.pathname === '/api/open/rank/report' && req.method === 'POST') {
       const b = await body(req);
       if (!hub.checkTicket(b.room, b.ticket)) return json(res, 403, { error: '凭证不对' });
-      const r = rank.report(String(b.room), b);
+      const r = await rank.report(String(b.room), b);
       return json(res, r.ok ? 200 : 400, r.ok ? { ...r, board: rank.board() } : { error: r.why });
     }
     if (await hub.handle(req, res, url)) return;
