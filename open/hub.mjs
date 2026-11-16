@@ -33,8 +33,9 @@ export function loadOpenConfig(file) {
 }
 
 export class OpenHub extends EventEmitter {
-  constructor({ appid = '', appSecret = '', pushSecret = '', cloud = false, selftest = false, log = console.log, api = null } = {}) {
+  constructor({ appid = '', appSecret = '', pushSecret = '', cloud = false, selftest = false, log = console.log, api = null, rank = null } = {}) {
     super();
+    this.rank = rank; // 全网总榜（rankstore.mjs）：只有抖音云上的服务端带，/api/open/score、/api/open/rank
     if (!selfTest()) throw new Error('推送签名算法自检没过（官方测试向量不符）');
     this.real = !!(appid && appSecret);
     this.cloud = !!cloud;
@@ -225,6 +226,23 @@ export class OpenHub extends EventEmitter {
         return json(200, { ok: true }), true;
       }
       if (p === '/api/open/events' && req.method === 'GET') return this.stream(req, res, url), true;
+      // 全网总榜：exe 报记账条目 / 取整份榜。凭证和事件流同一个（启动过的直播间才收）
+      if (p === '/api/open/score' && req.method === 'POST' && this.rank) {
+        let b = {};
+        try { b = JSON.parse(await readRaw() || '{}'); } catch { return json(400, { error: '不是合法 JSON' }), true; }
+        if (!this.checkTicket(b.room, b.ticket)) return json(403, { error: '凭证不对' }), true;
+        return json(200, await this.rank.report(String(b.room), b.batch)), true;
+      }
+      if (p === '/api/open/rank' && req.method === 'GET' && this.rank) {
+        const room = url.searchParams.get('room') || '';
+        if (!this.checkTicket(room, url.searchParams.get('ticket'))) return json(403, { error: '凭证不对' }), true;
+        if (!this.rank.ready) return json(503, { error: '总榜还没准备好' }), true;
+        const m = this.rank.snapshot();
+        if (url.searchParams.get('ver') === m.ver) { res.writeHead(304, { 'Cache-Control': 'no-store' }); res.end(); return true; }
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Encoding': 'gzip', 'Cache-Control': 'no-store', 'X-Rank-Ver': m.ver });
+        res.end(m.gz);
+        return true;
+      }
       this.log(`[接口] 没有这个接口：${req.method} ${p}`);
       return json(404, { error: '没有这个接口' }), true;
     } catch (e) { return json(400, { error: e.message }), true; }

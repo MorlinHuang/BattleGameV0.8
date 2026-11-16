@@ -1,0 +1,1 @@
+{ "name": "foodpk-cloud", "private": true, "type": "module", "dependencies": { "mongodb": "6.9.0" } }
