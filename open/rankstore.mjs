@@ -77,8 +77,10 @@ export function mongoUrlFromEnv(env = process.env) {
   if (env.MONGO_URL) return env.MONGO_URL;
   const { MONGO_ADDRESS: addr, MONGO_USERNAME: user, MONGO_PASSWORD: pass } = env;
   if (!addr) return '';
+  const raw = addr.trim();
+  if (!user && /^mongodb:\/\/[^/]*@/.test(raw)) return raw; // 整条连接串（自带账号密码）
   const auth = user ? `${encodeURIComponent(user)}:${encodeURIComponent(pass || '')}@` : '';
-  const host = addr.replace(/^mongodb:\/\//, '');
+  const host = raw.replace(/^mongodb:\/\//, '').replace(/^[^/]*@/, ''); // 控制台「私网地址」整段照抄过来的，去掉里面的 <user>:<password>@
   return `mongodb://${auth}${host}${host.includes('/') ? '' : '/?authSource=admin'}`;
 }
 
