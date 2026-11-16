@@ -23,6 +23,7 @@ const hub = new OpenHub({ ...loadOpenConfig(''), log, rank });
     if (mongoUrl) { log('[总榜] 连 MongoDB：' + mongoUrl.replace(/\/\/[^@/]*@/, '//***@')); await rank.db.connect(); }
     else log('警告：没配置 MongoDB（MONGO_ADDRESS），全网总榜只记在内存里，重启就没了');
     await rank.init();
+    hub.restore(rank.launches);
   } catch (e) { log('[总榜] 读入失败，10 秒后重试：' + e.message); setTimeout(initRank, 10e3); }
 })();
 if (!hub.real) console.log('警告：没配置 DOUYIN_APPID / DOUYIN_APP_SECRET，当前是模拟模式');

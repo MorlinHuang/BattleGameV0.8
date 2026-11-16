@@ -81,10 +81,22 @@ export class OpenHub extends EventEmitter {
     const r = this.room(info.roomId);
     r.anchor = info.anchor; r.active = Date.now();
     if (r.anchor.openId) this.anchorRooms.set(r.anchor.openId, r.id);
+    // 记进数据库：服务重新部署 / 重启后内存清空，内网推送只带主播 openId，不读回来就认不出是哪个直播间、正在播的主播要重开玩法才恢复
+    if (r.anchor.openId) this.rank?.saveLaunch({ roomId: r.id, anchor: r.anchor }).catch((e) => this.log('[直播间] 启动信息没存上：' + e.message));
     this.lastLaunch = r.id;
     await this.startTasks(r);
     this.log(`[直播间] ${r.id} ${r.anchor.name} 已启动推送（${this.cloud ? '抖音云内网' : '外网'}开任务）：${JSON.stringify(r.tasks)}`);
     return this.summary(r);
+  }
+  // 服务重启后读回最近启动过的直播间（rankstore 存的）：主播 openId → 直播间，exe 重连上来就接着收推送
+  restore(list = []) {
+    for (const { roomId, anchor } of list) {
+      if (!roomId || !anchor?.openId) continue;
+      const r = this.room(roomId);
+      r.anchor ||= anchor; r.active = Date.now();
+      this.anchorRooms.set(anchor.openId, r.id);
+    }
+    if (list.length) this.log(`[直播间] 读回 ${list.length} 个最近启动的直播间（主播 → 直播间对应），重启前在播的不用重开玩法`);
   }
   async startTasks(r) {
     await Promise.all(MSG_TYPES.map(async (t) => {
@@ -237,7 +249,7 @@ export class OpenHub extends EventEmitter {
         const room = url.searchParams.get('room') || '';
         if (!this.checkTicket(room, url.searchParams.get('ticket'))) return json(403, { error: '凭证不对' }), true;
         if (!this.rank.ready) return json(503, { error: '总榜还没准备好' }), true;
-        const m = this.rank.snapshot();
+        const m = this.rank.snapshot(room);
         if (url.searchParams.get('ver') === m.ver) { res.writeHead(304, { 'Cache-Control': 'no-store' }); res.end(); return true; }
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Encoding': 'gzip', 'Cache-Control': 'no-store', 'X-Rank-Ver': m.ver });
         res.end(m.gz);
