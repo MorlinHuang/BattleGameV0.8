@@ -45,6 +45,7 @@ export class OpenHub extends EventEmitter {
     // 开了之后转给最近一次从直播伴侣启动、exe 正连着的直播间，事件标成 test（出效果、不进榜）
     this.selftest = !!selftest;
     this.lastLaunch = '';
+    this.first = null;   // 「历史第一次」台账（open/first.mjs），open-server 装上；没装 = 关注 / 加团都按第一次
     if (this.real && !this.cloud && !pushSecret) throw new Error('正式模式要配置推送秘钥 pushSecret（后台「直播间互动数据配置」里填的那个）');
     this.appid = appid;
     this.pushSecret = pushSecret || (this.real ? '' : DEV_PUSH_SECRET); // 正式模式没配推送秘钥（抖音云内网推送用不到）= 外网签名推送一律不收
@@ -59,6 +60,7 @@ export class OpenHub extends EventEmitter {
     this.ackTimer = setInterval(() => this.flushAcks(), 1000).unref();
   }
 
+  anchorKey(r) { return r.anchor?.openId || r.id; }   // 历史首次按主播记：模拟模式没有 openId，用直播间号
   get mode() { return this.real ? 'live' : 'mock'; }
   room(id) {
     id = String(id);
@@ -76,6 +78,7 @@ export class OpenHub extends EventEmitter {
     if (!this.real) {
       const r = this.room('mock-' + createHash('sha256').update(token).digest('hex').slice(0, 10));
       r.anchor = { openId: '', name: '模拟主播', avatar: '' };
+      await this.first?.open(this.anchorKey(r));
       for (const t of MSG_TYPES) r.tasks[t] = '模拟';
       return this.summary(r);
     }
@@ -83,6 +86,7 @@ export class OpenHub extends EventEmitter {
     const r = this.room(info.roomId);
     r.anchor = info.anchor; r.active = Date.now();
     if (r.anchor.openId) this.anchorRooms.set(r.anchor.openId, r.id);
+    await this.first?.open(this.anchorKey(r));
     this.lastLaunch = r.id;
     await this.startTasks(r);
     this.log(`[直播间] ${r.id} ${r.anchor.name} 已启动推送（${this.cloud ? '抖音云内网' : '外网'}开任务）：${JSON.stringify(r.tasks)}`);
@@ -144,6 +148,9 @@ export class OpenHub extends EventEmitter {
         reason: +it.fansclub_reason_type || 0, level: +it.fansclub_level || 0,
         action: msgType === 'live_follow' ? +(it.follow_type ?? it.use_follow_action ?? it.action_type ?? 1) || 1 : 0, // 关注 1 / 取关 2（字段名官方服务端文档没写，几个可能的都认）
       };
+      /* 关注（不含取关）、加团点亮灯牌：标出是不是这个观众在这个主播这里的历史第一次（11-18 用户），直播画面只给第一次加拉力 */
+      const kind = ev.type === 'follow' && ev.action !== 2 ? 'follow' : ev.type === 'fansclub' && ev.reason === 2 ? 'fans' : '';
+      if (kind) ev.first = this.first ? this.first.claim(kind, this.anchorKey(r), ev.user.id || ev.user.name) : true;
       r.buf.push(ev); if (r.buf.length > BUF_MAX) r.buf.shift();
       out.accepted++;
       // 能做履约上报的：正式直播间里平台真推来的（含补回的失败数据）礼物 / 评论 / 点赞；自测转发的模拟数据不是平台订单，不报。记下来等 exe 报收到 / 处理完

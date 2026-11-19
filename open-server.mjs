@@ -14,6 +14,7 @@ import { OpenHub, loadOpenConfig } from './open/hub.mjs';
 import { table, findGift, FEN_PER_DIAMOND } from './open/gifts.mjs';
 import { GlobalRank } from './open/rank.mjs';
 import { FileStore, CloudStore } from './open/rankstore.mjs';
+import { FirstBook, FirstFileStore, FirstCloudStore } from './open/first.mjs';
 
 const args = process.argv.slice(2);
 const flag = (k) => args.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
@@ -27,7 +28,10 @@ const log = (s) => console.log(new Date().toISOString().slice(11, 19), s);
 const store = hub.cloud ? new CloudStore((await import('@open-dy/node-server-sdk')).dySDK.database()) : new FileStore(flag('rank-file') || path.join(here, 'data', 'rank-global.json'));
 const rank = new GlobalRank({ store, log });
 await rank.init();
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => rank.flush().finally(() => process.exit(0)));
+/* 关注 / 第一次获得灯牌的「历史第一次」台账（open/first.mjs）：云上存云数据库 csj_first，本地存 data/first.json */
+hub.first = new FirstBook(hub.cloud ? new FirstCloudStore((await import('@open-dy/node-server-sdk')).dySDK.database()) : new FirstFileStore(flag('first-file') || path.join(here, 'data', 'first.json')), log);
+await hub.first.init();
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { hub.first.flush(); rank.flush().finally(() => process.exit(0)); });
 const json = (res, code, o) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
 const body = (req) => new Promise((ok) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString() || '{}')); } catch { ok({}); } }); });
 const viewer = (name) => ({ sec_openid: 'mock_' + Buffer.from(name).toString('hex').slice(0, 16), nickname: name, avatar_url: '' });
@@ -44,7 +48,8 @@ async function mock(b) {
   } else if (b.kind === 'chat') { msgType = 'live_comment'; item = { ...viewer(name), content: String(b.text ?? '') }; }
   else if (b.kind === 'like') { msgType = 'live_like'; item = { ...viewer(name), like_num: n }; }
   else if (b.kind === 'follow') { msgType = 'live_follow'; item = { ...viewer(name), follow_type: 1 }; }
-  else return [400, { error: 'kind 只能是 gift / chat / like / follow' }];
+  else if (b.kind === 'fansclub') { msgType = 'live_fansclub'; item = { ...viewer(name), fansclub_reason_type: +b.reason || 2, fansclub_level: +b.level || 1 }; }
+  else return [400, { error: 'kind 只能是 gift / chat / like / follow / fansclub' }];
   const { headers, raw } = hub.mockPush(room.roomId, msgType, item);
   const r = hub.ingest(headers, raw);
   return [r.code, { ...r, roomId: room.roomId }];

@@ -5,13 +5,16 @@
 //   点赞    = 直播间点赞推送 live_like，like_num 个算 like_num 份（SHOP.like）
 //   666     = 评论指令（不是礼物）：评论里含 666 → main.js comment() 给本方一份 SHOP.six（免费）
 //   站队    = 评论 1 / 2（加入小美 / 大帅）
-//   付费 5 种：仙女棒 1 / 魔法镜 19 / 甜甜圈 52 / 能量电池 99 / 派对话筒 299 抖币（官方上限 8 种，后台「营收 → 礼物评论配置」里选这 5 种）
+//   付费 7 种：仙女棒 1 / 能力药丸 10 / 魔法镜 19 / 甜甜圈 52 / 能量电池 99 / 爱的爆炸 199 / 派对话筒 299 抖币（官方上限 8 种，后台「营收 → 礼物评论配置」里选这 7 种；
+//   11-18 加能力药丸、爱的爆炸，sec_gift_id 照美食大赛 server/open/gifts.mjs）
 // 「假设」：开放平台后台给的 sec_gift_id 和这份表一致；拿到后台截图再核一遍。
 export const PAID = [
   { key: 'wand',    name: '仙女棒',   diamond: 1,   id: 'n1/Dg1905sj1FyoBlQBvmbaDZFBNaKuKZH6zxHkv8Lg5x2cRfrKUTb8gzMs=' },
+  { key: 'pill',    name: '能力药丸', diamond: 10,  id: '28rYzVFNyXEXFC8HI+f/WG+I7a6lfl3OyZZjUS+CVuwCgYZrPrUdytGHu0c=' },
   { key: 'mirror',  name: '魔法镜',   diamond: 19,  id: 'fJs8HKQ0xlPRixn8JAUiL2gFRiLD9S6IFCFdvZODSnhyo9YN8q7xUuVVyZI=' },
   { key: 'donut',   name: '甜甜圈',   diamond: 52,  id: 'PJ0FFeaDzXUreuUBZH6Hs+b56Jh0tQjrq0bIrrlZmv13GSAL9Q1hf59fjGk=' },
   { key: 'battery', name: '能量电池', diamond: 99,  id: 'IkkadLfz7O/a5UR45p/OOCCG6ewAWVbsuzR/Z+v1v76CBU+mTG/wPjqdpfg=' },
+  { key: 'boom',    name: '爱的爆炸', diamond: 199, id: 'gx7pmjQfhBaDOG2XkWI2peZ66YFWkCWRjZXpTqb23O/epru+sxWyTV/3Ufs=' },
   { key: 'mic',     name: '派对话筒', diamond: 299, id: 'YbLESoUj053FWVYPWUNOAtp4FYnb+/eZbyrLi7ndArVFz14rivgxf0cFrKs=' },
 ];
 // 后台「评论关键词」（官方：只推送含关键词的评论，最多 10 个）
